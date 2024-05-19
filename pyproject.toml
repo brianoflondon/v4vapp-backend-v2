@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "v4vapp-backend-v2"
+version = "0.1.0"
+description = "Back End for the V4V.app bridge from Hive to Lightning"
+authors = ["Brian of London (home imac) <brian@v4v.app>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+grpcio = "^1.63.0"
+grpcio-tools = "1.62.0"
+googleapis-common-protos = "1.62.0"
+mypy-protobuf = "^3.6.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.flake8]
+max-line-length = 88
