@@ -4,5 +4,16 @@
         "titleBar.activeBackground": "#6F1B69",
         "titleBar.activeForeground": "#FDF8FD"
     },
-    "cmake.configureOnOpen": true
+    "cmake.configureOnOpen": true,
+    "cSpell.words": [
+        "lnrpc"
+    ],
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.analysis.extraPaths": [
+        "./src/v4vapp_backend_v2/lnd_grpc"
+    ]
 }
