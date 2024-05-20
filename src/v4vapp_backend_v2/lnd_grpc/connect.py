@@ -1,16 +1,33 @@
 import codecs
 import os
+from typing import AsyncGenerator
 
-import grpc
+from google.protobuf.json_format import MessageToDict
+from grpc import (
+    composite_channel_credentials,
+    metadata_call_credentials,
+    ssl_channel_credentials,
+)
+from grpc.aio import AioRpcError, secure_channel
+from pydantic import ValidationError
 
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
+from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+
+
+class LNDConnectionError(Exception):
+    pass
+
 
 LND_USE_LOCAL_NODE = "local"
+
 
 if LND_USE_LOCAL_NODE == "local":
     LND_MACAROON_PATH = os.path.expanduser(".certs/umbrel-admin.macaroon")
     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls.cert")
-    LND_CONNECTION_ADDRESS = "10.0.0.5:10009"
+    LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
     LND_CONNECTION_OPTIONS = [
         (
             "grpc.ssl_target_name_override",
@@ -36,39 +53,128 @@ else:
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
 
-def lnd_stub() -> lnrpc.LightningStub:
+async def connect_to_lnd() -> lnrpc.LightningStub:
     """
-    Creates and returns a gRPC stub for interacting with the LND (Lightning Network Daemon) server.
-
     Returns:
         lnrpc.LightningStub: The gRPC stub for interacting with the LND server.
     """
+    logger.info("Connecting to LND")
 
     def metadata_callback(context, callback):
         # for more info see grpc docs
         callback([("macaroon", macaroon)], None)
 
-    with open(LND_MACAROON_PATH, "rb") as f:
-        macaroon_bytes = f.read()
-    macaroon = codecs.encode(macaroon_bytes, "hex")
-    cert = open(LND_CERTIFICATE_PATH, "rb").read()
+    try:
+        with open(LND_MACAROON_PATH, "rb") as f:
+            macaroon_bytes = f.read()
+        macaroon = codecs.encode(macaroon_bytes, "hex")
+        cert = open(LND_CERTIFICATE_PATH, "rb").read()
+    except FileNotFoundError as e:
+        logger.error(f"Macaroon and cert files missing: {e}")
+        raise LNDConnectionError(f"Macaroon and cert files missing: {e}")
 
     # build ssl credentials using the cert the same as before
-    cert_creds = grpc.ssl_channel_credentials(cert)
+    cert_creds = ssl_channel_credentials(cert)
 
     # now build meta data credentials
-    auth_creds = grpc.metadata_call_credentials(metadata_callback)
+    auth_creds = metadata_call_credentials(metadata_callback)
 
     # combine the cert credentials and the macaroon auth credentials
     # such that every call is properly encrypted and authenticated
-    combined_creds = grpc.composite_channel_credentials(cert_creds, auth_creds)
+    combined_creds = composite_channel_credentials(cert_creds, auth_creds)
 
     # now every call will be made with the macaroon already included
     # channel = grpc.secure_channel("umbrel.local:10009", creds)
-    channel = grpc.secure_channel(
+    channel = secure_channel(
         LND_CONNECTION_ADDRESS,
         combined_creds,
         options=LND_CONNECTION_OPTIONS,
     )
 
     return lnrpc.LightningStub(channel)
+
+
+# async def list_invoices(reversed: boolindex_offset: int = 0, num_max_invoices: int = 1):
+#     stub = await connect_to_lnd()
+#     response_inv = await stub.ListInvoices(
+#         ln.ListInvoiceRequest(
+#             pending_only=False,
+#             reversed=True,
+#             index_offset=index_offset,
+#             num_max_invoices=num_max_invoices,
+#         )
+#     )
+#     for inv in response_inv.invoices:
+#         inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+#         try:
+#             invoice = LNDInvoice.model_validate(inv_dict)
+#             print(f"✅ Valid invoice {invoice.add_index}")
+#         except ValidationError as e:
+#             print(e)
+#             print(f"❌ Invalid invoice {inv.add_index}")
+
+
+async def most_recent_invoice(stub: lnrpc.LightningStub | None = None) -> LNDInvoice:
+    """
+    Returns:
+        LNDInvoice: The most recent invoice from the LND server.
+    """
+    if not stub:
+        stub = await connect_to_lnd()
+    response_inv = await stub.ListInvoices(
+        ln.ListInvoiceRequest(
+            pending_only=False,
+            reversed=True,
+            index_offset=0,
+            num_max_invoices=1,
+        )
+    )
+    inv_dict = MessageToDict(response_inv.invoices[0], preserving_proto_field_name=True)
+    return LNDInvoice.model_validate(inv_dict)
+
+
+async def subscribe_invoices(
+    count_back: int = 0, add_index: int = 0
+) -> AsyncGenerator[LNDInvoice, None]:
+    """
+    Subscribe to invoices from the Lightning Network Daemon (LND).
+
+    Args:
+        count_back (int): The number of invoices to go back from the most recent
+        invoice. Defaults to 0.
+
+    Yields:
+        LNDInvoice: A validated LNDInvoice object representing an invoice.
+
+    Raises:
+        AioRpcError: If there is an error with the RPC communication.
+        Exception: If there is an unexpected error.
+
+    Returns:
+        AsyncGenerator[LNDInvoice, None]: An asynchronous generator that yields
+        LNDInvoice objects.
+    """
+
+    # find the most recent highest add_index
+    stub = await connect_to_lnd()
+    if add_index == 0:
+        most_recent = await most_recent_invoice(stub)
+        add_index = most_recent.add_index
+        request_sub = ln.InvoiceSubscription(add_index=add_index - count_back)
+    else:
+        request_sub = ln.InvoiceSubscription(add_index=add_index)
+    logger.info(f"Subscribing to invoices from add_index {add_index}")
+    try:
+        async for inv in stub.SubscribeInvoices(request_sub):
+            inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+            try:
+                invoice = LNDInvoice.model_validate(inv_dict)
+                yield invoice
+            except ValidationError as e:
+                logger.error(e)
+                logger.warning(f"❌ Invalid invoice {inv.add_index}")
+    except AioRpcError as e:
+        raise e
+
+    except Exception as e:
+        raise e

@@ -1,46 +1,93 @@
-from google.protobuf.json_format import MessageToDict
+import asyncio
+
+import backoff
+import grpc
+from grpc.aio import AioRpcError
 from pydantic import ValidationError
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
-from v4vapp_backend_v2.lnd_grpc.connect import lnd_stub
-from v4vapp_backend_v2.lnd_grpc.lnd_models import LNDInvoice
+from v4vapp_backend_v2.config import logger, setup_logging
+from v4vapp_backend_v2.lnd_grpc.connect import (
+    connect_to_lnd,
+    most_recent_invoice,
+    subscribe_invoices,
+)
 
-if __name__ == "__main__":
-    stub = lnd_stub()
-    response = stub.WalletBalance(ln.WalletBalanceRequest())
-    print(response)
 
-    response_inv = stub.ListInvoices(
-        ln.ListInvoiceRequest(
-            pending_only=False, reversed=True, index_offset=0, num_max_invoices=10
-        )
-    )
-    for inv in response_inv.invoices:
-        inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+@backoff.on_exception(
+    lambda: backoff.expo(base=10),
+    (ValidationError, AioRpcError, grpc.RpcError),
+    max_tries=20,
+    logger=logger,
+)
+async def subscribe_invoices_with_backoff():
+    stub = await connect_to_lnd()
+    most_recent = await most_recent_invoice(stub)
+    while True:
         try:
-            invoice = LNDInvoice.model_validate(inv_dict)
-            print(f"✅ Valid invoice {invoice.add_index}")
-        except ValidationError as e:
-            print(e)
-            print(f"❌ Invalid invoice {inv.add_index}")
+            async for invoice in subscribe_invoices(add_index=most_recent.add_index):
+                if invoice.settled:
+                    logger.info(
+                        f"✅ Settled invoice {invoice.add_index} with memo {invoice.memo} and value {invoice.value}"
+                    )
+                    logger.info(f"{invoice.settle_date}")
+                    most_recent = invoice
+                else:
+                    logger.info(
+                        f"✅ Valid invoice {invoice.add_index} with memo {invoice.memo} and value {invoice.value}"
+                    )
+                    most_recent = invoice
+        except grpc.RpcError as e:
+            logger.error(f"Lost connection to server: {e}")
+            stub = await connect_to_lnd()  # reconnect to the server
 
+
+async def main():
+    # stub = await connect_to_lnd()
+    # response = await stub.WalletBalance(ln.WalletBalanceRequest())
     # print(response)
 
-    response_payment = stub.ListPayments(
-        ln.ListPaymentsRequest(reversed=True, index_offset=0, max_payments=1)
-    )
+    # response_inv = await stub.ListInvoices(
+    #     ln.ListInvoiceRequest(
+    #         pending_only=False, reversed=True, index_offset=0, num_max_invoices=10
+    #     )
+    # )
+    # for inv in response_inv.invoices:
+    #     inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+    #     try:
+    #         invoice = LNDInvoice.model_validate(inv_dict)
+    #         print(f"✅ Valid invoice {invoice.add_index}")
+    #     except ValidationError as e:
+    #         print(e)
+    #         print(f"❌ Invalid invoice {inv.add_index}")
 
-    for pay in response_payment.payments:
-        print(pay)
-        print(MessageToDict(pay, preserving_proto_field_name=True))
-        print()
+    # response_payment = await stub.ListPayments(
+    #     ln.ListPaymentsRequest(reversed=True, index_offset=0, max_payments=1)
+    # )
 
-    request_sub = ln.InvoiceSubscription()
-    for inv in stub.SubscribeInvoices(request_sub):
-        inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+    # for pay in response_payment.payments:
+    #     print(pay)
+    #     print(MessageToDict(pay, preserving_proto_field_name=True))
+    #     print()
+    while True:
         try:
-            invoice = LNDInvoice.model_validate(inv_dict)
-            print(f"✅ Valid invoice {invoice.add_index}")
-        except ValidationError as e:
-            print(e)
-            print(f"❌ Invalid invoice {inv.add_index}")
+            logger.info("🔁 Starting invoice subscription")
+            await subscribe_invoices_with_backoff()
+        except Exception as e:
+            logger.error("❌ Error in invoice subscription")
+            logger.error(e)
+            await asyncio.sleep(30)
+
+
+if __name__ == "__main__":
+
+    setup_logging()
+
+    try:
+        asyncio.run(main())
+
+    except KeyboardInterrupt:
+        logger.warning("❌ LND gRPC client stopped")
+    except Exception as e:
+        logger.error("❌ LND gRPC client stopped")
+        logger.error(e)
+        raise e
