@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import json
 import logging
@@ -77,10 +78,14 @@ class MyJSONFormatter(logging.Formatter):
 class CustomTelegramHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
-        self.send_telegram_message(log_message)
+        asyncio.run(self.send_telegram_message(log_message))
 
-    def send_telegram_message(self, message: str):
+    async def send_telegram_message(self, message: str):
         # TODO: #1 Implement the method to send the message to Telegram
+        print("Sending message to Telegram")
+        await asyncio.sleep(3)
+        print(message)
+        print("Message sent to Telegram")
         pass
         # raise NotImplementedError
 
@@ -89,3 +94,9 @@ class NonErrorFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         return record.levelno <= logging.INFO
+
+
+class TelegramFilter(logging.Filter):
+    @override
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        return hasattr(record, "telegram") and record.telegram

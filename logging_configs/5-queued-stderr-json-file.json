@@ -23,6 +23,9 @@
     "filters": {
         "no_errors": {
             "()": "v4vapp_backend_v2.config.mylogger.NonErrorFilter"
+        },
+        "telegram_filter": {
+            "()": "v4vapp_backend_v2.config.mylogger.TelegramFilter"
         }
     },
     "handlers": {
@@ -51,7 +54,8 @@
         "telegram": {
             "class": "v4vapp_backend_v2.config.mylogger.CustomTelegramHandler",
             "level": "INFO",
-            "formatter": "simple"
+            "formatter": "simple",
+            "filters" : ["telegram_filter"]
         }
     },
     "loggers": {

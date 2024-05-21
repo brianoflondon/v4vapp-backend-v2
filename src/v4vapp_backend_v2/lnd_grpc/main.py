@@ -3,7 +3,6 @@ import asyncio
 import backoff
 import grpc
 from grpc.aio import AioRpcError
-from pydantic import ValidationError
 
 from v4vapp_backend_v2.config import logger, setup_logging
 from v4vapp_backend_v2.database.db import MyDB
@@ -14,7 +13,6 @@ from v4vapp_backend_v2.lnd_grpc.connect import (
     subscribe_invoices,
     wallet_balance,
 )
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 # Create a temporary file
 db = MyDB()
@@ -46,7 +44,8 @@ async def subscribe_invoices_with_backoff():
                     most_recent = invoice
                 else:
                     logger.info(
-                        f"✅ Valid invoice {invoice.add_index} with memo {invoice.memo} and value {invoice.value}"
+                        f"✅ Valid invoice {invoice.add_index} with memo {invoice.memo} and value {invoice.value}",
+                        extra={"telegram": True},
                     )
                     most_recent = invoice
                     db.update_most_recent(invoice)

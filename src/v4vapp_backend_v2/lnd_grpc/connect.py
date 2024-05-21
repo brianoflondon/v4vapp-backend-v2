@@ -26,7 +26,7 @@ class LNDConnectionError(Exception):
     pass
 
 
-LND_USE_LOCAL_NODE = "local"
+LND_USE_LOCAL_NODE = "voltage"
 
 
 if LND_USE_LOCAL_NODE == "local":

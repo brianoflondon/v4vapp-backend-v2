@@ -48,4 +48,4 @@ def setup_logging():
     grpc_logger = logging.getLogger("grpc")
     grpc_logger.addHandler(handler)
     grpc_logger.setLevel(logging.WARNING)
-    logger.info(f"Starting LND gRPC client v{__version__}")
+    logger.info(f"Starting LND gRPC client v{__version__}", extra={"telegram": True})
