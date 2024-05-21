@@ -1,5 +1,6 @@
 import codecs
 import os
+import sys
 from typing import AsyncGenerator
 
 from google.protobuf.json_format import MessageToDict
@@ -15,6 +16,10 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+
+
+class LNDConnectionStartupError(Exception):
+    pass
 
 
 class LNDConnectionError(Exception):
@@ -45,12 +50,26 @@ else:
         ),
     ]
 
-
 # Create a channel to the server
 # Due to updated ECDSA generated tls.cert we need to let grpc know that
 # we need to use that cipher suite otherwise there will be a handshake
 # error when we communicate with the lnd rpc server.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+
+
+# Open the macaroon file and read the macaroon and certs at this point
+
+try:
+    with open(LND_MACAROON_PATH, "rb") as f:
+        macaroon_bytes = f.read()
+    MACAROON_FROM_FILE = codecs.encode(macaroon_bytes, "hex")
+    CERT_FROM_FILE = open(LND_CERTIFICATE_PATH, "rb").read()
+except FileNotFoundError as e:
+    logger.error(f"Macaroon and cert files missing: {e}")
+    sys.exit(1)
+except Exception as e:
+    logger.error(e)
+    raise LNDConnectionStartupError(f"Error starting LND connection: {e}")
 
 
 async def connect_to_lnd() -> lnrpc.LightningStub:
@@ -62,19 +81,10 @@ async def connect_to_lnd() -> lnrpc.LightningStub:
 
     def metadata_callback(context, callback):
         # for more info see grpc docs
-        callback([("macaroon", macaroon)], None)
-
-    try:
-        with open(LND_MACAROON_PATH, "rb") as f:
-            macaroon_bytes = f.read()
-        macaroon = codecs.encode(macaroon_bytes, "hex")
-        cert = open(LND_CERTIFICATE_PATH, "rb").read()
-    except FileNotFoundError as e:
-        logger.error(f"Macaroon and cert files missing: {e}")
-        raise LNDConnectionError(f"Macaroon and cert files missing: {e}")
+        callback([("macaroon", MACAROON_FROM_FILE)], None)
 
     # build ssl credentials using the cert the same as before
-    cert_creds = ssl_channel_credentials(cert)
+    cert_creds = ssl_channel_credentials(CERT_FROM_FILE)
 
     # now build meta data credentials
     auth_creds = metadata_call_credentials(metadata_callback)
@@ -92,6 +102,23 @@ async def connect_to_lnd() -> lnrpc.LightningStub:
     )
 
     return lnrpc.LightningStub(channel)
+
+
+async def wallet_balance() -> ln.WalletBalanceResponse:
+    """
+    Returns:
+        ln.WalletBalanceResponse: The response from the LND server.
+    """
+    stub = await connect_to_lnd()
+    try:
+        response = await stub.WalletBalance(ln.WalletBalanceRequest())
+        return response
+    except AioRpcError as e:
+        logger.warning(f"Error connecting to LND: {e}")
+        raise LNDConnectionError(f"Error connecting to LND: {e}")
+
+    except Exception as e:
+        raise e
 
 
 # async def list_invoices(reversed: boolindex_offset: int = 0, num_max_invoices: int = 1):
@@ -178,3 +205,31 @@ async def subscribe_invoices(
 
     except Exception as e:
         raise e
+
+
+# stub = await connect_to_lnd()
+# response = await stub.WalletBalance(ln.WalletBalanceRequest())
+# print(response)
+
+# response_inv = await stub.ListInvoices(
+#     ln.ListInvoiceRequest(
+#         pending_only=False, reversed=True, index_offset=0, num_max_invoices=10
+#     )
+# )
+# for inv in response_inv.invoices:
+#     inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+#     try:
+#         invoice = LNDInvoice.model_validate(inv_dict)
+#         print(f"✅ Valid invoice {invoice.add_index}")
+#     except ValidationError as e:
+#         print(e)
+#         print(f"❌ Invalid invoice {inv.add_index}")
+
+# response_payment = await stub.ListPayments(
+#     ln.ListPaymentsRequest(reversed=True, index_offset=0, max_payments=1)
+# )
+
+# for pay in response_payment.payments:
+#     print(pay)
+#     print(MessageToDict(pay, preserving_proto_field_name=True))
+#     print()

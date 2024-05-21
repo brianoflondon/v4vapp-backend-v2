@@ -1,4 +1,7 @@
 import asyncio
+import json
+import posixpath
+import tempfile
 
 import backoff
 import grpc
@@ -10,7 +13,12 @@ from v4vapp_backend_v2.lnd_grpc.connect import (
     connect_to_lnd,
     most_recent_invoice,
     subscribe_invoices,
+    wallet_balance,
 )
+from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+
+# Create a temporary file
+TEMP_FILE = posixpath.join(tempfile.gettempdir(), "add_index.json")
 
 
 @backoff.on_exception(
@@ -21,7 +29,14 @@ from v4vapp_backend_v2.lnd_grpc.connect import (
 )
 async def subscribe_invoices_with_backoff():
     stub = await connect_to_lnd()
-    most_recent = await most_recent_invoice(stub)
+    # check if temp_file exists
+    try:
+        with open(TEMP_FILE, "r") as f:
+            invoice_json = json.load(f)
+            most_recent = LNDInvoice.model_validate(json.loads(invoice_json))
+    except FileNotFoundError:
+        most_recent = await most_recent_invoice(stub)
+    logger.info(f"Most recent invoice: {most_recent.add_index}")
     while True:
         try:
             async for invoice in subscribe_invoices(add_index=most_recent.add_index):
@@ -36,46 +51,40 @@ async def subscribe_invoices_with_backoff():
                         f"✅ Valid invoice {invoice.add_index} with memo {invoice.memo} and value {invoice.value}"
                     )
                     most_recent = invoice
+                with open(TEMP_FILE, "w") as f:
+                    json.dump(invoice.model_dump_json(indent=2), f)
         except grpc.RpcError as e:
             logger.error(f"Lost connection to server: {e}")
-            stub = await connect_to_lnd()  # reconnect to the server
+            raise e
+
+async def heartbeat_check_connection():
+    while True:
+        try:
+            logger.info("❤️ Heartbeat check connection")
+            response = await wallet_balance()
+            logger.info("✅ Connection to LND server is OK")
+            await asyncio.sleep(60)
+        except grpc.RpcError as e:
+            logger.error(f"Lost connection to server: {e}")
+            raise e
 
 
 async def main():
-    # stub = await connect_to_lnd()
-    # response = await stub.WalletBalance(ln.WalletBalanceRequest())
-    # print(response)
-
-    # response_inv = await stub.ListInvoices(
-    #     ln.ListInvoiceRequest(
-    #         pending_only=False, reversed=True, index_offset=0, num_max_invoices=10
-    #     )
-    # )
-    # for inv in response_inv.invoices:
-    #     inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
-    #     try:
-    #         invoice = LNDInvoice.model_validate(inv_dict)
-    #         print(f"✅ Valid invoice {invoice.add_index}")
-    #     except ValidationError as e:
-    #         print(e)
-    #         print(f"❌ Invalid invoice {inv.add_index}")
-
-    # response_payment = await stub.ListPayments(
-    #     ln.ListPaymentsRequest(reversed=True, index_offset=0, max_payments=1)
-    # )
-
-    # for pay in response_payment.payments:
-    #     print(pay)
-    #     print(MessageToDict(pay, preserving_proto_field_name=True))
-    #     print()
+    logger.info("Starting LND gRPC client")
     while True:
         try:
-            logger.info("🔁 Starting invoice subscription")
-            await subscribe_invoices_with_backoff()
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(subscribe_invoices_with_backoff())
+                tg.create_task(heartbeat_check_connection())
+        except AioRpcError as e:
+            logger.error(f"Lost connection to server: {e}")
+            await asyncio.sleep(5)
+            continue
         except Exception as e:
-            logger.error("❌ Error in invoice subscription")
-            logger.error(e)
-            await asyncio.sleep(30)
+            logger.error(f"Error: {e}")
+            continue
+
+    logger.info("❌ LND gRPC client stopped")
 
 
 if __name__ == "__main__":
