@@ -430,6 +430,17 @@ testing = ["build[virtualenv]", "filelock (>=3.4.0)", "importlib-metadata", "ini
 testing-integration = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "packaging (>=23.2)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
 
 [[package]]
+name = "single-source"
+version = "0.3.0"
+description = "Access to the project version in Python code for PEP 621-style projects"
+optional = false
+python-versions = ">=3.6,<4.0"
+files = [
+    {file = "single-source-0.3.0.tar.gz", hash = "sha256:b12705af958ca99d56ea9ce40bd9cc749378f4fe7ad03b1f9067e29daceef27d"},
+    {file = "single_source-0.3.0-py3-none-any.whl", hash = "sha256:7bc87168ced50f638b6ab0cda4cc1ce9e80ee0e1220014397050d336d021a597"},
+]
+
+[[package]]
 name = "types-protobuf"
 version = "5.26.0.20240422"
 description = "Typing stubs for protobuf"
@@ -454,4 +465,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "f1d8a0de54232ef1e8040f836b0d8421a04d5917e231e1a66e17aa51876cd7c5"
+content-hash = "4de54dde1426f3530e361d933bb3db65ad5afaadabcea26768d9c5285ba012a2"

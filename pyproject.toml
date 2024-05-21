@@ -15,6 +15,7 @@ mypy-protobuf = "^3.6.0"
 pydantic = "^2.7.1"
 colorlog = "^6.8.2"
 backoff = "^2.2.1"
+single-source = "^0.3.0"
 
 
 [tool.poetry.group.dev.dependencies]

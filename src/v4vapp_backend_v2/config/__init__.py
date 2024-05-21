@@ -2,16 +2,20 @@ import atexit
 import json
 import logging.config
 import logging.handlers
-import pathlib
 import sys
+from pathlib import Path
 
 import colorlog
+from single_source import get_version
+
+from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.config.mylogger import NonErrorFilter
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
 
 def setup_logging():
-    config_file = pathlib.Path("logging_configs/2-stderr-json-file.json")
+    config_file = Path("logging_configs/5-queued-stderr-json-file.json")
     with open(config_file) as f_in:
         config = json.load(f_in)
 
@@ -36,6 +40,7 @@ def setup_logging():
             stream=sys.stdout,
         )
     )
+    # handler.addFilter(NonErrorFilter())
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
@@ -43,10 +48,4 @@ def setup_logging():
     grpc_logger = logging.getLogger("grpc")
     grpc_logger.addHandler(handler)
     grpc_logger.setLevel(logging.WARNING)
-
-    logger.info("Starting LND gRPC client")
-    logger.debug("Debug message")
-    logger.warning("Warning message")
-    logger.error("Error message")
-    critical = {"json": "data"}
-    logger.critical("Critical message", extra=critical)
+    logger.info(f"Starting LND gRPC client v{__version__}")

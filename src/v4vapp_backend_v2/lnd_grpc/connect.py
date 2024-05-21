@@ -1,7 +1,7 @@
 import codecs
 import os
 import sys
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Tuple
 
 from google.protobuf.json_format import MessageToDict
 from grpc import (
@@ -141,7 +141,9 @@ async def wallet_balance() -> ln.WalletBalanceResponse:
 #             print(f"❌ Invalid invoice {inv.add_index}")
 
 
-async def most_recent_invoice(stub: lnrpc.LightningStub | None = None) -> LNDInvoice:
+async def most_recent_invoice(
+    stub: lnrpc.LightningStub | None = None,
+) -> Tuple[LNDInvoice, LNDInvoice]:
     """
     Returns:
         LNDInvoice: The most recent invoice from the LND server.
@@ -153,15 +155,23 @@ async def most_recent_invoice(stub: lnrpc.LightningStub | None = None) -> LNDInv
             pending_only=False,
             reversed=True,
             index_offset=0,
-            num_max_invoices=1,
+            num_max_invoices=100,
         )
     )
-    inv_dict = MessageToDict(response_inv.invoices[0], preserving_proto_field_name=True)
-    return LNDInvoice.model_validate(inv_dict)
+    highest_invoice: LNDInvoice = LNDInvoice.model_construct()
+    highest_settled_invoice = LNDInvoice.model_construct()
+    for inv in response_inv.invoices:
+        inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+        invoice = LNDInvoice.model_validate(inv_dict)
+        if invoice.add_index > highest_invoice.add_index:
+            highest_invoice = invoice
+        if invoice.settle_index > highest_settled_invoice.settle_index:
+            highest_settled_invoice = invoice
+    return highest_invoice, highest_settled_invoice
 
 
 async def subscribe_invoices(
-    count_back: int = 0, add_index: int = 0
+    count_back: int = 0, add_index: int = 0, settle_index: int = 0
 ) -> AsyncGenerator[LNDInvoice, None]:
     """
     Subscribe to invoices from the Lightning Network Daemon (LND).
@@ -185,12 +195,19 @@ async def subscribe_invoices(
     # find the most recent highest add_index
     stub = await connect_to_lnd()
     if add_index == 0:
-        most_recent = await most_recent_invoice(stub)
+        most_recent, most_recent_settled = await most_recent_invoice(stub)
         add_index = most_recent.add_index
-        request_sub = ln.InvoiceSubscription(add_index=add_index - count_back)
+        settle_index = most_recent_settled.settle_index
+        request_sub = ln.InvoiceSubscription(
+            add_index=add_index - count_back, settle_index=settle_index
+        )
     else:
-        request_sub = ln.InvoiceSubscription(add_index=add_index)
-    logger.info(f"Subscribing to invoices from add_index {add_index}")
+        request_sub = ln.InvoiceSubscription(
+            add_index=add_index, settle_index=settle_index
+        )
+    logger.info(
+        f"Subscribing to invoices from add_index {add_index} settle_index {settle_index}"
+    )
     try:
         async for inv in stub.SubscribeInvoices(request_sub):
             inv_dict = MessageToDict(inv, preserving_proto_field_name=True)

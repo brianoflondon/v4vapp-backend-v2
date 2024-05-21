@@ -27,8 +27,8 @@ class LNDInvoice(BaseModel):
     cltv_expiry: int
     route_hints: List[dict] | None = None
     private: bool | None = None
-    add_index: int
-    settle_index: int | None = None
+    add_index: int = 0
+    settle_index: int = 0
     amt_paid: int | None = None
     amt_paid_sat: int | None = None
     amt_paid_msat: int | None = None

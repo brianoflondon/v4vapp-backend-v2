@@ -74,6 +74,17 @@ class MyJSONFormatter(logging.Formatter):
         return message
 
 
+class CustomTelegramHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord):
+        log_message = self.format(record)
+        self.send_telegram_message(log_message)
+
+    def send_telegram_message(self, message: str):
+        # TODO: #1 Implement the method to send the message to Telegram
+        pass
+        # raise NotImplementedError
+
+
 class NonErrorFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
