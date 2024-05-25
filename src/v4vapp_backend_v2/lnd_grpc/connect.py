@@ -4,11 +4,8 @@ import sys
 from typing import Any, AsyncGenerator, Dict, Tuple
 
 from google.protobuf.json_format import MessageToDict
-from grpc import (
-    composite_channel_credentials,
-    metadata_call_credentials,
-    ssl_channel_credentials,
-)
+from grpc import (composite_channel_credentials, metadata_call_credentials,
+                  ssl_channel_credentials)
 from grpc.aio import AioRpcError, secure_channel
 from pydantic import ValidationError
 
@@ -134,7 +131,7 @@ async def wallet_balance() -> ln.WalletBalanceResponse:
 #     for inv in response_inv.invoices:
 #         inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
 #         try:
-#             invoice = LNDInvoice.model_validate(inv_dict)
+#             invoice = LNDInvoice.model_construct(inv_dict)
 #             print(f"✅ Valid invoice {invoice.add_index}")
 #         except ValidationError as e:
 #             print(e)
@@ -221,6 +218,8 @@ async def subscribe_invoices(
         raise e
 
     except Exception as e:
+        logger.error("Unexpected error")
+        logger.exception(e)
         raise e
 
 
@@ -236,7 +235,7 @@ async def subscribe_invoices(
 # for inv in response_inv.invoices:
 #     inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
 #     try:
-#         invoice = LNDInvoice.model_validate(inv_dict)
+#         invoice = LNDInvoice.model_construct(inv_dict)
 #         print(f"✅ Valid invoice {invoice.add_index}")
 #     except ValidationError as e:
 #         print(e)

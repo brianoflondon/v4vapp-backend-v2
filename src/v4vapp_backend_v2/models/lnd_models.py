@@ -12,11 +12,11 @@ LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
 class LNDInvoice(BaseModel):
     """Model of an LND Invoice"""
 
-    memo: str | None = None
+    memo: str = ""
     r_preimage: str
     r_hash: str
-    value: int
-    value_msat: int
+    value: int = 0
+    value_msat: int = 0
     settled: bool = False
     creation_date: datetime
     settle_date: datetime | None = None

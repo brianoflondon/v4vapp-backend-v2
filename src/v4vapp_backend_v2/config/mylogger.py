@@ -4,6 +4,8 @@ import json
 import logging
 from typing import override
 
+from v4vapp_backend_v2.config import logger
+
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
     "asctime",
@@ -82,21 +84,39 @@ class CustomTelegramHandler(logging.Handler):
 
     async def send_telegram_message(self, message: str):
         # TODO: #1 Implement the method to send the message to Telegram
-        print("Sending message to Telegram")
         await asyncio.sleep(3)
-        print(message)
-        print("Message sent to Telegram")
+        print(message, " -> Telegram")
         pass
         # raise NotImplementedError
+
+
+class TelegramFilter(logging.Filter):
+    @override
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        """
+        Filter method for the logger.
+
+        Args:
+            record (logging.LogRecord): The log record to be filtered.
+
+        Returns:
+            bool | logging.LogRecord: True if the log record level is
+                                      greater than or equal to WARNING,
+                                      or if the log record has a
+                                      'telegram' attribute and it is True.
+                                      Otherwise, returns False.
+        """
+        # If the record.telegram flag is set to False,
+        # do not send the message to Telegram
+        if hasattr(record, "telegram") and not record.telegram:
+            return False
+
+        return record.levelno >= logging.WARNING or (
+            hasattr(record, "telegram") and record.telegram
+        )
 
 
 class NonErrorFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         return record.levelno <= logging.INFO
-
-
-class TelegramFilter(logging.Filter):
-    @override
-    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        return hasattr(record, "telegram") and record.telegram

@@ -9,7 +9,6 @@ import colorlog
 from single_source import get_version
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.config.mylogger import NonErrorFilter
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
@@ -48,4 +47,8 @@ def setup_logging():
     grpc_logger = logging.getLogger("grpc")
     grpc_logger.addHandler(handler)
     grpc_logger.setLevel(logging.WARNING)
+
+    # set the level of the logger for asyncio to WARNING
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
     logger.info(f"Starting LND gRPC client v{__version__}", extra={"telegram": True})
