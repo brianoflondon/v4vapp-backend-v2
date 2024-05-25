@@ -18,6 +18,11 @@ def setup_logging():
     with open(config_file) as f_in:
         config = json.load(f_in)
 
+    # if folder for logs doesn't exist create it
+    log_folder = Path("logs/")
+    log_folder.mkdir(exist_ok=True)
+
+
     logging.config.dictConfig(config)
     queue_handler = logging.getHandlerByName("queue_handler")
     if queue_handler is not None:
