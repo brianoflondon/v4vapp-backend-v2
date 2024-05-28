@@ -1,0 +1,10 @@
+services:
+
+  v4vapp-backend-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./.certs:/app/.certs
+      - ./logging_configs:/app/logging_configs
+    command: ["poetry", "run", "python", "main.py"]

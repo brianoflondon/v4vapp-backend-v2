@@ -16,6 +16,8 @@ from v4vapp_backend_v2.lnd_grpc.connect import (
 )
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
+setup_logging()
+
 # Create a temporary file
 db = MyDB()
 
@@ -172,8 +174,6 @@ async def main():
 
 
 if __name__ == "__main__":
-
-    setup_logging()
 
     try:
         asyncio.run(main())
