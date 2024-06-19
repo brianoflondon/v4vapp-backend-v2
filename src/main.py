@@ -28,7 +28,7 @@ error_code = contextvars.ContextVar("code", default=None)
 
 
 @backoff.on_exception(
-    lambda: backoff.expo(base=1),
+    lambda: backoff.expo(base=2, factor=1),
     (LNDConnectionError),
     max_tries=20,
     logger=logger,
@@ -39,6 +39,9 @@ async def subscribe_invoices_with_backoff():
     most_recent = db.LND.most_recent
     most_recent_settled = db.LND.most_recent_settled
     while True:
+        if not error_state.get() and error_code.get():
+            logger.info("✅ Connection to LND server is OK", extra={"telegram": True})
+            error_code.set(None)
         try:
             async for invoice in subscribe_invoices(
                 add_index=most_recent.add_index,

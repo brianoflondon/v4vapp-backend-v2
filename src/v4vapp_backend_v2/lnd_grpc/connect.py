@@ -4,8 +4,11 @@ import sys
 from typing import Any, AsyncGenerator, Dict, Tuple
 
 from google.protobuf.json_format import MessageToDict
-from grpc import (composite_channel_credentials, metadata_call_credentials,
-                  ssl_channel_credentials)
+from grpc import (
+    composite_channel_credentials,
+    metadata_call_credentials,
+    ssl_channel_credentials,
+)
 from grpc.aio import AioRpcError, secure_channel
 from pydantic import ValidationError
 
@@ -23,13 +26,18 @@ class LNDConnectionError(Exception):
     pass
 
 
-LND_USE_LOCAL_NODE = "voltage"
+LND_USE_LOCAL_NODE = "local"
+
+# Set the environment variables for the proxy
+os.environ["http_proxy"] = "http://localhost:8888"
+os.environ["https_proxy"] = "http://localhost:8888"
 
 
 if LND_USE_LOCAL_NODE == "local":
     LND_MACAROON_PATH = os.path.expanduser(".certs/umbrel-admin.macaroon")
     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls.cert")
-    LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
+    # LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
+    LND_CONNECTION_ADDRESS = "10.0.0.5:10009"
     LND_CONNECTION_OPTIONS = [
         (
             "grpc.ssl_target_name_override",
@@ -95,7 +103,11 @@ async def connect_to_lnd() -> lnrpc.LightningStub:
     channel = secure_channel(
         LND_CONNECTION_ADDRESS,
         combined_creds,
-        options=LND_CONNECTION_OPTIONS,
+        options=[
+            ("grpc.enable_http_proxy", 1),
+            # ("grpc.http_connect_server", "localhost:8889"),
+            *LND_CONNECTION_OPTIONS,
+        ],
     )
 
     return lnrpc.LightningStub(channel)
