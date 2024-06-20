@@ -9,7 +9,6 @@ from v4vapp_backend_v2.lnd_grpc.connect import (  # replace with the actual impo
 )
 
 
-
 @pytest.mark.asyncio
 async def test_connect_to_lnd():
     stub = await connect_to_lnd()

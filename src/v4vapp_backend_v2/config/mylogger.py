@@ -80,10 +80,12 @@ class MyJSONFormatter(logging.Formatter):
 class CustomTelegramHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
+        print(record)
         asyncio.run(self.send_telegram_message(log_message))
 
     async def send_telegram_message(self, message: str):
         # TODO: #1 Implement the method to send the message to Telegram
+        print(self, message, " -> Telegram")
         await asyncio.sleep(3)
         print(message, " -> Telegram")
         pass
@@ -111,6 +113,8 @@ class TelegramFilter(logging.Filter):
         if hasattr(record, "telegram") and not record.telegram:
             return False
 
+        # Send everything with level WARNING or higher to Telegram
+        # unless the record.telegram flag is set to False
         return record.levelno >= logging.WARNING or (
             hasattr(record, "telegram") and record.telegram
         )

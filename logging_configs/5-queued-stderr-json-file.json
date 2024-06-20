@@ -3,7 +3,7 @@
     "disable_existing_loggers": false,
     "formatters": {
         "simple": {
-            "format": "%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-14s %(lineno) 5d : %(message)s",
+            "format": "%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-16s %(lineno) 5d : %(message)s",
             "datefmt": "%Y-%m-%dT%H:%M:%S%z"
         },
         "json": {

@@ -22,7 +22,6 @@ def setup_logging():
     log_folder = Path("logs/")
     log_folder.mkdir(exist_ok=True)
 
-
     logging.config.dictConfig(config)
     queue_handler = logging.getHandlerByName("queue_handler")
     if queue_handler is not None:
@@ -32,7 +31,7 @@ def setup_logging():
     handler = colorlog.StreamHandler()
     handler.setFormatter(
         colorlog.ColoredFormatter(
-            "%(log_color)s%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-14s %(lineno) 5d : %(message)s",
+            "%(log_color)s%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-16s %(lineno) 5d : %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S%z",
             log_colors={
                 "DEBUG": "cyan",
