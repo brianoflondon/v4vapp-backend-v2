@@ -2,7 +2,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
-from typing import override
+from typing import Any, override
 
 from v4vapp_backend_v2.config import logger
 
@@ -78,14 +78,23 @@ class MyJSONFormatter(logging.Formatter):
 
 
 class CustomTelegramHandler(logging.Handler):
+    error_codes: set[Any] = set()
+
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
-        print(record)
-        asyncio.run(self.send_telegram_message(log_message))
+        # Do something special here with error codes or details
+        if hasattr(record, "error_code"):
+            if record.error_code not in self.error_codes:
+                asyncio.run(self.send_telegram_message(log_message))
+                self.error_codes.add(record.error_code)
+        elif hasattr(record, "error_code_clear"):
+            self.error_codes.clear()
+            asyncio.run(self.send_telegram_message(log_message))
+        else:
+            asyncio.run(self.send_telegram_message(log_message))
 
     async def send_telegram_message(self, message: str):
         # TODO: #1 Implement the method to send the message to Telegram
-        print(self, message, " -> Telegram")
         await asyncio.sleep(3)
         print(message, " -> Telegram")
         pass

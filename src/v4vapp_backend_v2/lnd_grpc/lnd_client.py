@@ -16,10 +16,11 @@ from grpc.aio import AioRpcError, secure_channel
 
 from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
-from v4vapp_backend_v2.lnd_grpc.lnd_connection import (
+from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
-    LNDConnectionSettings,
-    LNDConnectionStartupError,
+    LNDStartupError,
+    LNDSubscriptionError,
 )
 
 
@@ -55,7 +56,7 @@ class LNDClient:
             sys.exit(1)
         except Exception as e:
             logger.error(e)
-            raise LNDConnectionStartupError("Error starting LND connection")
+            raise LNDStartupError("Error starting LND connection")
 
     async def disconnect(self):
         if self.channel is not None:
@@ -87,38 +88,20 @@ class LNDClient:
     async def call_async_generator(
         self, method: Callable[..., AsyncGenerator[Any, None]], *args, **kwargs
     ):
-        backoff_counter = 0
-        # check if call_name in kwargs
         if "call_name" in kwargs:
             call_name = kwargs.pop("call_name")
         else:
             call_name = __name__
-        while True:
-            try:
-                async for response in method(*args, **kwargs):
-                    logger.info(f"Received response from {call_name}")
-                    yield response
-                    backoff_counter = 0  # reset the counter after a successful call
-            except AioRpcError as e:
-                logger.warning(
-                    f"Error in {method} RPC call: {e.code()}",
-                    extra={
-                        "telegram": True,
-                        "call_name": call_name,
-                        "error_code": e.code(),
-                    },
-                )
-                backoff_counter += 1
-                backoff_time = min(
-                    2**backoff_counter, 60
-                )  # cap the backoff time to 60 seconds
-                logger.warning(
-                    f"Retrying in {backoff_time} seconds",
-                    extra={"telegram": False},
-                )
-                await asyncio.sleep(backoff_time)
-            else:
-                break
+        try:
+            async for response in method(*args, **kwargs):
+                yield response
+        except AioRpcError as e:
+            raise LNDSubscriptionError(
+                message=f"Error in {call_name} RPC call",
+                rpc_error_code=e.code(),
+                rpc_error_details=e.details(),
+                call_name=call_name,
+            )
 
     @backoff.on_exception(
         lambda: backoff.expo(base=2, factor=1),

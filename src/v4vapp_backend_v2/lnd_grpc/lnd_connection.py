@@ -2,24 +2,13 @@ import codecs
 import os
 
 from v4vapp_backend_v2.config import logger
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDStartupError
 
 LND_USE_LOCAL_NODE = "local"
 
 # Set the environment variables for the proxy
 os.environ["http_proxy"] = "http://localhost:8888"
 os.environ["https_proxy"] = "http://localhost:8888"
-
-
-class LNDConnectionStartupError(Exception):
-    pass
-
-
-class LNDConnectionError(Exception):
-    pass
-
-
-class LNDConnectionSubscriptionError(Exception):
-    pass
 
 
 class LNDConnectionSettings:
@@ -66,7 +55,7 @@ class LNDConnectionSettings:
             self.cert = open(LND_CERTIFICATE_PATH, "rb").read()
         except FileNotFoundError as e:
             logger.error(f"Macaroon and cert files missing: {e}")
-            raise LNDConnectionStartupError(f"Missing files: {e}")
+            raise LNDStartupError(f"Missing files: {e}")
         except Exception as e:
             logger.error(e)
-            raise LNDConnectionStartupError(f"Error starting LND connection: {e}")
+            raise LNDStartupError(f"Error starting LND connection: {e}")
