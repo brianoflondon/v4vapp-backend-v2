@@ -2,6 +2,8 @@ import asyncio
 import datetime as dt
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, override
 
 from v4vapp_backend_v2.config import logger
@@ -77,19 +79,35 @@ class MyJSONFormatter(logging.Formatter):
         return message
 
 
+@dataclass
+class ErrorCode:
+    code: Any
+    start_time: datetime = datetime.now(tz=timezone.utc)
+
+    @property
+    def elapsed_time(self) -> timedelta:
+        return datetime.now(tz=timezone.utc) - self.start_time
+
+
 class CustomTelegramHandler(logging.Handler):
-    error_codes: set[Any] = set()
+    error_codes: dict[Any, ErrorCode] = {}
 
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
         # Do something special here with error codes or details
+        if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
+            elapsed_time = self.error_codes[record.error_code].elapsed_time
+            log_message = f"Error code {record.error_code} cleared after {elapsed_time} {log_message}"
+            self.error_codes.pop(record.error_code)
+            asyncio.run(self.send_telegram_message(log_message))
+            return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
                 asyncio.run(self.send_telegram_message(log_message))
-                self.error_codes.add(record.error_code)
-        elif hasattr(record, "error_code_clear"):
-            self.error_codes.clear()
-            asyncio.run(self.send_telegram_message(log_message))
+                self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
+            else:
+                # Do not send the same error code to Telegram
+                pass
         else:
             asyncio.run(self.send_telegram_message(log_message))
 

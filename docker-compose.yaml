@@ -7,4 +7,4 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./logging_configs:/app/logging_configs
-    command: ["poetry", "run", "python", "first_try.py"]
+    command: ["poetry", "run", "python", "context_manager.py"]

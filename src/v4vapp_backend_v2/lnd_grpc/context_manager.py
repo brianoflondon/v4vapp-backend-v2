@@ -32,15 +32,10 @@ async def subscribe_invoices(add_index: int, settle_index: int):
                 invoice = LNDInvoice.model_validate(inv_dict)
                 yield invoice
         except LNDSubscriptionError as e:
-            logger.error(
-                e,
-                extra={
-                    "telegram": True,
-                    "error_code": e.rpc_error_code,
-                    "error_details": e.rpc_error_details,
-                },
+            await client.check_connection(
+                original_error=e.original_error, call_name="SubscribeInvoices"
             )
-            raise e
+            return
         except Exception as e:
             logger.error(e)
             raise e
@@ -62,8 +57,10 @@ async def main():
 
             while True:
                 logger.info("Subscribing to invoices")
+                logger.info(f"Add index: {add_index} - Settle index: {settle_index}")
                 try:
                     async for invoice in subscribe_invoices(add_index, settle_index):
+
                         if error_codes:
                             logger.info(
                                 f"✅ Error codes cleared {error_codes}",
@@ -91,9 +88,6 @@ async def main():
                             most_recent = invoice
                             db.update_most_recent(invoice)
                             add_index = most_recent.add_index
-                except LNDSubscriptionError as e:
-                    await asyncio.sleep(5)
-                    error_codes.add(e.rpc_error_code)
 
                 except Exception as e:
                     logger.error(e)

@@ -18,8 +18,10 @@ class LNDSubscriptionError(LNDConnectionError):
         rpc_error_code: StatusCode,
         rpc_error_details: str,
         call_name: str,
+        original_error: Exception,
     ) -> None:
         super().__init__(message)
         self.rpc_error_code = rpc_error_code
         self.rpc_error_details = rpc_error_details
         self.call_name = call_name
+        self.original_error = original_error

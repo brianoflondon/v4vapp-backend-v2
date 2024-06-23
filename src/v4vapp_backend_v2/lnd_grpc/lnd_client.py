@@ -14,6 +14,7 @@ from grpc import (
 )
 from grpc.aio import AioRpcError, secure_channel
 
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
@@ -30,6 +31,8 @@ class LNDClient:
         self.channel = None
         self.stub = None
         self.error_state = False
+        self.error_code = None
+        self.connection_check_task: asyncio.Task[Any] | None = None
 
     def metadata_callback(self, context, callback):
         # for more info see grpc docs
@@ -64,12 +67,62 @@ class LNDClient:
             self.channel = None
             self.stub = None
 
+    async def check_connection(
+        self, original_error: AioRpcError | None = None, call_name: str = ""
+    ):
+        error_count = 0
+        back_off_time = 1
+        if self.stub is None:
+            await self.connect()
+        while True:
+            try:
+                if self.stub is not None:
+                    _ = await self.stub.WalletBalance(ln.WalletBalanceRequest())
+                    logger.info(
+                        "Connection to LND is OK",
+                        extra={
+                            "telegram": True,
+                            "error_code": original_error.code(),
+                            "error_code_clear": True,
+                        },
+                    )
+                    self.error_state = False
+                    self.error_code = None
+                    return
+                else:
+                    logger.warning("LNDClient stub is None")
+            except AioRpcError as e:
+                if original_error is not None:
+                    e = original_error
+                logger.error(
+                    e,
+                    extra={
+                        "telegram": True,
+                        "error_code": e.code(),
+                        "error_details": e,
+                    },
+                )
+                self.error_state = True
+            error_count += 1
+            back_off_time = min((2**error_count), 60)
+            logger.warning(
+                f"Back off: {back_off_time} Error {call_name}",
+                extra={"telegram": False},
+            )
+            await asyncio.sleep(back_off_time)
+
     async def __aenter__(self):
         await self.connect()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         logger.info("Disconnecting from LND")
+        if self.connection_check_task is not None:
+            self.connection_check_task.cancel()
+            try:
+                await self.connection_check_task
+            except asyncio.CancelledError:
+                pass
         await self.disconnect()
 
     @backoff.on_exception(
@@ -88,19 +141,40 @@ class LNDClient:
     async def call_async_generator(
         self, method: Callable[..., AsyncGenerator[Any, None]], *args, **kwargs
     ):
+        """
+        Calls the specified asynchronous generator method and yields the responses.
+        If the name of the `call_name` is passed as a keyword argument, it will be
+        used in the error message. Otherwise, the name of the method will be used.
+
+        Args:
+            method (Callable[..., AsyncGenerator[Any, None]]): The asynchronous
+                generator method to call.
+            *args: Variable length argument list to be passed to the method.
+            **kwargs: Arbitrary keyword arguments to be passed to the method.
+
+        Yields:
+            Any: The responses yielded by the asynchronous generator method.
+
+        Raises:
+            LNDSubscriptionError: If an error occurs during the RPC call.
+        """
         if "call_name" in kwargs:
             call_name = kwargs.pop("call_name")
         else:
             call_name = __name__
+
         try:
             async for response in method(*args, **kwargs):
                 yield response
         except AioRpcError as e:
+            if self.error_state:
+                logger.error(f"broken connection in {call_name} RPC call: {e.code()}")
             raise LNDSubscriptionError(
                 message=f"Error in {call_name} RPC call",
                 rpc_error_code=e.code(),
                 rpc_error_details=e.details(),
                 call_name=call_name,
+                original_error=e,
             )
 
     @backoff.on_exception(
