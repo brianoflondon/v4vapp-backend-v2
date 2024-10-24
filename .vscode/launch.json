@@ -10,6 +10,13 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "context manager",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/context_manager.py",
+            "console": "integratedTerminal"
         }
     ]
 }
