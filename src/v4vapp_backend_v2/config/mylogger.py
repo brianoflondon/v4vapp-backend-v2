@@ -96,10 +96,17 @@ class CustomTelegramHandler(logging.Handler):
         log_message = self.format(record)
         # Do something special here with error codes or details
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
-            elapsed_time = self.error_codes[record.error_code].elapsed_time
-            log_message = f"Error code {record.error_code} cleared after {elapsed_time} {log_message}"
-            self.error_codes.pop(record.error_code)
-            asyncio.run(self.send_telegram_message(log_message))
+            if record.error_code in self.error_codes:
+                elapsed_time = self.error_codes[record.error_code].elapsed_time
+                log_message = (
+                    f"Error code {record.error_code} "
+                    f"cleared after {elapsed_time} {log_message}"
+                )
+                self.error_codes.pop(record.error_code)
+                asyncio.run(self.send_telegram_message(log_message))
+            else:
+                log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
+                asyncio.run(self.send_telegram_message(log_message))
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
