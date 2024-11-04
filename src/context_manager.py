@@ -83,7 +83,7 @@ async def main():
                             logger.info(
                                 f"✅ Valid invoice {invoice.add_index} with memo "
                                 f"{invoice.memo} {invoice.value} sats",
-                                extra={"telegram": True},
+                                extra={"telegram": False},
                             )
                             most_recent = invoice
                             db.update_most_recent(invoice)

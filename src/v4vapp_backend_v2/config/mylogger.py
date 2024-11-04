@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, override
 
-from v4vapp_backend_v2.config import logger
-
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
     "asctime",
@@ -66,7 +64,7 @@ class MyJSONFormatter(logging.Formatter):
             key: (
                 msg_val
                 if (msg_val := always_fields.pop(val, None)) is not None
-                else getattr(record, val)
+                else getattr(record, val, None)
             )
             for key, val in self.fmt_keys.items()
         }
@@ -90,6 +88,25 @@ class ErrorCode:
 
 
 class CustomTelegramHandler(logging.Handler):
+    """
+    Custom logging handler to send log messages to Telegram with special
+    handling for error codes.
+
+    Attributes:
+        error_codes (dict[Any, ErrorCode]): A dictionary to keep track of error codes
+        and their details.
+
+    Methods:
+        emit(record: logging.LogRecord):
+            Processes a log record and sends a formatted log message to Telegram.
+            Handles special cases for error codes, including clearing and tracking
+            elapsed time.
+
+        send_telegram_message(message: str):
+            Asynchronously sends a message to Telegram.
+            This method needs to be implemented to integrate with the Telegram API.
+    """
+
     error_codes: dict[Any, ErrorCode] = {}
 
     def emit(self, record: logging.LogRecord):

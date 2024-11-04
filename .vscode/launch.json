@@ -7,6 +7,7 @@
         {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
+            "consoleName": "${file}",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
@@ -14,6 +15,7 @@
         {
             "name": "context manager",
             "type": "debugpy",
+            "consoleName": "context manager",
             "request": "launch",
             "program": "src/context_manager.py",
             "console": "integratedTerminal"
