@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import threading
 from typing import Any, override
 
 LOG_RECORD_BUILTIN_ATTRS = {
@@ -111,6 +112,15 @@ class CustomTelegramHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
+        print('emit log_message', log_message)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # No event loop in the current thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # Start the event loop in a new thread
+            threading.Thread(target=loop.run_forever, daemon=True).start()
+
         # Do something special here with error codes or details
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
             if record.error_code in self.error_codes:
@@ -120,20 +130,28 @@ class CustomTelegramHandler(logging.Handler):
                     f"cleared after {elapsed_time} {log_message}"
                 )
                 self.error_codes.pop(record.error_code)
-                asyncio.run(self.send_telegram_message(log_message))
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
             else:
                 log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
-                asyncio.run(self.send_telegram_message(log_message))
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                asyncio.run(self.send_telegram_message(log_message))
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Telegram
                 pass
         else:
-            asyncio.run(self.send_telegram_message(log_message))
+            asyncio.run_coroutine_threadsafe(
+                self.send_telegram_message(log_message), loop
+            )
 
     async def send_telegram_message(self, message: str):
         # TODO: #1 Implement the method to send the message to Telegram
