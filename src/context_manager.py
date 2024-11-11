@@ -5,13 +5,13 @@ from typing import Any
 from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
-from v4vapp_backend_v2.config import logger, setup_logging
+from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDSubscriptionError
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
-setup_logging()
+config = InternalConfig().config
 
 # Create a temporary file
 db = MyDB()
@@ -83,7 +83,7 @@ async def main():
                             logger.info(
                                 f"✅ Valid invoice {invoice.add_index} with memo "
                                 f"{invoice.memo} {invoice.value} sats",
-                                extra={"telegram": False},
+                                extra={"telegram": True},
                             )
                             most_recent = invoice
                             db.update_most_recent(invoice)
@@ -104,7 +104,6 @@ async def main():
 
 
 if __name__ == "__main__":
-
     try:
         asyncio.run(main())
 

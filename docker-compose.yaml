@@ -6,5 +6,5 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./.certs:/app/.certs
-      - ./logging_configs:/app/logging_configs
+      - ./config:/app/config
     command: ["poetry", "run", "python", "context_manager.py"]

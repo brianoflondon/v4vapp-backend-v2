@@ -1,0 +1,9 @@
+version: "0.1.0-test"
+
+logging:
+  log_config_file: 5-queued-stderr-json-file.json
+  default_log_level: DEBUG
+  log_folder: logs
+  handlers:
+    grpc: WARNING
+    asyncio: WARNING
