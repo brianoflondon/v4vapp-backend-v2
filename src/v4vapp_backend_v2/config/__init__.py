@@ -8,7 +8,6 @@ from typing import Any
 
 import colorlog
 from pydantic import BaseModel
-from single_source import get_version
 from yaml import safe_load
 
 from v4vapp_backend_v2 import __version__
@@ -27,18 +26,38 @@ class LoggingConfig(BaseModel):
     log_folder: Path = Path("logs/")
 
 
+class TailscaleConfig(BaseModel):
+    tailnet_name: str = ""
+    notification_server: str = ""
+    notification_server_port: int = 0
+
+
+class TelegramConfig(BaseModel):
+    chat_id: int = 0
+
+
 class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
+    tailscale: TailscaleConfig
+    telegram: TelegramConfig
 
 
 class InternalConfig:
+    _instance = None
     config: Config
 
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(InternalConfig, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        super().__init__()
-        self.setup_config()
-        self.setup_logging()
+        if not hasattr(self, "_initialized"):
+            super().__init__()
+            self.setup_config()
+            self.setup_logging()
+            self._initialized = True
 
     def setup_config(self) -> None:
         try:
