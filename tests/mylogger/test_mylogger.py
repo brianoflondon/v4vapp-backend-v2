@@ -1,7 +1,12 @@
-from datetime import datetime, timezone
+import asyncio
 import json
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 
+import pytest
+
+from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.config.mylogger import MyJSONFormatter
 
 
@@ -89,3 +94,23 @@ def test_format_log_record_with_custom_keys():
     # Check the output
     assert log_dict["log_message"] == "Test message with custom keys"
     assert "log_timestamp" in log_dict
+
+
+@pytest.mark.asyncio
+async def test_log_message_with_notification(monkeypatch):
+    # config_file = Path("tests/data/config", "config.yaml")
+    # with open(config_file) as f_in:
+    #     raw_config = safe_load(f_in)
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path)
+    config = InternalConfig().config
+
+    logger.info("Test message")
+    logger.info("Test message with notification", extra={"telegram": True})
+    await asyncio.sleep(5)
+
+    # Check the log messages
+    # assert len(logger.records) == 2
+    # assert logger.records[0].getMessage() == "Test message"
+    # assert logger.records[1].getMessage() == "Test message with notification"
+    # assert logger.records[1].telegram is True

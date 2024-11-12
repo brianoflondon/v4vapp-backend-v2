@@ -2,10 +2,14 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-import threading
-from typing import Any, override
+from typing import Any, Dict, override
+
+import httpx
+
+from v4vapp_backend_v2.config import InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -110,9 +114,20 @@ class CustomTelegramHandler(logging.Handler):
 
     error_codes: dict[Any, ErrorCode] = {}
 
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Formats the log record.
+
+        Args:
+            record (logging.LogRecord): The log record to be formatted.
+
+        Returns:
+            str: The formatted log message.
+        """
+        return record.message
+
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
-        print('emit log_message', log_message)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:  # No event loop in the current thread
@@ -154,9 +169,37 @@ class CustomTelegramHandler(logging.Handler):
             )
 
     async def send_telegram_message(self, message: str):
-        # TODO: #1 Implement the method to send the message to Telegram
-        await asyncio.sleep(3)
-        print(message, " -> Telegram")
+        # Assign the configuration to a local variable
+        config = InternalConfig().config
+
+        url = (
+            f"{config.tailscale.notification_server}."
+            f"{config.tailscale.tailnet_name}:"
+            f"{config.tailscale.notification_server_port}/send_notification/"
+        )
+        alert_level = 1
+        params: Dict = {
+            "notify": message,
+            "alert_level": alert_level,
+            "room_id": config.telegram.chat_id,
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                _ = await client.get(url, params=params, timeout=60)
+        except httpx.RequestError as ex:
+            logger.error(
+                f"An error occurred while sending the message: {ex}",
+                extra={
+                    "telegram": False,
+                },
+            )
+        except Exception as ex:
+            logger.error(
+                f"An error occurred while sending the message: {ex}",
+                extra={
+                    "telegram": False,
+                },
+            )
         pass
         # raise NotImplementedError
 

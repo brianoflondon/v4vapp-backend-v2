@@ -19,6 +19,12 @@ BASE_CONFIG_PATH = Path("config/")
 BASE_LOGGING_CONFIG_PATH = Path(BASE_CONFIG_PATH, "logging/")
 
 
+"""
+These classes need to match the structure of the config.yaml file
+
+"""
+
+
 class LoggingConfig(BaseModel):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"

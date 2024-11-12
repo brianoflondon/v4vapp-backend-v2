@@ -27,3 +27,9 @@ def test_internal_config(set_base_config_path: None):
     assert config is not None
     assert config.config is not None
     assert config.config.version == raw_config["version"]
+
+
+def test_singleton_config():
+    config = InternalConfig()
+    config2 = InternalConfig()
+    assert config is config2
