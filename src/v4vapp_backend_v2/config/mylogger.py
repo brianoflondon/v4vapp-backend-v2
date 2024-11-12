@@ -2,7 +2,6 @@ import asyncio
 import datetime as dt
 import json
 import logging
-import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, override
@@ -128,14 +127,6 @@ class CustomTelegramHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
-        try:
-            loop = asyncio.get_running_loop()
-            logger.debug("Found running loop for emit")
-        except RuntimeError:  # No event loop in the current thread
-            loop = asyncio.new_event_loop()
-            # Start the event loop in a new thread
-            # threading.Thread(target=loop.run_forever, daemon=True).start()
-            logger.debug("Started new event loop for emit")
 
         # Do something special here with error codes or details
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
@@ -146,41 +137,75 @@ class CustomTelegramHandler(logging.Handler):
                     f"cleared after {elapsed_time} {log_message}"
                 )
                 self.error_codes.pop(record.error_code)
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.create_task(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                self.send_telegram_message(log_message)
             else:
                 log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.run_coroutine_threadsafe(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                self.send_telegram_message(log_message)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.run_coroutine_threadsafe(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                self.send_telegram_message(log_message)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Telegram
                 pass
+        # Default case
         else:
-            # asyncio.run(self.send_telegram_message(log_message))
-            loop.run_until_complete(self.send_telegram_message(log_message))
-            # asyncio.run_coroutine_threadsafe(
-            #     self.send_telegram_message(log_message), loop
-            # )
-        logger.debug(f"Finished emit, loop is running: {loop.is_running()}")
+            self.send_telegram_message(log_message)
 
-    async def send_telegram_message(self, message: str):
+    def send_telegram_message(self, message: str) -> None:
+        """
+        Sends a message to a Telegram chat via a notification server.
+
+        This method sends a message to a specified Telegram chat by calling an
+        external notification server API. It handles the creation and management
+        of the asyncio event loop required for making the asynchronous HTTP request.
+
+        Args:
+            message (str): The message to be sent to the Telegram chat.
+
+        Raises:
+            httpx.RequestError: If an error occurs while making the HTTP request.
+            Exception: For any other exceptions that occur during the process.
+
+        Note:
+            The configuration for the notification server and Telegram chat is
+            retrieved from the InternalConfig class.
+        """
+
+        async def call_notification_api(message: str):
+            try:
+                async with httpx.AsyncClient() as client:
+                    ans = await client.get(url, params=params, timeout=60)
+                    if ans.status_code != 200:
+                        logger.warning(
+                            f"An error occurred while sending the message: {ans.text}",
+                            extra={
+                                "telegram": False,
+                                "failed_message": message,
+                            },
+                        )
+                    else:
+                        logger.debug(f"Sent message: {message}")
+
+            except Exception as ex:
+                logger.warning(
+                    f"An error occurred while sending the message: {ex}",
+                    extra={
+                        "telegram": False,
+                        "failed_message": message,
+                    },
+                )
+
         # Assign the configuration to a local variable
         config = InternalConfig().config
+
+        try:
+            loop = asyncio.get_running_loop()
+            logger.debug("Found running loop for emit")
+        except RuntimeError:  # No event loop in the current thread
+            loop = asyncio.new_event_loop()
+            logger.debug("Started new event loop for emit")
 
         url = (
             f"{config.tailscale.notification_server}."
@@ -194,16 +219,8 @@ class CustomTelegramHandler(logging.Handler):
             "room_id": config.telegram.chat_id,
         }
         try:
-            async with httpx.AsyncClient() as client:
-                _ = await client.get(url, params=params, timeout=60)
-        except httpx.RequestError as ex:
-            logger.error(
-                f"An error occurred while sending the message: {ex}",
-                extra={
-                    "telegram": False,
-                    "failed_message": message,
-                },
-            )
+            loop.run_until_complete(call_notification_api(message))
+
         except Exception as ex:
             logger.error(
                 f"An error occurred while sending the message: {ex}",
@@ -212,7 +229,8 @@ class CustomTelegramHandler(logging.Handler):
                     "failed_message": message,
                 },
             )
-        pass
+        logger.debug(f"Finished emit, loop is running: {loop.is_running()}")
+
         # raise NotImplementedError
 
 
