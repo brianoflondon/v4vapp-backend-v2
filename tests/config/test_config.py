@@ -23,13 +23,15 @@ def test_internal_config(set_base_config_path: None):
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
 
-    config = InternalConfig()
-    assert config is not None
-    assert config.config is not None
-    assert config.config.version == raw_config["version"]
+    internal_config = InternalConfig()
+    assert internal_config is not None
+    assert internal_config.config is not None
+    assert internal_config.config.version == raw_config["version"]
 
 
-def test_singleton_config():
-    config = InternalConfig()
-    config2 = InternalConfig()
-    assert config is config2
+def test_singleton_config(set_base_config_path: None):
+    internal_config = InternalConfig()
+    internal_config2 = InternalConfig()
+    print(internal_config.config.version)
+    print(internal_config2.config.version)
+    assert internal_config is internal_config2

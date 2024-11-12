@@ -1,7 +1,8 @@
 import codecs
 import os
+from pathlib import Path
 
-from v4vapp_backend_v2.config import logger
+from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDStartupError
 
 LND_USE_LOCAL_NODE = "voltage"
@@ -18,27 +19,37 @@ class LNDConnectionSettings:
     cert: bytes
 
     def __init__(self) -> None:
-        if LND_USE_LOCAL_NODE == "local":
-            LND_MACAROON_PATH = os.path.expanduser(".certs/umbrel-admin.macaroon")
-            LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls.cert")
-            # LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
-            self.address = "10.0.0.5:10009"
-            self.options = [
-                (
-                    "grpc.ssl_target_name_override",
-                    "umbrel.local",
-                ),
-            ]
-        else:
-            LND_MACAROON_PATH = os.path.expanduser(".certs/readonly.macaroon")
-            LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls-voltage.cert")
-            self.address = "v4vapp.m.voltageapp.io:10009"
-            self.options = [
-                (
-                    "grpc.ssl_target_name_override",
-                    "v4vapp.m.voltageapp.io",
-                ),
-            ]
+        lnd_config = InternalConfig().config.lnd_connection
+        self.address = lnd_config.address
+        options_dict = lnd_config.options
+        options_tuples = [
+            (key, value) for d in options_dict for key, value in d.items()
+        ]
+        self.options = options_tuples
+        LND_MACAROON_PATH = Path(lnd_config.certs_path, lnd_config.macaroon_filename)
+        LND_CERTIFICATE_PATH = Path(lnd_config.certs_path, lnd_config.cert_filename)
+
+        # if LND_USE_LOCAL_NODE == "local":
+        #     LND_MACAROON_PATH = os.path.expanduser(".certs/umbrel-admin.macaroon")
+        #     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls.cert")
+        #     # LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
+        #     self.address = "10.0.0.5:10009"
+        #     self.options = [
+        #         (
+        #             "grpc.ssl_target_name_override",
+        #             "umbrel.local",
+        #         ),
+        #     ]
+        # else:
+        #     LND_MACAROON_PATH = os.path.expanduser(".certs/readonly.macaroon")
+        #     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls-voltage.cert")
+        #     self.address = "v4vapp.m.voltageapp.io:10009"
+        #     self.options = [
+        #         (
+        #             "grpc.ssl_target_name_override",
+        #             "v4vapp.m.voltageapp.io",
+        #         ),
+        #     ]
 
         # Create a channel to the server
         # Due to updated ECDSA generated tls.cert we need to let grpc know that

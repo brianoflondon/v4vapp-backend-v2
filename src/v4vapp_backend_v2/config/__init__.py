@@ -32,6 +32,14 @@ class LoggingConfig(BaseModel):
     log_folder: Path = Path("logs/")
 
 
+class LndConnectionConfig(BaseModel):
+    address: str = ""
+    options: list = []
+    certs_path: Path = Path(".certs/")
+    macaroon_filename: str = ""
+    cert_filename: str = ""
+
+
 class TailscaleConfig(BaseModel):
     tailnet_name: str = ""
     notification_server: str = ""
@@ -45,6 +53,7 @@ class TelegramConfig(BaseModel):
 class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
+    lnd_connection: LndConnectionConfig
     tailscale: TailscaleConfig
     telegram: TelegramConfig
 
