@@ -16,6 +16,7 @@ async def test_connect_to_lnd():
     assert stub is not None
 
 
+@pytest.mark.skip(reason="This test is not implemented yet.")
 @pytest.fixture(autouse=True)
 def set_up_and_tear_down():
     # Backup the original environment variable

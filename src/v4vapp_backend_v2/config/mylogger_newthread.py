@@ -130,12 +130,13 @@ class CustomTelegramHandler(logging.Handler):
         log_message = self.format(record)
         try:
             loop = asyncio.get_running_loop()
-            logger.debug("Found running loop for emit")
+            logger.info('Found running loop for emit')
         except RuntimeError:  # No event loop in the current thread
             loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             # Start the event loop in a new thread
-            # threading.Thread(target=loop.run_forever, daemon=True).start()
-            logger.debug("Started new event loop for emit")
+            threading.Thread(target=loop.run_forever, daemon=True).start()
+            logger.info('Started new event loop for emit')
 
         # Do something special here with error codes or details
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
@@ -146,37 +147,28 @@ class CustomTelegramHandler(logging.Handler):
                     f"cleared after {elapsed_time} {log_message}"
                 )
                 self.error_codes.pop(record.error_code)
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.create_task(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
             else:
                 log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.run_coroutine_threadsafe(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                # asyncio.run(self.send_telegram_message(log_message))
-                loop.run_until_complete(self.send_telegram_message(log_message))
-                # asyncio.run_coroutine_threadsafe(
-                #     self.send_telegram_message(log_message), loop
-                # )
+                asyncio.run_coroutine_threadsafe(
+                    self.send_telegram_message(log_message), loop
+                )
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Telegram
                 pass
         else:
-            # asyncio.run(self.send_telegram_message(log_message))
-            loop.run_until_complete(self.send_telegram_message(log_message))
-            # asyncio.run_coroutine_threadsafe(
-            #     self.send_telegram_message(log_message), loop
-            # )
-        logger.debug(f"Finished emit, loop is running: {loop.is_running()}")
+            asyncio.run_coroutine_threadsafe(
+                self.send_telegram_message(log_message), loop
+            )
 
     async def send_telegram_message(self, message: str):
         # Assign the configuration to a local variable

@@ -7,7 +7,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDStartupError
 LND_USE_LOCAL_NODE = "voltage"
 
 # Set the environment variables for the local Charles proxy
-# os.environ["http_proxy"] = "http://home-imac:8888"
+os.environ["http_proxy"] = "http://home-imac:8888"
 # os.environ["https_proxy"] = "http://home-imac:8888"
 
 

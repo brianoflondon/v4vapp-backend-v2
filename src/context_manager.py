@@ -76,7 +76,6 @@ async def main():
                                 f"{invoice.memo} {invoice.value} sats",
                                 extra={"telegram": True},
                             )
-                            logger.info(f"{invoice.settle_date}")
                             most_recent = invoice
                             settle_index = most_recent.settle_index
                         else:
