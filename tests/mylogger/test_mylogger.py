@@ -1,13 +1,13 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from v4vapp_backend_v2.config import InternalConfig, logger
-from v4vapp_backend_v2.config.mylogger import MyJSONFormatter
+from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, timedelta_display
 
 
 def test_format_basic_log_record():
@@ -114,3 +114,18 @@ async def test_log_message_with_notification(monkeypatch):
     # assert logger.records[0].getMessage() == "Test message"
     # assert logger.records[1].getMessage() == "Test message with notification"
     # assert logger.records[1].telegram is True
+
+
+def test_timedelta_display():
+
+    # Test with a timedelta of 1 hour, 2 minutes, and 3 seconds
+    td = timedelta(hours=1, minutes=2, seconds=3)
+    assert timedelta_display(td) == "01h 02m 03s"
+
+    # Test with a timedelta of 0 hours, 0 minutes, and 0 seconds
+    td = timedelta(seconds=0)
+    assert timedelta_display(td) == "00h 00m 00s"
+
+    # Test with a timedelta of 23 hours, 59 minutes, and 59 seconds
+    td = timedelta(hours=23, minutes=59, seconds=59)
+    assert timedelta_display(td) == "23h 59m 59s"
