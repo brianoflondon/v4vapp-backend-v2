@@ -1,6 +1,5 @@
 import asyncio
-import os
-from typing import Any
+from typing import AsyncGenerator
 
 from google.protobuf.json_format import MessageToDict
 
@@ -17,7 +16,9 @@ config = InternalConfig().config
 db = MyDB()
 
 
-async def subscribe_invoices(add_index: int, settle_index: int):
+async def subscribe_invoices(
+    add_index: int, settle_index: int
+) -> AsyncGenerator[LNDInvoice, None]:
     async with LNDClient() as client:
         request_sub = ln.InvoiceSubscription(
             add_index=add_index, settle_index=settle_index
@@ -35,22 +36,22 @@ async def subscribe_invoices(add_index: int, settle_index: int):
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeInvoices"
             )
-            return
+            raise e
         except Exception as e:
             logger.error(e)
             raise e
 
 
-async def main():
+async def main() -> None:
     logger.info("Starting LND gRPC client")
-    error_codes: set[Any] = set()
+    error_codes: set[str] = set()
     try:
         async with LNDClient() as client:
-            balance = await client.call(
-                client.stub.WalletBalance,
-                ln.WalletBalanceRequest(),
+            balance: ln.ChannelBalanceResponse = await client.call(
+                client.stub.ChannelBalance,
+                ln.ChannelBalanceRequest(),
             )
-            logger.info(f"Balance: {balance.total_balance} sats")
+            logger.info(f"Balance: {balance.local_balance.sat:,.0f} sats")
 
             add_index = 0
             settle_index = 0
@@ -93,9 +94,9 @@ async def main():
                     raise e
 
     except KeyboardInterrupt:
-        logger.warning("❌ LND gRPC client stopped")
+        logger.warning("❌ LND gRPC client stopped keyboard")
     except Exception as e:
-        logger.error("❌ LND gRPC client stopped")
+        logger.error("❌ LND gRPC client stopped error")
         logger.error(e)
         raise e
 
@@ -105,10 +106,13 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())
+        logger.info("✅ LND gRPC client stopped")
 
     except KeyboardInterrupt:
-        logger.warning("❌ LND gRPC client stopped")
+        logger.warning(
+            "✅ LND gRPC client stopped by keyboard", extra={"telegram": False}
+        )
     except Exception as e:
-        logger.error("❌ LND gRPC client stopped")
-        logger.error(e)
+        logger.error("❌ LND gRPC client stopped by error", extra={"telegram": False})
+        logger.error(e, extra={"telegram": False})
         raise e
