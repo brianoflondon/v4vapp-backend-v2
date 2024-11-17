@@ -135,7 +135,14 @@ class LNDClient:
         try:
             return await method(*args, **kwargs)
         except AioRpcError as e:
-            logger.warning(f"Error in {method} RPC call: {e.code()}")
+            logger.warning(
+                f"Error in {method} RPC call: {e.code()}",
+                extra={
+                    "telegram": True,
+                    "error_code": e.code(),
+                    "error_details": e,
+                },
+            )
             raise LNDConnectionError()
 
     async def call_async_generator(
