@@ -33,11 +33,13 @@ class LoggingConfig(BaseModel):
 
 
 class LndConnectionConfig(BaseModel):
+    name: str = ""
     address: str = ""
     options: list = []
     certs_path: Path = Path(".certs/")
     macaroon_filename: str = ""
     cert_filename: str = ""
+    use_proxy: str = ""
 
 
 class TailscaleConfig(BaseModel):
@@ -59,6 +61,27 @@ class Config(BaseModel):
 
 
 class InternalConfig:
+    """
+    Singleton class to manage internal configuration and logging setup.
+
+    Attributes:
+        _instance (InternalConfig): Singleton instance of the class.
+        config (Config): Configuration object validated from the config file.
+
+    Methods:
+        __new__(cls, *args, **kwargs):
+            Ensures only one instance of the class is created (Singleton pattern).
+
+        __init__(self):
+            Initializes the instance, sets up configuration and logging if not already initialized.
+
+        setup_config(self) -> None:
+            Loads and validates the configuration from a YAML file.
+
+        setup_logging(self):
+            Sets up logging configuration from a JSON file, initializes log handlers, and sets log levels.
+    """
+
     _instance = None
     config: Config
 
