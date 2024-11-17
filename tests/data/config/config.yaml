@@ -11,12 +11,14 @@ logging:
     httpx: WARNING
 
 lnd_connection:
+  name: example
   address: example.com:10009
   options:
     - grpc.ssl_target_name_override: example.com
   certs_path: tests/data/config/.certs
   macaroon_filename: readonly.macaroon
   cert_filename: tls.cert
+  # use_proxy: http://proxy.example.com:8888
 
 tailscale:
   tailnet_name: anything.ts.net

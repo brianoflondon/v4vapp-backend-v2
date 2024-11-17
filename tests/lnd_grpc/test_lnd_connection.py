@@ -26,3 +26,4 @@ def test_local_node_settings(set_base_config_path: None):
     with pytest.raises(LNDStartupError):
         settings = LNDConnectionSettings()
         assert settings.address == raw_config["lnd_connection"]["address"]
+
