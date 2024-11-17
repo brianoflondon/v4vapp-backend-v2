@@ -37,6 +37,22 @@ LOG_RECORD_BUILTIN_ATTRS = {
 }
 
 
+def timedelta_display(td: timedelta) -> str:
+    """
+    Convert a timedelta object to a string in the format "HHh MMm SSs".
+
+    Args:
+        td (timedelta): The timedelta object to be converted.
+
+    Returns:
+        str: The formatted string representing the timedelta.
+    """
+    hours = td.seconds // 3600
+    minutes = (td.seconds % 3600) // 60
+    seconds = td.seconds % 60
+    return f"{hours:02}h {minutes:02}m {seconds:02}s"
+
+
 class MyJSONFormatter(logging.Formatter):
     def __init__(
         self,
@@ -132,19 +148,20 @@ class CustomTelegramHandler(logging.Handler):
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
             if record.error_code in self.error_codes:
                 elapsed_time = self.error_codes[record.error_code].elapsed_time
+                elapsed_time_str = timedelta_display(elapsed_time)
                 log_message = (
                     f"Error code {record.error_code} "
-                    f"cleared after {elapsed_time} {log_message}"
+                    f"cleared after {elapsed_time_str} {log_message}"
                 )
                 self.error_codes.pop(record.error_code)
-                self.send_telegram_message(log_message)
+                self.send_telegram_message(log_message, alert_level=3)
             else:
                 log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
-                self.send_telegram_message(log_message)
+                self.send_telegram_message(log_message, alert_level=3)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                self.send_telegram_message(log_message)
+                self.send_telegram_message(log_message, alert_level=5)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Telegram
@@ -153,7 +170,7 @@ class CustomTelegramHandler(logging.Handler):
         else:
             self.send_telegram_message(log_message)
 
-    def send_telegram_message(self, message: str) -> None:
+    def send_telegram_message(self, message: str, alert_level: int = 1) -> None:
         """
         Sends a message to a Telegram chat via a notification server.
 
@@ -212,13 +229,13 @@ class CustomTelegramHandler(logging.Handler):
             f"{config.tailscale.tailnet_name}:"
             f"{config.tailscale.notification_server_port}/send_notification/"
         )
-        alert_level = 1
         params: Dict = {
             "notify": message,
             "alert_level": alert_level,
             "room_id": config.telegram.chat_id,
         }
         try:
+            logger.info(f"NOTIFICATION -> {message}", extra={"telegram": False})
             loop.run_until_complete(call_notification_api(message))
 
         except Exception as ex:
