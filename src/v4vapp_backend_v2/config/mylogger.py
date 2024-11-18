@@ -154,26 +154,28 @@ class CustomTelegramHandler(logging.Handler):
             )
             if record.error_code in self.error_codes:
                 self.error_codes.pop(record.error_code)
-                self.send_telegram_message(log_message, alert_level=3)
+                self.send_telegram_message(log_message, record, alert_level=5)
             else:
                 logger.warning(
                     f"Error code not found in error_codes {record.error_code}",
                     extra={"telegram": False},
                 )
-                self.send_telegram_message(log_message, alert_level=3)
+                self.send_telegram_message(log_message, record, alert_level=5)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                self.send_telegram_message(log_message, alert_level=5)
+                self.send_telegram_message(log_message, record, alert_level=5)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Telegram
                 pass
         # Default case
         else:
-            self.send_telegram_message(log_message)
+            self.send_telegram_message(log_message, record, alert_level=1)
 
-    def send_telegram_message(self, message: str, alert_level: int = 1) -> None:
+    def send_telegram_message(
+        self, message: str, record: logging.LogRecord, alert_level: int = 1
+    ) -> None:
         """
         Sends a message to a Telegram chat via a notification server.
 
@@ -218,28 +220,31 @@ class CustomTelegramHandler(logging.Handler):
                 )
 
         # Assign the configuration to a local variable
-        config = InternalConfig().config
-
-        try:
-            loop = asyncio.get_running_loop()
-            logger.debug("Found running loop for emit")
-        except RuntimeError:  # No event loop in the current thread
-            loop = asyncio.new_event_loop()
-            logger.debug("Started new event loop for emit")
+        internal_config = InternalConfig()
+        _config = internal_config.config
 
         url = (
-            f"{config.tailscale.notification_server}."
-            f"{config.tailscale.tailnet_name}:"
-            f"{config.tailscale.notification_server_port}/send_notification/"
+            f"{_config.tailscale.notification_server}."
+            f"{_config.tailscale.tailnet_name}:"
+            f"{_config.tailscale.notification_server_port}/send_notification/"
         )
         params: Dict = {
             "notify": message,
             "alert_level": alert_level,
-            "room_id": config.telegram.chat_id,
+            "room_id": _config.telegram.chat_id,
         }
         try:
-            logger.info(f"NOTIFICATION -> {message}", extra={"telegram": False})
-            loop.run_until_complete(call_notification_api(message))
+            formatter = MyJSONFormatter()
+            logger.debug(
+                f"NOTIFICATION SENT -> {message}",
+                extra={
+                    "telegram": False,
+                    "details": formatter._prepare_log_dict(record),
+                },
+            )
+            internal_config.notification_loop.run_until_complete(
+                call_notification_api(message)
+            )
 
         except Exception as ex:
             logger.error(
