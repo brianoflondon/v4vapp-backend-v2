@@ -1,3 +1,4 @@
+import asyncio
 import atexit
 import json
 import logging.config
@@ -84,6 +85,7 @@ class InternalConfig:
 
     _instance = None
     config: Config
+    notification_loop: asyncio.AbstractEventLoop
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -163,6 +165,14 @@ class InternalConfig:
         for handler, level in self.config.logging.handlers.items():
             logging.getLogger(handler).addHandler(handler)
             logging.getLogger(handler).setLevel(level)
+
+        try:
+            self.notification_loop = asyncio.get_running_loop()
+            logger.info("Found running loop for setup logging")
+        except RuntimeError:  # No event loop in the current thread
+            self.notification_loop = asyncio.new_event_loop()
+            logger.info("Started new event loop for notification logging")
+        atexit.register(self.notification_loop.close)
 
         logger.info(
             f"Starting LND gRPC client v{__version__}", extra={"telegram": True}

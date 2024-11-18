@@ -185,7 +185,7 @@ class LNDClient:
 
         try:
             async for response in method(*args, **kwargs):
-                logger.info(str(response))
+                logger.debug(str(response))
                 yield response
         except AioRpcError as e:
             if self.error_state:
