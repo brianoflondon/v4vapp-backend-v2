@@ -254,7 +254,10 @@ class CustomTelegramHandler(logging.Handler):
                     "failed_message": message,
                 },
             )
-        logger.debug(f"Finished emit, loop is running: {loop.is_running()}")
+        logger.debug(
+            f"Finished emit, loop is running: "
+            f"{internal_config.notification_loop.is_running()}"
+        )
 
         # raise NotImplementedError
 
