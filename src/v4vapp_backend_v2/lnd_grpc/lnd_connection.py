@@ -24,13 +24,14 @@ class LNDConnectionSettings:
     options: list
     macaroon: bytes
     cert: bytes
-    
+    use_proxy: str
 
     def __init__(self) -> None:
         lnd_config = InternalConfig().config.lnd_connection
 
         if lnd_config.use_proxy:
             os.environ["http_proxy"] = lnd_config.use_proxy
+            self.use_proxy = lnd_config.use_proxy
             logger.info(f"Using proxy: {lnd_config.use_proxy}")
 
         self.address = lnd_config.address

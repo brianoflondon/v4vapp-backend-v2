@@ -146,17 +146,20 @@ class CustomTelegramHandler(logging.Handler):
 
         # Do something special here with error codes or details
         if hasattr(record, "error_code") and hasattr(record, "error_code_clear"):
+            elapsed_time = self.error_codes[record.error_code].elapsed_time
+            elapsed_time_str = timedelta_display(elapsed_time)
+            log_message = (
+                f"✅ Error code {record.error_code} "
+                f"cleared after {elapsed_time_str} {log_message}"
+            )
             if record.error_code in self.error_codes:
-                elapsed_time = self.error_codes[record.error_code].elapsed_time
-                elapsed_time_str = timedelta_display(elapsed_time)
-                log_message = (
-                    f"Error code {record.error_code} "
-                    f"cleared after {elapsed_time_str} {log_message}"
-                )
                 self.error_codes.pop(record.error_code)
                 self.send_telegram_message(log_message, alert_level=3)
             else:
-                log_message = f"Error code {record.error_code} not found in error_codes {log_message}"
+                logger.warning(
+                    f"Error code not found in error_codes {record.error_code}",
+                    extra={"telegram": False},
+                )
                 self.send_telegram_message(log_message, alert_level=3)
             return
         if hasattr(record, "error_code"):

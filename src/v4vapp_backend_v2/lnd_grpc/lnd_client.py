@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 import sys
 from typing import Any, AsyncGenerator, Callable
 
@@ -20,6 +21,7 @@ from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
+    LNDFatalError,
     LNDStartupError,
     LNDSubscriptionError,
 )
@@ -135,6 +137,17 @@ class LNDClient:
         try:
             return await method(*args, **kwargs)
         except AioRpcError as e:
+            if self.connection.use_proxy:
+                message = f"Local proxy not running {self.connection.use_proxy}"
+                logger.error(
+                    message,
+                    extra={
+                        "telegram": False,
+                        "error_code": e.code(),
+                        "error_details": e,
+                    },
+                )
+                raise LNDFatalError(message)
             logger.warning(
                 f"Error in {method} RPC call: {e.code()}",
                 extra={
@@ -172,6 +185,7 @@ class LNDClient:
 
         try:
             async for response in method(*args, **kwargs):
+                logger.info(str(response))
                 yield response
         except AioRpcError as e:
             if self.error_state:
@@ -183,6 +197,8 @@ class LNDClient:
                 call_name=call_name,
                 original_error=e,
             )
+        except Exception as e:
+            logger.error(f"Error in {call_name} RPC call: {e}")
 
     @backoff.on_exception(
         lambda: backoff.expo(base=2, factor=1),

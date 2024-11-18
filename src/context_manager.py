@@ -7,7 +7,7 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDSubscriptionError
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
@@ -89,12 +89,19 @@ async def main() -> None:
                             db.update_most_recent(invoice)
                             add_index = most_recent.add_index
 
+                except LNDSubscriptionError as e:
+                    logger.warning(e)
+                    pass
+
                 except Exception as e:
                     logger.error(e)
                     raise e
 
     except KeyboardInterrupt:
         logger.warning("❌ LND gRPC client stopped keyboard")
+    except LNDFatalError as e:
+        logger.error("❌ LND gRPC client stopped fatal error")
+        raise e
     except Exception as e:
         logger.error("❌ LND gRPC client stopped error")
         logger.error(e)
@@ -112,6 +119,13 @@ if __name__ == "__main__":
         logger.warning(
             "✅ LND gRPC client stopped by keyboard", extra={"telegram": False}
         )
+
+    except LNDFatalError as e:
+        logger.error(
+            "❌ LND gRPC client stopped by fatal error", extra={"telegram": False}
+        )
+        logger.error(e, extra={"telegram": False})
+
     except Exception as e:
         logger.error("❌ LND gRPC client stopped by error", extra={"telegram": False})
         logger.error(e, extra={"telegram": False})

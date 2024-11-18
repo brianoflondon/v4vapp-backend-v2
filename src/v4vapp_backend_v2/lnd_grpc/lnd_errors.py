@@ -9,6 +9,10 @@ class LNDStartupError(LNDConnectionError):
     pass
 
 
+class LNDFatalError(Exception):
+    pass
+
+
 class LNDSubscriptionError(LNDConnectionError):
     pass
 
