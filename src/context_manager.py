@@ -74,16 +74,17 @@ async def main() -> None:
                         if invoice.settled:
                             logger.info(
                                 f"✅ Settled invoice {invoice.add_index} with memo "
-                                f"{invoice.memo} {invoice.value} sats",
+                                f"{invoice.memo} {invoice.value:,.0f} sats",
                                 extra={"telegram": True},
                             )
                             most_recent = invoice
                             settle_index = most_recent.settle_index
                         else:
+                            send_telegram = False if invoice.is_keysend else True
                             logger.info(
-                                f"✅ Valid invoice {invoice.add_index} with memo "
-                                f"{invoice.memo} {invoice.value} sats",
-                                extra={"telegram": True},
+                                f"✅ Valid   invoice {invoice.add_index} with memo "
+                                f"{invoice.memo} {invoice.value:,.0f} sats",
+                                extra={"telegram": send_telegram},
                             )
                             most_recent = invoice
                             db.update_most_recent(invoice)
