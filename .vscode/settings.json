@@ -6,7 +6,9 @@
     },
     "cmake.configureOnOpen": true,
     "cSpell.words": [
-        "lnrpc"
+        "htlc",
+        "lnrpc",
+        "routerrpc"
     ],
     "python.testing.pytestArgs": [
         "tests",

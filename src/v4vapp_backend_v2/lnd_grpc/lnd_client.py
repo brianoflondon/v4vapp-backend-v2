@@ -18,6 +18,8 @@ from grpc.aio import AioRpcError, secure_channel
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
+from v4vapp_backend_v2.lnd_grpc import router_pb2 as routerrpc
+from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
@@ -31,7 +33,8 @@ class LNDClient:
     def __init__(self) -> None:
         self.connection = LNDConnectionSettings()
         self.channel = None
-        self.stub: lnrpc.LightningStub = None
+        self.lightning_stub: lnrpc.LightningStub = None
+        self.router_stub: routerstub.RouterStub = None
         self.error_state = False
         self.error_code = None
         self.connection_check_task: asyncio.Task[Any] | None = None
@@ -54,7 +57,8 @@ class LNDClient:
                 options=self.connection.options,
             )
 
-            self.stub = lnrpc.LightningStub(self.channel)
+            self.lightning_stub = lnrpc.LightningStub(self.channel)
+            self.router_stub = routerstub.RouterStub(self.channel)
 
         except FileNotFoundError as e:
             logger.error(f"Macaroon and cert files missing: {e.code()}")
@@ -67,19 +71,21 @@ class LNDClient:
         if self.channel is not None:
             await self.channel.close()
             self.channel = None
-            self.stub = None
+            self.lightning_stub = None
 
     async def check_connection(
         self, original_error: AioRpcError | None = None, call_name: str = ""
     ):
         error_count = 0
         back_off_time = 1
-        if self.stub is None:
+        if self.lightning_stub is None:
             await self.connect()
         while True:
             try:
-                if self.stub is not None:
-                    _ = await self.stub.WalletBalance(ln.WalletBalanceRequest())
+                if self.lightning_stub is not None:
+                    _ = await self.lightning_stub.WalletBalance(
+                        ln.WalletBalanceRequest()
+                    )
                     logger.info(
                         "Connection to LND is OK",
                         extra={
@@ -208,7 +214,7 @@ class LNDClient:
     )
     async def call_retry(self, method_name, request):
         try:
-            method = getattr(self.stub, method_name)
+            method = getattr(self.lightning_stub, method_name)
         except AttributeError:
             raise ValueError(f"Invalid method name: {method_name}")
 
@@ -226,7 +232,7 @@ class LNDClient:
     )
     async def call_async_generator_retry(self, method_name, request):
         try:
-            method = getattr(self.stub, method_name)
+            method = getattr(self.lightning_stub, method_name)
 
             while True:
                 async for response in method(request):

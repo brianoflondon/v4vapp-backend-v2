@@ -5,7 +5,6 @@ from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-import v4vapp_backend_v2.lnd_grpc.router_pb2_grpc as routerstub
 from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -27,7 +26,7 @@ async def subscribe_invoices(
         )
         try:
             async for inv in client.call_async_generator(
-                client.stub.SubscribeInvoices,
+                client.lightning_stub.SubscribeInvoices,
                 request_sub,
                 call_name="SubscribeInvoices",
             ):
@@ -46,9 +45,12 @@ async def subscribe_invoices(
 
 async def subscribe_htlc_events():
     async with LNDClient() as client:
+        request_sub = routerrpc.SubscribeHtlcEventsRequest()
+
         try:
             async for htlc_event in client.call_async_generator(
-                client.stub.SubscribeHtlcEvents,
+                client.router_stub.SubscribeHtlcEvents,
+                request_sub,
                 call_name="SubscribeHtlcEvents",
             ):
                 logger.info(htlc_event)
@@ -68,20 +70,19 @@ async def main() -> None:
     try:
         async with LNDClient() as client:
             balance: ln.ChannelBalanceResponse = await client.call(
-                client.stub.ChannelBalance,
+                client.lightning_stub.ChannelBalance,
                 ln.ChannelBalanceRequest(),
             )
             logger.info(f"Balance: {balance.local_balance.sat:,.0f} sats")
 
             add_index = 0
             settle_index = 0
-
+            await subscribe_htlc_events()
             while True:
                 logger.info("Subscribing to invoices")
                 logger.info(f"Add index: {add_index} - Settle index: {settle_index}")
                 try:
                     async for invoice in subscribe_invoices(add_index, settle_index):
-
                         if error_codes:
                             logger.info(
                                 f"✅ Error codes cleared {error_codes}",
