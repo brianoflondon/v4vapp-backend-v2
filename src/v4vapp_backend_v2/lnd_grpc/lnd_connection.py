@@ -81,7 +81,7 @@ class LNDConnectionSettings:
             self.macaroon = codecs.encode(macaroon_bytes, "hex")
             with open(LND_CERTIFICATE_PATH, "rb") as f:
                 self.cert = f.read()
-            logger.info(
+            logger.debug(
                 f"Setting up for connection to LND: {lnd_config.name} {self.address}"
             )
         except FileNotFoundError as e:

@@ -47,3 +47,5 @@ class LNDInvoice(BaseModel):
             match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
             if match:
                 __pydantic_self__.is_lndtohive = True
+
+

@@ -45,7 +45,7 @@ class LNDClient:
 
     async def connect(self):
         try:
-            logger.info("Connecting to LND")
+            logger.debug("Connecting to LND")
 
             cert_creds = ssl_channel_credentials(self.connection.cert)
             auth_creds = metadata_call_credentials(self.metadata_callback)
@@ -124,7 +124,7 @@ class LNDClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        logger.info("Disconnecting from LND")
+        logger.debug("Disconnecting from LND")
         if self.connection_check_task is not None:
             self.connection_check_task.cancel()
             try:
