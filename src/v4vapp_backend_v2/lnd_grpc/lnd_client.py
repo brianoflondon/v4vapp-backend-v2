@@ -31,7 +31,7 @@ class LNDClient:
     def __init__(self) -> None:
         self.connection = LNDConnectionSettings()
         self.channel = None
-        self.stub = None
+        self.stub: lnrpc.LightningStub = None
         self.error_state = False
         self.error_code = None
         self.connection_check_task: asyncio.Task[Any] | None = None

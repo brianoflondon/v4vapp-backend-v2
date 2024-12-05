@@ -4,6 +4,8 @@ from typing import AsyncGenerator
 from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
+import v4vapp_backend_v2.lnd_grpc.router_pb2_grpc as routerstub
 from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -35,6 +37,24 @@ async def subscribe_invoices(
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeInvoices"
+            )
+            raise e
+        except Exception as e:
+            logger.error(e)
+            raise e
+
+
+async def subscribe_htlc_events():
+    async with LNDClient() as client:
+        try:
+            async for htlc_event in client.call_async_generator(
+                client.stub.SubscribeHtlcEvents,
+                call_name="SubscribeHtlcEvents",
+            ):
+                logger.info(htlc_event)
+        except LNDSubscriptionError as e:
+            await client.check_connection(
+                original_error=e.original_error, call_name="SubscribeHtlcEvents"
             )
             raise e
         except Exception as e:
