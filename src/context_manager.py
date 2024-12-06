@@ -3,6 +3,7 @@ import json
 from typing import Any, AsyncGenerator
 
 from google.protobuf.json_format import MessageToDict
+from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
@@ -10,6 +11,7 @@ from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
+from v4vapp_backend_v2.models.htlc_event_models import HtlcEvent
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
@@ -46,6 +48,8 @@ async def subscribe_invoices(
 
 async def get_channel_name(channel_id: int) -> str:
     async with LNDClient() as client:
+        if not channel_id:
+            return ""
         request = ln.ChanInfoRequest(chan_id=channel_id)
         try:
             response = await client.call(
@@ -113,17 +117,25 @@ async def subscribe_invoices_loop() -> None:
             raise e
 
 
-async def subscribe_htlc_events() -> AsyncGenerator[Any, None]:
+async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
     async with LNDClient() as client:
         request_sub = routerrpc.SubscribeHtlcEventsRequest()
         try:
-            async for htlc_event in client.call_async_generator(
+            async for htlc in client.call_async_generator(
                 client.router_stub.SubscribeHtlcEvents,
                 request_sub,
                 call_name="SubscribeHtlcEvents",
             ):
-                htlc_dict = MessageToDict(htlc_event, preserving_proto_field_name=True)
-                yield htlc_dict
+                htlc_data = MessageToDict(htlc, preserving_proto_field_name=True)
+                logger.info(
+                    "htlc_event_data object\n" + json.dumps(htlc_data, indent=2)
+                )
+                try:
+                    htlc_event = HtlcEvent.model_validate(htlc_data)
+                except ValidationError as e:
+                    logger.error(e)
+                    continue
+                yield htlc_event
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeHtlcEvents"
@@ -138,20 +150,27 @@ async def subscribe_htlc_events_loop() -> None:
     while True:
         logger.info("Subscribing to HTLC events")
         try:
-            async for htlc_dict in subscribe_htlc_events():
-                incoming_channel_name = htlc_dict.get("incoming_channel_id", "")
-                outgoing_channel_name = htlc_dict.get("outgoing_channel_id", "")
-                if htlc_dict.get("incoming_channel_id"):
-                    incoming_channel_name = await get_channel_name(
-                        int(htlc_dict["incoming_channel_id"])
+            async for htlc_event in subscribe_htlc_events():
+                forward_amount = 0
+                incoming_channel_name = await get_channel_name(
+                    htlc_event.incoming_channel_id
+                )
+                outgoing_channel_name = await get_channel_name(
+                    htlc_event.outgoing_channel_id
+                )
+                if htlc_event.forward_event and htlc_event.forward_event:
+                    forward_message = (
+                        f"{incoming_channel_name} -> {outgoing_channel_name}"
+                        f" | {htlc_event.forward_amt_earned}"
                     )
-                if htlc_dict.get("outgoing_channel_id"):
-                    outgoing_channel_name = await get_channel_name(
-                        int(htlc_dict["outgoing_channel_id"])
+                    logger.info(
+                        forward_message,
+                        extra={"telegram": forward_amount > 0},
                     )
-
-                logger.info(f"{incoming_channel_name} -> {outgoing_channel_name}")
-                logger.info("\n" + json.dumps(htlc_dict, indent=2))
+                logger.info(
+                    "htlc_event object\n"
+                    + htlc_event.model_dump_json(indent=2, exclude_none=True)
+                )
 
         except LNDSubscriptionError as e:
             logger.warning(e)
