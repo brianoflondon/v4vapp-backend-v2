@@ -74,9 +74,11 @@ def test_htlc_event():
             assert htlc_event.event_type == htlc_event_data["event_type"]
             if htlc_event.event_type == "FORWARD":
                 if htlc_event.forward_event and htlc_event.forward_event.info:
-                    assert (
-                        htlc_event.forward_event.info.incoming_amt_msat
-                        == htlc_event_data["forward_event"]["info"]["incoming_amt_msat"]
+                    assert htlc_event.forward_event.info.incoming_amt_msat == int(
+                        htlc_event_data["forward_event"]["info"]["incoming_amt_msat"]
                     )
                     print(htlc_event.forward_amt_earned)
+                print(
+                    htlc_event.forward_message("incoming_channel", "outgoing_channel")
+                )
         print(htlc_event.model_dump_json(indent=2, exclude_none=True))

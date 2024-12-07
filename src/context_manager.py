@@ -1,9 +1,9 @@
 import asyncio
 import json
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, List
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
@@ -11,7 +11,7 @@ from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
-from v4vapp_backend_v2.models.htlc_event_models import HtlcEvent
+from v4vapp_backend_v2.models.htlc_event_models import EventType, HtlcEvent
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
@@ -46,7 +46,12 @@ async def subscribe_invoices(
             raise e
 
 
-async def get_channel_name(channel_id: int) -> str:
+class ChannelName(BaseModel):
+    channel_id: int
+    name: str
+
+
+async def get_channel_name(channel_id: int) -> ChannelName:
     async with LNDClient() as client:
         if not channel_id:
             return ""
@@ -64,10 +69,12 @@ async def get_channel_name(channel_id: int) -> str:
                     ln.NodeInfoRequest(pub_key=pub_key),
                 )
                 node_info = MessageToDict(response, preserving_proto_field_name=True)
-                return node_info["node"]["alias"]
-            return chan_info
+                return ChannelName(
+                    channel_id=channel_id, name=node_info["node"]["alias"]
+                )
+            return ChannelName(channel_id=channel_id, name="Unknown")
         except Exception as e:
-            logger.error(e)
+            logger.exception(e)
             pass
 
 
@@ -93,7 +100,10 @@ async def subscribe_invoices_loop() -> None:
                     logger.info(
                         f"✅ Settled invoice {invoice.add_index} with memo "
                         f"{invoice.memo} {invoice.value:,.0f} sats",
-                        extra={"telegram": True},
+                        extra={
+                            "telegram": (True if invoice.value > 100 else False),
+                            "invoice": invoice.model_dump(exclude_none=True),
+                        },
                     )
                     most_recent = invoice
                     settle_index = most_recent.settle_index
@@ -102,7 +112,10 @@ async def subscribe_invoices_loop() -> None:
                     logger.info(
                         f"✅ Valid   invoice {invoice.add_index} with memo "
                         f"{invoice.memo} {invoice.value:,.0f} sats",
-                        extra={"telegram": send_telegram},
+                        extra={
+                            "telegram": send_telegram,
+                            "invoice": invoice.model_dump(exclude_none=True),
+                        },
                     )
                     most_recent = invoice
                     db.update_most_recent(invoice)
@@ -128,11 +141,16 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
             ):
                 htlc_data = MessageToDict(htlc, preserving_proto_field_name=True)
                 logger.info(
-                    "htlc_event_data object\n" + json.dumps(htlc_data, indent=2)
+                    "RAW htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
+                    extra={"htlc_data": htlc_data},
                 )
                 try:
                     htlc_event = HtlcEvent.model_validate(htlc_data)
                 except ValidationError as e:
+                    logger.warning(
+                        "htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
+                        extra={"htlc_data": htlc_data},
+                    )
                     logger.error(e)
                     continue
                 yield htlc_event
@@ -151,33 +169,36 @@ async def subscribe_htlc_events_loop() -> None:
         logger.info("Subscribing to HTLC events")
         try:
             async for htlc_event in subscribe_htlc_events():
-                forward_amount = 0
-                incoming_channel_name = await get_channel_name(
+                incoming_channel = await get_channel_name(
                     htlc_event.incoming_channel_id
                 )
-                outgoing_channel_name = await get_channel_name(
+                outgoing_channel = await get_channel_name(
                     htlc_event.outgoing_channel_id
                 )
-                if htlc_event.forward_event and htlc_event.forward_event:
-                    forward_message = (
-                        f"{incoming_channel_name} -> {outgoing_channel_name}"
-                        f" | {htlc_event.forward_amt_earned}"
+                if htlc_event.is_complete_forward:
+                    forward_message = htlc_event.forward_message(
+                        incoming_channel.name, outgoing_channel.name
                     )
                     logger.info(
                         forward_message,
-                        extra={"telegram": forward_amount > 0},
+                        extra={
+                            "telegram": True,
+                            "htlc_event": htlc_event.model_dump(exclude_none=True),
+                            "forward_message": forward_message,
+                        },
                     )
-                logger.info(
-                    "htlc_event object\n"
-                    + htlc_event.model_dump_json(indent=2, exclude_none=True)
-                )
-
+                else:
+                    logger.info(
+                        "htlc_event object\n"
+                        + htlc_event.model_dump_json(indent=2, exclude_none=True),
+                        extra={"htlc_event": htlc_event.model_dump(exclude_none=True)},
+                    )
         except LNDSubscriptionError as e:
             logger.warning(e)
             pass
         except Exception as e:
-            logger.error(e)
-            raise e
+            logger.exception(e)
+            pass
 
 
 async def main() -> None:
@@ -200,9 +221,12 @@ async def main() -> None:
             for channel in channels_dict.get("channels", []):
                 tasks.append(get_channel_name(int(channel["chan_id"])))
                 # name =  get_channel_name(int(channel["chan_id"]))
-            names = await asyncio.gather(*tasks)
-            for name in names:
-                logger.info(name)
+            names_list: List[ChannelName] = await asyncio.gather(*tasks)
+            for channel_name in names_list:
+                logger.info(
+                    f"Channel {channel_name.channel_id} -> {channel_name.name}",
+                    extra={"channel_name": channel_name.model_dump()},
+                )
 
             tasks = [subscribe_invoices_loop(), subscribe_htlc_events_loop()]
             await asyncio.gather(*tasks)

@@ -1,6 +1,5 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -8,8 +7,8 @@ from pydantic import BaseModel
 class HtlcInfo(BaseModel):
     incoming_timelock: int | None = None
     outgoing_timelock: int | None = None
-    incoming_amt_msat: str | None = None
-    outgoing_amt_msat: str | None = None
+    incoming_amt_msat: int | None = None
+    outgoing_amt_msat: int | None = None
 
 
 class ForwardEvent(BaseModel):
@@ -21,12 +20,12 @@ class ForwardFailEvent(BaseModel):
 
 
 class SettleEvent(BaseModel):
-    preimage: bytes
+    preimage: bytes | None = None
 
 
 class FinalHtlcEvent(BaseModel):
-    settled: bool
-    offchain: bool
+    settled: bool | None = None
+    offchain: bool | None = None
 
 
 class SubscribedEvent(BaseModel):
@@ -87,10 +86,10 @@ class FailureCode(StrEnum):
 
 
 class LinkFailEvent(BaseModel):
-    info: HtlcInfo
-    wire_failure: FailureCode
-    failure_detail: FailureDetail
-    failure_string: str
+    info: HtlcInfo | None = None
+    wire_failure: FailureCode | None = None
+    failure_detail: FailureDetail | None = None
+    failure_string: str | None = None
 
 
 class EventType(StrEnum):
@@ -100,38 +99,75 @@ class EventType(StrEnum):
     FORWARD = "FORWARD"
 
 
+class ForwardAmtEarned(BaseModel):
+    forward_amount: int
+    earned: float
+
+
 class HtlcEvent(BaseModel):
     incoming_channel_id: int | None = None
     outgoing_channel_id: int | None = None
     incoming_htlc_id: int | None = None
     outgoing_htlc_id: int | None = None
     timestamp_ns: int | None = None
-    event_type: Optional[EventType] = None
-    forward_event: Optional[ForwardEvent] = None
-    forward_fail_event: Optional[ForwardFailEvent] = None
-    settle_event: Optional[SettleEvent] = None
-    link_fail_event: Optional[LinkFailEvent] = None
-    subscribed_event: Optional[SubscribedEvent] = None
-    final_htlc_event: Optional[FinalHtlcEvent] = None
+    event_type: EventType | None = None
+    forward_event: ForwardEvent | None = None
+    forward_fail_event: ForwardFailEvent | None = None
+    settle_event: SettleEvent | None = None
+    link_fail_event: LinkFailEvent | None = None
+    subscribed_event: SubscribedEvent | None = None
+    final_htlc_event: FinalHtlcEvent | None = None
 
     @property
-    def timestamp(self) -> Optional[datetime]:
+    def timestamp(self) -> datetime | None:
         if self.timestamp_ns is not None:
             return datetime.fromtimestamp(self.timestamp_ns / 1e9)
         return None
 
     @property
-    def forward_amt_earned(self) -> str:
+    def is_complete_forward(self) -> bool:
         if (
-            self.forward_event
+            self.event_type == EventType.FORWARD
+            and self.forward_event
             and self.forward_event.info
             and self.forward_event.info.incoming_amt_msat
             and self.forward_event.info.outgoing_amt_msat
         ):
-            forward_amount = int(self.forward_event.info.incoming_amt_msat) // 1000
+            return True
+        return False
+
+    @property
+    def forward_amt_earned(self) -> ForwardAmtEarned:
+        if (
+            self.event_type == EventType.FORWARD
+            and self.forward_event
+            and self.forward_event.info
+            and self.forward_event.info.incoming_amt_msat
+            and self.forward_event.info.outgoing_amt_msat
+        ):
+            forward_amount = self.forward_event.info.incoming_amt_msat // 1000
             earned: float = (
-                int(self.forward_event.info.incoming_amt_msat)
-                - int(self.forward_event.info.outgoing_amt_msat)
+                self.forward_event.info.incoming_amt_msat
+                - self.forward_event.info.outgoing_amt_msat
             ) / 1000
-            return f"{forward_amount:,.0f} sats (earned: {earned:,.3f})"
-        return ""
+            return ForwardAmtEarned(forward_amount=forward_amount, earned=earned)
+        return ForwardAmtEarned(forward_amount=0, earned=0)
+
+    def forward_message(
+        self, incoming_channel_name: str, outgoing_channel_name: str
+    ) -> str:
+        # 💰 Forwarded 222 V4VAPP Hive GoPodcasting! → WalletOfSatoshi.com. Earned 0.006 0.00% (27)
+        try:
+            fee_percent = (
+                self.forward_amt_earned.earned / self.forward_amt_earned.forward_amount
+            )
+        except ZeroDivisionError:
+            fee_percent = 0
+        fee_ppm = fee_percent * 1_000_000
+        message = (
+            f"💰 Forwarded {self.forward_amt_earned.forward_amount:,.0f} "
+            f"{incoming_channel_name} → {outgoing_channel_name}. "
+            f"Earned {self.forward_amt_earned.earned:,.3f} "
+            f"{fee_percent:.2%} ({fee_ppm:,.0f})"
+        )
+        return message
