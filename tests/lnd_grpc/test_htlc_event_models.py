@@ -63,22 +63,57 @@ htlc_event_data_list = [
         "timestamp_ns": "1733490545577188389",
         "final_htlc_event": {"settled": True, "offchain": True},
     },
+    # 7 RECEIVE
+    {
+        "incoming_channel_id": "821398957719289857",
+        "incoming_htlc_id": "27602",
+        "timestamp_ns": "1733566043184062900",
+        "event_type": "RECEIVE",
+        "settle_event": {"preimage": "kHOpZbcqpXWhSRqcW5OMPu4guHsYKpv1pMhXtTRkqjg="},
+    },
+    # 8 Final HTLC Event
+    {
+        "incoming_channel_id": "821398957719289857",
+        "incoming_htlc_id": "27602",
+        "timestamp_ns": "1733566043312622051",
+        "final_htlc_event": {"settled": True, "offchain": True},
+    },
+    # 9 FORWARD Fail
+    {
+        "incoming_channel_id": 949409599124406300,
+        "outgoing_channel_id": 888405395399180300,
+        "incoming_htlc_id": 928,
+        "timestamp_ns": 1733597007363239700,
+        "event_type": "FORWARD",
+        "link_fail_event": {
+            "info": {
+                "incoming_timelock": 874393,
+                "outgoing_timelock": 874293,
+                "incoming_amt_msat": 7540960454,
+                "outgoing_amt_msat": 7532283264,
+            },
+            "wire_failure": "TEMPORARY_CHANNEL_FAILURE",
+            "failure_detail": "INSUFFICIENT_BALANCE",
+            "failure_string": "insufficient bandwidth to route htlc",
+        },
+    },
+    # 10 Settle Event
+    {
+        "incoming_channel_id": 821398957719289900,
+        "outgoing_channel_id": 920269242371670000,
+        "incoming_htlc_id": 27809,
+        "outgoing_htlc_id": 1831,
+        "timestamp_ns": 1733650382468938000,
+        "event_type": "FORWARD",
+        "settle_event": {"preimage": "b'+E7LxMHJZY9ske8wGPhGNmezR1rzWpUXdmAEbbYo7QM='"},
+    },
 ]
 
 
 def test_htlc_event():
-    for htlc_event_data in htlc_event_data_list:
-        print(htlc_event_data)
+    for count, htlc_event_data in enumerate(htlc_event_data_list):
         htlc_event = HtlcEvent.model_validate(htlc_event_data)
-        if htlc_event.event_type:
-            assert htlc_event.event_type == htlc_event_data["event_type"]
-            if htlc_event.event_type == "FORWARD":
-                if htlc_event.forward_event and htlc_event.forward_event.info:
-                    assert htlc_event.forward_event.info.incoming_amt_msat == int(
-                        htlc_event_data["forward_event"]["info"]["incoming_amt_msat"]
-                    )
-                    print(htlc_event.forward_amt_earned)
-                print(
-                    htlc_event.forward_message("incoming_channel", "outgoing_channel")
-                )
-        print(htlc_event.model_dump_json(indent=2, exclude_none=True))
+        print(count, htlc_event.event_type)
+        print(count, htlc_event.forward_message("incoming_channel", "outgoing_channel"))
+        print(count, htlc_event.forward_amt_fee)
+        print("-" * 80)

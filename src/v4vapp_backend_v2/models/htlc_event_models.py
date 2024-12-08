@@ -99,9 +99,9 @@ class EventType(StrEnum):
     FORWARD = "FORWARD"
 
 
-class ForwardAmtEarned(BaseModel):
+class ForwardAmtFee(BaseModel):
     forward_amount: int
-    earned: float
+    fee: float
 
 
 class HtlcEvent(BaseModel):
@@ -110,7 +110,7 @@ class HtlcEvent(BaseModel):
     incoming_htlc_id: int | None = None
     outgoing_htlc_id: int | None = None
     timestamp_ns: int | None = None
-    event_type: EventType | None = None
+    event_type: EventType = EventType.UNKNOWN
     forward_event: ForwardEvent | None = None
     forward_fail_event: ForwardFailEvent | None = None
     settle_event: SettleEvent | None = None
@@ -125,49 +125,127 @@ class HtlcEvent(BaseModel):
         return None
 
     @property
-    def is_complete_forward(self) -> bool:
-        if (
-            self.event_type == EventType.FORWARD
-            and self.forward_event
-            and self.forward_event.info
-            and self.forward_event.info.incoming_amt_msat
-            and self.forward_event.info.outgoing_amt_msat
+    def is_forward_attempt(self) -> bool:
+        return self.event_type == EventType.FORWARD and any(
+            event
+            and event.info
+            and event.info.incoming_amt_msat
+            and event.info.outgoing_amt_msat
+            for event in (self.forward_event, self.link_fail_event)
+        )
+
+    @property
+    def is_forward_fail(self) -> bool:
+        if self.event_type == EventType.FORWARD and (
+            self.forward_fail_event or self.link_fail_event
         ):
             return True
         return False
 
     @property
-    def forward_amt_earned(self) -> ForwardAmtEarned:
-        if (
-            self.event_type == EventType.FORWARD
-            and self.forward_event
-            and self.forward_event.info
-            and self.forward_event.info.incoming_amt_msat
-            and self.forward_event.info.outgoing_amt_msat
-        ):
-            forward_amount = self.forward_event.info.incoming_amt_msat // 1000
-            earned: float = (
-                self.forward_event.info.incoming_amt_msat
-                - self.forward_event.info.outgoing_amt_msat
-            ) / 1000
-            return ForwardAmtEarned(forward_amount=forward_amount, earned=earned)
-        return ForwardAmtEarned(forward_amount=0, earned=0)
+    def is_forward_settle(self) -> bool:
+        return self.settle_event is not None and self.event_type == EventType.FORWARD
+
+    @property
+    def forward_amt_fee(self) -> ForwardAmtFee:
+        """
+        Calculate the forward amount and fee for an HTLC event.
+
+        This method calculates the forward amount and fee based on the incoming and
+        outgoing amounts in millisatoshis (msat) from the event information. If the
+        event has a forward message, it will iterate through the forward and link
+        fail events to find the relevant event information.
+
+        Returns:
+            ForwardAmtFee: An object containing the forward amount (in satoshis) and
+            the fee (in satoshis).
+        """
+        if self.has_forward_message:
+            for event in (self.forward_event, self.link_fail_event):
+                if event and event.info:
+                    info = event.info
+                    break
+            else:
+                return ForwardAmtFee(forward_amount=0, fee=0)
+
+            incoming_amt_msat = info.incoming_amt_msat or 0
+            outgoing_amt_msat = info.outgoing_amt_msat or 0
+
+            forward_amount = incoming_amt_msat // 1000
+            earned: float = (incoming_amt_msat - outgoing_amt_msat) / 1000
+            return ForwardAmtFee(forward_amount=forward_amount, fee=earned)
+        return ForwardAmtFee(forward_amount=0, fee=0)
+
+    @property
+    def has_forward_message(self) -> bool:
+        """
+        Check if the event has a forward message.
+
+        Returns:
+            bool: True if the event is a forward fail, forward attempt, or
+            forward settle; False otherwise.
+        """
+        if self.is_forward_fail or self.is_forward_attempt or self.is_forward_settle:
+            return True
+        return False
 
     def forward_message(
         self, incoming_channel_name: str, outgoing_channel_name: str
     ) -> str:
+        """
+        Generates a message string describing the forwarding event of an HTLC
+        (Hashed TimeLock Contract).
+
+        Args:
+            incoming_channel_name (str): The name of the incoming channel.
+            outgoing_channel_name (str): The name of the outgoing channel.
+
+        Returns:
+            str: A formatted string describing the forwarding event,
+                 including the forward amount, fee, fee percentage, and the
+                 result of the forward attempt (e.g., success, failure).
+        """
+
         # 💰 Forwarded 222 V4VAPP Hive GoPodcasting! → WalletOfSatoshi.com. Earned 0.006 0.00% (27)
+        if not self.has_forward_message:
+            return ""
+
         try:
-            fee_percent = (
-                self.forward_amt_earned.earned / self.forward_amt_earned.forward_amount
-            )
+            fee_percent = self.forward_amt_fee.fee / self.forward_amt_fee.forward_amount
         except ZeroDivisionError:
             fee_percent = 0
         fee_ppm = fee_percent * 1_000_000
-        message = (
-            f"💰 Forwarded {self.forward_amt_earned.forward_amount:,.0f} "
-            f"{incoming_channel_name} → {outgoing_channel_name}. "
-            f"Earned {self.forward_amt_earned.earned:,.3f} "
-            f"{fee_percent:.2%} ({fee_ppm:,.0f})"
-        )
+
+        forward_result = "Forward Attempt"
+        message = f"💰 {self.incoming_htlc_id} "
+        if self.forward_fail_event or self.link_fail_event:
+            forward_result = "Forward Fail   "
+            if self.link_fail_event:
+                fee_percent = 0
+                fee_ppm = 0
+                forward_result = (
+                    self.link_fail_event.failure_string
+                    if self.link_fail_event.failure_string
+                    else "Unknown"
+                )
+            message = (
+                f"💰 {self.incoming_htlc_id} "
+                f"{forward_result} {self.forward_amt_fee.forward_amount:,.0f} "
+                f"{incoming_channel_name} → {outgoing_channel_name}. "
+                f"Fee {self.forward_amt_fee.fee:,.3f} "
+                f"{fee_percent:.2%} ({fee_ppm:,.0f})"
+            )
+        elif self.settle_event:
+            if self.link_fail_event:
+                forward_result = (
+                    f"💰⭕️ Forward Fail {self.link_fail_event.failure_string} "
+                )
+            else:
+                forward_result = "💰✅ Forward Settle "
+            message = (
+                f"💰 {self.incoming_htlc_id} "
+                f"{forward_result} "
+                f"{incoming_channel_name} → {outgoing_channel_name}. "
+            )
+
         return message

@@ -52,9 +52,9 @@ class ChannelName(BaseModel):
 
 
 async def get_channel_name(channel_id: int) -> ChannelName:
+    if not channel_id:
+        return ChannelName(channel_id=0, name="Unknown")
     async with LNDClient() as client:
-        if not channel_id:
-            return ""
         request = ln.ChanInfoRequest(chan_id=channel_id)
         try:
             response = await client.call(
@@ -96,30 +96,14 @@ async def subscribe_invoices_loop() -> None:
                         },
                     )
                     error_codes.clear()
+
                 if invoice.settled:
-                    logger.info(
-                        f"✅ Settled invoice {invoice.add_index} with memo "
-                        f"{invoice.memo} {invoice.value:,.0f} sats",
-                        extra={
-                            "telegram": (True if invoice.value > 100 else False),
-                            "invoice": invoice.model_dump(exclude_none=True),
-                        },
-                    )
-                    most_recent = invoice
-                    settle_index = most_recent.settle_index
+                    settle_index = invoice.settle_index
                 else:
-                    send_telegram = False if invoice.is_keysend else True
-                    logger.info(
-                        f"✅ Valid   invoice {invoice.add_index} with memo "
-                        f"{invoice.memo} {invoice.value:,.0f} sats",
-                        extra={
-                            "telegram": send_telegram,
-                            "invoice": invoice.model_dump(exclude_none=True),
-                        },
-                    )
-                    most_recent = invoice
-                    db.update_most_recent(invoice)
-                    add_index = most_recent.add_index
+                    add_index = invoice.add_index
+                send_telegram = False if invoice.is_keysend else True
+                invoice.invoice_log(logger.info, send_telegram)
+                db.update_most_recent(invoice)
 
         except LNDSubscriptionError as e:
             logger.warning(e)
@@ -140,7 +124,7 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
                 call_name="SubscribeHtlcEvents",
             ):
                 htlc_data = MessageToDict(htlc, preserving_proto_field_name=True)
-                logger.info(
+                logger.debug(
                     "RAW htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
                     extra={"htlc_data": htlc_data},
                 )
@@ -169,13 +153,12 @@ async def subscribe_htlc_events_loop() -> None:
         logger.info("Subscribing to HTLC events")
         try:
             async for htlc_event in subscribe_htlc_events():
-                incoming_channel = await get_channel_name(
-                    htlc_event.incoming_channel_id
-                )
-                outgoing_channel = await get_channel_name(
-                    htlc_event.outgoing_channel_id
-                )
-                if htlc_event.is_complete_forward:
+                tasks = [
+                    get_channel_name(htlc_event.incoming_channel_id),
+                    get_channel_name(htlc_event.outgoing_channel_id),
+                ]
+                incoming_channel, outgoing_channel = await asyncio.gather(*tasks)
+                if htlc_event.has_forward_message:
                     forward_message = htlc_event.forward_message(
                         incoming_channel.name, outgoing_channel.name
                     )
@@ -187,11 +170,31 @@ async def subscribe_htlc_events_loop() -> None:
                             "forward_message": forward_message,
                         },
                     )
+                elif htlc_event.is_forward_fail:
+                    logger.info(
+                        (
+                            f"💰 {htlc_event.incoming_htlc_id} Fail"
+                            f"from: {incoming_channel.name} "
+                            f"to: {outgoing_channel.name} "
+                            f"{htlc_event.event_type}"
+                        ),
+                        extra={
+                            "telegram": True,
+                            "htlc_event": htlc_event.model_dump(exclude_none=True),
+                        },
+                    )
                 else:
                     logger.info(
-                        "htlc_event object\n"
-                        + htlc_event.model_dump_json(indent=2, exclude_none=True),
+                        (
+                            f"htlc_event object {htlc_event.incoming_htlc_id} "
+                            f"from: {incoming_channel.name} "
+                            f"to: {outgoing_channel.name} "
+                            f"{htlc_event.event_type}"
+                        ),
                         extra={"htlc_event": htlc_event.model_dump(exclude_none=True)},
+                    )
+                    logger.debug(
+                        htlc_event.model_dump_json(exclude_none=True, indent=2)
                     )
         except LNDSubscriptionError as e:
             logger.warning(e)

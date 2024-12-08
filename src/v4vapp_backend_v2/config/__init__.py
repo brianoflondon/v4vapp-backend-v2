@@ -5,7 +5,7 @@ import logging.config
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import colorlog
 from pydantic import BaseModel
@@ -59,6 +59,10 @@ class Config(BaseModel):
     lnd_connection: LndConnectionConfig
     tailscale: TailscaleConfig
     telegram: TelegramConfig
+
+
+class LoggerFunction(Protocol):
+    def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
 
 
 class InternalConfig:
