@@ -217,9 +217,9 @@ class HtlcEvent(BaseModel):
         fee_ppm = fee_percent * 1_000_000
 
         forward_result = "Forward Attempt"
-        message = f"💰 {self.incoming_htlc_id} "
+        message = f"💰 {self.incoming_htlc_id:>6} "
         if self.forward_fail_event or self.link_fail_event:
-            forward_result = "Forward Fail   "
+            forward_result = "⭕️ Forward Fail   "
             if self.link_fail_event:
                 fee_percent = 0
                 fee_ppm = 0
@@ -228,24 +228,26 @@ class HtlcEvent(BaseModel):
                     if self.link_fail_event.failure_string
                     else "Unknown"
                 )
-            message = (
-                f"💰 {self.incoming_htlc_id} "
-                f"{forward_result} {self.forward_amt_fee.forward_amount:,.0f} "
-                f"{incoming_channel_name} → {outgoing_channel_name}. "
-                f"Fee {self.forward_amt_fee.fee:,.3f} "
-                f"{fee_percent:.2%} ({fee_ppm:,.0f})"
-            )
+
         elif self.settle_event:
             if self.link_fail_event:
                 forward_result = (
-                    f"💰⭕️ Forward Fail {self.link_fail_event.failure_string} "
+                    f"⭕️ Forward Fail {self.link_fail_event.failure_string} "
                 )
             else:
-                forward_result = "💰✅ Forward Settle "
+                forward_result = "✅ Forward Settle "
             message = (
-                f"💰 {self.incoming_htlc_id} "
+                f"💰 {self.incoming_htlc_id:>6} "
                 f"{forward_result} "
                 f"{incoming_channel_name} → {outgoing_channel_name}. "
             )
+            return message
 
+        message = (
+            f"💰 {self.incoming_htlc_id:>6} "
+            f"{forward_result} {self.forward_amt_fee.forward_amount:,.0f} "
+            f"{incoming_channel_name} → {outgoing_channel_name}. "
+            f"Fee {self.forward_amt_fee.fee:,.3f} "
+            f"{fee_percent:.2%} ({fee_ppm:,.0f})"
+        )
         return message

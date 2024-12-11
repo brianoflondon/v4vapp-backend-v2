@@ -8,7 +8,8 @@
     "cSpell.words": [
         "htlc",
         "lnrpc",
-        "routerrpc"
+        "routerrpc",
+        "routerstub"
     ],
     "python.testing.pytestArgs": [
         "tests",

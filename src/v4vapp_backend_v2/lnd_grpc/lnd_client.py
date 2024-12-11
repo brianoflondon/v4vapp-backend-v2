@@ -35,8 +35,8 @@ class LNDClient:
         self.channel = None
         self.lightning_stub: lnrpc.LightningStub = None
         self.router_stub: routerstub.RouterStub = None
-        self.error_state = False
-        self.error_code = None
+        self.error_state: bool = False
+        self.error_code: str | None = None
         self.connection_check_task: asyncio.Task[Any] | None = None
 
     def metadata_callback(self, context, callback):
@@ -90,7 +90,7 @@ class LNDClient:
                         "Connection to LND is OK",
                         extra={
                             "telegram": True,
-                            "error_code": original_error.code(),
+                            "error_code": str(original_error.code()),
                             "error_code_clear": True,
                         },
                     )
@@ -102,11 +102,12 @@ class LNDClient:
             except AioRpcError as e:
                 if original_error is not None:
                     e = original_error
+                    message = e.debug_error_string()
                 logger.error(
-                    e,
+                    message,
                     extra={
                         "telegram": True,
-                        "error_code": e.code(),
+                        "error_code": str(e.code()),
                         "error_details": e,
                     },
                 )
@@ -149,7 +150,7 @@ class LNDClient:
                     message,
                     extra={
                         "telegram": False,
-                        "error_code": e.code(),
+                        "error_code": str(e.code()),
                         "error_details": e,
                     },
                 )
@@ -158,7 +159,7 @@ class LNDClient:
                 f"Error in {method} RPC call: {e.code()}",
                 extra={
                     "telegram": True,
-                    "error_code": e.code(),
+                    "error_code": str(e.code()),
                     "error_details": e,
                 },
             )

@@ -107,6 +107,16 @@ htlc_event_data_list = [
         "event_type": "FORWARD",
         "settle_event": {"preimage": "b'+E7LxMHJZY9ske8wGPhGNmezR1rzWpUXdmAEbbYo7QM='"},
     },
+    # 11 Forward Fail Event
+    {
+        "incoming_channel_id": 920269242371670000,
+        "outgoing_channel_id": 887757782897721300,
+        "incoming_htlc_id": 3296,
+        "outgoing_htlc_id": 2011,
+        "timestamp_ns": 1733667260658913800,
+        "event_type": "FORWARD",
+        "forward_fail_event": {},
+    },
 ]
 
 
