@@ -1,6 +1,7 @@
 import asyncio
 import json
-from typing import Any, AsyncGenerator, List
+from pprint import pprint
+from typing import Any, AsyncGenerator, Dict, Generator, List
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ValidationError
@@ -11,13 +12,42 @@ from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
-from v4vapp_backend_v2.models.htlc_event_models import EventType, HtlcEvent
+from v4vapp_backend_v2.models.htlc_event_models import (
+    EventType,
+    HtlcEvent,
+    HtlcTrackingList,
+)
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
 
 # Create a temporary file
 db = MyDB()
+
+tracking = HtlcTrackingList()
+
+
+def read_last_50_lines(file_path: str) -> Generator[Dict[str, Any], None, None]:
+    with open(file_path, "r") as file:
+        # Read all lines in the file
+        lines = file.readlines()
+
+        # Get the last 50 lines
+        last_50_lines = lines[-50:]
+
+        # Parse each line as JSON and yield the htlc_event data
+        for line in last_50_lines:
+            try:
+                log_entry = json.loads(line)
+                if "htlc_event" in log_entry:
+                    yield HtlcEvent.model_validate(log_entry["htlc_event"])
+
+            except ValidationError as e:
+                logger.error(e)
+                continue
+            except Exception as e:
+                logger.error(e)
+                continue
 
 
 async def subscribe_invoices(
@@ -148,54 +178,83 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
             raise e
 
 
+class HtlcLiveEvent(BaseModel):
+    incoming_htlc_id: int | None = None
+    outgoing_htlc_id: int | None = None
+    htlc_event: HtlcEvent
+
+
+class HtlcLiveEvents(BaseModel):
+    live: Dict[EventType, List[HtlcLiveEvent]] = {}
+
+
 async def subscribe_htlc_events_loop() -> None:
+
     while True:
         logger.info("Subscribing to HTLC events")
         try:
             async for htlc_event in subscribe_htlc_events():
-                tasks = [
-                    get_channel_name(htlc_event.incoming_channel_id),
-                    get_channel_name(htlc_event.outgoing_channel_id),
-                ]
-                incoming_channel, outgoing_channel = await asyncio.gather(*tasks)
-                if htlc_event.has_forward_message:
-                    forward_message = htlc_event.forward_message(
-                        incoming_channel.name, outgoing_channel.name
-                    )
-                    logger.info(
-                        forward_message,
-                        extra={
-                            "telegram": True,
-                            "htlc_event": htlc_event.model_dump(exclude_none=True),
-                            "forward_message": forward_message,
-                        },
-                    )
-                elif htlc_event.is_forward_fail:
-                    logger.info(
-                        (
-                            f"💰 {htlc_event.incoming_htlc_id} Fail"
-                            f"from: {incoming_channel.name} "
-                            f"to: {outgoing_channel.name} "
-                            f"{htlc_event.event_type}"
-                        ),
-                        extra={
-                            "telegram": True,
-                            "htlc_event": htlc_event.model_dump(exclude_none=True),
-                        },
-                    )
-                else:
-                    logger.info(
-                        (
-                            f"htlc_event object {htlc_event.incoming_htlc_id} "
-                            f"from: {incoming_channel.name} "
-                            f"to: {outgoing_channel.name} "
-                            f"{htlc_event.event_type}"
-                        ),
-                        extra={"htlc_event": htlc_event.model_dump(exclude_none=True)},
-                    )
-                    logger.debug(
-                        htlc_event.model_dump_json(exclude_none=True, indent=2)
-                    )
+                htlc_id = tracking.add_event(htlc_event)
+                message = tracking.message(htlc_id)
+                complete = tracking.complete_group(htlc_id)
+                logger.info(
+                    message,
+                    extra={
+                        "telegram": complete,
+                        "htlc_event": htlc_event.model_dump(exclude_none=True),
+                        "complete": complete,
+                    },
+                )
+                logger.info(tracking.model_dump_json(indent=2))
+                if complete:
+                    logger.info("✅ Complete group")
+                    logger.info(f"Delete group {htlc_id}")
+                    tracking.delete_event(htlc_id)
+
+                # print(tracking.message(htlc_id))
+                # tasks = [
+                #     get_channel_name(htlc_event.incoming_channel_id),
+                #     get_channel_name(htlc_event.outgoing_channel_id),
+                # ]
+                # incoming_channel, outgoing_channel = await asyncio.gather(*tasks)
+                # if htlc_event.has_forward_message:
+                #     forward_message = htlc_event.forward_message(
+                #         incoming_channel.name, outgoing_channel.name
+                #     )
+                #     logger.info(
+                #         forward_message,
+                #         extra={
+                #             "telegram": True,
+                #             "htlc_event": htlc_event.model_dump(exclude_none=True),
+                #             "forward_message": forward_message,
+                #         },
+                #     )
+                # elif htlc_event.is_forward_fail:
+                #     logger.info(
+                #         (
+                #             f"💰 {htlc_event.incoming_htlc_id} Fail"
+                #             f"from: {incoming_channel.name} "
+                #             f"to: {outgoing_channel.name} "
+                #             f"{htlc_event.event_type}"
+                #         ),
+                #         extra={
+                #             "telegram": True,
+                #             "htlc_event": htlc_event.model_dump(exclude_none=True),
+                #         },
+                #     )
+                # else:
+                #     logger.info(
+                #         (
+                #             f"htlc_event object {htlc_event.incoming_htlc_id} "
+                #             f"from: {incoming_channel.name} "
+                #             f"to: {outgoing_channel.name} "
+                #             f"{htlc_event.event_type}"
+                #         ),
+                #         extra={"htlc_event": htlc_event.model_dump(exclude_none=True)},
+                #     )
+                #     logger.debug(
+                #         htlc_event.model_dump_json(exclude_none=True, indent=2)
+                #     )
         except LNDSubscriptionError as e:
             logger.warning(e)
             pass
@@ -226,6 +285,7 @@ async def main() -> None:
                 # name =  get_channel_name(int(channel["chan_id"]))
             names_list: List[ChannelName] = await asyncio.gather(*tasks)
             for channel_name in names_list:
+                tracking.add_name(channel_name)
                 logger.info(
                     f"Channel {channel_name.channel_id} -> {channel_name.name}",
                     extra={"channel_name": channel_name.model_dump()},

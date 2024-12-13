@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Dict, List
 
 from pydantic import BaseModel
 
@@ -100,7 +101,7 @@ class EventType(StrEnum):
 
 
 class ForwardAmtFee(BaseModel):
-    forward_amount: int
+    forward_amount: float
     fee: float
 
 
@@ -171,7 +172,7 @@ class HtlcEvent(BaseModel):
             incoming_amt_msat = info.incoming_amt_msat or 0
             outgoing_amt_msat = info.outgoing_amt_msat or 0
 
-            forward_amount = incoming_amt_msat // 1000
+            forward_amount = incoming_amt_msat / 1000
             earned: float = (incoming_amt_msat - outgoing_amt_msat) / 1000
             return ForwardAmtFee(forward_amount=forward_amount, fee=earned)
         return ForwardAmtFee(forward_amount=0, fee=0)
@@ -190,7 +191,7 @@ class HtlcEvent(BaseModel):
         return False
 
     def forward_message(
-        self, incoming_channel_name: str, outgoing_channel_name: str
+        self, incoming_channel_name: str = "", outgoing_channel_name: str = ""
     ) -> str:
         """
         Generates a message string describing the forwarding event of an HTLC
@@ -209,6 +210,9 @@ class HtlcEvent(BaseModel):
         # 💰 Forwarded 222 V4VAPP Hive GoPodcasting! → WalletOfSatoshi.com. Earned 0.006 0.00% (27)
         if not self.has_forward_message:
             return ""
+
+        incoming_channel_name = incoming_channel_name or str(self.incoming_channel_id)
+        outgoing_channel_name = outgoing_channel_name or str(self.outgoing_channel_id)
 
         try:
             fee_percent = self.forward_amt_fee.fee / self.forward_amt_fee.forward_amount
@@ -251,3 +255,136 @@ class HtlcEvent(BaseModel):
             f"{fee_percent:.2%} ({fee_ppm:,.0f})"
         )
         return message
+
+
+class ChannelName(BaseModel):
+    channel_id: int
+    name: str
+
+
+class HtlcTrackingList(BaseModel):
+    events: list[HtlcEvent] = []
+    names: Dict[int, str] = {}
+
+    def add_event(self, event: HtlcEvent) -> int:
+        htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+        if htlc_id is None:
+            return -1
+        self.events.append(event)
+        return htlc_id
+
+    def add_name(self, channel_name: ChannelName) -> None:
+        self.names[channel_name.channel_id] = channel_name.name
+
+    def list_htlc_id(self, htlc_id: int) -> List[HtlcEvent]:
+        return [
+            event
+            for event in self.events
+            if event.incoming_htlc_id == htlc_id or event.outgoing_htlc_id == htlc_id
+        ]
+
+    def delete_event(self, htlc_id: int) -> None:
+        self.events = [
+            event
+            for event in self.events
+            if event.incoming_htlc_id != htlc_id and event.outgoing_htlc_id != htlc_id
+        ]
+
+    def complete_group(self, htlc_id: int) -> bool:
+        group_list = self.list_htlc_id(htlc_id)
+        if group_list:
+
+            match group_list[0].event_type:
+                case EventType.FORWARD:
+                    return True if len(group_list) == 3 else False
+                case EventType.SEND:
+                    return True if len(group_list) == 3 else False
+                case EventType.RECEIVE:
+                    return True if len(group_list) == 3 else False
+                case _:
+                    return True
+
+        return False
+
+    def message(self, htlc_id: int) -> str:
+        if htlc_id is None or htlc_id < 0:
+            return "no message"
+        group_list = self.list_htlc_id(htlc_id)
+        if group_list:
+            match group_list[0].event_type:
+                case EventType.FORWARD:
+                    if self.complete_group(htlc_id):
+                        message_str = self.forward_message(group_list)
+                    else:
+                        message_str = "💰 Forward in progress"
+                    return message_str
+                case EventType.SEND:
+                    if self.complete_group(htlc_id):
+                        message_str = self.send_message(group_list)
+                    else:
+                        message_str = "⚡️ Send in progress"
+                    return message_str
+                case EventType.RECEIVE:
+                    if self.complete_group(htlc_id):
+                        message_str = self.receive_message(group_list)
+                    else:
+                        message_str = "💵 Receive in progress"
+                    return message_str
+                case _:
+                    return "Unknown"
+        return "no message"
+
+    def send_message(self, group_list: List[HtlcEvent]) -> str:
+        if (
+            len(group_list) == 3
+            and group_list[2].final_htlc_event
+            and group_list[2].final_htlc_event.settled
+        ):
+            end_message = "✅ Settled"
+        else:
+            end_message = "❌ Not Settled"
+        message_str = (
+            f"⚡️ Sent {group_list[0].forward_amt_fee.forward_amount:,.3f} "
+            f"{self.lookup_name(group_list[0].outgoing_channel_id)}. "
+            f"{end_message}"
+        )
+        return message_str
+
+    def receive_message(self, group_list: List[HtlcEvent]) -> str:
+        if (
+            len(group_list) == 3
+            and group_list[2].final_htlc_event
+            and group_list[2].final_htlc_event.settled
+        ):
+            end_message = "✅ Settled"
+        else:
+            end_message = "❌ Not Settled"
+        message_str = (
+            f"💵 Received via "
+            f"{self.lookup_name(group_list[0].incoming_channel_id)}. "
+            f"{end_message}"
+        )
+        return message_str
+
+    def forward_message(self, group_list: List[HtlcEvent]) -> str:
+        if group_list[2].event_type == EventType.FORWARD and (
+            group_list[2].forward_fail_event or group_list[2].link_fail_event
+        ):
+            end_message = "❌ Forward Fail"
+        elif group_list[2].final_htlc_event and group_list[2].final_htlc_event.settled:
+            end_message = f"✅ Earned {group_list[0].forward_amt_fee.fee:,.3f} "
+        else:
+            end_message = "❌ Not Settled"
+        message_str = (
+            f"💰 Forwarded "
+            f"{group_list[0].forward_amt_fee.forward_amount:,.3f} "
+            f"{self.lookup_name(group_list[0].incoming_channel_id)} → "
+            f"{self.lookup_name(group_list[0].outgoing_channel_id)}. "
+            f"{end_message}"
+        )
+        return message_str
+
+    def lookup_name(self, channel_id: int | None = None) -> str:
+        if channel_id is None:
+            return "Unknown"
+        return self.names.get(channel_id, str(channel_id))

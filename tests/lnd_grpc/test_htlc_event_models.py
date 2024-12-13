@@ -1,4 +1,13 @@
-from v4vapp_backend_v2.models.htlc_event_models import HtlcEvent
+import json
+from typing import Generator
+
+from pydantic import ValidationError
+
+from v4vapp_backend_v2.models.htlc_event_models import (
+    ChannelName,
+    HtlcEvent,
+    HtlcTrackingList,
+)
 
 htlc_event_data_list = [
     # 0 start of htlc_event_data_list
@@ -124,6 +133,84 @@ def test_htlc_event():
     for count, htlc_event_data in enumerate(htlc_event_data_list):
         htlc_event = HtlcEvent.model_validate(htlc_event_data)
         print(count, htlc_event.event_type)
-        print(count, htlc_event.forward_message("incoming_channel", "outgoing_channel"))
+        print(count, htlc_event.forward_message())
         print(count, htlc_event.forward_amt_fee)
         print("-" * 80)
+
+
+def read_log_file_htlc_events(file_path: str) -> Generator[HtlcEvent, None, None]:
+    with open(file_path, "r") as file:
+        # Parse each line as JSON and yield the htlc_event data
+        for line in file.readlines():
+            try:
+                log_entry = json.loads(line)
+                if "htlc_event" in log_entry:
+                    yield HtlcEvent.model_validate(log_entry["htlc_event"])
+
+            except ValidationError as e:
+                print(e)
+                continue
+            except Exception as e:
+                print(e)
+                continue
+
+
+def read_log_file_channel_names(file_path: str) -> Generator[ChannelName, None, None]:
+    with open(file_path, "r") as file:
+        # Parse each line as JSON and yield the htlc_event data
+        for line in file.readlines():
+            try:
+                log_entry = json.loads(line)
+                if "channel_name" in log_entry:
+                    yield ChannelName.model_validate(log_entry["channel_name"])
+
+            except ValidationError as e:
+                print(e)
+                continue
+            except Exception as e:
+                print(e)
+                continue
+
+
+def test_group_detection():
+    tracking = HtlcTrackingList()
+    try:
+        for name in read_log_file_channel_names("tests/data/htlc_events_test_data.log"):
+            tracking.add_name(name)
+            print(name)
+            print("-" * 80)
+
+        for id, name in tracking.names.items():
+            print(id, name)
+
+        for htlc_event in read_log_file_htlc_events(
+            "tests/data/htlc_events_test_data.log"
+        ):
+            htlc_id = tracking.add_event(htlc_event)
+            events_in_group = tracking.list_htlc_id(htlc_id=htlc_id)
+            complete = tracking.complete_group(htlc_id=htlc_id)
+            complete_str = "✅" if tracking.complete_group(htlc_id=htlc_id) else "❌"
+            print(
+                f"{complete_str} "
+                f"{htlc_id:>6} "
+                f"{htlc_event.event_type.value} "
+                f"{htlc_event.timestamp} "
+                f"events in group "
+                f"{len(events_in_group)} "
+                f"{tracking.complete_group(htlc_id=htlc_id)}"
+            )
+            print(tracking.message(htlc_id=htlc_id))
+            print("-" * 80)
+            if complete:
+                print()
+                tracking.delete_event(htlc_id=htlc_id)
+    except FileNotFoundError as e:
+        print(e)
+        assert False
+    assert len(tracking.list_htlc_id(385)) == 0
+    assert len(tracking.list_htlc_id(1338)) == 0
+
+    for event in tracking.events:
+        print(event.model_dump_json(indent=2))
+
+    assert (len(tracking.events) == 0)
