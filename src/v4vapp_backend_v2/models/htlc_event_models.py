@@ -369,43 +369,59 @@ class HtlcTrackingList(BaseModel):
         return "no message"
 
     def send_message(self, group_list: List[HtlcEvent]) -> str:
+        end_message = "✅ Settled"
+        primary_event = group_list[0]
         if (
-            len(group_list) == 3
-            and group_list[2].final_htlc_event
-            and group_list[2].final_htlc_event.settled
+            primary_event.forward_event
+            and primary_event.forward_event.info
+            and primary_event.forward_event.info.outgoing_amt_msat
         ):
-            end_message = "✅ Settled"
+            amount = primary_event.forward_event.info.outgoing_amt_msat / 1000
         else:
-            end_message = "❌ Not Settled"
-        message_str = (
-            f"⚡️ Sent {group_list[0].forward_amt_fee.forward_amount:,.3f} "
-            f"{self.lookup_name(group_list[0].outgoing_channel_id)}. "
-            f"{end_message}"
-        )
+            amount = 0
+
+        if primary_event.outgoing_channel_id:
+            sent_via = self.lookup_name(primary_event.outgoing_channel_id)
+        else:
+            sent_via = "Unknown"
+
+        message_str = f"⚡️ Sent {amount:,.3f} " f"out {sent_via}. " f"{end_message}"
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:
+        end_message = "✅ Settled"
+        primary_event = group_list[0]
         if (
-            len(group_list) == 3
-            and group_list[2].final_htlc_event
-            and group_list[2].final_htlc_event.settled
+            primary_event.forward_event
+            and primary_event.forward_event.info
+            and primary_event.forward_event.info.incoming_amt_msat
         ):
-            end_message = "✅ Settled"
+            amount = primary_event.forward_event.info.incoming_amt_msat / 1000
         else:
-            end_message = "❌ Not Settled"
+            amount = 0
+
+        if primary_event.incoming_channel_id:
+            received_via = self.lookup_name(primary_event.incoming_channel_id)
+        else:
+            received_via = "Unknown"
+
         message_str = (
-            f"💵 Received via "
-            f"{self.lookup_name(group_list[0].incoming_channel_id)}. "
-            f"{end_message}"
+            f"⚡️ Received {amount:,.3f} " f"via {received_via}. " f"{end_message}"
         )
         return message_str
 
     def forward_message(self, group_list: List[HtlcEvent]) -> str:
+        primary_event = group_list[0]
         if len(group_list) == 2:
-
-            if group_list[0].link_fail_event:
-                amount = group_list[0].link_fail_event.info.incoming_amt_msat / 1000
-                failure_string = group_list[0].link_fail_event.failure_string
+            if primary_event.link_fail_event:
+                if (
+                    primary_event.link_fail_event.info
+                    and primary_event.link_fail_event.info.incoming_amt_msat
+                ):
+                    amount = primary_event.link_fail_event.info.incoming_amt_msat / 1000
+                else:
+                    amount = 0
+                failure_string = primary_event.link_fail_event.failure_string
                 end_message = f"❌ Not Settled {amount:.3f} {failure_string}"
             else:
                 end_message = "❌ Not Settled"
@@ -415,14 +431,14 @@ class HtlcTrackingList(BaseModel):
         ):
             end_message = "❌ Forward Fail"
         elif group_list[2].final_htlc_event and group_list[2].final_htlc_event.settled:
-            end_message = f"✅ Earned {group_list[0].forward_amt_fee.fee:,.3f} "
+            end_message = f"✅ Earned {primary_event.forward_amt_fee.fee:,.3f} "
         else:
             end_message = "❌ Not Settled"
         message_str = (
             f"💰 Forwarded "
-            f"{group_list[0].forward_amt_fee.forward_amount:,.3f} "
-            f"{self.lookup_name(group_list[0].incoming_channel_id)} → "
-            f"{self.lookup_name(group_list[0].outgoing_channel_id)}. "
+            f"{primary_event.forward_amt_fee.forward_amount:,.3f} "
+            f"{self.lookup_name(primary_event.incoming_channel_id)} → "
+            f"{self.lookup_name(primary_event.outgoing_channel_id)}. "
             f"{end_message}"
         )
         return message_str
