@@ -175,7 +175,7 @@ def read_log_file_channel_names(file_path: str) -> Generator[ChannelName, None, 
 def test_group_detection():
     tracking = HtlcTrackingList()
     try:
-        for name in read_log_file_channel_names("tests/data/htlc_events_test_data.log"):
+        for name in read_log_file_channel_names("tests/data/htlc_events_test_data2.log"):
             tracking.add_name(name)
             print(name)
             print("-" * 80)
@@ -184,7 +184,7 @@ def test_group_detection():
             print(id, name)
 
         for htlc_event in read_log_file_htlc_events(
-            "tests/data/htlc_events_test_data.log"
+            "tests/data/htlc_events_test_data2.log"
         ):
             htlc_id = tracking.add_event(htlc_event)
             events_in_group = tracking.list_htlc_id(htlc_id=htlc_id)
@@ -200,17 +200,24 @@ def test_group_detection():
                 f"{tracking.complete_group(htlc_id=htlc_id)}"
             )
             print(tracking.message(htlc_id=htlc_id))
-            print("-" * 80)
             if complete:
-                print()
+                print(f"Group {htlc_id} is complete")
                 tracking.delete_event(htlc_id=htlc_id)
+            print("-" * 80)
     except FileNotFoundError as e:
         print(e)
         assert False
     assert len(tracking.list_htlc_id(385)) == 0
     assert len(tracking.list_htlc_id(1338)) == 0
 
-    for event in tracking.events:
-        print(event.model_dump_json(indent=2))
+    all_htlc_ids = tracking.list_all_htlc_ids()
+
+    for htlc_id in all_htlc_ids:
+        events_in_group = tracking.list_htlc_id(htlc_id=htlc_id)
+        print(
+            f"HTLC ID: {htlc_id} - {events_in_group[0].event_type.value} "
+            f"Events in group: {len(events_in_group)}"
+        )
+        print(tracking.list_htlc_id(htlc_id=htlc_id))
 
     assert (len(tracking.events) == 0)

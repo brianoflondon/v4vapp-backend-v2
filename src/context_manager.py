@@ -205,7 +205,7 @@ async def subscribe_htlc_events_loop() -> None:
                         "complete": complete,
                     },
                 )
-                logger.info(tracking.model_dump_json(indent=2))
+                # logger.info(tracking.model_dump_json(indent=2))
                 if complete:
                     logger.info("✅ Complete group")
                     logger.info(f"Delete group {htlc_id}")

@@ -277,11 +277,27 @@ class HtlcTrackingList(BaseModel):
         self.names[channel_name.channel_id] = channel_name.name
 
     def list_htlc_id(self, htlc_id: int) -> List[HtlcEvent]:
+        """Returns a list of events with the given htlc_id."""
         return [
             event
             for event in self.events
             if event.incoming_htlc_id == htlc_id or event.outgoing_htlc_id == htlc_id
         ]
+
+    def list_all_htlc_ids(self) -> List[int]:
+        """Returns a list of all htlc_ids in the events."""
+        return list(
+            {
+                event.incoming_htlc_id
+                for event in self.events
+                if event.incoming_htlc_id is not None
+            }
+            | {
+                event.outgoing_htlc_id
+                for event in self.events
+                if event.outgoing_htlc_id is not None
+            }
+        )
 
     def delete_event(self, htlc_id: int) -> None:
         self.events = [
@@ -293,14 +309,32 @@ class HtlcTrackingList(BaseModel):
     def complete_group(self, htlc_id: int) -> bool:
         group_list = self.list_htlc_id(htlc_id)
         if group_list:
-
             match group_list[0].event_type:
                 case EventType.FORWARD:
+                    if len(group_list) == 3:
+                        return True
+                    if len(group_list) == 2:
+                        has_forward_event = any(
+                            event.event_type == EventType.FORWARD
+                            and event.link_fail_event
+                            for event in group_list
+                        )
+                        has_unknown_event = any(
+                            event.event_type == EventType.UNKNOWN
+                            and event.final_htlc_event
+                            for event in group_list
+                        )
+                        if has_forward_event and has_unknown_event:
+                            for event in group_list:
+                                if event.final_htlc_event:
+                                    event.final_htlc_event.settled = True
+                            return True
+                    return False
                     return True if len(group_list) == 3 else False
                 case EventType.SEND:
-                    return True if len(group_list) == 3 else False
+                    return True if len(group_list) == 2 else False
                 case EventType.RECEIVE:
-                    return True if len(group_list) == 3 else False
+                    return True if len(group_list) == 2 else False
                 case _:
                     return True
 
@@ -316,19 +350,19 @@ class HtlcTrackingList(BaseModel):
                     if self.complete_group(htlc_id):
                         message_str = self.forward_message(group_list)
                     else:
-                        message_str = "💰 Forward in progress"
+                        message_str = f"💰 Forward in progress {htlc_id}"
                     return message_str
                 case EventType.SEND:
                     if self.complete_group(htlc_id):
                         message_str = self.send_message(group_list)
                     else:
-                        message_str = "⚡️ Send in progress"
+                        message_str = f"⚡️ Send in progress {htlc_id}"
                     return message_str
                 case EventType.RECEIVE:
                     if self.complete_group(htlc_id):
                         message_str = self.receive_message(group_list)
                     else:
-                        message_str = "💵 Receive in progress"
+                        message_str = f"💵 Receive in progress {htlc_id}"
                     return message_str
                 case _:
                     return "Unknown"
@@ -367,7 +401,16 @@ class HtlcTrackingList(BaseModel):
         return message_str
 
     def forward_message(self, group_list: List[HtlcEvent]) -> str:
-        if group_list[2].event_type == EventType.FORWARD and (
+        if len(group_list) == 2:
+
+            if group_list[0].link_fail_event:
+                amount = group_list[0].link_fail_event.info.incoming_amt_msat / 1000
+                failure_string = group_list[0].link_fail_event.failure_string
+                end_message = f"❌ Not Settled {amount:.3f} {failure_string}"
+            else:
+                end_message = "❌ Not Settled"
+
+        elif group_list[2].event_type == EventType.FORWARD and (
             group_list[2].forward_fail_event or group_list[2].link_fail_event
         ):
             end_message = "❌ Forward Fail"
