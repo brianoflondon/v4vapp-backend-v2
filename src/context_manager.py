@@ -207,54 +207,9 @@ async def subscribe_htlc_events_loop() -> None:
                 )
                 # logger.info(tracking.model_dump_json(indent=2))
                 if complete:
-                    logger.info("✅ Complete group")
-                    logger.info(f"Delete group {htlc_id}")
+                    logger.info(f"✅ Complete group, Delete group {htlc_id}")
                     tracking.delete_event(htlc_id)
 
-                # print(tracking.message(htlc_id))
-                # tasks = [
-                #     get_channel_name(htlc_event.incoming_channel_id),
-                #     get_channel_name(htlc_event.outgoing_channel_id),
-                # ]
-                # incoming_channel, outgoing_channel = await asyncio.gather(*tasks)
-                # if htlc_event.has_forward_message:
-                #     forward_message = htlc_event.forward_message(
-                #         incoming_channel.name, outgoing_channel.name
-                #     )
-                #     logger.info(
-                #         forward_message,
-                #         extra={
-                #             "telegram": True,
-                #             "htlc_event": htlc_event.model_dump(exclude_none=True),
-                #             "forward_message": forward_message,
-                #         },
-                #     )
-                # elif htlc_event.is_forward_fail:
-                #     logger.info(
-                #         (
-                #             f"💰 {htlc_event.incoming_htlc_id} Fail"
-                #             f"from: {incoming_channel.name} "
-                #             f"to: {outgoing_channel.name} "
-                #             f"{htlc_event.event_type}"
-                #         ),
-                #         extra={
-                #             "telegram": True,
-                #             "htlc_event": htlc_event.model_dump(exclude_none=True),
-                #         },
-                #     )
-                # else:
-                #     logger.info(
-                #         (
-                #             f"htlc_event object {htlc_event.incoming_htlc_id} "
-                #             f"from: {incoming_channel.name} "
-                #             f"to: {outgoing_channel.name} "
-                #             f"{htlc_event.event_type}"
-                #         ),
-                #         extra={"htlc_event": htlc_event.model_dump(exclude_none=True)},
-                #     )
-                #     logger.debug(
-                #         htlc_event.model_dump_json(exclude_none=True, indent=2)
-                #     )
         except LNDSubscriptionError as e:
             logger.warning(e)
             pass
