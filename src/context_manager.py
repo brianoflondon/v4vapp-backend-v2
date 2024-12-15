@@ -28,29 +28,6 @@ db = MyDB()
 tracking = HtlcTrackingList()
 
 
-def read_last_50_lines(file_path: str) -> Generator[Dict[str, Any], None, None]:
-    with open(file_path, "r") as file:
-        # Read all lines in the file
-        lines = file.readlines()
-
-        # Get the last 50 lines
-        last_50_lines = lines[-50:]
-
-        # Parse each line as JSON and yield the htlc_event data
-        for line in last_50_lines:
-            try:
-                log_entry = json.loads(line)
-                if "htlc_event" in log_entry:
-                    yield HtlcEvent.model_validate(log_entry["htlc_event"])
-
-            except ValidationError as e:
-                logger.error(e)
-                continue
-            except Exception as e:
-                logger.error(e)
-                continue
-
-
 async def subscribe_invoices(
     add_index: int, settle_index: int
 ) -> AsyncGenerator[LNDInvoice, None]:
@@ -75,33 +52,6 @@ async def subscribe_invoices(
         except Exception as e:
             logger.error(e)
             raise e
-
-
-async def get_channel_name(channel_id: int) -> ChannelName:
-    if not channel_id:
-        return ChannelName(channel_id=0, name="Unknown")
-    async with LNDClient() as client:
-        request = ln.ChanInfoRequest(chan_id=channel_id)
-        try:
-            response = await client.call(
-                client.lightning_stub.GetChanInfo,
-                request,
-            )
-            chan_info = MessageToDict(response, preserving_proto_field_name=True)
-            pub_key = chan_info.get("node2_pub")
-            if pub_key:
-                response = await client.call(
-                    client.lightning_stub.GetNodeInfo,
-                    ln.NodeInfoRequest(pub_key=pub_key),
-                )
-                node_info = MessageToDict(response, preserving_proto_field_name=True)
-                return ChannelName(
-                    channel_id=channel_id, name=node_info["node"]["alias"]
-                )
-            return ChannelName(channel_id=channel_id, name="Unknown")
-        except Exception as e:
-            logger.exception(e)
-            pass
 
 
 async def subscribe_invoices_loop() -> None:
@@ -140,6 +90,33 @@ async def subscribe_invoices_loop() -> None:
             raise e
 
 
+async def get_channel_name(channel_id: int) -> ChannelName:
+    if not channel_id:
+        return ChannelName(channel_id=0, name="Unknown")
+    async with LNDClient() as client:
+        request = ln.ChanInfoRequest(chan_id=channel_id)
+        try:
+            response = await client.call(
+                client.lightning_stub.GetChanInfo,
+                request,
+            )
+            chan_info = MessageToDict(response, preserving_proto_field_name=True)
+            pub_key = chan_info.get("node2_pub")
+            if pub_key:
+                response = await client.call(
+                    client.lightning_stub.GetNodeInfo,
+                    ln.NodeInfoRequest(pub_key=pub_key),
+                )
+                node_info = MessageToDict(response, preserving_proto_field_name=True)
+                return ChannelName(
+                    channel_id=channel_id, name=node_info["node"]["alias"]
+                )
+            return ChannelName(channel_id=channel_id, name="Unknown")
+        except Exception as e:
+            logger.exception(e)
+            pass
+
+
 async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
     async with LNDClient() as client:
         request_sub = routerrpc.SubscribeHtlcEventsRequest()
@@ -172,16 +149,6 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
         except Exception as e:
             logger.error(e)
             raise e
-
-
-class HtlcLiveEvent(BaseModel):
-    incoming_htlc_id: int | None = None
-    outgoing_htlc_id: int | None = None
-    htlc_event: HtlcEvent
-
-
-class HtlcLiveEvents(BaseModel):
-    live: Dict[EventType, List[HtlcLiveEvent]] = {}
 
 
 async def subscribe_htlc_events_loop() -> None:
