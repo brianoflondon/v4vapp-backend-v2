@@ -13,6 +13,7 @@ from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
 from v4vapp_backend_v2.models.htlc_event_models import (
+    ChannelName,
     EventType,
     HtlcEvent,
     HtlcTrackingList,
@@ -74,11 +75,6 @@ async def subscribe_invoices(
         except Exception as e:
             logger.error(e)
             raise e
-
-
-class ChannelName(BaseModel):
-    channel_id: int
-    name: str
 
 
 async def get_channel_name(channel_id: int) -> ChannelName:
