@@ -24,7 +24,7 @@ class LNDConnectionSettings:
     options: list
     macaroon: bytes
     cert: bytes
-    use_proxy: str
+    use_proxy: str = ""
 
     def __init__(self) -> None:
         lnd_config = InternalConfig().config.lnd_connection

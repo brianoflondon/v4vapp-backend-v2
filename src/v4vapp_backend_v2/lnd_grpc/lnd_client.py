@@ -163,7 +163,7 @@ class LNDClient:
                     "error_details": e,
                 },
             )
-            raise LNDConnectionError()
+            raise LNDConnectionError(e)
 
     async def call_async_generator(
         self, method: Callable[..., AsyncGenerator[Any, None]], *args, **kwargs

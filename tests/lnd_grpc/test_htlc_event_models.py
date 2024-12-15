@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from v4vapp_backend_v2.models.htlc_event_models import (
     ChannelName,
+    EventType,
     HtlcEvent,
     HtlcTrackingList,
 )
@@ -202,6 +203,11 @@ def test_group_detection():
                 f"{tracking.complete_group(htlc_id=htlc_id)}"
             )
             print(tracking.message(htlc_id=htlc_id))
+
+            if htlc_event.event_type == EventType.RECEIVE:
+                if htlc_event.settle_event:
+                    print(f"Preimage: {htlc_event.settle_event.preimage}")
+
             if complete:
                 print(f"Group {htlc_id} is complete")
                 tracking.delete_event(htlc_id=htlc_id)
