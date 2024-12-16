@@ -1,11 +1,9 @@
 import asyncio
-import hashlib
 import json
-from pprint import pprint
-from typing import Any, AsyncGenerator, Dict, Generator, List
+from typing import AsyncGenerator, List
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
@@ -16,7 +14,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscription
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
 from v4vapp_backend_v2.models.htlc_event_models import (
     ChannelName,
-    EventType,
     HtlcEvent,
     HtlcTrackingList,
 )
@@ -27,7 +24,7 @@ config = InternalConfig().config
 # Create a temporary file
 db = MyDB()
 
-tracking = HtlcTrackingList()
+global_tracking = HtlcTrackingList()
 
 
 async def subscribe_invoices(
@@ -44,6 +41,10 @@ async def subscribe_invoices(
                 call_name="SubscribeInvoices",
             ):
                 inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+                logger.info(
+                    f"Raw invoice data\n{json.dumps(inv_dict, indent=2)}",
+                    extra={"invoice_data": inv_dict, "telegram": False},
+                )
                 invoice = LNDInvoice.model_validate(inv_dict)
                 yield invoice
         except LNDSubscriptionError as e:
@@ -65,6 +66,8 @@ async def subscribe_invoices_loop() -> None:
         logger.info(f"Add index: {add_index} - Settle index: {settle_index}")
         try:
             async for invoice in subscribe_invoices(add_index, settle_index):
+                add_index = global_tracking.add_invoice(invoice)
+
                 if error_codes:
                     logger.info(
                         f"✅ Error codes cleared {error_codes}",
@@ -75,48 +78,20 @@ async def subscribe_invoices_loop() -> None:
                     )
                     error_codes.clear()
 
-                if invoice.settled:
-                    settle_index = invoice.settle_index
-                else:
-                    add_index = invoice.add_index
                 send_telegram = False if invoice.is_keysend else True
                 invoice.invoice_log(logger.info, send_telegram)
                 db.update_most_recent(invoice)
+
+                if invoice.settled:
+                    settle_index = invoice.settle_index
 
         except LNDSubscriptionError as e:
             logger.warning(e)
             pass
 
         except Exception as e:
-            logger.error(e)
+            logger.exception(e)
             raise e
-
-
-# async def get_channel_name(channel_id: int) -> ChannelName:
-#     if not channel_id:
-#         return ChannelName(channel_id=0, name="Unknown")
-#     async with LNDClient() as client:
-#         request = ln.ChanInfoRequest(chan_id=channel_id)
-#         try:
-#             response = await client.call(
-#                 client.lightning_stub.GetChanInfo,
-#                 request,
-#             )
-#             chan_info = MessageToDict(response, preserving_proto_field_name=True)
-#             pub_key = chan_info.get("node2_pub")
-#             if pub_key:
-#                 response = await client.call(
-#                     client.lightning_stub.GetNodeInfo,
-#                     ln.NodeInfoRequest(pub_key=pub_key),
-#                 )
-#                 node_info = MessageToDict(response, preserving_proto_field_name=True)
-#                 return ChannelName(
-#                     channel_id=channel_id, name=node_info["node"]["alias"]
-#                 )
-#             return ChannelName(channel_id=channel_id, name="Unknown")
-#         except Exception as e:
-#             logger.exception(e)
-#             pass
 
 
 async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
@@ -159,9 +134,10 @@ async def subscribe_htlc_events_loop() -> None:
         logger.info("Subscribing to HTLC events")
         try:
             async for htlc_event in subscribe_htlc_events():
-                htlc_id = tracking.add_event(htlc_event)
-                message = tracking.message(htlc_id)
-                complete = tracking.complete_group(htlc_id)
+                await asyncio.sleep(0.1)
+                htlc_id = global_tracking.add_event(htlc_event)
+                message = global_tracking.message(htlc_id)
+                complete = global_tracking.complete_group(htlc_id)
                 logger.info(
                     message,
                     extra={
@@ -170,16 +146,11 @@ async def subscribe_htlc_events_loop() -> None:
                         "complete": complete,
                     },
                 )
-                if (
-                    htlc_event.event_type == EventType.RECEIVE
-                    and htlc_event.settle_event
-                    and htlc_event.settle_event.preimage
-                ):
-                    invoice = await lookup_invoice(htlc_event.settle_event.preimage)
-                    print(invoice)
                 if complete:
                     logger.info(f"✅ Complete group, Delete group {htlc_id}")
-                    tracking.delete_event(htlc_id)
+                    global_tracking.delete_event(htlc_id)
+                    logger.info(f"Now tracking {global_tracking.num_events} events")
+                    logger.info(f"Now tracking {global_tracking.num_invoices} invoices")
 
         except LNDSubscriptionError as e:
             logger.warning(e)
@@ -211,7 +182,7 @@ async def main() -> None:
                 # name =  get_channel_name(int(channel["chan_id"]))
             names_list: List[ChannelName] = await asyncio.gather(*tasks)
             for channel_name in names_list:
-                tracking.add_name(channel_name)
+                global_tracking.add_name(channel_name)
                 logger.info(
                     f"Channel {channel_name.channel_id} -> {channel_name.name}",
                     extra={"channel_name": channel_name.model_dump()},

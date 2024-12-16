@@ -4,6 +4,8 @@ from typing import Dict, List
 
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+
 
 class HtlcInfo(BaseModel):
     incoming_timelock: int | None = None
@@ -161,7 +163,7 @@ class HtlcEvent(BaseModel):
             ForwardAmtFee: An object containing the forward amount (in satoshis) and
             the fee (in satoshis).
         """
-        if self.has_forward_message:
+        if self.is_forward_fail_attempt_settle:
             for event in (self.forward_event, self.link_fail_event):
                 if event and event.info:
                     info = event.info
@@ -178,7 +180,7 @@ class HtlcEvent(BaseModel):
         return ForwardAmtFee(forward_amount=0, fee=0)
 
     @property
-    def has_forward_message(self) -> bool:
+    def is_forward_fail_attempt_settle(self) -> bool:
         """
         Check if the event has a forward message.
 
@@ -190,72 +192,6 @@ class HtlcEvent(BaseModel):
             return True
         return False
 
-    def forward_message(
-        self, incoming_channel_name: str = "", outgoing_channel_name: str = ""
-    ) -> str:
-        """
-        Generates a message string describing the forwarding event of an HTLC
-        (Hashed TimeLock Contract).
-
-        Args:
-            incoming_channel_name (str): The name of the incoming channel.
-            outgoing_channel_name (str): The name of the outgoing channel.
-
-        Returns:
-            str: A formatted string describing the forwarding event,
-                 including the forward amount, fee, fee percentage, and the
-                 result of the forward attempt (e.g., success, failure).
-        """
-
-        # 💰 Forwarded 222 V4VAPP Hive GoPodcasting! → WalletOfSatoshi.com. Earned 0.006 0.00% (27)
-        if not self.has_forward_message:
-            return ""
-
-        incoming_channel_name = incoming_channel_name or str(self.incoming_channel_id)
-        outgoing_channel_name = outgoing_channel_name or str(self.outgoing_channel_id)
-
-        try:
-            fee_percent = self.forward_amt_fee.fee / self.forward_amt_fee.forward_amount
-        except ZeroDivisionError:
-            fee_percent = 0
-        fee_ppm = fee_percent * 1_000_000
-
-        forward_result = "Forward Attempt"
-        message = f"💰 {self.incoming_htlc_id:>6} "
-        if self.forward_fail_event or self.link_fail_event:
-            forward_result = "⭕️ Forward Fail   "
-            if self.link_fail_event:
-                fee_percent = 0
-                fee_ppm = 0
-                forward_result = (
-                    self.link_fail_event.failure_string
-                    if self.link_fail_event.failure_string
-                    else "Unknown"
-                )
-
-        elif self.settle_event:
-            if self.link_fail_event:
-                forward_result = (
-                    f"⭕️ Forward Fail {self.link_fail_event.failure_string} "
-                )
-            else:
-                forward_result = "✅ Forward Settle "
-            message = (
-                f"💰 {self.incoming_htlc_id:>6} "
-                f"{forward_result} "
-                f"{incoming_channel_name} → {outgoing_channel_name}. "
-            )
-            return message
-
-        message = (
-            f"💰 {self.incoming_htlc_id:>6} "
-            f"{forward_result} {self.forward_amt_fee.forward_amount:,.0f} "
-            f"{incoming_channel_name} → {outgoing_channel_name}. "
-            f"Fee {self.forward_amt_fee.fee:,.3f} "
-            f"{fee_percent:.2%} ({fee_ppm:,.0f})"
-        )
-        return message
-
 
 class ChannelName(BaseModel):
     channel_id: int
@@ -265,6 +201,7 @@ class ChannelName(BaseModel):
 class HtlcTrackingList(BaseModel):
     events: list[HtlcEvent] = []
     names: Dict[int, str] = {}
+    invoices: list[LNDInvoice] = []
 
     def add_event(self, event: HtlcEvent) -> int:
         htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
@@ -273,8 +210,53 @@ class HtlcTrackingList(BaseModel):
         self.events.append(event)
         return htlc_id
 
+    def add_invoice(self, invoice: LNDInvoice) -> int:
+        add_index = invoice.add_index
+        if add_index is None:
+            return -1
+        if self.lookup_invoice(add_index):
+            self.remove_invoice(add_index)
+        self.invoices.append(invoice)
+        return add_index
+
+    def remove_invoice(self, add_index: int) -> None:
+        if not self.lookup_invoice(add_index):
+            return
+        self.invoices = [
+            invoice for invoice in self.invoices if invoice.add_index != add_index
+        ]
+
+    def lookup_invoice(self, add_index: int) -> LNDInvoice | None:
+        for invoice in self.invoices:
+            if invoice.add_index == add_index:
+                return invoice
+        return None
+
+    def lookup_invoice_by_htlc_id(self, htlc_id: int) -> LNDInvoice | None:
+        for invoice in self.invoices:
+            if invoice and invoice.htlcs:
+                for htlc_data in invoice.htlcs:
+                    if int(htlc_data["htlc_index"]) == int(htlc_id):
+                        return invoice
+        return None
+
+    def invoice_htlc_id(self, add_index: int) -> int | None:
+        invoice = self.lookup_invoice(add_index)
+        if invoice and invoice.htlcs:
+            for htlc in invoice.htlcs:
+                return htlc["htlc_index"]
+        return None
+
+    @property
+    def num_invoices(self) -> int:
+        return len(self.invoices)
+
     def add_name(self, channel_name: ChannelName) -> None:
         self.names[channel_name.channel_id] = channel_name.name
+
+    @property
+    def num_events(self) -> int:
+        return len(self.events)
 
     def list_htlc_id(self, htlc_id: int) -> List[HtlcEvent]:
         """Returns a list of events with the given htlc_id."""
@@ -389,29 +371,27 @@ class HtlcTrackingList(BaseModel):
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:
-        end_message = "✅ Settled"
         primary_event = group_list[0]
-        if (
-            primary_event.forward_event
-            and primary_event.forward_event.info
-            and primary_event.forward_event.info.incoming_amt_msat
-        ):
-            amount = primary_event.forward_event.info.incoming_amt_msat / 1000
-        else:
-            amount = 0
-
+        amount = 0
         if primary_event.incoming_channel_id:
             received_via = self.lookup_name(primary_event.incoming_channel_id)
         else:
             received_via = "Unknown"
 
-        message_str = (
-            f"⚡️ Received {amount:,.3f} " f"via {received_via}. " f"{end_message}"
-        )
+        for_memo = ""
+        htlc_id = primary_event.incoming_htlc_id or primary_event.outgoing_htlc_id
+        if htlc_id:
+            incoming_invoice = self.lookup_invoice_by_htlc_id(htlc_id=htlc_id)
+            if incoming_invoice:
+                amount = incoming_invoice.value
+                for_memo = f" for {incoming_invoice.memo}"
+
+        message_str = f"⚡️ Received {amount:,.3f}{for_memo}" f"via {received_via}"
         return message_str
 
     def forward_message(self, group_list: List[HtlcEvent]) -> str:
         primary_event = group_list[0]
+        start_message = "💰 Attempted "
         if len(group_list) == 2:
             if primary_event.link_fail_event:
                 if (
@@ -431,11 +411,12 @@ class HtlcTrackingList(BaseModel):
         ):
             end_message = "❌ Forward Fail"
         elif group_list[2].final_htlc_event and group_list[2].final_htlc_event.settled:
+            start_message = "💰 Forwarded "
             end_message = f"✅ Earned {primary_event.forward_amt_fee.fee:,.3f} "
         else:
             end_message = "❌ Not Settled"
         message_str = (
-            f"💰 Forwarded "
+            f"{start_message} "
             f"{primary_event.forward_amt_fee.forward_amount:,.3f} "
             f"{self.lookup_name(primary_event.incoming_channel_id)} → "
             f"{self.lookup_name(primary_event.outgoing_channel_id)}. "

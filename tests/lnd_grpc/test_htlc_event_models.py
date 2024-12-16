@@ -134,7 +134,6 @@ def test_htlc_event():
     for count, htlc_event_data in enumerate(htlc_event_data_list):
         htlc_event = HtlcEvent.model_validate(htlc_event_data)
         print(count, htlc_event.event_type)
-        print(count, htlc_event.forward_message())
         print(count, htlc_event.forward_amt_fee)
         print("-" * 80)
 
@@ -228,4 +227,4 @@ def test_group_detection():
         )
         print(tracking.list_htlc_id(htlc_id=htlc_id))
 
-    assert len(tracking.events) == 0
+    assert tracking.num_events == len(tracking.events) == 0
