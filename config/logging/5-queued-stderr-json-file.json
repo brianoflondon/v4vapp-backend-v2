@@ -3,7 +3,7 @@
     "disable_existing_loggers": false,
     "formatters": {
         "simple": {
-            "format": "%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-16s %(lineno) 5d : %(message)s",
+            "format": "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s %(funcName)-26s %(lineno)6d : %(message)s",
             "datefmt": "%Y-%m-%dT%H:%M:%S%z"
         },
         "json": {
@@ -34,6 +34,12 @@
             "level": "WARNING",
             "formatter": "simple",
             "stream": "ext://sys.stderr"
+        },
+        "stdout": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "stream": "ext://sys.stdout"
         },
         "file_json": {
             "class": "logging.handlers.RotatingFileHandler",
