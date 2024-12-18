@@ -49,9 +49,9 @@ def read_log_file_htlc_invoice(
                 continue
 
 
-def fill_channel_names(tracking: HtlcTrackingList) -> HtlcTrackingList:
+def fill_channel_names(tracking: HtlcTrackingList, file_path: str) -> HtlcTrackingList:
     try:
-        for name in read_log_file_channel_names("logs/v4vapp-backend-v2.log.jsonl.1"):
+        for name in read_log_file_channel_names(file_path):
             tracking.add_name(name)
             print(name)
 
@@ -62,11 +62,11 @@ def fill_channel_names(tracking: HtlcTrackingList) -> HtlcTrackingList:
 
 
 def test_read_all_log():
+    file_path = "tests/data/combined_test_data.safe_log"
     tracking = HtlcTrackingList()
-    tracking = fill_channel_names(tracking)
+    tracking = fill_channel_names(tracking, file_path)
     assert tracking.names
-
-    for item in read_log_file_htlc_invoice("logs/v4vapp-backend-v2.log.jsonl.1"):
+    for item in read_log_file_htlc_invoice(file_path):
         if isinstance(item, HtlcEvent):
             htlc_id = tracking.add_event(item)
             complete = tracking.complete_group(htlc_id)
