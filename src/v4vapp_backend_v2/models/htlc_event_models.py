@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Dict, List
 
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.config import LoggerFunction
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 
@@ -122,7 +123,27 @@ class HtlcEvent(BaseModel):
     final_htlc_event: FinalHtlcEvent | None = None
 
     @property
+    def htlc_id(self) -> int | None:
+        """
+        Returns the HTLC (Hashed Time-Locked Contract) ID.
+
+        This method returns the incoming HTLC ID if it exists; otherwise, it returns the outgoing HTLC ID.
+        If neither exists, it returns None.
+
+        Returns:
+            int | None: The HTLC ID, or None if neither incoming nor outgoing HTLC ID is present.
+        """
+        return self.incoming_htlc_id or self.outgoing_htlc_id
+
+    @property
     def timestamp(self) -> datetime | None:
+        """
+        Converts the timestamp in nanoseconds to a datetime object.
+
+        Returns:
+            datetime | None: A datetime object representing the timestamp if `timestamp_ns` is not None,
+                             otherwise None.
+        """
         if self.timestamp_ns is not None:
             return datetime.fromtimestamp(self.timestamp_ns / 1e9)
         return None
@@ -174,7 +195,7 @@ class HtlcEvent(BaseModel):
             incoming_amt_msat = info.incoming_amt_msat or 0
             outgoing_amt_msat = info.outgoing_amt_msat or 0
 
-            forward_amount = incoming_amt_msat / 1000
+            forward_amount = outgoing_amt_msat / 1000
             earned: float = (incoming_amt_msat - outgoing_amt_msat) / 1000
             return ForwardAmtFee(forward_amount=forward_amount, fee=earned)
         return ForwardAmtFee(forward_amount=0, fee=0)
@@ -204,7 +225,7 @@ class HtlcTrackingList(BaseModel):
     invoices: list[LNDInvoice] = []
 
     def add_event(self, event: HtlcEvent) -> int:
-        htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+        htlc_id = event.htlc_id
         if htlc_id is None:
             return -1
         self.events.append(event)
@@ -225,6 +246,17 @@ class HtlcTrackingList(BaseModel):
         self.invoices = [
             invoice for invoice in self.invoices if invoice.add_index != add_index
         ]
+
+    def remove_expired_invoices(self) -> None:
+        def check_expiry(invoice: LNDInvoice) -> bool:
+            current_time = int(datetime.now(tz=timezone.utc).timestamp())
+            return current_time > invoice.creation_date.timestamp() + (
+                invoice.expiry or 300
+            )
+
+        for invoice in self.invoices:
+            if check_expiry(invoice):
+                self.remove_invoice(invoice.add_index)
 
     def lookup_invoice(self, add_index: int) -> LNDInvoice | None:
         for invoice in self.invoices:
@@ -350,6 +382,29 @@ class HtlcTrackingList(BaseModel):
                     return "Unknown"
         return "no message"
 
+    def log_event(
+        self, htlc_id: int, logger_func: LoggerFunction, extra: dict = {}
+    ) -> None:
+        """
+        Logs an event message for a given HTLC (Hashed TimeLock Contract) ID.
+
+        Args:
+            htlc_id (int): The ID of the HTLC event to log.
+            logger_func (LoggerFunction): The logging function to use for logging the
+                event message.
+            extra (dict, optional): Additional context or metadata to include in the
+                log. Defaults to an empty dictionary.
+                logger_func must take extra as a keyword argument if extra is passed.
+
+        Returns:
+            None
+        """
+        message_str = self.message(htlc_id)
+        if extra:
+            logger_func(message_str, extra=extra)
+        else:
+            logger_func(message_str)
+
     def send_message(self, group_list: List[HtlcEvent]) -> str:
         end_message = "✅ Settled"
         primary_event = group_list[0]
@@ -367,7 +422,7 @@ class HtlcTrackingList(BaseModel):
         else:
             sent_via = "Unknown"
 
-        message_str = f"⚡️ Sent {amount:,.3f} " f"out {sent_via}. " f"{end_message}"
+        message_str = f"⚡️ Sent {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:
@@ -379,14 +434,17 @@ class HtlcTrackingList(BaseModel):
             received_via = "Unknown"
 
         for_memo = ""
-        htlc_id = primary_event.incoming_htlc_id or primary_event.outgoing_htlc_id
+        htlc_id = primary_event.htlc_id
         if htlc_id:
             incoming_invoice = self.lookup_invoice_by_htlc_id(htlc_id=htlc_id)
             if incoming_invoice:
                 amount = incoming_invoice.value
-                for_memo = f" for {incoming_invoice.memo}"
+                for_memo = (
+                    f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
+                )
+                self.remove_invoice(incoming_invoice.add_index)
 
-        message_str = f"⚡️ Received {amount:,.3f}{for_memo}" f"via {received_via}"
+        message_str = f"💵 Received {amount:,.0f}{for_memo}" f" via {received_via}"
         return message_str
 
     def forward_message(self, group_list: List[HtlcEvent]) -> str:
@@ -402,7 +460,7 @@ class HtlcTrackingList(BaseModel):
                 else:
                     amount = 0
                 failure_string = primary_event.link_fail_event.failure_string
-                end_message = f"❌ Not Settled {amount:.3f} {failure_string}"
+                end_message = f"❌ Not Settled {amount:.0f} {failure_string}"
             else:
                 end_message = "❌ Not Settled"
 
@@ -417,7 +475,7 @@ class HtlcTrackingList(BaseModel):
             end_message = "❌ Not Settled"
         message_str = (
             f"{start_message} "
-            f"{primary_event.forward_amt_fee.forward_amount:,.3f} "
+            f"{primary_event.forward_amt_fee.forward_amount:,.0f} "
             f"{self.lookup_name(primary_event.incoming_channel_id)} → "
             f"{self.lookup_name(primary_event.outgoing_channel_id)}. "
             f"{end_message}"

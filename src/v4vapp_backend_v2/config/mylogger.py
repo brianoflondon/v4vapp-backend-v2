@@ -178,7 +178,7 @@ class CustomTelegramHandler(logging.Handler):
                 pass
         # Default case
         else:
-            self.send_telegram_message(log_message, record, alert_level=1)
+            self.send_telegram_message(log_message, record, alert_level=10)
 
     def send_telegram_message(
         self, message: str, record: logging.LogRecord, alert_level: int = 1

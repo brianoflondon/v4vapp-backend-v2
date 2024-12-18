@@ -1,5 +1,7 @@
 import asyncio
+import inspect
 import json
+from datetime import datetime, timezone
 from typing import AsyncGenerator, List
 
 from google.protobuf.json_format import MessageToDict
@@ -27,6 +29,41 @@ db = MyDB()
 global_tracking = HtlcTrackingList()
 
 
+def tracking_list_dump():
+    if global_tracking.num_events == 0 and global_tracking.num_invoices == 0:
+        return
+    logger.debug(
+        f"Now tracking {global_tracking.num_events} events",
+        extra={"events": global_tracking.events},
+    )
+    for event in global_tracking.events:
+        logger.debug(
+            f" -> Event {event.htlc_id} {event.event_type}",
+        )
+
+    logger.debug(
+        f"Now tracking {global_tracking.num_invoices} invoices",
+        extra={"invoices": global_tracking.invoices},
+    )
+    current_time = int(datetime.now(tz=timezone.utc).timestamp())
+    for invoice in global_tracking.invoices:
+        expires_in = (
+            invoice.creation_date.timestamp() + (invoice.expiry or 0) - current_time
+        )
+        logger.debug(
+            f" -> Invoice {invoice.add_index} {invoice.value:,} sats "
+            f"expires in {expires_in:.1f}",
+        )
+        if expires_in < 0:
+            global_tracking.remove_invoice(invoice.add_index)
+
+
+async def tracking_list_dump_loop():
+    while True:
+        tracking_list_dump()
+        await asyncio.sleep(60)
+
+
 async def subscribe_invoices(
     add_index: int, settle_index: int
 ) -> AsyncGenerator[LNDInvoice, None]:
@@ -41,7 +78,7 @@ async def subscribe_invoices(
                 call_name="SubscribeInvoices",
             ):
                 inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
-                logger.info(
+                logger.debug(
                     f"Raw invoice data\n{json.dumps(inv_dict, indent=2)}",
                     extra={"invoice_data": inv_dict, "telegram": False},
                 )
@@ -62,12 +99,12 @@ async def subscribe_invoices_loop() -> None:
     add_index = 0
     settle_index = 0
     while True:
-        logger.info("Subscribing to invoices")
-        logger.info(f"Add index: {add_index} - Settle index: {settle_index}")
+        logger.debug("Subscribing to invoices")
+        logger.debug(f"Add index: {add_index} - Settle index: {settle_index}")
         try:
             async for invoice in subscribe_invoices(add_index, settle_index):
+                tracking_list_dump()
                 add_index = global_tracking.add_invoice(invoice)
-
                 if error_codes:
                     logger.info(
                         f"✅ Error codes cleared {error_codes}",
@@ -79,11 +116,13 @@ async def subscribe_invoices_loop() -> None:
                     error_codes.clear()
 
                 send_telegram = False if invoice.is_keysend else True
-                invoice.invoice_log(logger.info, send_telegram)
+                invoice.invoice_log(logger.debug, send_telegram)
                 db.update_most_recent(invoice)
 
                 if invoice.settled:
                     settle_index = invoice.settle_index
+
+                global_tracking.remove_expired_invoices()
 
         except LNDSubscriptionError as e:
             logger.warning(e)
@@ -95,6 +134,7 @@ async def subscribe_invoices_loop() -> None:
 
 
 async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
+    logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
     async with LNDClient() as client:
         request_sub = routerrpc.SubscribeHtlcEventsRequest()
         try:
@@ -124,44 +164,43 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
             )
             raise e
         except Exception as e:
+            logger.error(f"Unexpected error in {inspect.currentframe().f_code.co_name}")
             logger.error(e)
             raise e
 
 
 async def subscribe_htlc_events_loop() -> None:
-
+    logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
     while True:
-        logger.info("Subscribing to HTLC events")
+        logger.debug("Subscribing to HTLC events")
         try:
             async for htlc_event in subscribe_htlc_events():
+                tracking_list_dump()
                 await asyncio.sleep(0.1)
                 htlc_id = global_tracking.add_event(htlc_event)
-                message = global_tracking.message(htlc_id)
                 complete = global_tracking.complete_group(htlc_id)
-                logger.info(
-                    message,
-                    extra={
-                        "telegram": complete,
-                        "htlc_event": htlc_event.model_dump(exclude_none=True),
-                        "complete": complete,
-                    },
-                )
+                extra = {
+                    "telegram": complete,
+                    "htlc_event": htlc_event.model_dump(exclude_none=True),
+                    "complete": complete,
+                }
+                log_level = logger.info if complete else logger.debug
+                global_tracking.log_event(htlc_id, log_level, extra)
                 if complete:
-                    logger.info(f"✅ Complete group, Delete group {htlc_id}")
+                    logger.debug(f"✅ Complete group, Delete group {htlc_id}")
                     global_tracking.delete_event(htlc_id)
-                    logger.info(f"Now tracking {global_tracking.num_events} events")
-                    logger.info(f"Now tracking {global_tracking.num_invoices} invoices")
 
         except LNDSubscriptionError as e:
             logger.warning(e)
             pass
         except Exception as e:
+            logger.error(f"Error in {__name__}")
             logger.exception(e)
-            pass
+            raise e
 
 
 async def main() -> None:
-    logger.info("Starting LND gRPC client")
+    logger.debug("Starting LND gRPC client")
 
     try:
         async with LNDClient() as client:
@@ -188,7 +227,11 @@ async def main() -> None:
                     extra={"channel_name": channel_name.model_dump()},
                 )
 
-            tasks = [subscribe_invoices_loop(), subscribe_htlc_events_loop()]
+            tasks = [
+                subscribe_invoices_loop(),
+                subscribe_htlc_events_loop(),
+                tracking_list_dump_loop(),
+            ]
             await asyncio.gather(*tasks)
 
     except KeyboardInterrupt:

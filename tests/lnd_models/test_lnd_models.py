@@ -61,7 +61,7 @@ def read_log_file_invoices(file_path: str) -> Generator[LNDInvoice, None, None]:
 def test_log_file_invoices():
     tracking = HtlcTrackingList()
     try:
-        for invoice in read_log_file_invoices("tests/data/invoices_test_data.log"):
+        for invoice in read_log_file_invoices("tests/data/invoices_test_data.safe_log"):
             tracking.add_invoice(invoice)
             print(invoice.add_index)
             assert tracking.lookup_invoice(invoice.add_index) == invoice
@@ -78,6 +78,25 @@ def test_log_file_invoices():
             tracking.remove_invoice(invoice.add_index)
 
         assert len(tracking.invoices) == 0
+
+    except FileNotFoundError as e:
+        print(e)
+        assert False
+    except ValidationError as e:
+        print(e)
+        assert False
+
+
+def test_remove_expired_invoices():
+    tracking = HtlcTrackingList()
+    try:
+        for invoice in read_log_file_invoices("tests/data/invoices_test_data.safe_log"):
+            tracking.add_invoice(invoice)
+            print(invoice.add_index)
+            print("-" * 80)
+
+        tracking.remove_expired_invoices()
+        assert tracking.num_invoices == 0
 
     except FileNotFoundError as e:
         print(e)

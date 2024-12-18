@@ -202,6 +202,7 @@ def test_group_detection():
                 f"{tracking.complete_group(htlc_id=htlc_id)}"
             )
             print(tracking.message(htlc_id=htlc_id))
+            tracking.log_event(htlc_id=htlc_id, logger_func=print)
 
             if htlc_event.event_type == EventType.RECEIVE:
                 if htlc_event.settle_event:
@@ -228,3 +229,5 @@ def test_group_detection():
         print(tracking.list_htlc_id(htlc_id=htlc_id))
 
     assert tracking.num_events == len(tracking.events) == 0
+
+
