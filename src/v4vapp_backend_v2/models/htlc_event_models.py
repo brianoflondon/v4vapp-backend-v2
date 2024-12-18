@@ -427,24 +427,28 @@ class HtlcTrackingList(BaseModel):
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:
         primary_event = group_list[0]
-        amount = 0
         if primary_event.incoming_channel_id:
             received_via = self.lookup_name(primary_event.incoming_channel_id)
         else:
             received_via = "Unknown"
 
-        for_memo = ""
         htlc_id = primary_event.htlc_id
+        for_memo = ""
+        amount = 0
+        add_index_str = ""
         if htlc_id:
             incoming_invoice = self.lookup_invoice_by_htlc_id(htlc_id=htlc_id)
             if incoming_invoice:
                 amount = incoming_invoice.value
+                add_index_str = f" ({incoming_invoice.add_index})"
                 for_memo = (
                     f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
                 )
                 self.remove_invoice(incoming_invoice.add_index)
 
-        message_str = f"💵 Received {amount:,.0f}{for_memo}" f" via {received_via}"
+        message_str = (
+            f"💵 Received {amount:,}{for_memo} via " f"{received_via}{add_index_str}"
+        )
         return message_str
 
     def forward_message(self, group_list: List[HtlcEvent]) -> str:
