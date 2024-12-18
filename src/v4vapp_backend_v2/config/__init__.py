@@ -5,7 +5,7 @@ import logging.config
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, override
 
 import colorlog
 from pydantic import BaseModel
@@ -19,6 +19,7 @@ logger = logging.getLogger("backend")  # __name__ is a common choice
 BASE_CONFIG_PATH = Path("config/")
 BASE_LOGGING_CONFIG_PATH = Path(BASE_CONFIG_PATH, "logging/")
 
+BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
 """
 These classes need to match the structure of the config.yaml file
@@ -61,6 +62,23 @@ class Config(BaseModel):
     telegram: TelegramConfig
 
 
+class ConsoleLogFilter(logging.Filter):
+    """
+    A logging filter that allows only log records with a level greater than DEBUG.
+
+    This is referenced in the logging configuration json file.
+
+    Methods:
+        filter(record: logging.LogRecord) -> bool | logging.LogRecord:
+            Determines if the given log record should be logged. Returns True
+            if the log level is more than DEBUG, otherwise False.
+    """
+
+    @override
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        return record.levelno >= BASE_DISPLAY_LOG_LEVEL
+
+
 class LoggerFunction(Protocol):
     def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
 
@@ -78,13 +96,15 @@ class InternalConfig:
             Ensures only one instance of the class is created (Singleton pattern).
 
         __init__(self):
-            Initializes the instance, sets up configuration and logging if not already initialized.
+            Initializes the instance, sets up configuration and logging if not already
+            initialized.
 
         setup_config(self) -> None:
             Loads and validates the configuration from a YAML file.
 
         setup_logging(self):
-            Sets up logging configuration from a JSON file, initializes log handlers, and sets log levels.
+            Sets up logging configuration from a JSON file, initializes log handlers,
+            and sets log levels.
     """
 
     _instance = None
@@ -129,6 +149,9 @@ class InternalConfig:
             logger.error(f"Logging config file not found: {ex}")
             raise ex
 
+        # Configuration for the json log file is set in the external config.json file
+        # The stdout log configuration is set in the code below
+
         # if folder for logs doesn't exist create it
         log_folder = self.config.logging.log_folder
         log_folder.mkdir(exist_ok=True)
@@ -142,8 +165,12 @@ class InternalConfig:
             if config["formatters"]["simple"]["format"]:
                 format_str = config["formatters"]["simple"]["format"]
         except KeyError:
-            format_str = "%(asctime)s.%(msecs)03d %(levelname)-8s %(name)-14s %(module)-16s %(lineno) 5d : %(message)s"
+            format_str = (
+                "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s "
+                "%(lineno)6d : %(message)s"
+            )
 
+        # Set up the colorlog handler
         handler = colorlog.StreamHandler()
         handler.setFormatter(
             colorlog.ColoredFormatter(
@@ -162,6 +189,8 @@ class InternalConfig:
         # handler.addFilter(NonErrorFilter())
         logger.addHandler(handler)
         logger.setLevel(self.config.logging.default_log_level)
+
+        handler.addFilter(ConsoleLogFilter())
 
         # # Get the gRPC logger and add the same handler
         # grpc_logger = logging.getLogger("grpc")

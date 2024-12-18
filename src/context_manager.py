@@ -11,7 +11,7 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
 from v4vapp_backend_v2.models.htlc_event_models import (
@@ -94,7 +94,7 @@ async def subscribe_invoices(
             raise e
 
 
-async def subscribe_invoices_loop() -> None:
+async def subscribe_invoices_loop():
     error_codes: set[str] = set()
     add_index = 0
     settle_index = 0
@@ -125,9 +125,11 @@ async def subscribe_invoices_loop() -> None:
                 global_tracking.remove_expired_invoices()
 
         except LNDSubscriptionError as e:
-            logger.warning(e)
+            logger.warning(
+                f"Clearing after error {e}",
+                extra={"telegram": True, "error_details": error_to_dict(e)},
+            )
             pass
-
         except Exception as e:
             logger.exception(e)
             raise e
@@ -191,7 +193,10 @@ async def subscribe_htlc_events_loop() -> None:
                     global_tracking.delete_event(htlc_id)
 
         except LNDSubscriptionError as e:
-            logger.warning(e)
+            logger.warning(
+                f"Clearing after error {e}",
+                extra={"telegram": True, "error_details": error_to_dict(e)},
+            )
             pass
         except Exception as e:
             logger.error(f"Error in {__name__}")
@@ -226,7 +231,7 @@ async def main() -> None:
                     f"Channel {channel_name.channel_id} -> {channel_name.name}",
                     extra={"channel_name": channel_name.model_dump()},
                 )
-
+            logger.info("Starting Tasks")
             tasks = [
                 subscribe_invoices_loop(),
                 subscribe_htlc_events_loop(),

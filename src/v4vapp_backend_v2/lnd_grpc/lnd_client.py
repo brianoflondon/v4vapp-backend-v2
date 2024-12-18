@@ -1,24 +1,16 @@
 import asyncio
-import inspect
-import json
 import sys
 from typing import Any, AsyncGenerator, Callable
 
 import backoff
-import grpc
-from grpc import (
-    RpcError,
-    StatusCode,
-    composite_channel_credentials,
-    metadata_call_credentials,
-    ssl_channel_credentials,
-)
-from grpc.aio import AioRpcError, secure_channel
+from grpc import composite_channel_credentials  # type: ignore
+from grpc import metadata_call_credentials  # type: ignore
+from grpc import ssl_channel_credentials  # type: ignore
+from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.config import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
-from v4vapp_backend_v2.lnd_grpc import router_pb2 as routerrpc
 from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
@@ -27,6 +19,21 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDStartupError,
     LNDSubscriptionError,
 )
+
+
+def get_error_code(e: AioRpcError) -> str:
+    try:
+        return str(e.code())
+    except AttributeError:
+        return "Unknown"
+
+
+def error_to_dict(e: Exception) -> dict:
+    return {
+        "type": type(e).__name__,
+        "message": str(e),
+        "args": e.args,
+    }
 
 
 class LNDClient:
@@ -61,7 +68,7 @@ class LNDClient:
             self.router_stub = routerstub.RouterStub(self.channel)
 
         except FileNotFoundError as e:
-            logger.error(f"Macaroon and cert files missing: {e.code()}")
+            logger.error(f"Macaroon and cert files missing: {get_error_code(e)}")
             sys.exit(1)
         except Exception as e:
             logger.error(e)
@@ -86,12 +93,15 @@ class LNDClient:
                     _ = await self.lightning_stub.WalletBalance(
                         ln.WalletBalanceRequest()
                     )
-                    logger.info(
-                        "Connection to LND is OK",
+                    logger.warning(
+                        f"Connection to LND is OK Error "
+                        f"cleared error_count: {error_count}",
                         extra={
                             "telegram": True,
                             "error_code": str(original_error.code()),
                             "error_code_clear": True,
+                            "error_count": error_count,
+                            "original_error": original_error,
                         },
                     )
                     self.error_state = False
@@ -107,8 +117,8 @@ class LNDClient:
                     message,
                     extra={
                         "telegram": True,
-                        "error_code": str(e.code()),
-                        "error_details": e,
+                        "error_code": get_error_code(e),
+                        "error_details": error_to_dict(e),
                     },
                 )
                 self.error_state = True
@@ -150,8 +160,8 @@ class LNDClient:
                     message,
                     extra={
                         "telegram": False,
-                        "error_code": str(e.code()),
-                        "error_details": e,
+                        "error_code": get_error_code(e),
+                        "error_details": error_to_dict(e),
                     },
                 )
                 raise LNDFatalError(message)
@@ -159,8 +169,8 @@ class LNDClient:
                 f"Error in {method} RPC call: {e.code()}",
                 extra={
                     "telegram": True,
-                    "error_code": str(e.code()),
-                    "error_details": e,
+                    "error_code": get_error_code(e),
+                    "error_details": error_to_dict(e),
                 },
             )
             raise LNDConnectionError(e)
@@ -253,10 +263,3 @@ class LNDClient:
         except AioRpcError as e:
             logger.error(f"Error in {method_name} RPC call: {e.code()}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")
-
-            # if e.code() == grpc.StatusCode.UNAVAILABLE:
-            #     logger.error(f"Connection lost, reconnecting...")
-            #     self.reconnect()  # reconnect to the server
-            # else:
-            #     logger.error(f"Error in {method_name} RPC call: {e.code()}")
-            #     raise LNDConnectionError(f"Error in {method_name} RPC call: {e.code()}")

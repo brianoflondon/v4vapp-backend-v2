@@ -143,15 +143,13 @@ class CustomTelegramHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         log_message = self.format(record)
         if self.error_codes:
-            print("error_codes")
-            print(self.error_codes)
+            logger.debug(f"Error codes: {self.error_codes}")
         # Do something special here with error codes or details
         if (
             self.error_codes
             and hasattr(record, "error_code")
             and hasattr(record, "error_code_clear")
         ):
-            print(self.error_codes)
             elapsed_time = self.error_codes[record.error_code].elapsed_time
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message = (
@@ -172,7 +170,6 @@ class CustomTelegramHandler(logging.Handler):
             if record.error_code not in self.error_codes:
                 self.send_telegram_message(log_message, record, alert_level=5)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
-                print(self.error_codes)
             else:
                 # Do not send the same error code to Telegram
                 pass
@@ -298,6 +295,35 @@ class TelegramFilter(logging.Filter):
 
 
 class NonErrorFilter(logging.Filter):
+    """
+    A logging filter that allows only non-error log records (i.e., log records
+    with a level less than or equal to INFO).
+
+    This is referenced in the logging configuration json file.
+
+    Methods:
+        filter(record: logging.LogRecord) -> bool | logging.LogRecord:
+            Determines if the given log record should be logged. Returns True
+            if the log level is less than or equal to INFO, otherwise False.
+    """
+
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         return record.levelno <= logging.INFO
+
+
+class NotDebugFilter(logging.Filter):
+    """
+    A logging filter that allows only log records with a level greater than DEBUG.
+
+    This is referenced in the logging configuration json file.
+
+    Methods:
+        filter(record: logging.LogRecord) -> bool | logging.LogRecord:
+            Determines if the given log record should be logged. Returns True
+            if the log level is more than DEBUG, otherwise False.
+    """
+
+    @override
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        return record.levelno > logging.DEBUG
