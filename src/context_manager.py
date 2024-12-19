@@ -116,7 +116,7 @@ async def subscribe_invoices_loop():
                     error_codes.clear()
 
                 send_telegram = False if invoice.is_keysend else True
-                invoice.invoice_log(logger.debug, send_telegram)
+                invoice.invoice_log(logger.info, send_telegram)
                 db.update_most_recent(invoice)
 
                 if invoice.settled:
