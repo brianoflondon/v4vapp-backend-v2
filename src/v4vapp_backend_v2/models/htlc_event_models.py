@@ -265,6 +265,16 @@ class HtlcTrackingList(BaseModel):
         return None
 
     def lookup_invoice_by_htlc_id(self, htlc_id: int) -> LNDInvoice | None:
+        """
+        Lookup an invoice by its HTLC (Hashed TimeLock Contract) ID.
+
+        Args:
+            htlc_id (int): The ID of the HTLC to search for.
+
+        Returns:
+            LNDInvoice | None: The invoice containing the specified HTLC ID,
+            or None if not found.
+        """
         for invoice in self.invoices:
             if invoice and invoice.htlcs:
                 for htlc_data in invoice.htlcs:

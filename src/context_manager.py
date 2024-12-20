@@ -115,8 +115,11 @@ async def subscribe_invoices_loop():
                     )
                     error_codes.clear()
 
-                send_telegram = False if invoice.is_keysend else True
-                invoice.invoice_log(logger.info, send_telegram)
+                # send_telegram = False if invoice.is_keysend else True
+                send_telegram = (
+                    False  # the alerts will come from the received htlc_events
+                )
+                invoice.invoice_log(logger.debug, send_telegram)
                 db.update_most_recent(invoice)
 
                 if invoice.settled:
@@ -180,12 +183,16 @@ async def subscribe_htlc_events_loop() -> None:
                 tracking_list_dump()
                 await asyncio.sleep(0.1)
                 htlc_id = global_tracking.add_event(htlc_event)
+                # must grab invoice before complete group event which will delete it
+                invoice = global_tracking.lookup_invoice_by_htlc_id(htlc_id)
                 complete = global_tracking.complete_group(htlc_id)
                 extra = {
                     "telegram": complete,
-                    "htlc_event": htlc_event.model_dump(exclude_none=True),
                     "complete": complete,
+                    "htlc_event": htlc_event.model_dump(exclude_none=True),
                 }
+                if invoice:
+                    extra["invoice"] = invoice.model_dump(exclude_none=True)
                 log_level = logger.info if complete else logger.debug
                 global_tracking.log_event(htlc_id, log_level, extra)
                 if complete:
