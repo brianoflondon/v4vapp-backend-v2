@@ -1,0 +1,20 @@
+version: "0.1.0"
+
+logging:
+  log_config_file: 5-queued-stderr-json-file.json
+  # log_config_file: 2-stderr-json-file.json
+  default_log_level: INFO
+  log_folder: logs
+  handlers:
+    grpc: WARNING
+    asyncio: WARNING
+    httpcore: WARNING
+    httpx: WARNING
+
+tailscale:
+  tailnet_name: yourname.ts.net
+  notification_server: http://yourserver
+  notification_server_port: 8000
+
+telegram:
+  chat_id: -1111111

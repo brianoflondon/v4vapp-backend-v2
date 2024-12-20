@@ -6,14 +6,24 @@
     },
     "cmake.configureOnOpen": true,
     "cSpell.words": [
-        "lnrpc"
+        "htlc",
+        "lnrpc",
+        "routerrpc",
+        "routerstub"
     ],
     "python.testing.pytestArgs": [
-        "tests"
+        "tests",
+        "-rs",
+        "--capture=no",
+        "--verbose",
+        "--disable-warnings",
+        "--log-level=DEBUG",
+        "--log-cli-level=INFO"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "python.analysis.extraPaths": [
-        "./src/v4vapp_backend_v2/lnd_grpc"
+        "./src/v4vapp_backend_v2/lnd_grpc",
+        "./src/v4vapp_backend_v2/config"
     ]
 }

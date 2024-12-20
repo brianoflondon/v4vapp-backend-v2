@@ -1,8 +1,10 @@
 import re
 from datetime import datetime
-from typing import Any, List
+from typing import Any, Callable, List
 
 from pydantic import BaseModel
+
+from v4vapp_backend_v2.config import LoggerFunction
 
 # This is the regex for finding if a given message is an LND invoice to pay.
 # This looks for #v4vapp v4vapp
@@ -12,11 +14,11 @@ LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
 class LNDInvoice(BaseModel):
     """Model of an LND Invoice"""
 
-    memo: str | None = None
+    memo: str = ""
     r_preimage: str
     r_hash: str
-    value: int
-    value_msat: int
+    value: int = 0
+    value_msat: int = 0
     settled: bool = False
     creation_date: datetime
     settle_date: datetime | None = None
@@ -27,8 +29,8 @@ class LNDInvoice(BaseModel):
     cltv_expiry: int
     route_hints: List[dict] | None = None
     private: bool | None = None
-    add_index: int
-    settle_index: int | None = None
+    add_index: int = 0
+    settle_index: int = 0
     amt_paid: int | None = None
     amt_paid_sat: int | None = None
     amt_paid_msat: int | None = None
@@ -47,3 +49,26 @@ class LNDInvoice(BaseModel):
             match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
             if match:
                 __pydantic_self__.is_lndtohive = True
+
+    def invoice_message(self) -> str:
+        if self.settled:
+            return (
+                f"✅ Settled invoice {self.add_index} "
+                f"with memo {self.memo} {self.value:,.0f} sats"
+            )
+        else:
+            return (
+                f"✅ Valid   invoice {self.add_index} "
+                f"with memo {self.memo} {self.value:,.0f} sats"
+            )
+
+    def invoice_log(
+        self, logger_func: LoggerFunction, send_telegram: bool = False
+    ) -> None:
+        logger_func(
+            self.invoice_message(),
+            extra={
+                "telegram": send_telegram,
+                "invoice": self.model_dump(exclude_none=True),
+            },
+        )
