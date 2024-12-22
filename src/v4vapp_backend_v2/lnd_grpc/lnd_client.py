@@ -81,7 +81,10 @@ class LNDClient:
             self.lightning_stub = None
 
     async def check_connection(
-        self, original_error: AioRpcError | None = None, call_name: str = ""
+        self,
+        original_error: AioRpcError | None = None,
+        call_name: str = "",
+        max_tries: int = 200,
     ):
         error_count = 0
         back_off_time = 1
@@ -113,6 +116,9 @@ class LNDClient:
                 if original_error is not None:
                     e = original_error
                     message = e.debug_error_string()
+                else:
+                    message = f"Error in {call_name} RPC call: {get_error_code(e)}"
+                    original_error = e
                 logger.error(
                     message,
                     extra={
@@ -123,6 +129,13 @@ class LNDClient:
                 )
                 self.error_state = True
             error_count += 1
+            if error_count >= max_tries:
+                message = f"Too many errors in {call_name} RPC call ({error_count})"
+                logger.error(
+                    message,
+                    extra={"telegram": True},
+                )
+                raise LNDConnectionError(message, error_count)
             back_off_time = min((2**error_count), 60)
             logger.warning(
                 f"Back off: {back_off_time} Error {call_name}",
