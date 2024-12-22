@@ -2,7 +2,7 @@ import json
 import posixpath
 import tempfile
 
-from v4vapp_backend_v2.config import logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 

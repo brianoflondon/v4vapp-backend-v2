@@ -13,7 +13,7 @@ from grpc.aio import AioRpcError, secure_channel
 from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
-from v4vapp_backend_v2.config import logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 

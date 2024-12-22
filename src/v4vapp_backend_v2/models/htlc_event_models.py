@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config import LoggerFunction
+from v4vapp_backend_v2.config.setup import LoggerFunction
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 

@@ -2,7 +2,7 @@ import codecs
 import os
 from pathlib import Path
 
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDStartupError
 
 LND_USE_LOCAL_NODE = "local"

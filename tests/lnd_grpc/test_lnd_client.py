@@ -1,9 +1,9 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-import v4vapp_backend_v2.config
 
 import pytest
 
+import v4vapp_backend_v2.config.setup
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, LNDConnectionError
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
@@ -19,30 +19,35 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
     # Save the original values
     original_base_config_path = getattr(
-        v4vapp_backend_v2.config, "BASE_CONFIG_PATH", None
+        v4vapp_backend_v2.config.setup, "BASE_CONFIG_PATH", None
     )
     original_base_logging_config_path = getattr(
-        v4vapp_backend_v2.config, "BASE_LOGGING_CONFIG_PATH", None
+        v4vapp_backend_v2.config.setup, "BASE_LOGGING_CONFIG_PATH", None
     )
 
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
-        "v4vapp_backend_v2.config.BASE_LOGGING_CONFIG_PATH", test_config_logging_path
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
     )
     yield
 
     # Teardown: Restore the original values
     if original_base_config_path is not None:
         monkeypatch.setattr(
-            "v4vapp_backend_v2.config.BASE_CONFIG_PATH", original_base_config_path
+            "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", original_base_config_path
         )
     if original_base_logging_config_path is not None:
         monkeypatch.setattr(
-            "v4vapp_backend_v2.config.BASE_LOGGING_CONFIG_PATH",
+            "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
             original_base_logging_config_path,
         )
+    # Reset the singleton instance
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
 def test_lnd_client(set_base_config_path: None):
@@ -120,17 +125,24 @@ async def test_call_method(set_base_config_path: None):
 @pytest.mark.asyncio
 async def test_lnd_client_connect_error(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
-        "v4vapp_backend_v2.config.BASE_LOGGING_CONFIG_PATH", test_config_logging_path
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
     )
 
     test_config_path_bad = Path("tests/data/config-bad")
     monkeypatch.setattr(
-        "v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path_bad
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
     )
 
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.lnd_grpc.lnd_connection.InternalConfig._instance",
+        None,
+    )
 
     try:
         lnd_client = LNDClient()

@@ -3,16 +3,19 @@ from pathlib import Path
 import pytest
 from yaml import safe_load
 
-from v4vapp_backend_v2.config import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig
 
 
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
-        "v4vapp_backend_v2.config.BASE_LOGGING_CONFIG_PATH", test_config_logging_path
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
     )
     yield
     # No need to restore the original value, monkeypatch will handle it

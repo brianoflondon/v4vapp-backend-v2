@@ -3,12 +3,11 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from timeit import timeit
 from typing import Any, Dict, OrderedDict, override
 
 import httpx
 
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",

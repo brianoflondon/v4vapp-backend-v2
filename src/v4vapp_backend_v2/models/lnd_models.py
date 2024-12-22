@@ -4,7 +4,7 @@ from typing import Any, Callable, List
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config import LoggerFunction
+from v4vapp_backend_v2.config.setup import LoggerFunction
 
 # This is the regex for finding if a given message is an LND invoice to pay.
 # This looks for #v4vapp v4vapp

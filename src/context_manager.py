@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (LNDFatalError,
