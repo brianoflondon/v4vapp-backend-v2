@@ -137,56 +137,40 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
     )
 
     # Create a mock method with side effects
+    retries = 2
     mock_method = AsyncMock(
-        side_effect=[
-            mock_response,
-            mock_error,
-            mock_error,
-            mock_error,
-            mock_error,
-            mock_error,
-            mock_error,
-            mock_response,
-        ]
+        side_effect=[mock_response] + [mock_error] * retries + [mock_response]
     )
+
     mock_client = LNDClient()
     mock_client.connect()
 
     with patch.object(
         lnrpc, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
     ):
-        with patch(
-            "v4vapp_backend_v2.lnd_grpc.lnd_client.backoff.on_exception"
-        ) as mock_backoff:
-            mock_backoff.side_effect = lambda *args, **kwargs: backoff.on_exception(
-                lambda: backoff.expo(base=2, factor=1),
-                (LNDConnectionError,),
-                max_tries=1,
+        async with LNDClient() as client:
+            # First call should succeed
+            balance: ln.ChannelBalanceResponse = await client.call(
+                client.lightning_stub.ChannelBalance,
+                ln.ChannelBalanceRequest(),
             )
-            async with LNDClient() as client:
-                # First call should succeed
-                balance: ln.ChannelBalanceResponse = await client.call(
-                    client.lightning_stub.ChannelBalance,
-                    ln.ChannelBalanceRequest(),
-                )
-                assert balance == mock_response
+            assert balance == mock_response
 
-                # Next three calls should raise LNDConnectionError
-                for _ in range(3):
-                    try:
-                        balance = await client.call(
-                            client.lightning_stub.ChannelBalance,
-                            ln.ChannelBalanceRequest(),
-                        )
-                    except Exception as ex:
-                        print(ex)
+            for _ in range(retries):
+                with pytest.raises(LNDConnectionError) as e:
+                    balance = await client.call(
+                        client.lightning_stub.ChannelBalance,
+                        ln.ChannelBalanceRequest(),
+                    )
+                    print(e)
+                    print(mock_method.call_count)
 
-                # Final call should succeed again
-                balance: ln.ChannelBalanceResponse = await client.call(
-                    client.lightning_stub.ChannelBalance,
-                    ln.ChannelBalanceRequest(),
-                )
-                assert balance == mock_response
+            # Final call should succeed again
+            balance: ln.ChannelBalanceResponse = await client.call(
+                client.lightning_stub.ChannelBalance,
+                ln.ChannelBalanceRequest(),
+            )
+            assert balance == mock_response
 
-                # Assert that the mock method was called 5 times
-                assert mock_method.call_count == 5
+            # Assert that the mock method was called 5 times
+            assert mock_method.call_count == retries + 2
