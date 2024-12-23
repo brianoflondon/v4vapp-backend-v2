@@ -20,6 +20,8 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDSubscriptionError,
 )
 
+MAX_RETRIES = 20
+
 
 def get_error_code(e: AioRpcError) -> str:
     try:
@@ -157,12 +159,12 @@ class LNDClient:
                 pass
         await self.disconnect()
 
-    @backoff.on_exception(
-        lambda: backoff.expo(base=2, factor=1),
-        (LNDConnectionError),
-        max_tries=20,
-        logger=logger,
-    )
+    # @backoff.on_exception(
+    #     lambda: backoff.expo(base=2, factor=1),
+    #     (LNDConnectionError),
+    #     max_tries=2,
+    #     logger=logger,
+    # )
     async def call(self, method: Callable[..., Any], *args, **kwargs):
         try:
             return await method(*args, **kwargs)
@@ -232,7 +234,7 @@ class LNDClient:
     @backoff.on_exception(
         lambda: backoff.expo(base=2, factor=1),
         (LNDConnectionError),
-        max_tries=20,
+        max_tries=MAX_RETRIES,
         logger=logger,
     )
     async def call_retry(self, method_name, request):
@@ -250,7 +252,7 @@ class LNDClient:
     @backoff.on_exception(
         lambda: backoff.expo(base=2, factor=1),
         (LNDConnectionError),
-        max_tries=20,
+        max_tries=MAX_RETRIES,
         logger=logger,
     )
     async def call_async_generator_retry(self, method_name, request):
