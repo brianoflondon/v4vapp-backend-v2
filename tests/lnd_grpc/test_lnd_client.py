@@ -1,29 +1,18 @@
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import backoff
 import pytest
+from grpc.aio import AioRpcError
 
-import v4vapp_backend_v2.config.setup
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, LNDConnectionError
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
-    LNDConnectionError,
-    LNDFatalError,
-    LNDStartupError,
-    LNDSubscriptionError,
-)
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 
 
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
-
-    # Save the original values
-    original_base_config_path = getattr(
-        v4vapp_backend_v2.config.setup, "BASE_CONFIG_PATH", None
-    )
-    original_base_logging_config_path = getattr(
-        v4vapp_backend_v2.config.setup, "BASE_LOGGING_CONFIG_PATH", None
-    )
 
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr(
@@ -36,17 +25,30 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     )
     yield
 
-    # Teardown: Restore the original values
-    if original_base_config_path is not None:
-        monkeypatch.setattr(
-            "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", original_base_config_path
-        )
-    if original_base_logging_config_path is not None:
-        monkeypatch.setattr(
-            "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
-            original_base_logging_config_path,
-        )
-    # Reset the singleton instance
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
+@pytest.fixture
+def set_base_config_path_bad(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+
+    test_config_path_bad = Path("tests/data/config-bad")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
+    )
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.lnd_grpc.lnd_connection.InternalConfig._instance",
+        None,
+    )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
@@ -123,35 +125,68 @@ async def test_call_method(set_base_config_path: None):
 
 
 @pytest.mark.asyncio
-async def test_lnd_client_connect_error(monkeypatch: pytest.MonkeyPatch):
-    test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
-    test_config_logging_path = Path(test_config_path, "logging/")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
-        test_config_logging_path,
-    )
-
-    test_config_path_bad = Path("tests/data/config-bad")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
+async def test_channel_balance_with_retries(set_base_config_path: None):
+    # Mock response and error
+    mock_response = ln.ChannelBalanceResponse(balance=100)
+    mock_error = AioRpcError(
+        code=1,
+        initial_metadata=None,
+        trailing_metadata=None,
+        details="Mock Test Data Error",
+        debug_error_string="Mock Test Data Error Debug String",
     )
 
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.lnd_grpc.lnd_connection.InternalConfig._instance",
-        None,
+    # Create a mock method with side effects
+    mock_method = AsyncMock(
+        side_effect=[
+            mock_response,
+            mock_error,
+            mock_error,
+            mock_error,
+            mock_error,
+            mock_error,
+            mock_error,
+            mock_response,
+        ]
     )
+    mock_client = LNDClient()
+    mock_client.connect()
 
-    try:
-        lnd_client = LNDClient()
-        print("Connection:")
-        print(lnd_client.connection)
-        print("Address:")
-        print(lnd_client.connection.address)
-    except Exception as e:
-        print(f"Error: {e}")
+    with patch.object(
+        lnrpc, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
+    ):
+        with patch(
+            "v4vapp_backend_v2.lnd_grpc.lnd_client.backoff.on_exception"
+        ) as mock_backoff:
+            mock_backoff.side_effect = lambda *args, **kwargs: backoff.on_exception(
+                lambda: backoff.expo(base=2, factor=1),
+                (LNDConnectionError,),
+                max_tries=1,
+            )
+            async with LNDClient() as client:
+                # First call should succeed
+                balance: ln.ChannelBalanceResponse = await client.call(
+                    client.lightning_stub.ChannelBalance,
+                    ln.ChannelBalanceRequest(),
+                )
+                assert balance == mock_response
 
-    with pytest.raises(LNDStartupError):
-        _ = LNDClient()
+                # Next three calls should raise LNDConnectionError
+                for _ in range(3):
+                    try:
+                        balance = await client.call(
+                            client.lightning_stub.ChannelBalance,
+                            ln.ChannelBalanceRequest(),
+                        )
+                    except Exception as ex:
+                        print(ex)
+
+                # Final call should succeed again
+                balance: ln.ChannelBalanceResponse = await client.call(
+                    client.lightning_stub.ChannelBalance,
+                    ln.ChannelBalanceRequest(),
+                )
+                assert balance == mock_response
+
+                # Assert that the mock method was called 5 times
+                assert mock_method.call_count == 5
