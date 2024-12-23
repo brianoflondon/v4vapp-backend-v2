@@ -140,7 +140,7 @@ class LNDClient:
                 raise LNDConnectionError(message, error_count)
             back_off_time = min((2**error_count), 60)
             logger.warning(
-                f"Back off: {back_off_time} Error {call_name}",
+                f"Back off: {back_off_time}s Error {call_name}",
                 extra={"telegram": False},
             )
             await asyncio.sleep(back_off_time)
