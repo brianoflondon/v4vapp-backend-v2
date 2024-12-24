@@ -3,11 +3,11 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, override
+from typing import Any, Dict, OrderedDict, override
 
 import httpx
 
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -52,6 +52,20 @@ def timedelta_display(td: timedelta) -> str:
     return f"{hours:02}h {minutes:02}m {seconds:02}s"
 
 
+def human_readable_datetime_str(dt_obj: datetime) -> str:
+    """
+    Convert a datetime object to a human-readable string.
+
+    Args:
+        dt_obj (datetime): The datetime object to be converted.
+
+    Returns:
+        str: The formatted string representing the datetime.
+    """
+    ms = dt_obj.microsecond // 1000
+    return f"{dt_obj:%H:%M:%S}.{ms:03d} {dt_obj:%a %d %b}"
+
+
 class MyJSONFormatter(logging.Formatter):
     def __init__(
         self,
@@ -67,8 +81,12 @@ class MyJSONFormatter(logging.Formatter):
         return json.dumps(message, default=str)
 
     def _prepare_log_dict(self, record: logging.LogRecord):
+        human_readable_str = human_readable_datetime_str(
+            dt.datetime.fromtimestamp(record.created, tz=dt.timezone.utc)
+        )
         always_fields = {
             "message": record.getMessage(),
+            "human_time": human_readable_str,
             "timestamp": dt.datetime.fromtimestamp(
                 record.created, tz=dt.timezone.utc
             ).isoformat(),
@@ -93,6 +111,16 @@ class MyJSONFormatter(logging.Formatter):
             if key not in LOG_RECORD_BUILTIN_ATTRS:
                 message[key] = val
 
+        # Move human_time to the desired position
+        if "human_time" in message:
+            human_time_value = message.pop("human_time")
+            # Insert human_time after level
+            new_message = OrderedDict()
+            for k, v in message.items():
+                new_message[k] = v
+                if k == "level":
+                    new_message["human_time"] = human_time_value
+            message = new_message
         return message
 
 

@@ -15,10 +15,10 @@ lnd_connection:
   address: example.com:10009
   options:
     - grpc.ssl_target_name_override: example.com
-  certs_path: tests/data/config/safe-certs
-  macaroon_filename: info-read.safe-macaroon
-  cert_filename: tls-fake.safe-cert
-  # use_proxy: http://proxy.example.com:8888
+  certs_path: tests/data/config/.certs
+  macaroon_filename: missing-info-read.macaroon
+  cert_filename: missing-tls-fake.cert
+  use_proxy: http://proxy.example.com:8888
 
 tailscale:
   tailnet_name: anything.ts.net

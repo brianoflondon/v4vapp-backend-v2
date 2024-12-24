@@ -2,7 +2,7 @@ import codecs
 import os
 from pathlib import Path
 
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDStartupError
 
 LND_USE_LOCAL_NODE = "local"
@@ -32,7 +32,7 @@ class LNDConnectionSettings:
         if lnd_config.use_proxy:
             os.environ["http_proxy"] = lnd_config.use_proxy
             self.use_proxy = lnd_config.use_proxy
-            logger.info(f"Using proxy: {lnd_config.use_proxy}")
+            logger.debug(f"Using proxy: {lnd_config.use_proxy}")
 
         self.address = lnd_config.address
         options_dict = lnd_config.options
@@ -47,32 +47,6 @@ class LNDConnectionSettings:
             lnd_config.certs_path, lnd_config.cert_filename
         ).expanduser()
 
-        # if LND_USE_LOCAL_NODE == "local":
-        #     LND_MACAROON_PATH = os.path.expanduser(".certs/umbrel-admin.macaroon")
-        #     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls.cert")
-        #     # LND_CONNECTION_ADDRESS = "100.97.242.92:10009"
-        #     self.address = "10.0.0.5:10009"
-        #     self.options = [
-        #         (
-        #             "grpc.ssl_target_name_override",
-        #             "umbrel.local",
-        #         ),
-        #     ]
-        # else:
-        #     LND_MACAROON_PATH = os.path.expanduser(".certs/readonly.macaroon")
-        #     LND_CERTIFICATE_PATH = os.path.expanduser(".certs/tls-voltage.cert")
-        #     self.address = "v4vapp.m.voltageapp.io:10009"
-        #     self.options = [
-        #         (
-        #             "grpc.ssl_target_name_override",
-        #             "v4vapp.m.voltageapp.io",
-        #         ),
-        #     ]
-
-        # Create a channel to the server
-        # Due to updated ECDSA generated tls.cert we need to let grpc know that
-        # we need to use that cipher suite otherwise there will be a handshake
-        # error when we communicate with the lnd rpc server.
         os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
         try:

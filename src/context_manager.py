@@ -9,16 +9,14 @@ from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import (LNDFatalError,
+                                                   LNDSubscriptionError)
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
-from v4vapp_backend_v2.models.htlc_event_models import (
-    ChannelName,
-    HtlcEvent,
-    HtlcTrackingList,
-)
+from v4vapp_backend_v2.models.htlc_event_models import (ChannelName, HtlcEvent,
+                                                        HtlcTrackingList)
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
@@ -274,7 +272,7 @@ if __name__ == "__main__":
             "❌ LND gRPC client stopped by fatal error", extra={"telegram": False}
         )
         logger.error(e, extra={"telegram": False})
-
+        raise e
     except Exception as e:
         logger.error("❌ LND gRPC client stopped by error", extra={"telegram": False})
         logger.error(e, extra={"telegram": False})

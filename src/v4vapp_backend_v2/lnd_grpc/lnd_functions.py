@@ -2,7 +2,7 @@
 from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
-from v4vapp_backend_v2.config import logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.models.htlc_event_models import ChannelName
 

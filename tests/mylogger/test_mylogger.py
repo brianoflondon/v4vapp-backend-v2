@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.config import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, timedelta_display
 
 
@@ -102,7 +102,7 @@ async def test_log_message_with_notification(monkeypatch):
     # with open(config_file) as f_in:
     #     raw_config = safe_load(f_in)
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     config = InternalConfig().config
 
     logger.info("Test message")
