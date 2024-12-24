@@ -50,8 +50,11 @@ def test_format_log_record_with_exception():
             msg="Test message with exception",
             args=(),
             exc_info=(type(ex), ex, ex.__traceback__),
+            unusual_attr="Unusual attribute",
         )
         record.created = datetime.now(tz=timezone.utc).timestamp()
+        # generate a stack_info field
+        record.stack_info = "Stack info"
 
     # Create an instance of MyJSONFormatter
     formatter = MyJSONFormatter()
@@ -116,4 +119,5 @@ def test_human_readable_datetime_str():
     # Test with a datetime object
     dt_obj = datetime(2022, 1, 1, 12, 30, 45, 123456)
     assert human_readable_datetime_str(dt_obj) == "12:30:45.123 Sat 01 Jan"
-    
+
+

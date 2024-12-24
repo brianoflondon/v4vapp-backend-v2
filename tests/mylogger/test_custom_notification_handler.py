@@ -3,7 +3,7 @@
 import pytest
 import logging
 from unittest.mock import Mock, MagicMock
-from v4vapp_backend_v2.config.mylogger import CustomNotificationHandler, ErrorCode, NotificationProtocol, TelegramNotification
+from v4vapp_backend_v2.config.mylogger import CustomNotificationHandler, ErrorCode, NotificationProtocol
 
 @pytest.fixture
 def mock_sender():
