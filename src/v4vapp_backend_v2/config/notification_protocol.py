@@ -1,3 +1,30 @@
+"""
+This module defines the notification protocol and its implementations for sending
+notifications.
+
+Classes:
+    NotificationProtocol (Protocol): An interface for sending notifications.
+    TelegramNotification: A class for sending notifications via Telegram.
+    EmailNotification: A class for sending notifications via Email (not implemented).
+
+Methods:
+    NotificationProtocol.send_notification(self, message: str, record: LogRecord,
+                                           alert_level: int = 1) -> None:
+
+    TelegramNotification.send_notification(self, message: str, record: LogRecord,
+                                           alert_level: int = 1) -> None:
+        Sends a notification with the given message, log record, and alert level using
+        Telegram.
+
+    TelegramNotification._send_to_telegram(self, _config: Config, message: str,
+                                    record: LogRecord, alert_level: int = 1) -> None:
+        Asynchronously sends a notification to Telegram.
+
+    EmailNotification.send_notification(self, message: str, record: LogRecord,
+                                        alert_level: int = 1) -> None:
+        Raises NotImplementedError as email notification is not implemented yet.
+"""
+
 from logging import LogRecord
 from typing import Dict, Protocol
 
@@ -16,6 +43,19 @@ class TelegramNotification:
     def send_notification(
         self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
+        """
+        Sends a notification with the given message, log record, and alert level.
+        Uses the separate event loop set up by the internal configuration.
+
+        Args:
+            message (str): The message to be sent in the notification.
+            record (LogRecord): The log record associated with the notification.
+            alert_level (int, optional): The alert level of the notification.
+            Defaults to 1.
+
+        Returns:
+            None
+        """
         # Send notification to Telegram
         # Assign the configuration to a local variable
         internal_config = InternalConfig()
