@@ -3,11 +3,13 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, OrderedDict, override
+from typing import Any, OrderedDict, override
 
-import httpx
-
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.notification_protocol import (
+    NotificationProtocol,
+    TelegramNotification,
+)
+from v4vapp_backend_v2.config.setup import logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -157,21 +159,9 @@ class CustomNotificationHandler(logging.Handler):
     error_codes: dict[Any, ErrorCode] = {}
 
     @override
-    def format(self, record: logging.LogRecord) -> str:
-        """
-        Formats the log record.
-
-        Args:
-            record (logging.LogRecord): The log record to be formatted.
-
-        Returns:
-            str: The formatted log message.
-        """
-        return record.message
-
-    @override
     def emit(self, record: logging.LogRecord):
-        log_message = self.format(record)
+        sender: NotificationProtocol = TelegramNotification()
+        log_message = record.message
         if self.error_codes:
             logger.debug(f"Error codes: {self.error_codes}")
         # Do something special here with error codes or details
@@ -188,112 +178,116 @@ class CustomNotificationHandler(logging.Handler):
             )
             if record.error_code in self.error_codes:
                 self.error_codes.pop(record.error_code)
-                self.send_notification_message(log_message, record, alert_level=5)
+                sender.send_notification(log_message, record, alert_level=5)
+                # self.send_notification_message(log_message, record, alert_level=5)
             else:
                 logger.warning(
                     f"Error code not found in error_codes {record.error_code}",
                     extra={"notification": False},
                 )
-                self.send_notification_message(log_message, record, alert_level=5)
+                sender.send_notification(log_message, record, alert_level=5)
+                # self.send_notification_message(log_message, record, alert_level=5)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                self.send_notification_message(log_message, record, alert_level=5)
+                sender.send_notification(log_message, record, alert_level=5)
+                # self.send_notification_message(log_message, record, alert_level=5)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Notification
                 pass
         # Default case
         else:
-            self.send_notification_message(log_message, record, alert_level=10)
+            sender.send_notification(log_message, record, alert_level=10)
+            # self.send_notification_message(log_message, record, alert_level=10)
 
-    def send_notification_message(
-        self, message: str, record: logging.LogRecord, alert_level: int = 1
-    ) -> None:
-        """
-        Sends a message to a Notification chat via a notification server.
+    # def send_notification_message(
+    #     self, message: str, record: logging.LogRecord, alert_level: int = 1
+    # ) -> None:
+    #     """
+    #     Sends a message to a Notification chat via a notification server.
 
-        This method sends a message to a specified Notification chat by calling an
-        external notification server API. It handles the creation and management
-        of the asyncio event loop required for making the asynchronous HTTP request.
+    #     This method sends a message to a specified Notification chat by calling an
+    #     external notification server API. It handles the creation and management
+    #     of the asyncio event loop required for making the asynchronous HTTP request.
 
-        Args:
-            message (str): The message to be sent to the Notification chat.
+    #     Args:
+    #         message (str): The message to be sent to the Notification chat.
 
-        Raises:
-            httpx.RequestError: If an error occurs while making the HTTP request.
-            Exception: For any other exceptions that occur during the process.
+    #     Raises:
+    #         httpx.RequestError: If an error occurs while making the HTTP request.
+    #         Exception: For any other exceptions that occur during the process.
 
-        Note:
-            The configuration for the notification server and Notification chat is
-            retrieved from the InternalConfig class.
-        """
+    #     Note:
+    #         The configuration for the notification server and Notification chat is
+    #         retrieved from the InternalConfig class.
+    #     """
 
-        async def call_notification_api(message: str):
-            try:
-                async with httpx.AsyncClient() as client:
-                    ans = await client.get(url, params=params, timeout=60)
-                    if ans.status_code != 200:
-                        logger.warning(
-                            f"An error occurred while sending the message: {ans.text}",
-                            extra={
-                                "notification": False,
-                                "failed_message": message,
-                            },
-                        )
-                    else:
-                        logger.debug(f"Sent message: {message}")
+    #     async def call_notification_api(message: str):
+    #         try:
+    #             async with httpx.AsyncClient() as client:
+    #                 ans = await client.get(url, params=params, timeout=60)
+    #                 if ans.status_code != 200:
+    #                     logger.warning(
+    #                         f"An error occurred while sending the message: {ans.text}",
+    #                         extra={
+    #                             "notification": False,
+    #                             "failed_message": message,
+    #                         },
+    #                     )
+    #                 else:
+    #                     logger.debug(f"Sent message: {message}")
 
-            except Exception as ex:
-                logger.warning(
-                    f"An error occurred while sending the message: {ex}",
-                    extra={
-                        "notification": False,
-                        "failed_message": message,
-                    },
-                )
+    #         except Exception as ex:
+    #             logger.warning(
+    #                 f"An error occurred while sending the message: {ex}",
+    #                 extra={
+    #                     "notification": False,
+    #                     "failed_message": message,
+    #                 },
+    #             )
 
-        # Assign the configuration to a local variable
-        internal_config = InternalConfig()
-        _config = internal_config.config
+    #     # Assign the configuration to a local variable
+    #     internal_config = InternalConfig()
+    #     _config = internal_config.config
 
-        url = (
-            f"{_config.tailscale.notification_server}."
-            f"{_config.tailscale.tailnet_name}:"
-            f"{_config.tailscale.notification_server_port}/send_notification/"
-        )
-        params: Dict = {
-            "notify": message,
-            "alert_level": alert_level,
-            "room_id": _config.telegram.chat_id,
-        }
-        try:
-            formatter = MyJSONFormatter()
-            logger.debug(
-                f"NOTIFICATION SENT -> {message}",
-                extra={
-                    "notification": False,
-                    "details": formatter._prepare_log_dict(record),
-                },
-            )
-            internal_config.notification_loop.run_until_complete(
-                call_notification_api(message)
-            )
+    #     url = (
+    #         f"{_config.tailscale.notification_server}."
+    #         f"{_config.tailscale.tailnet_name}:"
+    #         f"{_config.tailscale.notification_server_port}/send_notification/"
+    #     )
+    #     params: Dict = {
+    #         "notify": message,
+    #         "alert_level": alert_level,
+    #         "room_id": _config.telegram.chat_id,
+    #     }
+    #     try:
+    #         formatter = MyJSONFormatter()
+    #         logger.debug(
+    #             f"NOTIFICATION SENT -> {message}",
+    #             extra={
+    #                 "notification": False,
+    #                 "details": formatter._prepare_log_dict(record),
+    #             },
+    #         )
+    #         internal_config.notification_loop.run_until_complete(
+    #             call_notification_api(message)
+    #         )
 
-        except Exception as ex:
-            logger.error(
-                f"An error occurred while sending the message: {ex}",
-                extra={
-                    "notification": False,
-                    "failed_message": message,
-                },
-            )
-        logger.debug(
-            f"Finished emit, loop is running: "
-            f"{internal_config.notification_loop.is_running()}"
-        )
+    #     except Exception as ex:
+    #         logger.error(
+    #             f"An error occurred while sending the message: {ex}",
+    #             extra={
+    #                 "notification": False,
+    #                 "failed_message": message,
+    #             },
+    #         )
+    #     logger.debug(
+    #         f"Finished emit, loop is running: "
+    #         f"{internal_config.notification_loop.is_running()}"
+    #     )
 
-        # raise NotImplementedError
+    #     # raise NotImplementedError
 
 
 class NotificationFilter(logging.Filter):
