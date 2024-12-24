@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, timedelta_display
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 def test_format_basic_log_record():
@@ -102,18 +102,20 @@ async def test_log_message_with_notification(monkeypatch):
     # with open(config_file) as f_in:
     #     raw_config = safe_load(f_in)
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
     config = InternalConfig().config
 
     logger.info("Test message")
-    logger.info("Test message with notification", extra={"telegram": True})
+    logger.info("Test message with notification", extra={"notification": True})
     await asyncio.sleep(5)
 
     # Check the log messages
     # assert len(logger.records) == 2
     # assert logger.records[0].getMessage() == "Test message"
     # assert logger.records[1].getMessage() == "Test message with notification"
-    # assert logger.records[1].telegram is True
+    # assert logger.records[1].notification is True
 
 
 def test_timedelta_display():

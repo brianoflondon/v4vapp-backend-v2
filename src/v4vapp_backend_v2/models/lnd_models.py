@@ -63,12 +63,12 @@ class LNDInvoice(BaseModel):
             )
 
     def invoice_log(
-        self, logger_func: LoggerFunction, send_telegram: bool = False
+        self, logger_func: LoggerFunction, send_notification: bool = False
     ) -> None:
         logger_func(
             self.invoice_message(),
             extra={
-                "telegram": send_telegram,
+                "notification": send_notification,
                 "invoice": self.model_dump(exclude_none=True),
             },
         )
