@@ -36,9 +36,20 @@ def test_internal_config(set_base_config_path: None):
     with pytest.raises(ValueError):
         int_config.connection("bad_example")
 
+
 def test_singleton_config(set_base_config_path: None):
     internal_config = InternalConfig()
     internal_config2 = InternalConfig()
     print(internal_config.config.version)
     print(internal_config2.config.version)
     assert internal_config is internal_config2
+
+
+def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
+    test_config_path_bad = Path("tests/data/config-bad")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
+    )
+    # detect sys.exit(1) call
+    with pytest.raises(SystemExit):
+        InternalConfig()

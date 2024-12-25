@@ -40,11 +40,6 @@ def set_base_config_path_bad(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
 
-    test_config_path_bad = Path("tests/data/config-bad")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
-    )
-
     monkeypatch.setattr(
         "v4vapp_backend_v2.lnd_grpc.lnd_connection.InternalConfig._instance",
         None,

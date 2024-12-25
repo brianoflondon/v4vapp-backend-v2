@@ -28,7 +28,7 @@ db = MyDB()
 
 global_tracking = HtlcTrackingList()
 
-CONNECTION_NAME = "umbrel"
+CONNECTION_NAME = "voltage"
 
 
 def tracking_list_dump():

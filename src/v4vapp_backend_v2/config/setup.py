@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, List, Protocol, override
 
 import colorlog
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from yaml import safe_load
 
 from v4vapp_backend_v2 import __version__
@@ -61,11 +61,19 @@ class Config(BaseModel):
     tailscale: TailscaleConfig
     telegram: TelegramConfig
 
+    @field_validator("lnd_connections")
+    def unique_names(cls, v):
+        names = [conn.name for conn in v]
+        if len(names) != len(set(names)):
+            raise ValueError("Duplicate names found in lnd_connections")
+        return v
+
     def connection(self, connection_name: str) -> LndConnectionConfig:
         for connection in self.lnd_connections:
             if connection.name == connection_name:
                 return connection
         raise ValueError(f"Connection {connection_name} not found in config")
+
 
 class ConsoleLogFilter(logging.Filter):
     """
@@ -140,8 +148,9 @@ class InternalConfig:
         try:
             self.config = Config.model_validate(config)
         except ValueError as ex:
-            logger.error(f"Invalid configuration: {ex}")
-            raise ex
+            print(f"Invalid configuration: {ex}")
+            # exit the program with an error but no stack trace
+            sys.exit(1)
 
     def setup_logging(self):
         try:
