@@ -277,3 +277,6 @@ class LNDClient:
         except Exception as e:
             logger.error(f"Error in {method_name} RPC call: {e}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")
+
+
+    
