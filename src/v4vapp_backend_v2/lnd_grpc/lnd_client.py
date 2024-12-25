@@ -13,12 +13,10 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
-    LNDConnectionError,
-    LNDFatalError,
-    LNDStartupError,
-    LNDSubscriptionError,
-)
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import (LNDConnectionError,
+                                                   LNDFatalError,
+                                                   LNDStartupError,
+                                                   LNDSubscriptionError)
 
 MAX_RETRIES = 20
 
@@ -102,7 +100,7 @@ class LNDClient:
                         f"Connection to LND is OK Error "
                         f"cleared error_count: {error_count}",
                         extra={
-                            "telegram": True,
+                            "notification": True,
                             "error_code": str(original_error.code()),
                             "error_code_clear": True,
                             "error_count": error_count,
@@ -124,7 +122,7 @@ class LNDClient:
                 logger.error(
                     message,
                     extra={
-                        "telegram": True,
+                        "notification": True,
                         "error_code": get_error_code(e),
                         "error_details": error_to_dict(e),
                     },
@@ -135,13 +133,13 @@ class LNDClient:
                 message = f"Too many errors in {call_name} RPC call ({error_count})"
                 logger.error(
                     message,
-                    extra={"telegram": True},
+                    extra={"notification": True},
                 )
                 raise LNDConnectionError(message, error_count)
             back_off_time = min((2**error_count), 60)
             logger.warning(
                 f"Back off: {back_off_time}s Error {call_name}",
-                extra={"telegram": False},
+                extra={"notification": False},
             )
             await asyncio.sleep(back_off_time)
 
@@ -174,7 +172,7 @@ class LNDClient:
                 logger.error(
                     message,
                     extra={
-                        "telegram": False,
+                        "notification": False,
                         "error_code": get_error_code(e),
                         "error_details": error_to_dict(e),
                     },
@@ -183,7 +181,7 @@ class LNDClient:
             logger.warning(
                 f"Error in {method} RPC call: {e.code()}",
                 extra={
-                    "telegram": True,
+                    "notification": True,
                     "error_code": get_error_code(e),
                     "error_details": error_to_dict(e),
                 },

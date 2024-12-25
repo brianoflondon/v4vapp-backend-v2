@@ -143,7 +143,7 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
     )
 
     mock_client = LNDClient()
-    mock_client.connect()
+    await mock_client.connect()
 
     with patch.object(
         lnrpc, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)

@@ -24,8 +24,8 @@
         "no_errors": {
             "()": "v4vapp_backend_v2.config.mylogger.NonErrorFilter"
         },
-        "telegram_filter": {
-            "()": "v4vapp_backend_v2.config.mylogger.TelegramFilter"
+        "notification_filter": {
+            "()": "v4vapp_backend_v2.config.mylogger.NotificationFilter"
         }
     },
     "handlers": {
@@ -47,15 +47,15 @@
             "class": "logging.handlers.QueueHandler",
             "handlers": [
                 "file_json",
-                "telegram"
+                "notification"
             ],
             "respect_handler_level": true
         },
-        "telegram": {
-            "class": "v4vapp_backend_v2.config.mylogger.CustomTelegramHandler",
+        "notification": {
+            "class": "v4vapp_backend_v2.config.mylogger.CustomNotificationHandler",
             "level": "DEBUG",
             "formatter": "simple",
-            "filters" : ["telegram_filter"]
+            "filters" : ["notification_filter"]
         }
     },
     "loggers": {
