@@ -219,47 +219,65 @@ async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> 
             raise e
 
 
+async def fill_channel_list(connection_name: str = CONNECTION_NAME) -> None:
+    async with LNDClient(connection_name=connection_name) as client:
+        # Get the balance of the node
+        balance: ln.ChannelBalanceResponse = await client.call(
+            client.lightning_stub.ChannelBalance,
+            ln.ChannelBalanceRequest(),
+        )
+        balance_dict = MessageToDict(balance, preserving_proto_field_name=True)
+        # Get the list of channels
+        channels = await client.call(
+            client.lightning_stub.ListChannels,
+            ln.ListChannelsRequest(),
+        )
+        channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+        tasks = []
+        # Get the info about this node
+        get_info: ln.GetInfoResponse = await client.call(
+            client.lightning_stub.GetInfo,
+            ln.GetInfoRequest(),
+        )
+        get_info_dict = MessageToDict(get_info, preserving_proto_field_name=True)
+        own_pub_key = get_info.identity_pubkey
+
+        logger.info(
+            f"Local Balance: {balance.local_balance.sat:,.0f} sats",
+            extra={"balance": balance_dict},
+        )
+        logger.info(f"Own pub key: {own_pub_key}", extra={"get_info": get_info_dict})
+
+        # Get the name of each channel
+        for channel in channels_dict.get("channels", []):
+            tasks.append(
+                get_channel_name(
+                    int(channel["chan_id"]),
+                    connection_name,
+                    own_pub_key=own_pub_key,
+                )
+            )
+        names_list: List[ChannelName] = await asyncio.gather(*tasks)
+        for channel_name in names_list:
+            global_tracking.add_name(channel_name)
+            logger.info(
+                f"Channel {channel_name.channel_id} -> {channel_name.name}",
+                extra={"channel_name": channel_name.model_dump()},
+            )
+
+
 async def main() -> None:
     logger.debug("Starting LND gRPC client")
 
     try:
-        async with LNDClient(connection_name=CONNECTION_NAME) as client:
-            balance: ln.ChannelBalanceResponse = await client.call(
-                client.lightning_stub.ChannelBalance,
-                ln.ChannelBalanceRequest(),
-            )
-            logger.info(f"Balance: {balance.local_balance.sat:,.0f} sats")
-
-            channels = await client.call(
-                client.lightning_stub.ListChannels,
-                ln.ListChannelsRequest(),
-            )
-            channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-            tasks = []
-            own_pub_key = await get_node_pub_key(CONNECTION_NAME)
-            logger.info(f"Own pub key: {own_pub_key}")
-            for channel in channels_dict.get("channels", []):
-                tasks.append(
-                    get_channel_name(
-                        int(channel["chan_id"]),
-                        CONNECTION_NAME,
-                        own_pub_key=own_pub_key,
-                    )
-                )
-            names_list: List[ChannelName] = await asyncio.gather(*tasks)
-            for channel_name in names_list:
-                global_tracking.add_name(channel_name)
-                logger.info(
-                    f"Channel {channel_name.channel_id} -> {channel_name.name}",
-                    extra={"channel_name": channel_name.model_dump()},
-                )
-            logger.info("Starting Tasks")
-            tasks = [
-                subscribe_invoices_loop(CONNECTION_NAME),
-                subscribe_htlc_events_loop(CONNECTION_NAME),
-                tracking_list_dump_loop(),
-            ]
-            await asyncio.gather(*tasks)
+        await fill_channel_list(CONNECTION_NAME)
+        logger.info("Starting Tasks")
+        tasks = [
+            subscribe_invoices_loop(CONNECTION_NAME),
+            subscribe_htlc_events_loop(CONNECTION_NAME),
+            tracking_list_dump_loop(),
+        ]
+        await asyncio.gather(*tasks)
 
     except KeyboardInterrupt:
         logger.warning("❌ LND gRPC client stopped keyboard")
