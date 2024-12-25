@@ -53,7 +53,7 @@ def set_base_config_path_bad(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_lnd_client(set_base_config_path: None):
-    lnd_client = LNDClient()
+    lnd_client = LNDClient(connection_name="example")
     assert not lnd_client.error_state
     assert lnd_client.error_code is None
     assert lnd_client.connection_check_task is None
@@ -65,7 +65,7 @@ def test_lnd_client(set_base_config_path: None):
 
 @pytest.mark.asyncio
 async def test_lnd_client_connect(set_base_config_path: None):
-    lnd_client = LNDClient()
+    lnd_client = LNDClient(connection_name="example")
     await lnd_client.connect()
     assert lnd_client.channel is not None
     assert lnd_client.lightning_stub is not None
@@ -78,7 +78,7 @@ async def test_lnd_client_connect(set_base_config_path: None):
 
 @pytest.mark.asyncio
 async def test_check_connection_fails(set_base_config_path: None):
-    lnd_client = LNDClient()
+    lnd_client = LNDClient(connection_name="example")
     await lnd_client.connect()
     with pytest.raises(LNDConnectionError) as e:
         await lnd_client.check_connection(call_name="test_connection", max_tries=2)
@@ -95,7 +95,7 @@ async def test_get_balance(set_base_config_path: None, monkeypatch: pytest.Monke
     mock_method = AsyncMock(return_value=mock_response)
 
     with patch.object(LNDClient, "call", mock_method):
-        async with LNDClient() as client:
+        async with LNDClient(connection_name="example") as client:
             balance: ln.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,
                 ln.ChannelBalanceRequest(),
@@ -113,7 +113,7 @@ async def test_call_method(set_base_config_path: None):
 
     # Patch the call method in the LNDClient class
     with patch.object(LNDClient, "call", mock_method):
-        async with LNDClient() as client:
+        async with LNDClient(connection_name="example") as client:
             # Call the patched method
             response = await client.call(mock_method)
 
@@ -142,13 +142,13 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
         side_effect=[mock_response] + [mock_error] * retries + [mock_response]
     )
 
-    mock_client = LNDClient()
-    await mock_client.connect()
+    mock_client = LNDClient(connection_name="example")
+    mock_client.connect()
 
     with patch.object(
         lnrpc, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
     ):
-        async with LNDClient() as client:
+        async with LNDClient(connection_name="example") as client:
             # First call should succeed
             balance: ln.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,

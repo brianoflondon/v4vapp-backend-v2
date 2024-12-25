@@ -24,5 +24,10 @@ def test_local_node_settings(set_base_config_path: None):
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
-    settings = LNDConnectionSettings()
-    assert settings.address == raw_config["lnd_connection"]["address"]
+    settings = LNDConnectionSettings(connection_name="example")
+    assert settings.address == raw_config["lnd_connections"][0]["address"]
+
+
+def test_bad_connection_name(set_base_config_path: None):
+    with pytest.raises(LNDStartupError):
+        LNDConnectionSettings(connection_name="bad_example")
