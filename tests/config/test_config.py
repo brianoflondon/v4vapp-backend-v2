@@ -29,8 +29,12 @@ def test_internal_config(set_base_config_path: None):
     internal_config = InternalConfig()
     assert internal_config is not None
     assert internal_config.config is not None
-    assert internal_config.config.version == raw_config["version"]
-
+    int_config = internal_config.config
+    assert int_config.version == raw_config["version"]
+    assert len(int_config.lnd_connections) == len(raw_config["lnd_connections"])
+    assert int_config.connection("example").name == "example"
+    with pytest.raises(ValueError):
+        int_config.connection("bad_example")
 
 def test_singleton_config(set_base_config_path: None):
     internal_config = InternalConfig()

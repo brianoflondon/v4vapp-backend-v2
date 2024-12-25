@@ -5,7 +5,7 @@ import logging.config
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any, Protocol, override
+from typing import Any, List, Protocol, override
 
 import colorlog
 from pydantic import BaseModel
@@ -57,10 +57,15 @@ class TelegramConfig(BaseModel):
 class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
-    lnd_connection: LndConnectionConfig
+    lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
 
+    def connection(self, connection_name: str) -> LndConnectionConfig:
+        for connection in self.lnd_connections:
+            if connection.name == connection_name:
+                return connection
+        raise ValueError(f"Connection {connection_name} not found in config")
 
 class ConsoleLogFilter(logging.Filter):
     """

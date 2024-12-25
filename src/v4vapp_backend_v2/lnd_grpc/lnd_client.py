@@ -39,8 +39,8 @@ def error_to_dict(e: Exception) -> dict:
 
 
 class LNDClient:
-    def __init__(self) -> None:
-        self.connection = LNDConnectionSettings()
+    def __init__(self, connection_name: str) -> None:
+        self.connection = LNDConnectionSettings(connection_name)
         self.channel = None
         self.lightning_stub: lnrpc.LightningStub = None
         self.router_stub: routerstub.RouterStub = None
@@ -270,11 +270,10 @@ class LNDClient:
         # except grpc.aio._call.AioRpcError as e:
         #     if e.code() == grpc.StatusCode.UNAVAILABLE:
         #         raise LNDConnectionError(f"Error in {method_name} RPC call") from e
+        except AioRpcError as e:
+            logger.error(f"Error in {method_name} RPC call: {e.code()}")
+            raise LNDConnectionError(f"Error in {method_name} RPC call")
 
         except Exception as e:
             logger.error(f"Error in {method_name} RPC call: {e}")
-            raise LNDConnectionError(f"Error in {method_name} RPC call")
-
-        except AioRpcError as e:
-            logger.error(f"Error in {method_name} RPC call: {e.code()}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")

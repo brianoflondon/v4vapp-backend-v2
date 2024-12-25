@@ -26,8 +26,13 @@ class LNDConnectionSettings:
     cert: bytes
     use_proxy: str = ""
 
-    def __init__(self) -> None:
-        lnd_config = InternalConfig().config.lnd_connection
+    def __init__(self, connection_name: str) -> None:
+        try:
+            lnd_config = InternalConfig().config.connection(connection_name)
+        except ValueError as e:
+            message = f"Connection name {connection_name} not found: {e}"
+            logger.error(message, exc_info=True)
+            raise LNDStartupError(message)
 
         if lnd_config.use_proxy:
             os.environ["http_proxy"] = lnd_config.use_proxy

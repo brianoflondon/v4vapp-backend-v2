@@ -12,11 +12,13 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (LNDFatalError,
-                                                   LNDSubscriptionError)
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
-from v4vapp_backend_v2.models.htlc_event_models import (ChannelName, HtlcEvent,
-                                                        HtlcTrackingList)
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name, get_node_pub_key
+from v4vapp_backend_v2.models.htlc_event_models import (
+    ChannelName,
+    HtlcEvent,
+    HtlcTrackingList,
+)
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
@@ -25,6 +27,8 @@ config = InternalConfig().config
 db = MyDB()
 
 global_tracking = HtlcTrackingList()
+
+CONNECTION_NAME = "umbrel"
 
 
 def tracking_list_dump():
@@ -63,9 +67,9 @@ async def tracking_list_dump_loop():
 
 
 async def subscribe_invoices(
-    add_index: int, settle_index: int
+    add_index: int, settle_index: int, connection_name: str = CONNECTION_NAME
 ) -> AsyncGenerator[LNDInvoice, None]:
-    async with LNDClient() as client:
+    async with LNDClient(connection_name=connection_name) as client:
         request_sub = ln.InvoiceSubscription(
             add_index=add_index, settle_index=settle_index
         )
@@ -92,7 +96,7 @@ async def subscribe_invoices(
             raise e
 
 
-async def subscribe_invoices_loop():
+async def subscribe_invoices_loop(connection_name: str = CONNECTION_NAME) -> None:
     error_codes: set[str] = set()
     add_index = 0
     settle_index = 0
@@ -100,7 +104,9 @@ async def subscribe_invoices_loop():
         logger.debug("Subscribing to invoices")
         logger.debug(f"Add index: {add_index} - Settle index: {settle_index}")
         try:
-            async for invoice in subscribe_invoices(add_index, settle_index):
+            async for invoice in subscribe_invoices(
+                add_index, settle_index, connection_name
+            ):
                 tracking_list_dump()
                 add_index = global_tracking.add_invoice(invoice)
                 if error_codes:
@@ -136,9 +142,11 @@ async def subscribe_invoices_loop():
             raise e
 
 
-async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
+async def subscribe_htlc_events(
+    connection_name: str = CONNECTION_NAME,
+) -> AsyncGenerator[HtlcEvent, None]:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
-    async with LNDClient() as client:
+    async with LNDClient(connection_name=connection_name) as client:
         request_sub = routerrpc.SubscribeHtlcEventsRequest()
         try:
             async for htlc in client.call_async_generator(
@@ -172,12 +180,14 @@ async def subscribe_htlc_events() -> AsyncGenerator[HtlcEvent, None]:
             raise e
 
 
-async def subscribe_htlc_events_loop() -> None:
+async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> None:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
     while True:
         logger.debug("Subscribing to HTLC events")
         try:
-            async for htlc_event in subscribe_htlc_events():
+            async for htlc_event in subscribe_htlc_events(
+                connection_name=connection_name
+            ):
                 tracking_list_dump()
                 await asyncio.sleep(0.1)
                 htlc_id = global_tracking.add_event(htlc_event)
@@ -213,7 +223,7 @@ async def main() -> None:
     logger.debug("Starting LND gRPC client")
 
     try:
-        async with LNDClient() as client:
+        async with LNDClient(connection_name=CONNECTION_NAME) as client:
             balance: ln.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,
                 ln.ChannelBalanceRequest(),
@@ -226,9 +236,16 @@ async def main() -> None:
             )
             channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
             tasks = []
+            own_pub_key = await get_node_pub_key(CONNECTION_NAME)
+            logger.info(f"Own pub key: {own_pub_key}")
             for channel in channels_dict.get("channels", []):
-                tasks.append(get_channel_name(int(channel["chan_id"])))
-                # name =  get_channel_name(int(channel["chan_id"]))
+                tasks.append(
+                    get_channel_name(
+                        int(channel["chan_id"]),
+                        CONNECTION_NAME,
+                        own_pub_key=own_pub_key,
+                    )
+                )
             names_list: List[ChannelName] = await asyncio.gather(*tasks)
             for channel_name in names_list:
                 global_tracking.add_name(channel_name)
@@ -238,8 +255,8 @@ async def main() -> None:
                 )
             logger.info("Starting Tasks")
             tasks = [
-                subscribe_invoices_loop(),
-                subscribe_htlc_events_loop(),
+                subscribe_invoices_loop(CONNECTION_NAME),
+                subscribe_htlc_events_loop(CONNECTION_NAME),
                 tracking_list_dump_loop(),
             ]
             await asyncio.gather(*tasks)
