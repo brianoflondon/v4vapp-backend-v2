@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, List, Protocol, override
 
 import colorlog
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from yaml import safe_load
 
 from v4vapp_backend_v2 import __version__
@@ -25,6 +25,10 @@ BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 These classes need to match the structure of the config.yaml file
 
 """
+
+
+class StartupFailure(Exception):
+    pass
 
 
 class LoggingConfig(BaseModel):
@@ -55,8 +59,35 @@ class TelegramConfig(BaseModel):
 
 
 class Config(BaseModel):
+    """
+    Config class for application configuration.
+
+    Attributes:
+        version (str): The version of the configuration. Default is "1".
+        logging (LoggingConfig): Configuration for logging.
+        default_connection (str): The default connection name.
+        lnd_connections (List[LndConnectionConfig]): List of LND connection configurations.
+        tailscale (TailscaleConfig): Configuration for Tailscale.
+        telegram (TelegramConfig): Configuration for Telegram.
+
+    Methods:
+        unique_names(cls, v):
+            Validates that all LND connections have unique names.
+
+        check_default_connection(cls, v):
+            Validates that the default connection is present in the list of LND connections.
+
+        list_lnd_connections(self) -> List[str]:
+            Returns a list of names of all LND connections.
+
+        connection(self, connection_name: str) -> LndConnectionConfig:
+            Returns the LND connection configuration for the given connection name.
+            Raises a ValueError if the connection name is not found.
+    """
+
     version: str = "1"
     logging: LoggingConfig
+    default_connection: str = ""
     lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
@@ -67,6 +98,19 @@ class Config(BaseModel):
         if len(names) != len(set(names)):
             raise ValueError("Duplicate names found in lnd_connections")
         return v
+
+    @model_validator(mode="after")
+    def check_default_connection(cls, v):
+        # Check that the default connection is in the list of connections
+        # if it is given.
+        if v.default_connection and v.default_connection not in [
+            conn.name for conn in v.lnd_connections
+        ]:
+            raise ValueError("Default connection not found in lnd_connections")
+        return v
+
+    def list_lnd_connections(self) -> List[str]:
+        return [connection.name for connection in self.lnd_connections]
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
         for connection in self.lnd_connections:
@@ -150,7 +194,7 @@ class InternalConfig:
         except ValueError as ex:
             print(f"Invalid configuration: {ex}")
             # exit the program with an error but no stack trace
-            sys.exit(1)
+            raise (StartupFailure("Invalid configuration"))
 
     def setup_logging(self):
         try:
@@ -244,5 +288,6 @@ class InternalConfig:
             logging.getLogger(handler).setLevel(level)
 
         logger.info(
-            f"Starting LND gRPC client v{__version__}", extra={"notification": True}
+            f"Starting LND gRPC client v{__version__} config: {self.config.default_connection}",
+            extra={"notification": True},
         )

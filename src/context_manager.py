@@ -13,7 +13,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name, get_node_pub_key
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
 from v4vapp_backend_v2.models.htlc_event_models import (
     ChannelName,
     HtlcEvent,
@@ -27,8 +27,6 @@ config = InternalConfig().config
 db = MyDB()
 
 global_tracking = HtlcTrackingList()
-
-CONNECTION_NAME = "voltage"
 
 
 def tracking_list_dump():
@@ -67,7 +65,7 @@ async def tracking_list_dump_loop():
 
 
 async def subscribe_invoices(
-    add_index: int, settle_index: int, connection_name: str = CONNECTION_NAME
+    add_index: int, settle_index: int, connection_name: str
 ) -> AsyncGenerator[LNDInvoice, None]:
     async with LNDClient(connection_name=connection_name) as client:
         request_sub = ln.InvoiceSubscription(
@@ -96,7 +94,7 @@ async def subscribe_invoices(
             raise e
 
 
-async def subscribe_invoices_loop(connection_name: str = CONNECTION_NAME) -> None:
+async def subscribe_invoices_loop(connection_name: str) -> None:
     error_codes: set[str] = set()
     add_index = 0
     settle_index = 0
@@ -143,7 +141,7 @@ async def subscribe_invoices_loop(connection_name: str = CONNECTION_NAME) -> Non
 
 
 async def subscribe_htlc_events(
-    connection_name: str = CONNECTION_NAME,
+    connection_name: str,
 ) -> AsyncGenerator[HtlcEvent, None]:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
     async with LNDClient(connection_name=connection_name) as client:
@@ -180,7 +178,7 @@ async def subscribe_htlc_events(
             raise e
 
 
-async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> None:
+async def subscribe_htlc_events_loop(connection_name: str) -> None:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
     while True:
         logger.debug("Subscribing to HTLC events")
@@ -219,7 +217,7 @@ async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> 
             raise e
 
 
-async def fill_channel_list(connection_name: str = CONNECTION_NAME) -> None:
+async def fill_channel_list(connection_name: str) -> None:
     async with LNDClient(connection_name=connection_name) as client:
         # Get the balance of the node
         balance: ln.ChannelBalanceResponse = await client.call(
@@ -267,14 +265,12 @@ async def fill_channel_list(connection_name: str = CONNECTION_NAME) -> None:
 
 
 async def main() -> None:
-    logger.debug("Starting LND gRPC client")
-
     try:
-        await fill_channel_list(CONNECTION_NAME)
+        await fill_channel_list(config.default_connection)
         logger.info("Starting Tasks")
         tasks = [
-            subscribe_invoices_loop(CONNECTION_NAME),
-            subscribe_htlc_events_loop(CONNECTION_NAME),
+            subscribe_invoices_loop(config.default_connection),
+            subscribe_htlc_events_loop(config.default_connection),
             tracking_list_dump_loop(),
         ]
         await asyncio.gather(*tasks)

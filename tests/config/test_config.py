@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from yaml import safe_load
 
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure
 
 
 @pytest.fixture
@@ -20,6 +20,13 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
     # No need to restore the original value, monkeypatch will handle it
 
+@pytest.fixture(autouse=True)
+def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 def test_internal_config(set_base_config_path: None):
     config_file = Path("tests/data/config", "config.yaml")
@@ -51,5 +58,6 @@ def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
     )
     # detect sys.exit(1) call
-    with pytest.raises(SystemExit):
+
+    with pytest.raises(StartupFailure):
         InternalConfig()

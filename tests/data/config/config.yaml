@@ -10,6 +10,8 @@ logging:
     httpcore: WARNING
     httpx: WARNING
 
+default_connection: example
+
 lnd_connections:
   - name: example
     address: example.com:10009
