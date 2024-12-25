@@ -20,6 +20,8 @@ from v4vapp_backend_v2.models.htlc_event_models import (
     HtlcTrackingList,
 )
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.events.event_models import Events
+from v4vapp_backend_v2.events.event import publish
 
 config = InternalConfig().config
 
