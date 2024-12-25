@@ -235,5 +235,5 @@ class InternalConfig:
             logging.getLogger(handler).setLevel(level)
 
         logger.info(
-            f"Starting LND gRPC client v{__version__}", extra={"telegram": True}
+            f"Starting LND gRPC client v{__version__}", extra={"notification": True}
         )

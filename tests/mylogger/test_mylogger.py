@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, human_readable_datetime_str, timedelta_display
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, timedelta_display
 
 
 def test_format_basic_log_record():
@@ -50,8 +50,11 @@ def test_format_log_record_with_exception():
             msg="Test message with exception",
             args=(),
             exc_info=(type(ex), ex, ex.__traceback__),
+            unusual_attr="Unusual attribute",
         )
         record.created = datetime.now(tz=timezone.utc).timestamp()
+        # generate a stack_info field
+        record.stack_info = "Stack info"
 
     # Create an instance of MyJSONFormatter
     formatter = MyJSONFormatter()
@@ -96,26 +99,6 @@ def test_format_log_record_with_custom_keys():
     assert "log_timestamp" in log_dict
 
 
-@pytest.mark.asyncio
-async def test_log_message_with_notification(monkeypatch):
-    # config_file = Path("tests/data/config", "config.yaml")
-    # with open(config_file) as f_in:
-    #     raw_config = safe_load(f_in)
-    test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
-    config = InternalConfig().config
-
-    logger.info("Test message")
-    logger.info("Test message with notification", extra={"telegram": True})
-    await asyncio.sleep(5)
-
-    # Check the log messages
-    # assert len(logger.records) == 2
-    # assert logger.records[0].getMessage() == "Test message"
-    # assert logger.records[1].getMessage() == "Test message with notification"
-    # assert logger.records[1].telegram is True
-
-
 def test_timedelta_display():
 
     # Test with a timedelta of 1 hour, 2 minutes, and 3 seconds
@@ -129,3 +112,12 @@ def test_timedelta_display():
     # Test with a timedelta of 23 hours, 59 minutes, and 59 seconds
     td = timedelta(hours=23, minutes=59, seconds=59)
     assert timedelta_display(td) == "23h 59m 59s"
+
+
+def test_human_readable_datetime_str():
+
+    # Test with a datetime object
+    dt_obj = datetime(2022, 1, 1, 12, 30, 45, 123456)
+    assert human_readable_datetime_str(dt_obj) == "12:30:45.123 Sat 01 Jan"
+
+
