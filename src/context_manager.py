@@ -82,7 +82,7 @@ async def subscribe_invoices(
                 inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
                 logger.debug(
                     f"Raw invoice data\n{json.dumps(inv_dict, indent=2)}",
-                    extra={"invoice_data": inv_dict, "telegram": False},
+                    extra={"invoice_data": inv_dict, "notification": False},
                 )
                 invoice = LNDInvoice.model_validate(inv_dict)
                 yield invoice
@@ -113,17 +113,17 @@ async def subscribe_invoices_loop(connection_name: str = CONNECTION_NAME) -> Non
                     logger.info(
                         f"✅ Error codes cleared {error_codes}",
                         extra={
-                            "telegram": True,
+                            "notification": True,
                             "error_code_clear": error_codes,
                         },
                     )
                     error_codes.clear()
 
-                # send_telegram = False if invoice.is_keysend else True
-                send_telegram = (
+                # send_notification = False if invoice.is_keysend else True
+                send_notification = (
                     False  # the alerts will come from the received htlc_events
                 )
-                invoice.invoice_log(logger.debug, send_telegram)
+                invoice.invoice_log(logger.debug, send_notification)
                 db.update_most_recent(invoice)
 
                 if invoice.settled:
@@ -134,7 +134,7 @@ async def subscribe_invoices_loop(connection_name: str = CONNECTION_NAME) -> Non
         except LNDSubscriptionError as e:
             logger.warning(
                 f"Clearing after error {e}",
-                extra={"telegram": True, "error_details": error_to_dict(e)},
+                extra={"notification": True, "error_details": error_to_dict(e)},
             )
             pass
         except Exception as e:
@@ -195,7 +195,7 @@ async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> 
                 invoice = global_tracking.lookup_invoice_by_htlc_id(htlc_id)
                 complete = global_tracking.complete_group(htlc_id)
                 extra = {
-                    "telegram": complete,
+                    "notification": complete,
                     "complete": complete,
                     "htlc_event": htlc_event.model_dump(exclude_none=True),
                 }
@@ -210,7 +210,7 @@ async def subscribe_htlc_events_loop(connection_name: str = CONNECTION_NAME) -> 
         except LNDSubscriptionError as e:
             logger.warning(
                 f"Clearing after error {e}",
-                extra={"telegram": True, "error_details": error_to_dict(e)},
+                extra={"notification": True, "error_details": error_to_dict(e)},
             )
             pass
         except Exception as e:
@@ -299,16 +299,18 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         logger.warning(
-            "✅ LND gRPC client stopped by keyboard", extra={"telegram": False}
+            "✅ LND gRPC client stopped by keyboard", extra={"notification": False}
         )
 
     except LNDFatalError as e:
         logger.error(
-            "❌ LND gRPC client stopped by fatal error", extra={"telegram": False}
+            "❌ LND gRPC client stopped by fatal error", extra={"notification": False}
         )
-        logger.error(e, extra={"telegram": False})
+        logger.error(e, extra={"notification": False})
         raise e
     except Exception as e:
-        logger.error("❌ LND gRPC client stopped by error", extra={"telegram": False})
-        logger.error(e, extra={"telegram": False})
+        logger.error(
+            "❌ LND gRPC client stopped by error", extra={"notification": False}
+        )
+        logger.error(e, extra={"notification": False})
         raise e
