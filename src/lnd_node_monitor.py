@@ -10,7 +10,6 @@ from pydantic import ValidationError
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.database.db import MyDB
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
@@ -20,11 +19,13 @@ from v4vapp_backend_v2.models.htlc_event_models import (
     HtlcTrackingList,
 )
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.events.event_models import Events
+from v4vapp_backend_v2.events.async_event import async_publish
+
+from v4vapp_backend_v2.database.db import db
 
 config = InternalConfig().config
 
-# Create a temporary file
-db = MyDB()
 
 global_tracking = HtlcTrackingList()
 
@@ -121,8 +122,9 @@ async def subscribe_invoices_loop(connection_name: str) -> None:
                 send_notification = (
                     False  # the alerts will come from the received htlc_events
                 )
+                async_publish(Events.LND_INVOICE, invoice)
                 invoice.invoice_log(logger.debug, send_notification)
-                db.update_most_recent(invoice)
+                # db.update_most_recent(invoice)
 
                 if invoice.settled:
                     settle_index = invoice.settle_index

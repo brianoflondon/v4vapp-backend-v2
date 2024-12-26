@@ -5,6 +5,7 @@ from typing import Dict, List
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import LoggerFunction
+from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 
@@ -224,6 +225,12 @@ class HtlcTrackingList(BaseModel):
     names: Dict[int, str] = {}
     invoices: list[LNDInvoice] = []
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.events = []
+        self.names = {}
+        self.invoices = []
+
     def add_event(self, event: HtlcEvent) -> int:
         htlc_id = event.htlc_id
         if htlc_id is None:
@@ -354,7 +361,6 @@ class HtlcTrackingList(BaseModel):
                                     event.final_htlc_event.settled = True
                             return True
                     return False
-                    return True if len(group_list) == 3 else False
                 case EventType.SEND:
                     return True if len(group_list) == 2 else False
                 case EventType.RECEIVE:
