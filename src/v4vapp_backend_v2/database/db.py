@@ -3,6 +3,8 @@ import posixpath
 import tempfile
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.events.event import subscribe
+from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 
@@ -52,3 +54,9 @@ class MyDB:
                 f"Updated most recent invoice: {invoice.add_index} {invoice.settled}",
                 extra=output,
             )
+
+
+# Create a temporary file
+db = MyDB()
+
+subscribe(Events.LND_INVOICE_CREATED, db.update_most_recent)
