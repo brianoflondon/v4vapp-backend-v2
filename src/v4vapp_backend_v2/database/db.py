@@ -3,9 +3,30 @@ import posixpath
 import tempfile
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.events.event import subscribe
+from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+
+
+class MyDBFlat:
+    most_recent: LNDInvoice
+    most_recent_settled: LNDInvoice
+
+    def __init__(self):
+        self.most_recent = LNDInvoice.model_construct()
+        self.most_recent_settled = LNDInvoice.model_construct()
+        async_subscribe(Events.LND_INVOICE, self.update_most_recent)
+
+    async def update_most_recent(self, invoice: LNDInvoice):
+        if invoice.settled:
+            self.most_recent_settled = invoice
+        else:
+            self.most_recent = invoice
+
+
+
+
+
 
 
 class MyDB:
@@ -57,6 +78,6 @@ class MyDB:
 
 
 # Create a temporary file
-db = MyDB()
+db = MyDBFlat()
 
-subscribe(Events.LND_INVOICE_CREATED, db.update_most_recent)
+# subscribe(Events.LND_INVOICE_CREATED, db.update_most_recent)

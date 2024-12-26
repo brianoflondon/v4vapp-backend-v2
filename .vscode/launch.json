@@ -13,11 +13,11 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "context manager",
+            "name": "LND Node Monitor",
             "type": "debugpy",
-            "consoleName": "context manager",
+            "consoleName": "LND Node Monitor",
             "request": "launch",
-            "program": "src/context_manager.py",
+            "program": "src/lnd_node_monitor.py",
             "console": "integratedTerminal"
         }
     ]
