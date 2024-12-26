@@ -19,6 +19,14 @@
             "request": "launch",
             "program": "src/lnd_node_monitor.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Invoice Experiments",
+            "type": "debugpy",
+            "consoleName": "Invoice Experiments",
+            "request": "launch",
+            "program": "src/invoice_experiments.py",
+            "console": "integratedTerminal"
         }
     ]
 }
