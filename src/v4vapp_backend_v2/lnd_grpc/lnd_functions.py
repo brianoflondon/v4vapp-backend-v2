@@ -1,6 +1,6 @@
 from google.protobuf.json_format import MessageToDict
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.models.htlc_event_models import ChannelName
@@ -28,7 +28,7 @@ async def get_channel_name(
     if not channel_id:
         return ChannelName(channel_id=0, name="Unknown")
     async with LNDClient(connection_name=connection_name) as client:
-        request = ln.ChanInfoRequest(chan_id=channel_id)
+        request = lnrpc.ChanInfoRequest(chan_id=channel_id)
         try:
             response = await client.call(
                 client.lightning_stub.GetChanInfo,
@@ -47,7 +47,7 @@ async def get_channel_name(
             # Get the node info of the partner node
             response = await client.call(
                 client.lightning_stub.GetNodeInfo,
-                ln.NodeInfoRequest(pub_key=partner_pub_key),
+                lnrpc.NodeInfoRequest(pub_key=partner_pub_key),
             )
             node_info = MessageToDict(response, preserving_proto_field_name=True)
             return ChannelName(channel_id=channel_id, name=node_info["node"]["alias"])
@@ -75,7 +75,7 @@ async def get_node_pub_key(connection_name: str) -> str:
         async with LNDClient(connection_name=connection_name) as client:
             response = await client.call(
                 client.lightning_stub.GetInfo,
-                ln.GetInfoRequest(),
+                lnrpc.GetInfoRequest(),
             )
             return response.identity_pubkey
     except Exception as e:
