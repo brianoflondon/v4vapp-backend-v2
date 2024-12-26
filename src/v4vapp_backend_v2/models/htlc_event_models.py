@@ -422,8 +422,9 @@ class HtlcTrackingList(BaseModel):
             logger_func(message_str)
 
     def send_message(self, group_list: List[HtlcEvent]) -> str:
-        end_message = "✅ Settled"
         primary_event = group_list[0]
+        secondary_event = group_list[1]
+        end_message = "✅ Settled" if secondary_event.settle_event else "❌ Not Settled"
         if (
             primary_event.forward_event
             and primary_event.forward_event.info
