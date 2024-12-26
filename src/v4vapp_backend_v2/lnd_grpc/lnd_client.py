@@ -10,8 +10,8 @@ from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
+from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
@@ -42,7 +42,7 @@ class LNDClient:
     def __init__(self, connection_name: str) -> None:
         self.connection = LNDConnectionSettings(connection_name)
         self.channel = None
-        self.lightning_stub: lnrpc.LightningStub = None
+        self.lightning_stub: lightningstub.LightningStub = None
         self.router_stub: routerstub.RouterStub = None
         self.error_state: bool = False
         self.error_code: str | None = None
@@ -66,7 +66,7 @@ class LNDClient:
                 options=self.connection.options,
             )
 
-            self.lightning_stub = lnrpc.LightningStub(self.channel)
+            self.lightning_stub = lightningstub.LightningStub(self.channel)
             self.router_stub = routerstub.RouterStub(self.channel)
 
         except FileNotFoundError as e:
