@@ -8,15 +8,17 @@ from grpc import metadata_call_credentials  # type: ignore
 from grpc import ssl_channel_credentials  # type: ignore
 from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lnrpc
 from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (LNDConnectionError,
-                                                   LNDFatalError,
-                                                   LNDStartupError,
-                                                   LNDSubscriptionError)
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
+    LNDConnectionError,
+    LNDFatalError,
+    LNDStartupError,
+    LNDSubscriptionError,
+)
 
 MAX_RETRIES = 20
 
@@ -94,7 +96,7 @@ class LNDClient:
             try:
                 if self.lightning_stub is not None:
                     _ = await self.lightning_stub.WalletBalance(
-                        ln.WalletBalanceRequest()
+                        lnrpc.WalletBalanceRequest()
                     )
                     logger.warning(
                         f"Connection to LND is OK Error "
@@ -275,6 +277,3 @@ class LNDClient:
         except Exception as e:
             logger.error(f"Error in {method_name} RPC call: {e}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")
-
-
-    
