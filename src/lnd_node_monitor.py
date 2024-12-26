@@ -7,7 +7,7 @@ from typing import AsyncGenerator, List
 from google.protobuf.json_format import MessageToDict
 from pydantic import ValidationError
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
@@ -69,7 +69,7 @@ async def subscribe_invoices(
     add_index: int, settle_index: int, connection_name: str
 ) -> AsyncGenerator[LNDInvoice, None]:
     async with LNDClient(connection_name=connection_name) as client:
-        request_sub = ln.InvoiceSubscription(
+        request_sub = lnrpc.InvoiceSubscription(
             add_index=add_index, settle_index=settle_index
         )
         try:
@@ -222,22 +222,22 @@ async def subscribe_htlc_events_loop(connection_name: str) -> None:
 async def fill_channel_list(connection_name: str) -> None:
     async with LNDClient(connection_name=connection_name) as client:
         # Get the balance of the node
-        balance: ln.ChannelBalanceResponse = await client.call(
+        balance: lnrpc.ChannelBalanceResponse = await client.call(
             client.lightning_stub.ChannelBalance,
-            ln.ChannelBalanceRequest(),
+            lnrpc.ChannelBalanceRequest(),
         )
         balance_dict = MessageToDict(balance, preserving_proto_field_name=True)
         # Get the list of channels
         channels = await client.call(
             client.lightning_stub.ListChannels,
-            ln.ListChannelsRequest(),
+            lnrpc.ListChannelsRequest(),
         )
         channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
         tasks = []
         # Get the info about this node
-        get_info: ln.GetInfoResponse = await client.call(
+        get_info: lnrpc.GetInfoResponse = await client.call(
             client.lightning_stub.GetInfo,
-            ln.GetInfoRequest(),
+            lnrpc.GetInfoRequest(),
         )
         get_info_dict = MessageToDict(get_info, preserving_proto_field_name=True)
         own_pub_key = get_info.identity_pubkey
