@@ -5,8 +5,8 @@ import backoff
 import pytest
 from grpc.aio import AioRpcError
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lnrpc
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, LNDConnectionError
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 
@@ -86,14 +86,14 @@ async def test_check_connection_fails(set_base_config_path: None):
 @pytest.mark.asyncio
 async def test_get_balance(set_base_config_path: None, monkeypatch: pytest.MonkeyPatch):
     # monkey patch the lnd_client.call to return {'balance': 100}
-    mock_response = ln.ChannelBalanceResponse(balance=100)
+    mock_response = lnrpc.ChannelBalanceResponse(balance=100)
     mock_method = AsyncMock(return_value=mock_response)
 
     with patch.object(LNDClient, "call", mock_method):
         async with LNDClient(connection_name="example") as client:
-            balance: ln.ChannelBalanceResponse = await client.call(
+            balance: lnrpc.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,
-                ln.ChannelBalanceRequest(),
+                lnrpc.ChannelBalanceRequest(),
             )
             assert balance == mock_response
 
@@ -122,7 +122,7 @@ async def test_call_method(set_base_config_path: None):
 @pytest.mark.asyncio
 async def test_channel_balance_with_retries(set_base_config_path: None):
     # Mock response and error
-    mock_response = ln.ChannelBalanceResponse(balance=100)
+    mock_response = lnrpc.ChannelBalanceResponse(balance=100)
     mock_error = AioRpcError(
         code=1,
         initial_metadata=None,
@@ -141,13 +141,13 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
     mock_client.connect()
 
     with patch.object(
-        lnrpc, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
+        lightningstub, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
     ):
         async with LNDClient(connection_name="example") as client:
             # First call should succeed
-            balance: ln.ChannelBalanceResponse = await client.call(
+            balance: lnrpc.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,
-                ln.ChannelBalanceRequest(),
+                lnrpc.ChannelBalanceRequest(),
             )
             assert balance == mock_response
 
@@ -155,15 +155,15 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
                 with pytest.raises(LNDConnectionError) as e:
                     balance = await client.call(
                         client.lightning_stub.ChannelBalance,
-                        ln.ChannelBalanceRequest(),
+                        lnrpc.ChannelBalanceRequest(),
                     )
                     print(e)
                     print(mock_method.call_count)
 
             # Final call should succeed again
-            balance: ln.ChannelBalanceResponse = await client.call(
+            balance: lnrpc.ChannelBalanceResponse = await client.call(
                 client.lightning_stub.ChannelBalance,
-                ln.ChannelBalanceRequest(),
+                lnrpc.ChannelBalanceRequest(),
             )
             assert balance == mock_response
 
