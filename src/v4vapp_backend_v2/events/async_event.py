@@ -8,7 +8,7 @@ AsyncCallable = Callable[..., Awaitable[None]]
 async_subscribers: Dict[Events, list[AsyncCallable]] = dict()
 
 
-async def async_subscribe(event_name: Events, subscriber: AsyncCallable):
+def async_subscribe(event_name: Events, subscriber: AsyncCallable):
     """
     Asynchronously subscribes a subscriber to a specified event.
 
@@ -28,7 +28,7 @@ async def async_subscribe(event_name: Events, subscriber: AsyncCallable):
     async_subscribers[event_name].append(subscriber)
 
 
-async def async_publish(event_name: Events, *args: Any) -> None:
+def async_publish(event_name: Events, *args: Any) -> None:
     if event_name in async_subscribers:
         for subscriber in async_subscribers[event_name]:
             asyncio.create_task(subscriber(*args))

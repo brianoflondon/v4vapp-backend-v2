@@ -26,8 +26,8 @@ async def test_async_subscribe():
         print("Subscriber2 called with", x, y)
         pass
 
-    await async_subscribe(Events.LND_INVOICE_CREATED, subscriber)
-    await async_subscribe(Events.LND_INVOICE_CREATED, subscriber2)
+    async_subscribe(Events.LND_INVOICE_CREATED, subscriber)
+    async_subscribe(Events.LND_INVOICE_CREATED, subscriber2)
     subscribers = get_subscribers()
     assert Events.LND_INVOICE_CREATED in subscribers
     assert subscriber in subscribers[Events.LND_INVOICE_CREATED]
@@ -44,10 +44,10 @@ async def test_async_publish():
         print("Subscriber2 called with", x, y, z)
         pass
 
-    await async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
-    await async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber2)
+    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
+    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber2)
     print("Subscribers", get_subscribers())
-    await async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
+    async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
     subscribers = get_subscribers()
     assert Events.LND_PAYMENT_RECEIVED in subscribers
     assert subscriber in subscribers[Events.LND_PAYMENT_RECEIVED]
@@ -60,12 +60,12 @@ async def test_async_publish_wrong_args():
         print("Subscriber called with", x, y)
         pass
 
-    await async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
+    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
     try:
-        await async_publish(Events.LND_PAYMENT_RECEIVED, 1)
+        async_publish(Events.LND_PAYMENT_RECEIVED, 1)
     except Exception as e:
         print(e)
-    await async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
+    async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
     subscribers = get_subscribers()
     assert Events.LND_PAYMENT_RECEIVED in subscribers
     assert subscriber in subscribers[Events.LND_PAYMENT_RECEIVED]
