@@ -15,7 +15,7 @@ class LNDInvoice(BaseModel):
     """Model of an LND Invoice"""
 
     memo: str = ""
-    r_preimage: str
+    r_preimage: str | None = None
     r_hash: str
     value: int = 0
     value_msat: int = 0

@@ -55,6 +55,7 @@ def test_lnd_client(set_base_config_path: None):
     assert lnd_client.channel is None
     assert lnd_client.lightning_stub is None
     assert lnd_client.router_stub is None
+    assert lnd_client.invoices_stub is None
     assert lnd_client.connection.address == "example.com:10009"
 
 
@@ -65,6 +66,7 @@ async def test_lnd_client_connect(set_base_config_path: None):
     assert lnd_client.channel is not None
     assert lnd_client.lightning_stub is not None
     assert lnd_client.router_stub is not None
+    assert lnd_client.invoices_stub is not None
     assert not lnd_client.error_state
     assert lnd_client.error_code is None
     assert lnd_client.connection_check_task is None
@@ -141,7 +143,9 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
     mock_client.connect()
 
     with patch.object(
-        lightningstub, "LightningStub", return_value=MagicMock(ChannelBalance=mock_method)
+        lightningstub,
+        "LightningStub",
+        return_value=MagicMock(ChannelBalance=mock_method),
     ):
         async with LNDClient(connection_name="example") as client:
             # First call should succeed
