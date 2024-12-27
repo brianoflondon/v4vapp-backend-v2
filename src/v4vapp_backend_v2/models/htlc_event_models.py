@@ -427,6 +427,7 @@ class HtlcTrackingList(BaseModel):
         primary_event = group_list[0]
         secondary_event = group_list[1]
         end_message = "✅ Settled" if secondary_event.settle_event else "❌ Not Settled"
+        start_message = "⚡️ Sent" if secondary_event.settle_event else "⚡️ Probing"
         if (
             primary_event.forward_event
             and primary_event.forward_event.info
