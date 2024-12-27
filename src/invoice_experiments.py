@@ -1,5 +1,8 @@
 import asyncio
+from base64 import b64encode
+from hashlib import sha256
 import json
+from secrets import token_hex
 from typing import List
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -7,6 +10,7 @@ from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+import v4vapp_backend_v2.lnd_grpc.invoices_pb2 as invoicesrpc
 
 import httpx
 
@@ -21,7 +25,7 @@ async def fetch_random_word() -> str:
 
 
 async def add_invoice(
-    value: int, memo: str, connection_name: str = "umbrel"
+    value: int, memo: str, connection_name: str = "voltage"
 ) -> lnrpc.AddInvoiceResponse:
     # https://lightning.engineering/api-docs/api/lnd/router/add-invoice/
     async with LNDClient(connection_name=connection_name) as client:
@@ -39,55 +43,113 @@ async def add_invoice(
         return response
 
 
+def b64_hex_transform(plain_str: str) -> str:
+    """Returns the b64 transformed version of a hex string"""
+    a_string = bytes.fromhex(plain_str)
+    return b64encode(a_string).decode()
+
+
+async def add_hold_invoice(
+    value: int,
+    memo: str,
+    connection_name: str = "voltage",
+    pre_image: str = token_hex(32),
+) -> invoicesrpc.AddHoldInvoiceResp:
+    # https://lightning.engineering/api-docs/api/lnd/invoices/add-hold-invoice/#rest
+    async with LNDClient(connection_name=connection_name) as client:
+
+        logger.info(f"pre_image: {pre_image}")
+        payment_hash = sha256(bytes.fromhex(pre_image)).digest()
+
+        request = invoicesrpc.AddHoldInvoiceRequest(
+            value=value, memo=memo, expiry=600, cltv_expiry=18, hash=payment_hash
+        )
+        response: lnrpc.AddHoldInvoiceResp = await client.invoices_stub.AddHoldInvoice(
+            request
+        )
+        add_invoice_response_dict = MessageToDict(
+            response, preserving_proto_field_name=True
+        )
+        logger.info(
+            f"Hold Invoice generated: {memo} {value} sats",
+            extra={"add_invoice_response_dict": add_invoice_response_dict},
+        )
+        return response
+
+
+async def settle_hold_invoice(
+    pre_image: str, connection_name: str = "voltage"
+) -> invoicesrpc.SettleInvoiceResp:
+    async with LNDClient(connection_name=connection_name) as client:
+        request = invoicesrpc.SettleInvoiceRequest(preimage=bytes.fromhex(pre_image))
+        response: invoicesrpc.SettleInvoiceResp = (
+            await client.invoices_stub.SettleInvoice(request)
+        )
+        logger.info(f"Hold Invoice settled with preimage: {pre_image}")
+        return response
+
+
 async def send_payment_v2(
-    payment_request: str, connection_name: str = "umbrel"
+    payment_request: str, connection_name: str = "voltage", pre_image: str = None
 ) -> None:
     # https://lightning.engineering/api-docs/api/lnd/router/send-payment-v2/
     async with LNDClient(connection_name=connection_name) as client:
-        request = routerrpc.SendPaymentRequest(
-            payment_request=payment_request,
-            timeout_seconds=60,
-            fee_limit_sat=1,
-            allow_self_payment=True,
-        )
+        if not pre_image:
+            request = routerrpc.SendPaymentRequest(
+                payment_request=payment_request,
+                timeout_seconds=60,
+                fee_limit_msat=1000,
+                allow_self_payment=True,
+                outgoing_chan_ids=[800082725764071425],
+            )
+        if pre_image:
+            payment_hash = sha256(bytes.fromhex(pre_image)).digest()
+            request = routerrpc.SendPaymentRequest(
+                payment_hash=payment_hash,
+                timeout_seconds=60,
+                fee_limit_msat=1000,
+                allow_self_payment=True,
+                outgoing_chan_ids=[800082725764071425],
+            )
         async for response in client.router_stub.SendPaymentV2(request):
             payment: lnrpc.Payment = response
             payment_dict = MessageToDict(payment, preserving_proto_field_name=True)
             logger.info(
                 f"Status: {lnrpc.Payment.PaymentStatus.Name(payment.status)} - "
-                f"Failure {lnrpc.Failure.FailureCode.Name(payment.failure_reason)}",
+                f"Failure {lnrpc.PaymentFailureReason.Name(payment.failure_reason)}",
                 extra={
                     "notification": False,
                     "payment": payment_dict,
                 },
             )
-            # if payment.payment_error:
-            #     logger.error(f"payment_error: {response.payment_error}")
-            #     return
-
-
-# async def send_to_route_v2(connection_name: str = "umbrel") -> None:
-#     # https://lightning.engineering/api-docs/api/lnd/router/send-to-route-v2/
-#     async with LNDClient(connection_name=connection_name) as client:
-#         request = routerrpc.SendToRouteRequest(
-#             route=[
-#                 routerrpc.RouteHint(
-#                     hop_hints=[
-#                         routerrpc.HopHint(
-#                             node_id="02c1e1c6f1b8e4d6c5e5d6e7b3b1c4c7b8e1b1e3
 
 
 async def main():
     # Add invoice
     # generate a random word
+    connection = "umbrel"
+
     random_word = await fetch_random_word()
-    add_invoice_response = await add_invoice(
-        value=1000, memo=f"Test invoice {random_word}"
+    # add_invoice_response = await add_invoice(
+    #     value=1000, memo=f"Test invoice {random_word}", connection_name=connection
+    # )
+    pre_image = token_hex(32)
+    add_hold_invoice_response = await add_hold_invoice(
+        value=1000,
+        memo=f"Test invoice {random_word}",
+        connection_name=connection,
+        pre_image=pre_image,
     )
-    logger.info(f"invoice: {add_invoice_response.payment_request}")
+    logger.info(f"invoice: {add_hold_invoice_response.payment_request}")
+    add_hold_invoice_response_dict = MessageToDict(
+        add_hold_invoice_response, preserving_proto_field_name=True
+    )
     # Send payment
-    payment_request = add_invoice_response.payment_request
-    await send_payment_v2(payment_request)
+    await asyncio.sleep(10)
+    payment_request = add_hold_invoice_response.payment_request
+    await send_payment_v2(
+        payment_request, connection_name=connection, pre_image=pre_image
+    )
     await asyncio.sleep(0.1)
 
 
