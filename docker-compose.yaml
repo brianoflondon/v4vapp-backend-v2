@@ -7,4 +7,4 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-    command: ["poetry", "run", "python", "lnd_node_monitor.py"]
+    command: ["poetry", "run", "python", "lnd_node_monitor.py", "voltage"]
