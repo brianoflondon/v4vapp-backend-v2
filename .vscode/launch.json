@@ -13,11 +13,25 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "LND Node Monitor",
+            "name": "LND Node Monitor - Voltage",
             "type": "debugpy",
-            "consoleName": "LND Node Monitor",
+            "consoleName": "LND Node Monitor - Voltage",
             "request": "launch",
             "program": "src/lnd_node_monitor.py",
+            "args": [
+                "voltage"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "LND Node Monitor - Umbrel",
+            "type": "debugpy",
+            "consoleName": "LND Node Monitor - Umbrel",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "umbrel"
+            ],
             "console": "integratedTerminal"
         },
         {
