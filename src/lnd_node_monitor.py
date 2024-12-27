@@ -2,10 +2,11 @@ import asyncio
 import inspect
 import json
 from datetime import datetime, timezone
-from typing import AsyncGenerator, List
+from typing import Annotated, AsyncGenerator, List, Optional
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import ValidationError
+import typer
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
@@ -25,9 +26,9 @@ from v4vapp_backend_v2.events.async_event import async_publish
 from v4vapp_backend_v2.database.db import db
 
 config = InternalConfig().config
-
-
 global_tracking = HtlcTrackingList()
+
+app = typer.Typer()
 
 
 def tracking_list_dump():
@@ -266,13 +267,13 @@ async def fill_channel_list(connection_name: str) -> None:
             )
 
 
-async def main() -> None:
+async def run(connection_name: str) -> None:
     try:
-        await fill_channel_list(config.default_connection)
+        await fill_channel_list(connection_name)
         logger.info("Starting Tasks")
         tasks = [
-            subscribe_invoices_loop(config.default_connection),
-            subscribe_htlc_events_loop(config.default_connection),
+            subscribe_invoices_loop(connection_name),
+            subscribe_htlc_events_loop(connection_name),
             tracking_list_dump_loop(),
         ]
         await asyncio.gather(*tasks)
@@ -290,9 +291,44 @@ async def main() -> None:
     logger.info("❌ LND gRPC client stopped")
 
 
+def get_connection_names():
+    # output a list of connection names separated by commas
+    return ", ".join([name for name in config.list_lnd_connections()])
+
+
+@app.command()
+def main(
+    node: Annotated[
+        Optional[str],
+        typer.Argument(
+            help=(
+                f"The node to monitor. If not provided, defaults to the value: "
+                f"{config.default_connection}.\n"
+                f"Choose from: {get_connection_names()}"
+            )
+        ),
+    ] = config.default_connection
+):
+    f"""
+    Main function to run the node monitor.
+    Args:
+        node (Annotated[Optional[str], Argument]): The node to monitor. If not provided,
+        defaults to the value specified in config.default_connection.
+        Choose from:
+        {get_connection_names()}
+
+    Returns:
+        None
+    """
+    logger.info(
+        f"✅ LND gRPC client started. Monitoring node: {node}. Version: {config.version}"
+    )
+    asyncio.run(run(node))
+
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        app()
         logger.info("✅ LND gRPC client stopped")
 
     except KeyboardInterrupt:
