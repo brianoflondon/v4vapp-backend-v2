@@ -40,6 +40,7 @@ class LoggingConfig(BaseModel):
 
 class LndConnectionConfig(BaseModel):
     name: str = ""
+    icon: str = ""
     address: str = ""
     options: list = []
     certs_path: Path = Path(".certs/")
@@ -113,10 +114,34 @@ class Config(BaseModel):
         return [connection.name for connection in self.lnd_connections]
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
+        """
+        Retrieve the LndConnectionConfig for a given connection name.
+
+        Args:
+            connection_name (str): The name of the connection to retrieve.
+
+        Returns:
+            LndConnectionConfig: The configuration for the specified connection.
+
+        Raises:
+            ValueError: If the connection with the specified name is not found.
+        """
         for connection in self.lnd_connections:
             if connection.name == connection_name:
                 return connection
         raise ValueError(f"Connection {connection_name} not found in config")
+
+    def icon(self, connection_name: str) -> str:
+        """
+        Retrieves the icon associated with a given connection name.
+
+        Args:
+            connection_name (str): The name of the connection for which to retrieve the icon.
+
+        Returns:
+            str: The icon associated with the specified connection name.
+        """
+        return self.connection(connection_name).icon
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -286,4 +311,3 @@ class InternalConfig:
         for handler, level in self.config.logging.handlers.items():
             logging.getLogger(handler).addHandler(handler)
             logging.getLogger(handler).setLevel(level)
-

@@ -203,7 +203,9 @@ async def subscribe_htlc_events_loop(connection_name: str) -> None:
                 if invoice:
                     extra["invoice"] = invoice.model_dump(exclude_none=True)
                 log_level = logger.info if complete else logger.debug
-                global_tracking.log_event(htlc_id, log_level, extra)
+                global_tracking.log_event(
+                    htlc_id, log_level, extra=extra, icon=config.icon(connection_name)
+                )
                 if complete:
                     logger.debug(f"✅ Complete group, Delete group {htlc_id}")
                     global_tracking.delete_event(htlc_id)
