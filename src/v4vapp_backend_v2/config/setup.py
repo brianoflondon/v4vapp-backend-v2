@@ -287,7 +287,3 @@ class InternalConfig:
             logging.getLogger(handler).addHandler(handler)
             logging.getLogger(handler).setLevel(level)
 
-        logger.info(
-            f"Starting LND gRPC client v{__version__} config: {self.config.default_connection}",
-            extra={"notification": True},
-        )
