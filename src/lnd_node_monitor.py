@@ -67,36 +67,35 @@ async def tracking_list_dump_loop():
 
 
 async def subscribe_invoices(
-    add_index: int, settle_index: int, connection_name: str
+    add_index: int, settle_index: int, client: LNDClient
 ) -> AsyncGenerator[LNDInvoice, None]:
-    async with LNDClient(connection_name=connection_name) as client:
-        request_sub = lnrpc.InvoiceSubscription(
-            add_index=add_index, settle_index=settle_index
-        )
-        try:
-            async for inv in client.call_async_generator(
-                client.lightning_stub.SubscribeInvoices,
-                request_sub,
-                call_name="SubscribeInvoices",
-            ):
-                inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
-                logger.debug(
-                    f"Raw invoice data\n{json.dumps(inv_dict, indent=2)}",
-                    extra={"invoice_data": inv_dict, "notification": False},
-                )
-                invoice = LNDInvoice.model_validate(inv_dict)
-                yield invoice
-        except LNDSubscriptionError as e:
-            await client.check_connection(
-                original_error=e.original_error, call_name="SubscribeInvoices"
+    request_sub = lnrpc.InvoiceSubscription(
+        add_index=add_index, settle_index=settle_index
+    )
+    try:
+        async for inv in client.call_async_generator(
+            client.lightning_stub.SubscribeInvoices,
+            request_sub,
+            call_name="SubscribeInvoices",
+        ):
+            inv_dict = MessageToDict(inv, preserving_proto_field_name=True)
+            logger.debug(
+                f"Raw invoice data\n{json.dumps(inv_dict, indent=2)}",
+                extra={"invoice_data": inv_dict, "notification": False},
             )
-            raise e
-        except Exception as e:
-            logger.error(e)
-            raise e
+            invoice = LNDInvoice.model_validate(inv_dict)
+            yield invoice
+    except LNDSubscriptionError as e:
+        await client.check_connection(
+            original_error=e.original_error, call_name="SubscribeInvoices"
+        )
+        raise e
+    except Exception as e:
+        logger.error(e)
+        raise e
 
 
-async def subscribe_invoices_loop(connection_name: str) -> None:
+async def subscribe_invoices_loop(client: LNDClient) -> None:
     error_codes: set[str] = set()
     add_index = 0
     settle_index = 0
@@ -104,9 +103,7 @@ async def subscribe_invoices_loop(connection_name: str) -> None:
         logger.debug("Subscribing to invoices")
         logger.debug(f"Add index: {add_index} - Settle index: {settle_index}")
         try:
-            async for invoice in subscribe_invoices(
-                add_index, settle_index, connection_name
-            ):
+            async for invoice in subscribe_invoices(add_index, settle_index, client):
                 tracking_list_dump()
                 add_index = global_tracking.add_invoice(invoice)
                 if error_codes:
@@ -144,52 +141,49 @@ async def subscribe_invoices_loop(connection_name: str) -> None:
 
 
 async def subscribe_htlc_events(
-    connection_name: str,
+    client: LNDClient,
 ) -> AsyncGenerator[HtlcEvent, None]:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
-    async with LNDClient(connection_name=connection_name) as client:
-        request_sub = routerrpc.SubscribeHtlcEventsRequest()
-        try:
-            async for htlc in client.call_async_generator(
-                client.router_stub.SubscribeHtlcEvents,
-                request_sub,
-                call_name="SubscribeHtlcEvents",
-            ):
-                htlc_data = MessageToDict(htlc, preserving_proto_field_name=True)
-                logger.debug(
-                    "RAW htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
+    request_sub = routerrpc.SubscribeHtlcEventsRequest()
+    try:
+        async for htlc in client.call_async_generator(
+            client.router_stub.SubscribeHtlcEvents,
+            request_sub,
+            call_name="SubscribeHtlcEvents",
+        ):
+            htlc_data = MessageToDict(htlc, preserving_proto_field_name=True)
+            logger.debug(
+                "RAW htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
+                extra={"htlc_data": htlc_data},
+            )
+            try:
+                htlc_event = HtlcEvent.model_validate(htlc_data)
+            except ValidationError as e:
+                logger.warning(
+                    "htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
                     extra={"htlc_data": htlc_data},
                 )
-                try:
-                    htlc_event = HtlcEvent.model_validate(htlc_data)
-                except ValidationError as e:
-                    logger.warning(
-                        "htlc_event_data object\n" + json.dumps(htlc_data, indent=2),
-                        extra={"htlc_data": htlc_data},
-                    )
-                    logger.error(e)
-                    continue
-                yield htlc_event
-        except LNDSubscriptionError as e:
-            await client.check_connection(
-                original_error=e.original_error, call_name="SubscribeHtlcEvents"
-            )
-            raise e
-        except Exception as e:
-            logger.error(f"Unexpected error in {inspect.currentframe().f_code.co_name}")
-            logger.error(e)
-            raise e
+                logger.error(e)
+                continue
+            yield htlc_event
+    except LNDSubscriptionError as e:
+        await client.check_connection(
+            original_error=e.original_error, call_name="SubscribeHtlcEvents"
+        )
+        raise e
+    except Exception as e:
+        logger.error(f"Unexpected error in {inspect.currentframe().f_code.co_name}")
+        logger.error(e)
+        raise e
 
 
-async def subscribe_htlc_events_loop(connection_name: str) -> None:
+async def subscribe_htlc_events_loop(client: LNDClient) -> None:
     logger.debug(f"Starting {inspect.currentframe().f_code.co_name}")
-    icon = config.icon(connection_name)
+    icon = client.icon
     while True:
         logger.debug("Subscribing to HTLC events")
         try:
-            async for htlc_event in subscribe_htlc_events(
-                connection_name=connection_name
-            ):
+            async for htlc_event in subscribe_htlc_events(client=client):
                 tracking_list_dump()
                 await asyncio.sleep(0.1)
                 htlc_id = global_tracking.add_event(htlc_event)
@@ -221,73 +215,69 @@ async def subscribe_htlc_events_loop(connection_name: str) -> None:
             raise e
 
 
-async def fill_channel_list(connection_name: str) -> None:
-    async with LNDClient(connection_name=connection_name) as client:
-        # Get the balance of the node
-        balance: lnrpc.ChannelBalanceResponse = await client.call(
-            client.lightning_stub.ChannelBalance,
-            lnrpc.ChannelBalanceRequest(),
-        )
-        balance_dict = MessageToDict(balance, preserving_proto_field_name=True)
-        # Get the list of channels
-        channels = await client.call(
-            client.lightning_stub.ListChannels,
-            lnrpc.ListChannelsRequest(),
-        )
-        channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-        tasks = []
-        # Get the info about this node
-        get_info: lnrpc.GetInfoResponse = await client.call(
-            client.lightning_stub.GetInfo,
-            lnrpc.GetInfoRequest(),
-        )
-        get_info_dict = MessageToDict(get_info, preserving_proto_field_name=True)
-        own_pub_key = get_info.identity_pubkey
+async def fill_channel_list(client: LNDClient) -> None:
+    # Get the balance of the node
+    balance: lnrpc.ChannelBalanceResponse = await client.call(
+        client.lightning_stub.ChannelBalance,
+        lnrpc.ChannelBalanceRequest(),
+    )
+    balance_dict = MessageToDict(balance, preserving_proto_field_name=True)
+    # Get the list of channels
+    channels = await client.call(
+        client.lightning_stub.ListChannels,
+        lnrpc.ListChannelsRequest(),
+    )
+    channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+    tasks = []
+    # Get the info about this node
+    get_info: lnrpc.GetInfoResponse = await client.node_get_info
+    get_info_dict = MessageToDict(get_info, preserving_proto_field_name=True)
+    own_pub_key = get_info.identity_pubkey
+    logger.info(
+        f"Local Balance: {balance.local_balance.sat:,.0f} sats",
+        extra={"balance": balance_dict},
+    )
+    logger.info(f"Own pub key: {own_pub_key}", extra={"get_info": get_info_dict})
 
+    # Get the name of each channel
+    for channel in channels_dict.get("channels", []):
+        tasks.append(
+            get_channel_name(
+                channel_id=int(channel["chan_id"]),
+                client=client,
+                own_pub_key=own_pub_key,
+            )
+        )
+    names_list: List[ChannelName] = await asyncio.gather(*tasks)
+    for channel_name in names_list:
+        global_tracking.add_name(channel_name)
         logger.info(
-            f"Local Balance: {balance.local_balance.sat:,.0f} sats",
-            extra={"balance": balance_dict},
+            f"Channel {channel_name.channel_id} -> {channel_name.name}",
+            extra={"channel_name": channel_name.model_dump()},
         )
-        logger.info(f"Own pub key: {own_pub_key}", extra={"get_info": get_info_dict})
-
-        # Get the name of each channel
-        for channel in channels_dict.get("channels", []):
-            tasks.append(
-                get_channel_name(
-                    int(channel["chan_id"]),
-                    connection_name,
-                    own_pub_key=own_pub_key,
-                )
-            )
-        names_list: List[ChannelName] = await asyncio.gather(*tasks)
-        for channel_name in names_list:
-            global_tracking.add_name(channel_name)
-            logger.info(
-                f"Channel {channel_name.channel_id} -> {channel_name.name}",
-                extra={"channel_name": channel_name.model_dump()},
-            )
 
 
 async def run(connection_name: str) -> None:
-    try:
-        await fill_channel_list(connection_name)
-        logger.info("Starting Tasks")
-        tasks = [
-            subscribe_invoices_loop(connection_name),
-            subscribe_htlc_events_loop(connection_name),
-            tracking_list_dump_loop(),
-        ]
-        await asyncio.gather(*tasks)
+    async with LNDClient(connection_name=connection_name) as client:
+        try:
+            await fill_channel_list(client=client)
+            logger.info("Starting Tasks")
+            tasks = [
+                subscribe_invoices_loop(client=client),
+                subscribe_htlc_events_loop(client=client),
+                tracking_list_dump_loop(),
+            ]
+            await asyncio.gather(*tasks)
 
-    except KeyboardInterrupt:
-        logger.warning("❌ LND gRPC client stopped keyboard")
-    except LNDFatalError as e:
-        logger.error("❌ LND gRPC client stopped fatal error")
-        raise e
-    except Exception as e:
-        logger.error("❌ LND gRPC client stopped error")
-        logger.error(e)
-        raise e
+        except KeyboardInterrupt:
+            logger.warning("❌ LND gRPC client stopped keyboard")
+        except LNDFatalError as e:
+            logger.error("❌ LND gRPC client stopped fatal error")
+            raise e
+        except Exception as e:
+            logger.error("❌ LND gRPC client stopped error")
+            logger.error(e)
+            raise e
 
     logger.info("❌ LND gRPC client stopped")
 
