@@ -7,6 +7,8 @@
     "cmake.configureOnOpen": true,
     "cSpell.words": [
         "htlc",
+        "invoicesrpc",
+        "invoicesstub",
         "lnrpc",
         "routerrpc",
         "routerstub"
