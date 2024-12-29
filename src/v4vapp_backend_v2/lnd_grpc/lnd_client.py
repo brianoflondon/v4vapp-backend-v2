@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from typing import Any, AsyncGenerator, Callable
 
@@ -50,12 +51,33 @@ class LNDClient:
         self.error_state: bool = False
         self.error_code: str | None = None
         self.connection_check_task: asyncio.Task[Any] | None = None
+        self.get_info: lnrpc.GetInfoResponse | None = None
+        self.setup()
+
+    async def __aenter__(self):
+        if os.getenv("TESTING") == "True" or self.get_info is not None:
+            return self
+        try:
+            self.get_info = await self.node_get_info
+        except LNDConnectionError as e:
+            logger.warning(f"Error getting node info {e}", exc_info=True)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        logger.debug("Disconnecting from LND (async)")
+        if self.connection_check_task is not None:
+            self.connection_check_task.cancel()
+            try:
+                await self.connection_check_task
+            except asyncio.CancelledError:
+                pass
+        await self.disconnect()
 
     def metadata_callback(self, context, callback):
         # for more info see grpc docs
         callback([("macaroon", self.connection.macaroon)], None)
 
-    async def connect(self):
+    def setup(self):
         try:
             logger.debug("Connecting to LND")
 
@@ -80,6 +102,33 @@ class LNDClient:
             logger.error(e)
             raise LNDStartupError("Error starting LND connection")
 
+    def icon(self) -> str:
+        return self.connection.icon
+
+    @property
+    async def node_get_info(self) -> lnrpc.GetInfoResponse:
+        """
+        Retrieve the information about the node.
+
+        This function establishes a synchronous connection to an LND (Lightning Network
+        Daemon) client using the provided connection name. It then calls the `GetInfo`
+        method on the client's lightning stub to obtain information about the node.
+
+        Returns:
+            lnrpc.GetInfoResponse: The response from the `GetInfo` method.
+        """
+        try:
+            if self.get_info is not None:
+                return self.get_info
+            self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
+                lnrpc.GetInfoRequest()
+            )
+            logger.info("Calling get_info")
+            return self.get_info
+        except Exception as e:
+            logger.error(f"Error getting node info {e}", exc_info=True)
+            raise LNDConnectionError(f"Error getting node info {e}")
+
     async def disconnect(self):
         if self.channel is not None:
             await self.channel.close()
@@ -95,7 +144,7 @@ class LNDClient:
         error_count = 0
         back_off_time = 1
         if self.lightning_stub is None:
-            await self.connect()
+            self.setup()
         while True:
             try:
                 if self.lightning_stub is not None:
@@ -148,20 +197,6 @@ class LNDClient:
                 extra={"notification": False},
             )
             await asyncio.sleep(back_off_time)
-
-    async def __aenter__(self):
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        logger.debug("Disconnecting from LND")
-        if self.connection_check_task is not None:
-            self.connection_check_task.cancel()
-            try:
-                await self.connection_check_task
-            except asyncio.CancelledError:
-                pass
-        await self.disconnect()
 
     # @backoff.on_exception(
     #     lambda: backoff.expo(base=2, factor=1),

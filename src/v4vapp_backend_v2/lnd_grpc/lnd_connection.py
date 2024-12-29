@@ -20,6 +20,7 @@ Notes: tls cert for Umbrel /home/umbrel/umbrel/app-data/lightning/data/lnd
 
 class LNDConnectionSettings:
     name: str
+    icon: str
     address: str
     options: list
     macaroon: bytes

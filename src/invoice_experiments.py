@@ -128,27 +128,35 @@ async def main():
     # Add invoice
     # generate a random word
     connection = "umbrel"
+    hold_invoice = False
 
     random_word = await fetch_random_word()
-    # add_invoice_response = await add_invoice(
-    #     value=1000, memo=f"Test invoice {random_word}", connection_name=connection
-    # )
-    pre_image = token_hex(32)
-    add_hold_invoice_response = await add_hold_invoice(
-        value=1000,
-        memo=f"Test invoice {random_word}",
-        connection_name=connection,
-        pre_image=pre_image,
-    )
-    logger.info(f"invoice: {add_hold_invoice_response.payment_request}")
-    add_hold_invoice_response_dict = MessageToDict(
-        add_hold_invoice_response, preserving_proto_field_name=True
-    )
-    # Send payment
+    if not hold_invoice:
+        add_invoice_response = await add_invoice(
+            value=1000, memo=f"Test invoice {random_word}", connection_name=connection
+        )
+        logger.info(f"invoice: {add_invoice_response.payment_request}")
+        payment_request = add_invoice_response.payment_request
+    else:
+        pre_image = token_hex(32)
+        add_hold_invoice_response = await add_hold_invoice(
+            value=1000,
+            memo=f"Test invoice {random_word}",
+            connection_name=connection,
+            pre_image=pre_image,
+        )
+        logger.info(f"invoice: {add_hold_invoice_response.payment_request}")
+        add_hold_invoice_response_dict = MessageToDict(
+            add_hold_invoice_response, preserving_proto_field_name=True
+        )
+        logger.info(
+            f"add_hold_invoice_response_dict: {add_hold_invoice_response_dict}",
+            extra={"notification": False},
+        )
+
     await asyncio.sleep(10)
-    payment_request = add_hold_invoice_response.payment_request
     await send_payment_v2(
-        payment_request, connection_name=connection, pre_image=pre_image
+        payment_request, connection_name=connection
     )
     await asyncio.sleep(0.1)
 
