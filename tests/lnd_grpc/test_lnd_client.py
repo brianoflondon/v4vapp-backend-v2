@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import backoff
 import pytest
 from grpc.aio import AioRpcError
 from google.protobuf.json_format import Parse
@@ -168,8 +167,6 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
 async def test_node_get_info(set_base_config_path: None):
     with open("tests/data/node_get_info_response.json") as f:
         json_data = f.read()
-
-    response_data = json.loads(json_data)
 
     mock_response = Parse(json_data, lnrpc.GetInfoResponse())
     mock_method = AsyncMock(return_value=mock_response)
