@@ -102,7 +102,10 @@ class LNDClient:
             logger.error(e)
             raise LNDStartupError("Error starting LND connection")
 
+    @property
     def icon(self) -> str:
+        if self.connection.icon is None:
+            return "-"
         return self.connection.icon
 
     @property
@@ -123,7 +126,7 @@ class LNDClient:
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
                 lnrpc.GetInfoRequest()
             )
-            logger.info("Calling get_info")
+            logger.info(f"{self.icon} Calling get_info")
             return self.get_info
         except Exception as e:
             logger.error(f"Error getting node info {e}", exc_info=True)
@@ -134,6 +137,8 @@ class LNDClient:
             await self.channel.close()
             self.channel = None
             self.lightning_stub = None
+            self.router_stub = None
+            self.invoices_stub = None
 
     async def check_connection(
         self,
@@ -166,13 +171,13 @@ class LNDClient:
                     self.error_code = None
                     return
                 else:
-                    logger.warning("LNDClient stub is None")
+                    logger.warning(f"{self.icon} LNDClient stub is None")
             except AioRpcError as e:
                 if original_error is not None:
                     e = original_error
                     message = e.debug_error_string()
                 else:
-                    message = f"Error in {call_name} RPC call: {get_error_code(e)}"
+                    message = f"{self.icon} Error in {call_name} RPC call: {get_error_code(e)}"
                     original_error = e
                 logger.error(
                     message,
@@ -185,7 +190,7 @@ class LNDClient:
                 self.error_state = True
             error_count += 1
             if error_count >= max_tries:
-                message = f"Too many errors in {call_name} RPC call ({error_count})"
+                message = f"{self.icon} Too many errors in {call_name} RPC call ({error_count})"
                 logger.error(
                     message,
                     extra={"notification": True},
@@ -220,7 +225,7 @@ class LNDClient:
                 )
                 raise LNDFatalError(message)
             logger.warning(
-                f"Error in {method} RPC call: {e.code()}",
+                f"{self.icon} Error in {method} RPC call: {e.code()}",
                 extra={
                     "notification": True,
                     "error_code": get_error_code(e),
@@ -261,7 +266,7 @@ class LNDClient:
             if self.error_state:
                 logger.error(f"broken connection in {call_name} RPC call: {e.code()}")
             raise LNDSubscriptionError(
-                message=f"Error in {call_name} RPC call",
+                message=f"{self.icon} Error in {call_name} RPC call",
                 rpc_error_code=e.code(),
                 rpc_error_details=e.details(),
                 call_name=call_name,
@@ -280,12 +285,12 @@ class LNDClient:
         try:
             method = getattr(self.lightning_stub, method_name)
         except AttributeError:
-            raise ValueError(f"Invalid method name: {method_name}")
+            raise ValueError(f"{self.icon} Invalid method name: {method_name}")
 
         try:
             return await method(request)
         except AioRpcError as e:
-            logger.error(f"Error in {method_name} RPC call: {e.code()}")
+            logger.error(f"{self.icon} Error in {method_name} RPC call: {e.code()}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")
 
     @backoff.on_exception(
@@ -303,6 +308,7 @@ class LNDClient:
                     yield response
                 break  # if the method call was successful, break the loop
 
+
         # except AttributeError:
         #     raise ValueError(f"Invalid method name: {method_name}")
 
@@ -310,9 +316,11 @@ class LNDClient:
         #     if e.code() == grpc.StatusCode.UNAVAILABLE:
         #         raise LNDConnectionError(f"Error in {method_name} RPC call") from e
         except AioRpcError as e:
-            logger.error(f"Error in {method_name} RPC call: {e.code()}")
-            raise LNDConnectionError(f"Error in {method_name} RPC call")
+            message = f"{self.icon} Error in {method_name} RPC call: {e.code()}"
+            logger.error(message)
+            raise LNDConnectionError(f"{self.icon} Error in {method_name} RPC call")
 
         except Exception as e:
-            logger.error(f"Error in {method_name} RPC call: {e}")
+            message = f"{self.icon} Error in {method_name} RPC call: {e}"
+            logger.error(message)
             raise LNDConnectionError(f"Error in {method_name} RPC call")

@@ -234,10 +234,13 @@ async def fill_channel_list(client: LNDClient) -> None:
     get_info_dict = MessageToDict(get_info, preserving_proto_field_name=True)
     own_pub_key = get_info.identity_pubkey
     logger.info(
-        f"Local Balance: {balance.local_balance.sat:,.0f} sats",
+        f"{client.icon} " f"Local Balance: {balance.local_balance.sat:,.0f} sats",
         extra={"balance": balance_dict},
     )
-    logger.info(f"Own pub key: {own_pub_key}", extra={"get_info": get_info_dict})
+    logger.info(
+        (f"{client.icon} " f"Own pub key: {own_pub_key}"),
+        extra={"get_info": get_info_dict},
+    )
 
     # Get the name of each channel
     for channel in channels_dict.get("channels", []):
@@ -252,7 +255,10 @@ async def fill_channel_list(client: LNDClient) -> None:
     for channel_name in names_list:
         global_tracking.add_name(channel_name)
         logger.info(
-            f"Channel {channel_name.channel_id} -> {channel_name.name}",
+            (
+                f"{client.icon} "
+                f"Channel {channel_name.channel_id} -> {channel_name.name}"
+            ),
             extra={"channel_name": channel_name.model_dump()},
         )
 
