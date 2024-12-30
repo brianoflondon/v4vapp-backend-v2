@@ -13,7 +13,9 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_channel_name,
+)
 from v4vapp_backend_v2.models.htlc_event_models import (
     ChannelName,
     HtlcEvent,

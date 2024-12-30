@@ -442,7 +442,7 @@ class HtlcTrackingList(BaseModel):
         else:
             sent_via = "Unknown"
 
-        message_str = f"⚡️ Sent {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
+        message_str = f"{start_message} {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:

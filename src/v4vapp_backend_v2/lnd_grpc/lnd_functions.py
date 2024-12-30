@@ -109,11 +109,6 @@ async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -
             client.lightning_stub.DecodePayReq,
             decode_request,
         )
-        # Used to generate test data
-        # with open("tests/data/decode_pay_req_response.json", "w") as f:
-        #     json.dump(
-        #         MessageToDict(decode_response, preserving_proto_field_name=True), f
-        #     )
 
         decoded_pay_req = MessageToDict(
             decode_response, preserving_proto_field_name=True
@@ -125,7 +120,7 @@ async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -
 
         # Get the node info of the destination node
         node_info = await get_node_info(destination_pub_key, client)
-        return node_info.node.alias
+        return node_info.node.alias or destination_pub_key[:10]
     except Exception as e:
         logger.exception(e)
         return "Unknown"
