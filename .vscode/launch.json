@@ -13,11 +13,44 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "context manager",
+            "name": "Voltage",
             "type": "debugpy",
-            "consoleName": "context manager",
+            "consoleName": "Voltage",
             "request": "launch",
-            "program": "src/context_manager.py",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "voltage"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel",
+            "type": "debugpy",
+            "consoleName": "Umbrel",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "umbrel"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel Proxy",
+            "type": "debugpy",
+            "consoleName": "Umbrel Proxy",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "umbrel-proxy"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Invoice Experiments",
+            "type": "debugpy",
+            "consoleName": "Invoice Experiments",
+            "request": "launch",
+            "program": "src/invoice_experiments.py",
             "console": "integratedTerminal"
         }
     ]

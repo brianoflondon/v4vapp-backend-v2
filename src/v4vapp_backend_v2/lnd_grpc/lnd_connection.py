@@ -20,6 +20,7 @@ Notes: tls cert for Umbrel /home/umbrel/umbrel/app-data/lightning/data/lnd
 
 class LNDConnectionSettings:
     name: str
+    icon: str
     address: str
     options: list
     macaroon: bytes
@@ -35,10 +36,11 @@ class LNDConnectionSettings:
             raise LNDStartupError(message)
 
         if lnd_config.use_proxy:
-            os.environ["http_proxy"] = lnd_config.use_proxy
             self.use_proxy = lnd_config.use_proxy
+            os.environ["http_proxy"] = lnd_config.use_proxy
             logger.debug(f"Using proxy: {lnd_config.use_proxy}")
-
+        self.name = lnd_config.name
+        self.icon = lnd_config.icon
         self.address = lnd_config.address
         options_dict = lnd_config.options
         options_tuples = [
