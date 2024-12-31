@@ -26,7 +26,7 @@ app = typer.Typer()
 
 async def invoice_report(invoice: lnrpc.Invoice, client: LNDClient) -> None:
     logger.info(
-        f"{client.icon} Invoice: {invoice.add_index} amount: {invoice.value} sat {invoice.settle_index}",
+        f"{client.icon} Invoice: {invoice.add_index:>6} amount: {invoice.value:>10,} sat {invoice.settle_index}",
         extra={"invoice": MessageToDict(invoice, preserving_proto_field_name=True)},
     )
 
@@ -40,8 +40,8 @@ async def payment_report(payment: lnrpc.Payment, client: LNDClient) -> None:
     in_flight_time = datetime.now(tz=timezone.utc) - creation_date
     logger.info(
         (
-            f"{client.icon} Payment: {payment.payment_index} "
-            f"amount: {payment.value_sat:,} sat "
+            f"{client.icon} Payment: {payment.payment_index:>6} "
+            f"amount: {payment.value_sat:>10,} sat "
             f"pre_image: {pre_image} "
             f"in flight time: {in_flight_time} "
             f"created: {creation_date} status: {status}"
@@ -63,7 +63,7 @@ async def htlc_event_report(htlc_event: routerrpc.HtlcEvent, client: LNDClient) 
         else None
     )
     logger.info(
-        (f"{client.icon} htlc:   {htlc_id} {event_type} {preimage}"),
+        (f"{client.icon} htlc:    {htlc_id:>6} {event_type} {preimage}"),
         extra={
             "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True)
         },
