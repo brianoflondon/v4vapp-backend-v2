@@ -134,7 +134,8 @@ class LNDClient:
 
     async def disconnect(self):
         if self.channel is not None:
-            await self.channel.close()
+            await self.channel.close(grace=2)
+            print(f"{self.icon} Disconnecting from LND")
             self.channel = None
             self.lightning_stub = None
             self.router_stub = None
@@ -151,6 +152,7 @@ class LNDClient:
         if self.lightning_stub is None:
             self.setup()
         while True:
+            self.setup()
             try:
                 if self.lightning_stub is not None:
                     _ = await self.lightning_stub.WalletBalance(
@@ -236,7 +238,7 @@ class LNDClient:
 
     async def call_async_generator(
         self, method: Callable[..., AsyncGenerator[Any, None]], *args, **kwargs
-    ):
+    ) -> AsyncGenerator[Any, None]:
         """
         Calls the specified asynchronous generator method and yields the responses.
         If the name of the `call_name` is passed as a keyword argument, it will be
@@ -307,7 +309,6 @@ class LNDClient:
                 async for response in method(request):
                     yield response
                 break  # if the method call was successful, break the loop
-
 
         # except AttributeError:
         #     raise ValueError(f"Invalid method name: {method_name}")

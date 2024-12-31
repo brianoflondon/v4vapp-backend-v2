@@ -290,11 +290,6 @@ async def run(connection_name: str) -> None:
     logger.info("❌ LND gRPC client stopped")
 
 
-def get_connection_names():
-    # output a list of connection names separated by commas
-    return ", ".join([name for name in config.list_lnd_connections()])
-
-
 @app.command()
 def main(
     node: Annotated[
@@ -303,7 +298,7 @@ def main(
             help=(
                 f"The node to monitor. If not provided, defaults to the value: "
                 f"{config.default_connection}.\n"
-                f"Choose from: {get_connection_names()}"
+                f"Choose from: {config.connection_names}"
             )
         ),
     ] = config.default_connection
@@ -314,7 +309,7 @@ def main(
         node (Annotated[Optional[str], Argument]): The node to monitor. If not provided,
         defaults to the value specified in config.default_connection.
         Choose from:
-        {get_connection_names()}
+        {config.connection_names}
 
     Returns:
         None

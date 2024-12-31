@@ -110,8 +110,18 @@ class Config(BaseModel):
             raise ValueError("Default connection not found in lnd_connections")
         return v
 
-    def list_lnd_connections(self) -> List[str]:
+    def list_connection_names(self) -> List[str]:
         return [connection.name for connection in self.lnd_connections]
+
+    @property
+    def connection_names(self) -> str:
+        """
+        Retrieve a list of connection names from the lnd_connections attribute.
+
+        Returns:
+            str: A list containing the names of all connections separated by ,.
+        """
+        return ", ".join([name for name in self.list_connection_names()])
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
         """
@@ -204,6 +214,10 @@ class InternalConfig:
             self.setup_config()
             self.setup_logging()
             self._initialized = True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.notification_loop:
+            self.notification_loop.close()
 
     def setup_config(self) -> None:
         try:

@@ -198,7 +198,6 @@ class CustomNotificationHandler(logging.Handler):
             self.sender.send_notification(log_message, record, alert_level=10)
 
 
-
 class NotificationFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:

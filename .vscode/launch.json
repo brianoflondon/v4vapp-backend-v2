@@ -13,6 +13,50 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "CLI Help",
+            "type": "debugpy",
+            "consoleName": "CLI Help",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--help"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel-proxy Monitor v2",
+            "type": "debugpy",
+            "consoleName": "Umbrel-proxy Monitor v2",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "umbrel-proxy"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel Monitor v2",
+            "type": "debugpy",
+            "consoleName": "Umbrel Monitor v2",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "umbrel"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Voltage Monitor v2",
+            "type": "debugpy",
+            "consoleName": "Voltage Monitor v2",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "voltage"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Voltage",
             "type": "debugpy",
             "consoleName": "Voltage",
