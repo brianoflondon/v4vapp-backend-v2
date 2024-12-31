@@ -15,10 +15,59 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
+from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
+from v4vapp_backend_v2.events.event_models import Events
+
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
 
 app = typer.Typer()
+
+
+async def invoice_report(invoice: lnrpc.Invoice, client: LNDClient) -> None:
+    logger.info(
+        f"{client.icon} Invoice: {invoice.add_index} amount: {invoice.value} sat {invoice.settle_index}",
+        extra={"invoice": MessageToDict(invoice, preserving_proto_field_name=True)},
+    )
+
+
+async def payment_report(payment: lnrpc.Payment, client: LNDClient) -> None:
+    status = lnrpc.Payment.PaymentStatus.Name(payment.status)
+    creation_date = datetime.fromtimestamp(
+        payment.creation_time_ns / 1e9, tz=timezone.utc
+    )
+    pre_image = payment.payment_preimage if payment.payment_preimage else None
+    in_flight_time = datetime.now(tz=timezone.utc) - creation_date
+    logger.info(
+        (
+            f"{client.icon} Payment: {payment.payment_index} "
+            f"amount: {payment.value_sat:,} sat "
+            f"pre_image: {pre_image} "
+            f"in flight time: {in_flight_time} "
+            f"created: {creation_date} status: {status}"
+        ),
+        extra={"payment": MessageToDict(payment, preserving_proto_field_name=True)},
+    )
+
+
+async def htlc_event_report(htlc_event: routerrpc.HtlcEvent, client: LNDClient) -> None:
+    event_type = (
+        routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
+        if htlc_event.event_type
+        else None
+    )
+    htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
+    preimage = (
+        htlc_event.settle_event.preimage.hex()
+        if htlc_event.settle_event.preimage != b""
+        else None
+    )
+    logger.info(
+        (f"{client.icon} htlc:   {htlc_id} {event_type} {preimage}"),
+        extra={
+            "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True)
+        },
+    )
 
 
 async def invoices_loop(client: LNDClient) -> None:
@@ -33,18 +82,13 @@ async def invoices_loop(client: LNDClient) -> None:
     request_sub = lnrpc.InvoiceSubscription(add_index=0, settle_index=0)
     while True:
         try:
-            async for inv in client.call_async_generator(
+            async for invoice in client.call_async_generator(
                 client.lightning_stub.SubscribeInvoices,
                 request_sub,
                 call_name="SubscribeInvoices",
             ):
-                inv: lnrpc.Invoice
-                logger.info(
-                    f"{client.icon} Invoice: {inv.add_index} amount: {inv.value} sat {inv.settle_index}",
-                    extra={
-                        "invoice": MessageToDict(inv, preserving_proto_field_name=True)
-                    },
-                )
+                invoice: lnrpc.Invoice
+                async_publish(Events.LND_INVOICE, invoice, client)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeInvoices"
@@ -68,24 +112,7 @@ async def payments_loop(client: LNDClient) -> None:
                 call_name="TrackPayments",
             ):
                 payment: lnrpc.Payment
-                status = lnrpc.Payment.PaymentStatus.Name(payment.status)
-                creation_date = datetime.fromtimestamp(
-                    payment.creation_time_ns / 1e9, tz=timezone.utc
-                )
-                in_flight_time = datetime.now(tz=timezone.utc) - creation_date
-                logger.info(
-                    (
-                        f"{client.icon} Payment: {payment.payment_index} "
-                        f"amount: {payment.value_sat:,} sat "
-                        f"in flight time: {in_flight_time} "
-                        f"created: {creation_date} status: {status}"
-                    ),
-                    extra={
-                        "payment": MessageToDict(
-                            payment, preserving_proto_field_name=True
-                        )
-                    },
-                )
+                async_publish(Events.LND_PAYMENT, payment, client)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="TrackPayments"
@@ -109,16 +136,7 @@ async def htlc_events_loop(client: LNDClient) -> None:
                 call_name="SubscribeHtlcEvents",
             ):
                 htlc_event: routerrpc.HtlcEvent
-                logger.info(
-                    (
-                        f"{client.icon} htlc:   {htlc_event.incoming_htlc_id} {htlc_event.event_type} "
-                    ),
-                    extra={
-                        "htlc_event": MessageToDict(
-                            htlc_event, preserving_proto_field_name=True
-                        )
-                    },
-                )
+                async_publish(Events.HTLC_EVENT, htlc_event, client)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeHtlcEvents"
@@ -162,6 +180,9 @@ async def run(connection_name: str) -> None:
             logger.info(
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
             )
+        async_subscribe(Events.LND_INVOICE, invoice_report)
+        async_subscribe(Events.LND_PAYMENT, payment_report)
+        async_subscribe(Events.HTLC_EVENT, htlc_event_report)
         tasks = [invoices_loop(client), payments_loop(client), htlc_events_loop(client)]
         try:
             await asyncio.gather(*tasks)

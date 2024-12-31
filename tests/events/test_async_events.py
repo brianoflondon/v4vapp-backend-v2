@@ -26,12 +26,12 @@ async def test_async_subscribe():
         print("Subscriber2 called with", x, y)
         pass
 
-    async_subscribe(Events.LND_INVOICE_CREATED, subscriber)
-    async_subscribe(Events.LND_INVOICE_CREATED, subscriber2)
+    async_subscribe(Events.LND_INVOICE, subscriber)
+    async_subscribe(Events.LND_INVOICE, subscriber2)
     subscribers = get_subscribers()
-    assert Events.LND_INVOICE_CREATED in subscribers
-    assert subscriber in subscribers[Events.LND_INVOICE_CREATED]
-    assert subscriber2 in subscribers[Events.LND_INVOICE_CREATED]
+    assert Events.LND_INVOICE in subscribers
+    assert subscriber in subscribers[Events.LND_INVOICE]
+    assert subscriber2 in subscribers[Events.LND_INVOICE]
 
 
 @pytest.mark.asyncio
@@ -44,14 +44,14 @@ async def test_async_publish():
         print("Subscriber2 called with", x, y, z)
         pass
 
-    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
-    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber2)
+    async_subscribe(Events.LND_PAYMENT, subscriber)
+    async_subscribe(Events.LND_PAYMENT, subscriber2)
     print("Subscribers", get_subscribers())
-    async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
+    async_publish(Events.LND_PAYMENT, 1, 2)
     subscribers = get_subscribers()
-    assert Events.LND_PAYMENT_RECEIVED in subscribers
-    assert subscriber in subscribers[Events.LND_PAYMENT_RECEIVED]
-    assert subscriber2 in subscribers[Events.LND_PAYMENT_RECEIVED]
+    assert Events.LND_PAYMENT in subscribers
+    assert subscriber in subscribers[Events.LND_PAYMENT]
+    assert subscriber2 in subscribers[Events.LND_PAYMENT]
 
 
 @pytest.mark.asyncio
@@ -60,12 +60,12 @@ async def test_async_publish_wrong_args():
         print("Subscriber called with", x, y)
         pass
 
-    async_subscribe(Events.LND_PAYMENT_RECEIVED, subscriber)
+    async_subscribe(Events.LND_PAYMENT, subscriber)
     try:
-        async_publish(Events.LND_PAYMENT_RECEIVED, 1)
+        async_publish(Events.LND_PAYMENT, 1)
     except Exception as e:
         print(e)
-    async_publish(Events.LND_PAYMENT_RECEIVED, 1, 2)
+    async_publish(Events.LND_PAYMENT, 1, 2)
     subscribers = get_subscribers()
-    assert Events.LND_PAYMENT_RECEIVED in subscribers
-    assert subscriber in subscribers[Events.LND_PAYMENT_RECEIVED]
+    assert Events.LND_PAYMENT in subscribers
+    assert subscriber in subscribers[Events.LND_PAYMENT]
