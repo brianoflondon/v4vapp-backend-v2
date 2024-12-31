@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import signal
 import typer
 import sys
 import asyncio
@@ -16,7 +15,8 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
-config = InternalConfig().config
+INTERNAL_CONFIG = InternalConfig()
+CONFIG = INTERNAL_CONFIG.config
 
 app = typer.Typer()
 
@@ -99,6 +99,39 @@ async def payments_loop(client: LNDClient) -> None:
             raise e
 
 
+async def htlc_events_loop(client: LNDClient) -> None:
+    request = routerrpc.SubscribeHtlcEventsRequest()
+    while True:
+        try:
+            async for htlc_event in client.call_async_generator(
+                client.router_stub.SubscribeHtlcEvents,
+                request,
+                call_name="SubscribeHtlcEvents",
+            ):
+                htlc_event: routerrpc.HtlcEvent
+                logger.info(
+                    (
+                        f"{client.icon} htlc:   {htlc_event.incoming_htlc_id} {htlc_event.event_type} "
+                    ),
+                    extra={
+                        "htlc_event": MessageToDict(
+                            htlc_event, preserving_proto_field_name=True
+                        )
+                    },
+                )
+        except LNDSubscriptionError as e:
+            await client.check_connection(
+                original_error=e.original_error, call_name="SubscribeHtlcEvents"
+            )
+            pass
+        except LNDConnectionError as e:
+            # Raised after the max number of retries is reached.
+            logger.error(
+                "🔴 Connection error in payments_loop", exc_info=e, stack_info=True
+            )
+            raise e
+
+
 async def transactions_loop(client: LNDClient) -> None:
     request_sub = lnrpc.GetTransactionsRequest(
         start_height=0,
@@ -129,22 +162,13 @@ async def run(connection_name: str) -> None:
             logger.info(
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
             )
-        tasks = [
-            invoices_loop(client),
-            payments_loop(client),
-        ]
+        tasks = [invoices_loop(client), payments_loop(client), htlc_events_loop(client)]
         try:
             await asyncio.gather(*tasks)
         except (asyncio.CancelledError, KeyboardInterrupt):
             print("👋 Received signal to stop. Exiting...")
             await client.channel.close()
-            InternalConfig().__exit__(None, None, None)
-            # sys.exit(0)
-
-
-def signal_handler(signal, frame):
-    logger.info("👋 Received signal to stop. Exiting...")
-    sys.exit(0)
+            INTERNAL_CONFIG.__exit__(None, None, None)
 
 
 @app.command()
@@ -154,25 +178,25 @@ def main(
         typer.Argument(
             help=(
                 f"The node to monitor. If not provided, defaults to the value: "
-                f"{config.default_connection}.\n"
-                f"Choose from: {config.connection_names}"
+                f"{CONFIG.default_connection}.\n"
+                f"Choose from: {CONFIG.connection_names}"
             )
         ),
-    ] = config.default_connection
+    ] = CONFIG.default_connection
 ):
     f"""
     Main function to run the node monitor.
     Args:
         node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
-        {config.connection_names}
+        {CONFIG.connection_names}
 
     Returns:
         None
     """
-    icon = config.icon(node)
+    icon = CONFIG.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {config.version}"
+        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
     )
     asyncio.run(run(node))
     print("👋 Goodbye!")
