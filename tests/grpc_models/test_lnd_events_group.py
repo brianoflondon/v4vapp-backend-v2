@@ -6,7 +6,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from v4vapp_backend_v2.grpc_models.lnd_events_group import LndEventsGroup
 
 
-def read_log_file_htlc_events(
+def read_log_file(
     file_path: str,
 ) -> Generator[routerrpc.HtlcEvent | lnrpc.Invoice | lnrpc.Payment, None, None]:
     with open(file_path, "r") as file:
@@ -28,7 +28,7 @@ def read_log_file_htlc_events(
 
 def test_lnd_events_group():
     lnd_events_group = LndEventsGroup()
-    for event in read_log_file_htlc_events(
+    for event in read_log_file(
         "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
     ):
         if isinstance(event, routerrpc.HtlcEvent):
