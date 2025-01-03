@@ -1,13 +1,17 @@
+import json
+import pickle
 from google.protobuf.json_format import MessageToDict
 
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as ln
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.models.htlc_event_models import ChannelName
 
 
 async def get_channel_name(
-    channel_id: int, connection_name: str, own_pub_key: str = None
+    channel_id: int,
+    client: LNDClient = None,
+    own_pub_key: str = None,
 ) -> ChannelName:
     """
     Asynchronously retrieves the name of a channel given its ID and connection name.
@@ -27,57 +31,96 @@ async def get_channel_name(
     """
     if not channel_id:
         return ChannelName(channel_id=0, name="Unknown")
-    async with LNDClient(connection_name=connection_name) as client:
-        request = ln.ChanInfoRequest(chan_id=channel_id)
-        try:
-            response = await client.call(
-                client.lightning_stub.GetChanInfo,
-                request,
-            )
-            chan_info = MessageToDict(response, preserving_proto_field_name=True)
-            node1_pub = chan_info.get("node1_pub")
-            node2_pub = chan_info.get("node2_pub")
 
-            if not own_pub_key:
-                own_pub_key = await get_node_pub_key(connection_name)
+    request = lnrpc.ChanInfoRequest(chan_id=channel_id)
+    try:
+        response = await client.call(
+            client.lightning_stub.GetChanInfo,
+            request,
+        )
+        chan_info = MessageToDict(response, preserving_proto_field_name=True)
+        node1_pub = chan_info.get("node1_pub")
+        node2_pub = chan_info.get("node2_pub")
 
-            # Determine the partner node's public key
-            partner_pub_key = node1_pub if own_pub_key != node1_pub else node2_pub
+        if not own_pub_key:
+            own_pub_key = client.node_pub_key
+            # own_pub_key = await get_node_pub_key(connection_name)
 
-            # Get the node info of the partner node
-            response = await client.call(
-                client.lightning_stub.GetNodeInfo,
-                ln.NodeInfoRequest(pub_key=partner_pub_key),
-            )
-            node_info = MessageToDict(response, preserving_proto_field_name=True)
-            return ChannelName(channel_id=channel_id, name=node_info["node"]["alias"])
-        except Exception as e:
-            logger.exception(e)
-            return ChannelName(channel_id=channel_id, name="Unknown")
+        # Determine the partner node's public key
+        partner_pub_key = node1_pub if own_pub_key != node1_pub else node2_pub
+
+        # Get the node info of the partner node
+        node_info = await get_node_info(partner_pub_key, client)
+        # node_info = MessageToDict(response, preserving_proto_field_name=True)
+
+        return ChannelName(channel_id=channel_id, name=node_info.node.alias)
+    except Exception as e:
+        logger.exception(e)
+        return ChannelName(channel_id=channel_id, name="Unknown")
 
 
-async def get_node_pub_key(connection_name: str) -> str:
+async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
     """
-    Retrieve the public key of a node.
-
-    This function establishes an asynchronous connection to an LND (Lightning Network
-    Daemon) client using the provided connection name. It then calls the `GetInfo`
-    method on the client's lightning stub to obtain information about the node, and
-    returns the node's public key.
+    Fetches information about a node on the Lightning Network.
 
     Args:
-        connection_name (str): The name of the connection to use for the LND client.
+        pub_key (str): The public key of the node to fetch information for.
+        client (LNDClient): The LND client to use for making the request.
 
     Returns:
-        str: The public key of the node.
+        lnrpc.NodeInfo: The information about the node, or an empty dictionary if an error occurs.
+
+    Raises:
+        Exception: If there is an error while fetching the node information.
+    """
+
+    try:
+        request = lnrpc.NodeInfoRequest(pub_key=pub_key)
+        response: lnrpc.NodeInfo = await client.call(
+            client.lightning_stub.GetNodeInfo,
+            request,
+        )
+        # Used to generate test data
+        # with open("tests/data/lnd_functions/get_node_info_response.json", "w") as f:
+        #     json.dump(
+        #         MessageToDict(response, preserving_proto_field_name=True), f
+        #     )
+        return response
+    except Exception as e:
+        logger.exception(e)
+        return lnrpc.NodeInfo()
+
+
+async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -> str:
+    """
+    Retrieve the node alias from a payment request.
+
+    Args:
+        pay_request (str): The payment request string.
+        client (LNDClient): An instance of the LNDClient.
+
+    Returns:
+        str: The alias of the destination node.
     """
     try:
-        async with LNDClient(connection_name=connection_name) as client:
-            response = await client.call(
-                client.lightning_stub.GetInfo,
-                ln.GetInfoRequest(),
-            )
-            return response.identity_pubkey
+        # Decode the payment request
+        decode_request = lnrpc.PayReqString(pay_req=pay_request)
+        decode_response: lnrpc.PayReq = await client.call(
+            client.lightning_stub.DecodePayReq,
+            decode_request,
+        )
+
+        decoded_pay_req = MessageToDict(
+            decode_response, preserving_proto_field_name=True
+        )
+        destination_pub_key = decoded_pay_req.get("destination")
+
+        if not destination_pub_key:
+            raise ValueError("Destination public key not found in payment request")
+
+        # Get the node info of the destination node
+        node_info = await get_node_info(destination_pub_key, client)
+        return node_info.node.alias or destination_pub_key[:10]
     except Exception as e:
-        logger.error(f"Error getting node pub key {e}", exc_info=True)
-        return ""
+        logger.exception(e)
+        return "Unknown"

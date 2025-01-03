@@ -5,6 +5,7 @@ from typing import Dict, List
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import LoggerFunction
+from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 
@@ -224,6 +225,12 @@ class HtlcTrackingList(BaseModel):
     names: Dict[int, str] = {}
     invoices: list[LNDInvoice] = []
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.events = []
+        self.names = {}
+        self.invoices = []
+
     def add_event(self, event: HtlcEvent) -> int:
         htlc_id = event.htlc_id
         if htlc_id is None:
@@ -354,7 +361,6 @@ class HtlcTrackingList(BaseModel):
                                     event.final_htlc_event.settled = True
                             return True
                     return False
-                    return True if len(group_list) == 3 else False
                 case EventType.SEND:
                     return True if len(group_list) == 2 else False
                 case EventType.RECEIVE:
@@ -364,7 +370,7 @@ class HtlcTrackingList(BaseModel):
 
         return False
 
-    def message(self, htlc_id: int) -> str:
+    def message(self, htlc_id: int, icon: str = "") -> str:
         if htlc_id is None or htlc_id < 0:
             return "no message"
         group_list = self.list_htlc_id(htlc_id)
@@ -375,25 +381,27 @@ class HtlcTrackingList(BaseModel):
                         message_str = self.forward_message(group_list)
                     else:
                         message_str = f"💰 Forward in progress {htlc_id}"
-                    return message_str
                 case EventType.SEND:
                     if self.complete_group(htlc_id):
                         message_str = self.send_message(group_list)
                     else:
                         message_str = f"⚡️ Send in progress {htlc_id}"
-                    return message_str
                 case EventType.RECEIVE:
                     if self.complete_group(htlc_id):
                         message_str = self.receive_message(group_list)
                     else:
                         message_str = f"💵 Receive in progress {htlc_id}"
-                    return message_str
                 case _:
-                    return "Unknown"
+                    message_str = "no message"
+            return message_str if not icon else f"{icon} {message_str}"
         return "no message"
 
     def log_event(
-        self, htlc_id: int, logger_func: LoggerFunction, extra: dict = {}
+        self,
+        htlc_id: int,
+        logger_func: LoggerFunction,
+        extra: dict = {},
+        icon: str = "",
     ) -> None:
         """
         Logs an event message for a given HTLC (Hashed TimeLock Contract) ID.
@@ -409,15 +417,17 @@ class HtlcTrackingList(BaseModel):
         Returns:
             None
         """
-        message_str = self.message(htlc_id)
+        message_str = self.message(htlc_id, icon=icon)
         if extra:
             logger_func(message_str, extra=extra)
         else:
             logger_func(message_str)
 
     def send_message(self, group_list: List[HtlcEvent]) -> str:
-        end_message = "✅ Settled"
         primary_event = group_list[0]
+        secondary_event = group_list[1]
+        end_message = "✅ Settled" if secondary_event.settle_event else "❌ Not Settled"
+        start_message = "⚡️ Sent" if secondary_event.settle_event else "⚡️ Probing"
         if (
             primary_event.forward_event
             and primary_event.forward_event.info
@@ -432,7 +442,7 @@ class HtlcTrackingList(BaseModel):
         else:
             sent_via = "Unknown"
 
-        message_str = f"⚡️ Sent {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
+        message_str = f"{start_message} {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:
