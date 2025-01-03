@@ -61,3 +61,21 @@ def test_lnd_events_group():
 
     lnd_events_group.clear_htlc_events()
     assert len(lnd_events_group.htlc_events) == 0
+
+
+def test_append_method():
+    lnd_events_group = LndEventsGroup()
+    for event in read_log_file(
+        "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
+    ):
+        identifier = lnd_events_group.append(event)
+        assert event in lnd_events_group
+        print(
+            identifier,
+            event.__class__.__name__,
+            lnd_events_group.complete_group(identifier, event.__class__.__name__),
+        )
+
+    json_dump = json.dumps(lnd_events_group.to_dict(), indent=2)
+    assert json_dump is not None
+    lnd_events_group.clear()

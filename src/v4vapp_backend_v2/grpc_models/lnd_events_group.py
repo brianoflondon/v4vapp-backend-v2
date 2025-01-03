@@ -2,10 +2,14 @@ from typing import List
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict
+from typing import Union
 
 
 def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
     return routerrpc.HtlcEvent.EventType.Name(event_type)
+
+
+EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment]
 
 
 class LndEventsGroup:
@@ -23,6 +27,41 @@ class LndEventsGroup:
         self.invoices = invoices
         self.payments = payments
 
+    # MARK: Universal Methods
+
+    def append(self, item: EventItem) -> int:
+        match type(item):
+            case routerrpc.HtlcEvent:
+                return self.add_htlc_event(item)
+            case lnrpc.Invoice:
+                return self.add_invoice(item)
+            case lnrpc.Payment:
+                return self.add_payment(item)
+            case _:
+                return 0
+
+    def clear(self) -> None:
+        self.clear_htlc_events()
+        self.clear_invoices()
+        self.clear_payments()
+
+    def complete_group(
+        self,
+        event_id: int,
+        event_type: str = "",
+        event: EventItem = None,
+    ) -> bool:
+        match event_type:
+            case "HtlcEvent":
+                return self.htlc_complete_group(event_id)
+            case "Invoice":
+                return True
+            case "Payment":
+                return True
+            case _:
+                return False
+
+    # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:
         htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
         self.htlc_events.append(htlc_event)
@@ -89,6 +128,7 @@ class LndEventsGroup:
     def clear_htlc_events(self) -> None:
         self.htlc_events.clear()
 
+    # MARK: Invoice Methods
     def add_invoice(self, invoice: lnrpc.Invoice) -> int:
         add_index = invoice.add_index or 0
         self.invoices.append(invoice)
@@ -97,6 +137,7 @@ class LndEventsGroup:
     def clear_invoices(self) -> None:
         self.invoices.clear()
 
+    # MARK: Payment Methods
     def add_payment(self, payment: lnrpc.Payment) -> int:
         payment_index = payment.payment_index or 0
         self.payments.append(payment)
@@ -105,9 +146,9 @@ class LndEventsGroup:
     def clear_payments(self) -> None:
         self.payments.clear()
 
-    def __contains__(
-        self, item: routerrpc.HtlcEvent | lnrpc.Invoice | lnrpc.Payment
-    ) -> bool:
+    # MARK: Magic Methods
+
+    def __contains__(self, item: EventItem) -> bool:
         match type(item):
             case routerrpc.HtlcEvent:
                 return item in self.htlc_events
@@ -118,19 +159,12 @@ class LndEventsGroup:
             case _:
                 return False
 
-    def __repr__(self) -> str:
-        return f"HtlcEventGroup({self.htlc_events})"
-
-    def __str__(self) -> str:
-        return str(self.htlc_events)
-
     def to_dict(self) -> dict:
         return {
-            "htlc_events": [
-                self._htlc_event_to_dict(event) for event in self.htlc_events
-            ]
+            "htlc_events": [self._event_to_dict(event) for event in self.htlc_events],
+            "invoices": [self._event_to_dict(invoice) for invoice in self.invoices],
+            "payments": [self._event_to_dict(payment) for payment in self.payments],
         }
 
-    def _htlc_event_to_dict(self, event: routerrpc.HtlcEvent) -> dict:
-        event_dict = MessageToDict(event, preserving_proto_field_name=True)
-        return event_dict
+    def _event_to_dict(self, event: EventItem) -> dict:
+        return MessageToDict(event, preserving_proto_field_name=True)
