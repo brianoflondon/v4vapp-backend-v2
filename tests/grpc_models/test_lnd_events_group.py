@@ -73,13 +73,15 @@ def test_append_method():
         print(
             identifier,
             event.__class__.__name__,
-            lnd_events_group.complete_group(identifier, event.__class__.__name__),
+            lnd_events_group.complete_group(
+                identifier, event_type=event.__class__.__name__
+            ),
         )
         # Now test sending an event instead of an event name
         print(
             identifier,
             event.__class__.__name__,
-            lnd_events_group.complete_group(identifier, event),
+            lnd_events_group.complete_group(identifier, event=event),
         )
 
     json_dump = json.dumps(lnd_events_group.to_dict(), indent=2)
