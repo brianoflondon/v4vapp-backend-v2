@@ -75,6 +75,12 @@ def test_append_method():
             event.__class__.__name__,
             lnd_events_group.complete_group(identifier, event.__class__.__name__),
         )
+        # Now test sending an event instead of an event name
+        print(
+            identifier,
+            event.__class__.__name__,
+            lnd_events_group.complete_group(identifier, event),
+        )
 
     json_dump = json.dumps(lnd_events_group.to_dict(), indent=2)
     assert json_dump is not None

@@ -30,6 +30,17 @@ class LndEventsGroup:
     # MARK: Universal Methods
 
     def append(self, item: EventItem) -> int:
+        """
+        Appends an event item to the appropriate list based on its type.
+
+        Args:
+            item (EventItem): The event item to append. It can be of type
+                              routerrpc.HtlcEvent, lnrpc.Invoice, or lnrpc.Payment.
+
+        Returns:
+            int: The result of the corresponding add method based on the type of the item.
+                 Returns 0 if the item type does not match any known types.
+        """
         match type(item):
             case routerrpc.HtlcEvent:
                 return self.add_htlc_event(item)
@@ -51,6 +62,8 @@ class LndEventsGroup:
         event_type: str = "",
         event: EventItem = None,
     ) -> bool:
+        if event:
+            event_type = event.__class__.__name__
         match event_type:
             case "HtlcEvent":
                 return self.htlc_complete_group(event_id)
