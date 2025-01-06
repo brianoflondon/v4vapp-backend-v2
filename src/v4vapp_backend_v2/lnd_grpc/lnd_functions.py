@@ -43,7 +43,7 @@ async def get_channel_name(
         node2_pub = chan_info.get("node2_pub")
 
         if not own_pub_key:
-            own_pub_key = client.node_pub_key
+            own_pub_key = client.get_info.identity_pubkey
             # own_pub_key = await get_node_pub_key(connection_name)
 
         # Determine the partner node's public key

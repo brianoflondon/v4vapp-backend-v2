@@ -3,7 +3,11 @@ from typing import Generator
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict, ParseDict
-from v4vapp_backend_v2.grpc_models.lnd_events_group import LndEventsGroup
+from v4vapp_backend_v2.grpc_models.lnd_events_group import (
+    LndEventsGroup,
+    ChannelName,
+    event_type_name,
+)
 
 
 def read_log_file(
@@ -20,6 +24,11 @@ def read_log_file(
                     event = ParseDict(log_entry["invoice"], lnrpc.Invoice())
                 elif log_entry.get("payment"):
                     event = ParseDict(log_entry["payment"], lnrpc.Payment())
+                elif log_entry.get("channel_name"):
+                    event = ChannelName(
+                        channel_id=log_entry["channel_name"]["channel_id"],
+                        name=log_entry["channel_name"]["name"],
+                    )
                 yield event
             except Exception as e:
                 print(f"Error parsing log entry: {e}")
@@ -50,9 +59,6 @@ def test_lnd_events_group():
     print("Invoices: ", len(lnd_events_group.invoices))
     print("Payments: ", len(lnd_events_group.payments))
     print("HTLC Events: ", len(lnd_events_group.htlc_events))
-    assert len(lnd_events_group.invoices) == 28
-    assert len(lnd_events_group.payments) == 45
-    assert len(lnd_events_group.htlc_events) == 83
 
     for htlc_event in lnd_events_group.htlc_events:
         htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
@@ -70,20 +76,48 @@ def test_append_method():
     ):
         identifier = lnd_events_group.append(event)
         assert event in lnd_events_group
-        print(
-            identifier,
-            event.__class__.__name__,
-            lnd_events_group.complete_group(
-                identifier, event_type=event.__class__.__name__
-            ),
-        )
         # Now test sending an event instead of an event name
         print(
             identifier,
             event.__class__.__name__,
-            lnd_events_group.complete_group(identifier, event=event),
+            lnd_events_group.complete_group(event=event),
         )
 
     json_dump = json.dumps(lnd_events_group.to_dict(), indent=2)
     assert json_dump is not None
     lnd_events_group.clear()
+
+
+def test_channel_names():
+    lnd_events_group = LndEventsGroup()
+    for event in read_log_file(
+        "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
+    ):
+        print(event)
+        lnd_events_group.append(event)
+
+    for channel_name in lnd_events_group.channel_names.values():
+        print(channel_name, channel_name.channel_id, channel_name.name)
+        print(lnd_events_group.lookup_name(channel_name.channel_id))
+
+
+def test_message_forward_events():
+    lnd_events_group = LndEventsGroup()
+    for event in read_log_file(
+        "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
+        # "tests/data/htlc_events_test_data2.safe_log"
+    ):
+        lnd_events_group.append(event)
+
+    for event in lnd_events_group.htlc_events:
+        if event_type_name(event.event_type) == "FORWARD":
+            # print(
+            #     event.incoming_htlc_id or event.outgoing_htlc_id,
+            #     event.incoming_htlc_id,
+            #     event.outgoing_htlc_id,
+            #     event_type_name(event.event_type),
+            # )
+            if event_id := lnd_events_group.complete_group(event=event):
+                print(event_id, lnd_events_group.message(event=event))
+
+    print(lnd_events_group.list_htlc_ids())

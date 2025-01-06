@@ -1,9 +1,14 @@
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from yaml import safe_load
 
-from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure
+from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
+    StartupFailure,
+    format_time_delta,
+)
 
 
 @pytest.fixture
@@ -20,6 +25,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
     # No need to restore the original value, monkeypatch will handle it
 
+
 @pytest.fixture(autouse=True)
 def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     # Reset the singleton instance before each test
@@ -27,6 +33,7 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     yield
     # Reset the singleton instance after each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
 
 def test_internal_config(set_base_config_path: None):
     config_file = Path("tests/data/config", "config.yaml")
@@ -61,3 +68,35 @@ def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
 
     with pytest.raises(StartupFailure):
         InternalConfig()
+
+
+def test_format_time_delta():
+    # Test cases without fractions
+    test_cases = [
+        (timedelta(days=1, hours=2), "1 days, 2 hours"),
+        (timedelta(hours=5, minutes=6, seconds=7), "05:06:07"),
+        (timedelta(minutes=8, seconds=9), "00:08:09"),
+        (timedelta(seconds=10), "00:00:10"),
+        (timedelta(days=0, hours=0, minutes=0, seconds=0), "00:00:00"),
+        (timedelta(days=2, hours=0, minutes=0, seconds=0), "2 days, 0 hours"),
+        (timedelta(days=0, hours=3, minutes=0, seconds=0), "03:00:00"),
+        (timedelta(days=0, hours=0, minutes=4, seconds=0), "00:04:00"),
+    ]
+
+    for delta, expected in test_cases:
+        assert format_time_delta(delta) == expected
+
+    # Test cases with fractions
+    test_cases_with_fractions = [
+        (timedelta(hours=1, minutes=2, seconds=3, microseconds=456000), "01:02:03.456"),
+        (timedelta(minutes=8, seconds=9, microseconds=123000), "00:08:09.123"),
+        (timedelta(seconds=10, microseconds=789000), "00:00:10.789"),
+        (
+            timedelta(days=0, hours=0, minutes=0, seconds=0, microseconds=0),
+            "00:00:00.000",
+        ),
+    ]
+
+    for delta, expected in test_cases_with_fractions:
+        assert format_time_delta(delta, fractions=True) == expected
+

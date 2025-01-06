@@ -1,5 +1,6 @@
 import asyncio
 import atexit
+from datetime import timedelta
 import json
 import logging.config
 import logging.handlers
@@ -216,8 +217,9 @@ class InternalConfig:
             self._initialized = True
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.notification_loop:
-            self.notification_loop.close()
+        if hasattr(self, "notification_loop"):
+            if self.notification_loop is not None:
+                self.notification_loop.close()
 
     def setup_config(self) -> None:
         try:
@@ -325,3 +327,28 @@ class InternalConfig:
         for handler, level in self.config.logging.handlers.items():
             logging.getLogger(handler).addHandler(handler)
             logging.getLogger(handler).setLevel(level)
+
+
+"""
+General purpose functions
+"""
+
+
+def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
+    """
+    Formats a timedelta object as a string.
+    If Days are present, the format is "X days, Y hours".
+    Otherwise, the format is "HH:MM:SS".
+    Args:
+        delta (timedelta): The timedelta object to format.
+
+    Returns:
+        str: The formatted string.
+    """
+    if delta.days:
+        return f"{delta.days} days, {delta.seconds // 3600} hours"
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if fractions:
+        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"

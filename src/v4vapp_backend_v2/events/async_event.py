@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict, List
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.config.setup import logger
 
@@ -8,12 +8,12 @@ AsyncCallable = Callable[..., Awaitable[None]]
 async_subscribers: Dict[Events, list[AsyncCallable]] = dict()
 
 
-def async_subscribe(event_name: Events, subscriber: AsyncCallable):
+def async_subscribe(event_names: Events | List[Events], subscriber: AsyncCallable):
     """
-    Asynchronously subscribes a subscriber to a specified event.
+    Asynchronously subscribes a subscriber to one or more specified events.
 
     Args:
-        event_name (Events): The name of the event to subscribe to.
+        event_names (Union[Events, List[Events]]): The name(s) of the event(s) to subscribe to.
         subscriber (AsyncCallable): The asynchronous callable to be
         invoked when the event is triggered.
 
@@ -23,9 +23,13 @@ def async_subscribe(event_name: Events, subscriber: AsyncCallable):
     Returns:
         None
     """
-    if event_name not in async_subscribers:
-        async_subscribers[event_name] = []
-    async_subscribers[event_name].append(subscriber)
+    if not isinstance(event_names, list):
+        event_names = [event_names]
+
+    for event_name in event_names:
+        if event_name not in async_subscribers:
+            async_subscribers[event_name] = []
+        async_subscribers[event_name].append(subscriber)
 
 
 def async_publish(event_name: Events, *args: Any) -> None:

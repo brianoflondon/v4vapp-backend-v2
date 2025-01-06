@@ -33,6 +33,26 @@ async def test_async_subscribe():
     assert subscriber in subscribers[Events.LND_INVOICE]
     assert subscriber2 in subscribers[Events.LND_INVOICE]
 
+@pytest.mark.asyncio
+async def test_async_subscribe_multiple_events():
+    async def subscriber(x: int, y: int):
+        print("Subscriber called with", x, y)
+        pass
+
+    async def subscriber2(x: int, y: int):
+        print("Subscriber2 called with", x, y)
+        pass
+
+    async_subscribe([Events.LND_INVOICE, Events.LND_PAYMENT], subscriber)
+    async_subscribe([Events.LND_INVOICE, Events.LND_PAYMENT], subscriber2)
+    subscribers = get_subscribers()
+    assert Events.LND_INVOICE in subscribers
+    assert Events.LND_PAYMENT in subscribers
+    assert subscriber in subscribers[Events.LND_INVOICE]
+    assert subscriber2 in subscribers[Events.LND_INVOICE]
+    assert subscriber in subscribers[Events.LND_PAYMENT]
+    assert subscriber2 in subscribers[Events.LND_PAYMENT]
+
 
 @pytest.mark.asyncio
 async def test_async_publish():

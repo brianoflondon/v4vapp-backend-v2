@@ -6,13 +6,19 @@ from typing import Optional, Annotated, List
 from google.protobuf.json_format import MessageToDict
 
 
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
+from v4vapp_backend_v2.grpc_models.lnd_events_group import (
+    ChannelName,
+    LndEventsGroup,
+    EventItem,
+)
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
     LNDSubscriptionError,
 )
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, format_time_delta, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
@@ -24,33 +30,61 @@ CONFIG = INTERNAL_CONFIG.config
 app = typer.Typer()
 
 
-async def invoice_report(invoice: lnrpc.Invoice, client: LNDClient) -> None:
+async def track_events(
+    event: EventItem,
+    client: LNDClient,
+    lnd_events_group: LndEventsGroup,
+) -> None:
+    """
+    Asynchronously retrieves invoices from the LND node and logs them.
+    Args:
+        client (LNDClient): The LND client to use for the connection.
+
+    Returns:
+        None
+    """
+    event_id = lnd_events_group.append(event)
+    if lnd_events_group.complete_group(event=event):
+        logger.info(
+            f"{client.icon} {lnd_events_group.message(event)}",
+        )
+        lnd_events_group.remove_group(event)
+    pass
+
+
+async def invoice_report(
+    invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
+) -> None:
     logger.info(
         f"{client.icon} Invoice: {invoice.add_index:>6} amount: {invoice.value:>10,} sat {invoice.settle_index}",
         extra={"invoice": MessageToDict(invoice, preserving_proto_field_name=True)},
     )
 
 
-async def payment_report(payment: lnrpc.Payment, client: LNDClient) -> None:
+async def payment_report(
+    payment: lnrpc.Payment, client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(payment.status)
     creation_date = datetime.fromtimestamp(
         payment.creation_time_ns / 1e9, tz=timezone.utc
     )
     pre_image = payment.payment_preimage if payment.payment_preimage else None
-    in_flight_time = datetime.now(tz=timezone.utc) - creation_date
+    in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
         (
             f"{client.icon} Payment: {payment.payment_index:>6} "
             f"amount: {payment.value_sat:>10,} sat "
             f"pre_image: {pre_image} "
-            f"in flight time: {in_flight_time} "
-            f"created: {creation_date} status: {status}"
+            f"in flight: {in_flight_time} "
+            f"{creation_date:%H:%M:%S} status: {status}"
         ),
         extra={"payment": MessageToDict(payment, preserving_proto_field_name=True)},
     )
 
 
-async def htlc_event_report(htlc_event: routerrpc.HtlcEvent, client: LNDClient) -> None:
+async def htlc_event_report(
+    htlc_event: routerrpc.HtlcEvent, client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
     event_type = (
         routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
         if htlc_event.event_type
@@ -70,7 +104,7 @@ async def htlc_event_report(htlc_event: routerrpc.HtlcEvent, client: LNDClient) 
     )
 
 
-async def invoices_loop(client: LNDClient) -> None:
+async def invoices_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
     Args:
@@ -88,7 +122,7 @@ async def invoices_loop(client: LNDClient) -> None:
                 call_name="SubscribeInvoices",
             ):
                 invoice: lnrpc.Invoice
-                async_publish(Events.LND_INVOICE, invoice, client)
+                async_publish(Events.LND_INVOICE, invoice, client, lnd_events_group)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeInvoices"
@@ -102,7 +136,7 @@ async def invoices_loop(client: LNDClient) -> None:
             raise e
 
 
-async def payments_loop(client: LNDClient) -> None:
+async def payments_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -112,7 +146,7 @@ async def payments_loop(client: LNDClient) -> None:
                 call_name="TrackPayments",
             ):
                 payment: lnrpc.Payment
-                async_publish(Events.LND_PAYMENT, payment, client)
+                async_publish(Events.LND_PAYMENT, payment, client, lnd_events_group)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="TrackPayments"
@@ -126,7 +160,7 @@ async def payments_loop(client: LNDClient) -> None:
             raise e
 
 
-async def htlc_events_loop(client: LNDClient) -> None:
+async def htlc_events_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = routerrpc.SubscribeHtlcEventsRequest()
     while True:
         try:
@@ -136,7 +170,7 @@ async def htlc_events_loop(client: LNDClient) -> None:
                 call_name="SubscribeHtlcEvents",
             ):
                 htlc_event: routerrpc.HtlcEvent
-                async_publish(Events.HTLC_EVENT, htlc_event, client)
+                async_publish(Events.HTLC_EVENT, htlc_event, client, lnd_events_group)
         except LNDSubscriptionError as e:
             await client.check_connection(
                 original_error=e.original_error, call_name="SubscribeHtlcEvents"
@@ -165,6 +199,36 @@ async def transactions_loop(client: LNDClient) -> None:
             logger.info(transaction)
 
 
+async def fill_channel_names(
+    client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
+    request = lnrpc.ListChannelsRequest()
+    channels = await client.call(
+        client.lightning_stub.ListChannels,
+        lnrpc.ListChannelsRequest(),
+    )
+    channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+    # Get the name of each channel
+    tasks = []
+    for channel in channels_dict.get("channels", []):
+        tasks.append(
+            get_channel_name(
+                channel_id=int(channel["chan_id"]),
+                client=client,
+            )
+        )
+    names_list: List[ChannelName] = await asyncio.gather(*tasks)
+    for channel_name in names_list:
+        lnd_events_group.append(channel_name)
+        logger.info(
+            (
+                f"{client.icon} "
+                f"Channel {channel_name.channel_id} -> {channel_name.name}"
+            ),
+            extra={"channel_name": channel_name.model_dump()},
+        )
+
+
 async def run(connection_name: str) -> None:
     """
     Main function to run the node monitor.
@@ -174,16 +238,28 @@ async def run(connection_name: str) -> None:
     Returns:
         None
     """
+    lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as client:
         logger.info(f"{client.icon} 🔍 Monitoring node...")
+
         if client.get_info:
             logger.info(
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
             )
+        await fill_channel_names(client, lnd_events_group)
+
         async_subscribe(Events.LND_INVOICE, invoice_report)
         async_subscribe(Events.LND_PAYMENT, payment_report)
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-        tasks = [invoices_loop(client), payments_loop(client), htlc_events_loop(client)]
+        async_subscribe(
+            [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
+            track_events,
+        )
+        tasks = [
+            invoices_loop(client=client, lnd_events_group=lnd_events_group),
+            payments_loop(client=client, lnd_events_group=lnd_events_group),
+            htlc_events_loop(client=client, lnd_events_group=lnd_events_group),
+        ]
         try:
             await asyncio.gather(*tasks)
         except (asyncio.CancelledError, KeyboardInterrupt):
