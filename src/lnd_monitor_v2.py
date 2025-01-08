@@ -47,12 +47,51 @@ async def track_events(
         None
     """
     event_id = lnd_events_group.append(event)
+    dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
     if lnd_events_group.complete_group(event=event):
         logger.info(
-            f"{client.icon} {lnd_events_group.message(event)}",
+            f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
         )
-        lnd_events_group.remove_group(event)
+        await remove_event_group(event, lnd_events_group)
+
     pass
+
+
+async def check_dest_alias(
+    event: EventItem, client: LNDClient, lnd_events_group: LndEventsGroup, event_id: int
+) -> str:
+    if type(event) == routerrpc.HtlcEvent:
+        pre_image = lnd_events_group.get_htlc_event_pre_image(event_id)
+        if pre_image:
+            logger.info(
+                "HTLC Event with a pre_image so waiting for the payment to be completed"
+            )
+            await asyncio.sleep(1)
+            logger.info("Checking if the payment has been completed")
+            matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
+            if matching_payment:
+                dest_alias = await get_node_alias_from_pay_request(
+                    matching_payment.payment_request, client
+                )
+                return dest_alias
+    return ""
+
+
+async def remove_event_group(
+    event: EventItem, lnd_events_group: LndEventsGroup
+) -> None:
+    """
+    Asynchronously removes an event from the specified LndEventsGroup after a delay.
+
+    Args:
+        event (EventItem): The event to be removed from the group.
+        lnd_events_group (LndEventsGroup): The group from which the event will be removed.
+
+    Returns:
+        None
+    """
+    await asyncio.sleep(3)
+    lnd_events_group.remove_group(event)
 
 
 async def invoice_report(
@@ -265,6 +304,7 @@ async def run(connection_name: str) -> None:
             payments_loop(client=client, lnd_events_group=lnd_events_group),
             htlc_events_loop(client=client, lnd_events_group=lnd_events_group),
         ]
+        await asyncio.gather(*tasks)
         try:
             await asyncio.gather(*tasks)
         except (asyncio.CancelledError, KeyboardInterrupt):

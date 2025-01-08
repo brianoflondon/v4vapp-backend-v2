@@ -125,11 +125,21 @@ class LndEventsGroup:
     def list_groups(self) -> List[List[EventItem]]:
         return []
 
-    def message(self, event: EventItem) -> str:
+    def message(self, event: EventItem, dest_alias: str = None) -> str:
+        """
+        Generates a message string based on the type of the given event.
+        Args:
+            event (EventItem): The event object containing details about the event.
+            dest_alias (str, optional): The destination alias for the event. Defaults to None.
+                has to be passed in because it is read from a matching payment and looked up
+        Returns:
+            str: A formatted message string representing the event.
+        """
+
         event_type = event.__class__.__name__
         match event_type:
             case "HtlcEvent":
-                return self.message_htlc_event(event)
+                return self.message_htlc_event(event, dest_alias)
             case "Invoice":
                 return f"🧾 Invoice: {event.value_msat//1000:,.0f}"
             case "Payment":
@@ -139,7 +149,9 @@ class LndEventsGroup:
             case _:
                 return ""
 
-    def message_htlc_event(self, event: routerrpc.HtlcEvent) -> str:
+    def message_htlc_event(
+        self, event: routerrpc.HtlcEvent, dest_alias: str = None
+    ) -> str:
         htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
         # Special exception for when the htlc_id is 0 during the subscribe start up
         if htlc_id == 0 or not self.htlc_complete_group(htlc_id):
@@ -150,7 +162,7 @@ class LndEventsGroup:
             case routerrpc.HtlcEvent.EventType.UNKNOWN:
                 message_str = self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.SEND:
-                message_str = self.message_send_event(htlc_id)
+                message_str = self.message_send_event(htlc_id, dest_alias)
             case routerrpc.HtlcEvent.EventType.RECEIVE:
                 message_str = f"💵 {htlc_id} receive complete"
             case _:
@@ -170,6 +182,18 @@ class LndEventsGroup:
             if event.incoming_htlc_id == htlc_id or event.outgoing_htlc_id == htlc_id
         ]
 
+    def get_htlc_event_pre_image(self, htlc_id: int) -> str:
+        for event in self.htlc_events:
+            if event.incoming_htlc_id == htlc_id or event.outgoing_htlc_id == htlc_id:
+                preimage = (
+                    event.settle_event.preimage.hex()
+                    if event.settle_event.preimage != b""
+                    else None
+                )
+                if preimage:
+                    return preimage
+        return ""
+
     def list_htlc_ids(self) -> List[int]:
         return list(
             {
@@ -179,6 +203,17 @@ class LndEventsGroup:
         )
 
     def list_groups_htlc(self) -> List[List[routerrpc.HtlcEvent]]:
+        """
+        Groups HTLC (Hashed Time-Locked Contract) events by their HTLC ID.
+
+        This method iterates over the list of HTLC events and groups them based on their
+        incoming or outgoing HTLC ID. Each unique HTLC ID will have a list of associated
+        events.
+
+        Returns:
+            List[List[routerrpc.HtlcEvent]]: A list of lists, where each inner list contains
+            HTLC events that share the same HTLC ID.
+        """
         grouped_events = {}
         for event in self.htlc_events:
             htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
@@ -311,8 +346,13 @@ class LndEventsGroup:
             return ForwardAmtFee(forward_amount=forward_amount, fee=earned)
         return ForwardAmtFee(forward_amount=0, fee=0)
 
-    def message_send_event(self, htlc_id: int) -> str:
+    def get_payment_by_pre_image(self, pre_image: str) -> lnrpc.Payment:
+        for payment in self.payments:
+            if payment.payment_preimage == pre_image:
+                return payment
+        return None
 
+    def message_send_event(self, htlc_id: int, dest_alias: str = None) -> str:
         group_list = self.by_htlc_id(htlc_id)
         primary_event = group_list[0]
         secondary_event = group_list[1]
@@ -333,7 +373,10 @@ class LndEventsGroup:
             sent_via = "Unknown"
 
         message_str = (
-            f"{start_message} {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
+            f"{start_message} {amount:,.0f} "
+            f"to {dest_alias or 'Unknown'} "
+            f"out {sent_via}. "
+            f"{end_message}"
         )
         return message_str
 

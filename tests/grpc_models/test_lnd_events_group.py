@@ -111,4 +111,15 @@ def test_message_forward_events():
         lnd_events_group.append(event)
 
     for group in lnd_events_group.list_groups_htlc():
-        print(lnd_events_group.message(event=group[0]))
+        dest_alias = None
+        if type(event) == routerrpc.HtlcEvent:
+            event_id = group[0].incoming_htlc_id or group[0].outgoing_htlc_id
+            pre_image = lnd_events_group.get_htlc_event_pre_image(event_id)
+            if pre_image:
+                matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
+                if matching_payment:
+                    dest_alias = "Simulated lookup"
+                    # dest_alias = await get_node_alias_from_pay_request(
+                    #     matching_payment.payment_request, client
+                    # )
+        print(lnd_events_group.message(event=group[0], dest_alias=dest_alias))
