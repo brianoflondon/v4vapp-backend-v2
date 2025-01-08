@@ -51,6 +51,7 @@ async def track_events(
     if lnd_events_group.complete_group(event=event):
         logger.info(
             f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
+            extra={"notification": True},
         )
         await remove_event_group(event, lnd_events_group)
 
@@ -60,20 +61,39 @@ async def track_events(
 async def check_dest_alias(
     event: EventItem, client: LNDClient, lnd_events_group: LndEventsGroup, event_id: int
 ) -> str:
+    """
+    Asynchronously checks the destination alias for a given event.
+
+    This function checks if the provided event is of type `routerrpc.HtlcEvent`. If so, it retrieves the pre-image
+    associated with the event ID from the `lnd_events_group`. If a pre-image is found, it waits for the payment to
+    complete, then retrieves the matching payment using the pre-image. If a matching payment is found, it fetches
+    the destination alias from the payment request using the provided LND client.
+
+    Args:
+        event (EventItem): The event to check.
+        client (LNDClient): The LND client to use for fetching node alias.
+        lnd_events_group (LndEventsGroup): The group of LND events to query.
+        event_id (int): The ID of the event to check.
+
+    Returns:
+        str: The destination alias if found, otherwise an empty string.
+    """
     if type(event) == routerrpc.HtlcEvent:
         pre_image = lnd_events_group.get_htlc_event_pre_image(event_id)
         if pre_image:
-            logger.info(
-                "HTLC Event with a pre_image so waiting for the payment to be completed"
-            )
+            # Wait for the payment to complete
             await asyncio.sleep(1)
-            logger.info("Checking if the payment has been completed")
             matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
             if matching_payment:
                 dest_alias = await get_node_alias_from_pay_request(
                     matching_payment.payment_request, client
                 )
                 return dest_alias
+    if type(event) == lnrpc.Payment:
+        dest_alias = await get_node_alias_from_pay_request(
+            event.payment_request, client
+        )
+        return dest_alias
     return ""
 
 

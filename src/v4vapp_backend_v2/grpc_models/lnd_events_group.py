@@ -1,12 +1,18 @@
+from datetime import datetime, timezone
 from typing import List
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict
 from typing import Union
+from v4vapp_backend_v2.config.setup import format_time_delta
 
 
 def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
     return routerrpc.HtlcEvent.EventType.Name(event_type)
+
+
+def payment_event_status_name(event_status: lnrpc.Payment.PaymentStatus) -> str:
+    return lnrpc.Payment.PaymentStatus.Name(event_status)
 
 
 class LndChannelName:
@@ -143,7 +149,7 @@ class LndEventsGroup:
             case "Invoice":
                 return f"🧾 Invoice: {event.value_msat//1000:,.0f}"
             case "Payment":
-                return f"💸 Payment: {event.value_msat//1000:,.0f}"
+                return self.message_payment_event(event, dest_alias)
             case "ChannelName":
                 return f"🔗 Channel: {event}"
             case _:
@@ -164,10 +170,29 @@ class LndEventsGroup:
             case routerrpc.HtlcEvent.EventType.SEND:
                 message_str = self.message_send_event(htlc_id, dest_alias)
             case routerrpc.HtlcEvent.EventType.RECEIVE:
-                message_str = f"💵 {htlc_id} receive complete"
+                message_str = self.message_receive_event(htlc_id)
             case _:
                 message_str = f"no message {event_type_name(event.event_type)}"
         return message_str
+
+    def message_payment_event(
+        self, event: routerrpc.HtlcEvent, dest_alias: str = None
+    ) -> str:
+        if not type(event) == lnrpc.Payment:
+            return ""
+        creation_date = datetime.fromtimestamp(
+            event.creation_time_ns / 1e9, tz=timezone.utc
+        )
+        in_flight_time = format_time_delta(
+            datetime.now(tz=timezone.utc) - creation_date
+        )
+
+        return (
+            f"💸 Payment: {event.value_msat//1000:,.0f} sats "
+            f"to: {dest_alias or 'Unknown'} "
+            f"in flight: {in_flight_time} "
+            f"{payment_event_status_name(event.status)}"
+        )
 
     # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:
@@ -353,6 +378,16 @@ class LndEventsGroup:
         return None
 
     def message_send_event(self, htlc_id: int, dest_alias: str = None) -> str:
+        """
+        Constructs a message string based on the HTLC (Hashed Time-Locked Contract) event details.
+        Args:
+            htlc_id (int): The ID of the HTLC event.
+            dest_alias (str, optional): The alias of the destination. Defaults to None.
+        Returns:
+            str: A formatted message string describing the HTLC event status.
+        Raises:
+            IndexError: If the group_list does not contain at least two events.
+        """
         group_list = self.by_htlc_id(htlc_id)
         primary_event = group_list[0]
         secondary_event = group_list[1]
@@ -380,6 +415,31 @@ class LndEventsGroup:
         )
         return message_str
 
+    def message_receive_event(self, htlc_id: int) -> str:
+        group_list = self.by_htlc_id(htlc_id)
+        primary_event = group_list[0]
+        htlc_id = primary_event.incoming_htlc_id or primary_event.outgoing_htlc_id
+        if primary_event.incoming_channel_id:
+            received_via = self.lookup_name(primary_event.incoming_channel_id)
+        else:
+            received_via = "Unknown"
+        for_memo = ""
+        amount = 0
+        htlc_id_str = ""
+        if htlc_id:
+            incoming_invoice = self.lookup_invoice_by_htlc_id(htlc_id=htlc_id)
+            if incoming_invoice:
+                amount = incoming_invoice.value
+                htlc_id_str = f" ({htlc_id})"
+                for_memo = (
+                    f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
+                )
+
+        message_str = (
+            f"💵 Received {amount:,}{for_memo} via " f"{received_via}{htlc_id_str}"
+        )
+        return message_str
+
     # MARK: Invoice Methods
     def add_invoice(self, invoice: lnrpc.Invoice) -> int:
         add_index = invoice.add_index or 0
@@ -388,6 +448,14 @@ class LndEventsGroup:
 
     def clear_invoices(self) -> None:
         self.invoices.clear()
+
+    def lookup_invoice_by_htlc_id(self, htlc_id: int) -> lnrpc.Invoice:
+        for invoice in self.invoices:
+            if invoice and invoice.htlcs:
+                for htlc_data in invoice.htlcs:
+                    if int(htlc_data.htlc_index) == int(htlc_id):
+                        return invoice
+        return None
 
     # MARK: Payment Methods
     def add_payment(self, payment: lnrpc.Payment) -> int:
