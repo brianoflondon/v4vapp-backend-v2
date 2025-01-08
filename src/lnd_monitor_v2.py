@@ -6,9 +6,12 @@ from typing import Optional, Annotated, List
 from google.protobuf.json_format import MessageToDict
 
 
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_channel_name,
+    get_node_alias_from_pay_request,
+)
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
-    ChannelName,
+    LndChannelName,
     LndEventsGroup,
     EventItem,
 )
@@ -68,12 +71,14 @@ async def payment_report(
     creation_date = datetime.fromtimestamp(
         payment.creation_time_ns / 1e9, tz=timezone.utc
     )
-    pre_image = payment.payment_preimage if payment.payment_preimage else None
+    pre_image = payment.payment_preimage if payment.payment_preimage else ""
+    dest_alias = await get_node_alias_from_pay_request(payment.payment_request, client)
     in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
         (
             f"{client.icon} Payment: {payment.payment_index:>6} "
             f"amount: {payment.value_sat:>10,} sat "
+            f"dest: {dest_alias} "
             f"pre_image: {pre_image} "
             f"in flight: {in_flight_time} "
             f"{creation_date:%H:%M:%S} status: {status}"
@@ -217,7 +222,7 @@ async def fill_channel_names(
                 client=client,
             )
         )
-    names_list: List[ChannelName] = await asyncio.gather(*tasks)
+    names_list: List[LndChannelName] = await asyncio.gather(*tasks)
     for channel_name in names_list:
         lnd_events_group.append(channel_name)
         logger.info(
@@ -225,7 +230,7 @@ async def fill_channel_names(
                 f"{client.icon} "
                 f"Channel {channel_name.channel_id} -> {channel_name.name}"
             ),
-            extra={"channel_name": channel_name.model_dump()},
+            extra={"channel_name": channel_name.to_dict()},
         )
 
 

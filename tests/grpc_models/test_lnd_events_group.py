@@ -5,7 +5,7 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict, ParseDict
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndEventsGroup,
-    ChannelName,
+    LndChannelName,
     event_type_name,
 )
 
@@ -25,7 +25,7 @@ def read_log_file(
                 elif log_entry.get("payment"):
                     event = ParseDict(log_entry["payment"], lnrpc.Payment())
                 elif log_entry.get("channel_name"):
-                    event = ChannelName(
+                    event = LndChannelName(
                         channel_id=log_entry["channel_name"]["channel_id"],
                         name=log_entry["channel_name"]["name"],
                     )
@@ -82,6 +82,7 @@ def test_append_method():
             event.__class__.__name__,
             lnd_events_group.complete_group(event=event),
         )
+        print(lnd_events_group.message(event=event))
 
     json_dump = json.dumps(lnd_events_group.to_dict(), indent=2)
     assert json_dump is not None
@@ -109,15 +110,5 @@ def test_message_forward_events():
     ):
         lnd_events_group.append(event)
 
-    for event in lnd_events_group.htlc_events:
-        if event_type_name(event.event_type) == "FORWARD":
-            # print(
-            #     event.incoming_htlc_id or event.outgoing_htlc_id,
-            #     event.incoming_htlc_id,
-            #     event.outgoing_htlc_id,
-            #     event_type_name(event.event_type),
-            # )
-            if event_id := lnd_events_group.complete_group(event=event):
-                print(event_id, lnd_events_group.message(event=event))
-
-    print(lnd_events_group.list_htlc_ids())
+    for group in lnd_events_group.list_groups_htlc():
+        print(lnd_events_group.message(event=group[0]))

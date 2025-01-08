@@ -5,14 +5,16 @@ from google.protobuf.json_format import MessageToDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 from v4vapp_backend_v2.models.htlc_event_models import ChannelName
+from v4vapp_backend_v2.grpc_models.lnd_events_group import LndChannelName
 
 
 async def get_channel_name(
     channel_id: int,
     client: LNDClient = None,
     own_pub_key: str = None,
-) -> ChannelName:
+) -> LndChannelName:
     """
     Asynchronously retrieves the name of a channel given its ID and connection name.
 
@@ -30,7 +32,7 @@ async def get_channel_name(
                    with "Unknown" name.
     """
     if not channel_id:
-        return ChannelName(channel_id=0, name="Unknown")
+        return LndChannelName(channel_id=0, name="Unknown")
 
     request = lnrpc.ChanInfoRequest(chan_id=channel_id)
     try:
@@ -53,10 +55,10 @@ async def get_channel_name(
         node_info = await get_node_info(partner_pub_key, client)
         # node_info = MessageToDict(response, preserving_proto_field_name=True)
 
-        return ChannelName(channel_id=channel_id, name=node_info.node.alias)
+        return LndChannelName(channel_id=channel_id, name=node_info.node.alias)
     except Exception as e:
         logger.exception(e)
-        return ChannelName(channel_id=channel_id, name="Unknown")
+        return LndChannelName(channel_id=channel_id, name="Unknown")
 
 
 async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
@@ -75,18 +77,26 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
     """
 
     try:
+        logger.debug(f"get_node_info: {pub_key}")
         request = lnrpc.NodeInfoRequest(pub_key=pub_key)
         response: lnrpc.NodeInfo = await client.call(
             client.lightning_stub.GetNodeInfo,
             request,
         )
-        # Used to generate test data
-        # with open("tests/data/lnd_functions/get_node_info_response.json", "w") as f:
-        #     json.dump(
-        #         MessageToDict(response, preserving_proto_field_name=True), f
-        #     )
+        logger.debug(f"get_node_info: {pub_key} {response.node.alias}")
         return response
+    except LNDConnectionError as e:
+        try:
+            if e.args[1]._details == "unable to find node":
+                logger.warning(f"get_node_info: {pub_key} not found")
+                return lnrpc.NodeInfo()
+        except Exception as e:
+            pass
+        logger.exception(e)
+        return lnrpc.NodeInfo()
+
     except Exception as e:
+        logger.info(f"Failure get_node_info: {pub_key}")
         logger.exception(e)
         return lnrpc.NodeInfo()
 

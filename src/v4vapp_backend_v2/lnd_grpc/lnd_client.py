@@ -213,6 +213,7 @@ class LNDClient:
     # )
     async def call(self, method: Callable[..., Any], *args, **kwargs):
         try:
+            logger.debug(f"Calling {method} with args: {args}, kwargs: {kwargs}")
             return await method(*args, **kwargs)
         except AioRpcError as e:
             if self.connection.use_proxy:
@@ -234,7 +235,7 @@ class LNDClient:
                     "error_details": error_to_dict(e),
                 },
             )
-            raise LNDConnectionError(e)
+            raise LNDConnectionError(f"{self.icon} Error in {method} RPC call", e)
 
     async def call_async_generator(
         self, method: Callable[..., AsyncGenerator[Any, None]], *args, **kwargs

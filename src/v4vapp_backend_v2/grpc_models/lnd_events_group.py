@@ -9,7 +9,7 @@ def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
     return routerrpc.HtlcEvent.EventType.Name(event_type)
 
 
-class ChannelName:
+class LndChannelName:
     channel_id: int
     name: str
 
@@ -19,6 +19,12 @@ class ChannelName:
 
     def __str__(self):
         return f"{self.name} ({self.channel_id})"
+
+    def to_dict(self) -> dict:
+        return {
+            "channel_id": self.channel_id,
+            "name": self.name,
+        }
 
 
 class ForwardAmtFee:
@@ -30,14 +36,14 @@ class ForwardAmtFee:
         self.fee = fee
 
 
-EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment, ChannelName]
+EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment, LndChannelName]
 
 
 class LndEventsGroup:
     htlc_events: List[routerrpc.HtlcEvent] = []
     invoices: List[lnrpc.Invoice] = []
     payments: List[lnrpc.Payment] = []
-    channel_names: dict[int, ChannelName] = {}
+    channel_names: dict[int, LndChannelName] = {}
 
     def __init__(
         self,
@@ -71,7 +77,7 @@ class LndEventsGroup:
             case lnrpc.Payment:
                 return self.add_payment(item)
             case _:
-                if isinstance(item, ChannelName):
+                if isinstance(item, LndChannelName):
                     return self.add_channel_name(item)
                 return 0
 
@@ -113,59 +119,43 @@ class LndEventsGroup:
                 self.invoices.remove(event)
             case "Payment":
                 self.payments.remove(event)
-            case "ChannelName":
-                # I don't think we should ever remove a channel name
-                self.channel_names.pop(event.channel_id, None)
             case _:
                 pass
 
     def list_groups(self) -> List[List[EventItem]]:
         return []
 
-    def list_groups_htlc(self) -> List[List[routerrpc.HtlcEvent]]:
-        grouped_events = {}
-        for event in self.htlc_events:
-            htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
-            if htlc_id not in grouped_events:
-                grouped_events[htlc_id] = []
-                grouped_events[htlc_id].append(event)
-        return list(grouped_events.values())
-
     def message(self, event: EventItem) -> str:
         event_type = event.__class__.__name__
         match event_type:
             case "HtlcEvent":
-                htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
-                match event.event_type:
-                    case routerrpc.HtlcEvent.EventType.FORWARD:
-                        if self.htlc_complete_group(htlc_id):
-                            message_str = self.message_forward_event(htlc_id)
-                        else:
-                            message_str = f"💰 Forward in progress {htlc_id}"
-                    case routerrpc.HtlcEvent.EventType.SEND:
-                        if self.complete_group(htlc_id):
-                            message_str = "stub"
-                            # message_str = self.send_message(group_list)
-                        else:
-                            message_str = f"⚡️ Send in progress {htlc_id}"
-                    case routerrpc.HtlcEvent.EventType.RECEIVE:
-                        if self.complete_group(htlc_id):
-                            message_str = "stub"
-                            # message_str = self.receive_message(group_list)
-                        else:
-                            message_str = f"💵 Receive in progress {htlc_id}"
-                    case _:
-                        message_str = "no message"
-                return message_str
-
+                return self.message_htlc_event(event)
             case "Invoice":
-                return f"🧾 Invoice: {event.value_msat:,.0f}"
+                return f"🧾 Invoice: {event.value_msat//1000:,.0f}"
             case "Payment":
-                return f"💸 Payment: {event.value_msat:,.0f}"
+                return f"💸 Payment: {event.value_msat//1000:,.0f}"
             case "ChannelName":
                 return f"🔗 Channel: {event}"
             case _:
                 return ""
+
+    def message_htlc_event(self, event: routerrpc.HtlcEvent) -> str:
+        htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+        # Special exception for when the htlc_id is 0 during the subscribe start up
+        if htlc_id == 0 or not self.htlc_complete_group(htlc_id):
+            return f"{event_type_name(event.event_type)} {htlc_id} in progress"
+        match event.event_type:
+            case routerrpc.HtlcEvent.EventType.FORWARD:
+                message_str = self.message_forward_event(htlc_id)
+            case routerrpc.HtlcEvent.EventType.UNKNOWN:
+                message_str = self.message_forward_event(htlc_id)
+            case routerrpc.HtlcEvent.EventType.SEND:
+                message_str = self.message_send_event(htlc_id)
+            case routerrpc.HtlcEvent.EventType.RECEIVE:
+                message_str = f"💵 {htlc_id} receive complete"
+            case _:
+                message_str = f"no message {event_type_name(event.event_type)}"
+        return message_str
 
     # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:
@@ -187,6 +177,15 @@ class LndEventsGroup:
                 for event in self.htlc_events
             }
         )
+
+    def list_groups_htlc(self) -> List[List[routerrpc.HtlcEvent]]:
+        grouped_events = {}
+        for event in self.htlc_events:
+            htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+            if htlc_id not in grouped_events:
+                grouped_events[htlc_id] = []
+                grouped_events[htlc_id].append(event)
+        return list(grouped_events.values())
 
     def htlc_complete_group(self, htlc_id: int) -> bool:
         """
@@ -312,6 +311,32 @@ class LndEventsGroup:
             return ForwardAmtFee(forward_amount=forward_amount, fee=earned)
         return ForwardAmtFee(forward_amount=0, fee=0)
 
+    def message_send_event(self, htlc_id: int) -> str:
+
+        group_list = self.by_htlc_id(htlc_id)
+        primary_event = group_list[0]
+        secondary_event = group_list[1]
+        end_message = "✅ Settled" if secondary_event.settle_event else "❌ Not Settled"
+        start_message = "⚡️ Sent" if secondary_event.settle_event else "⚡️ Probing"
+        if (
+            primary_event.forward_event
+            and primary_event.forward_event.info
+            and primary_event.forward_event.info.outgoing_amt_msat
+        ):
+            amount = primary_event.forward_event.info.outgoing_amt_msat / 1000
+        else:
+            amount = 0
+
+        if primary_event.outgoing_channel_id:
+            sent_via = self.lookup_name(primary_event.outgoing_channel_id)
+        else:
+            sent_via = "Unknown"
+
+        message_str = (
+            f"{start_message} {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
+        )
+        return message_str
+
     # MARK: Invoice Methods
     def add_invoice(self, invoice: lnrpc.Invoice) -> int:
         add_index = invoice.add_index or 0
@@ -330,9 +355,24 @@ class LndEventsGroup:
     def clear_payments(self) -> None:
         self.payments.clear()
 
+    def search_payment(self, htlc_id: int) -> lnrpc.Payment:
+        """
+        Search for a payment in the payments list by HTLC ID.
+
+        Args:
+            htlc_id (int): The HTLC ID to search for.
+
+        Returns:
+            lnrpc.Payment: The payment object if found, None otherwise.
+        """
+        for payment in self.payments:
+            if payment.htlc_id == htlc_id:
+                return payment
+        return None
+
     # MARK: Channel Name Methods
 
-    def add_channel_name(self, channel_name: ChannelName) -> int:
+    def add_channel_name(self, channel_name: LndChannelName) -> int:
         self.channel_names[channel_name.channel_id] = channel_name
         return channel_name.channel_id
 
@@ -341,7 +381,7 @@ class LndEventsGroup:
 
     def lookup_name(self, channel_id: int) -> str:
         return self.channel_names.get(
-            channel_id, ChannelName(channel_id, f"Channel {channel_id}")
+            channel_id, LndChannelName(channel_id, f"Channel {channel_id}")
         ).name
 
     # MARK: Magic Methods
@@ -355,7 +395,7 @@ class LndEventsGroup:
             case lnrpc.Payment:
                 return item in self.payments
             case _:
-                if isinstance(item, ChannelName):
+                if isinstance(item, LndChannelName):
                     return item.channel_id in self.channel_names
                 return False
 
