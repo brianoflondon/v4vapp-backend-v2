@@ -49,13 +49,23 @@ async def track_events(
     event_id = lnd_events_group.append(event)
     dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
     if lnd_events_group.complete_group(event=event):
-        logger.info(
-            f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
-            extra={"notification": True},
-        )
-        await remove_event_group(event, lnd_events_group)
-
-    pass
+        notification = True if type(event) == routerrpc.HtlcEvent else False
+        if (
+            type(event) == routerrpc.HtlcEvent
+            and event.event_type != routerrpc.HtlcEvent.UNKNOWN
+        ):
+            logger.info(
+                f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
+                extra={"notification": notification},
+            )
+            logger.info(
+                f"{client.icon} {lnd_events_group.report_event_counts_str()}",
+                extra={
+                    "notification": False,
+                    "event_counts": lnd_events_group.report_event_counts(),
+                },
+            )
+            await remove_event_group(event, client, lnd_events_group)
 
 
 async def check_dest_alias(
@@ -98,7 +108,7 @@ async def check_dest_alias(
 
 
 async def remove_event_group(
-    event: EventItem, lnd_events_group: LndEventsGroup
+    event: EventItem, client: LNDClient, lnd_events_group: LndEventsGroup
 ) -> None:
     """
     Asynchronously removes an event from the specified LndEventsGroup after a delay.
@@ -112,13 +122,29 @@ async def remove_event_group(
     """
     await asyncio.sleep(3)
     lnd_events_group.remove_group(event)
+    logger.info(
+        f"{client.icon} {lnd_events_group.report_event_counts_str()} <- removed group",
+        extra={
+            "notification": False,
+            "event_counts": lnd_events_group.report_event_counts(),
+        },
+    )
 
 
 async def invoice_report(
     invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
 ) -> None:
+    expiry_datetime = datetime.fromtimestamp(
+        invoice.creation_date + invoice.expiry, tz=timezone.utc
+    )
+    time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
+    time_to_expire_str = format_time_delta(time_to_expire)
     logger.info(
-        f"{client.icon} Invoice: {invoice.add_index:>6} amount: {invoice.value:>10,} sat {invoice.settle_index}",
+        (
+            f"{client.icon} Invoice: {invoice.add_index:>6} "
+            f"amount: {invoice.value:>10,} sat {invoice.settle_index} "
+            f"expiry: {time_to_expire_str} "
+        ),
         extra={"invoice": MessageToDict(invoice, preserving_proto_field_name=True)},
     )
 
@@ -160,10 +186,15 @@ async def htlc_event_report(
         if htlc_event.settle_event.preimage != b""
         else None
     )
+    is_complete = lnd_events_group.complete_group(htlc_event)
+    is_complete_str = "💎" if is_complete else "🔨"
     logger.info(
-        (f"{client.icon} htlc:    {htlc_id:>6} {event_type} {preimage}"),
+        (
+            f"{client.icon} {is_complete_str} htlc:    {htlc_id:>6} {event_type} {preimage}"
+        ),
         extra={
-            "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True)
+            "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True),
+            "complete": is_complete,
         },
     )
 
@@ -269,7 +300,7 @@ async def fill_channel_names(
     request = lnrpc.ListChannelsRequest()
     channels = await client.call(
         client.lightning_stub.ListChannels,
-        lnrpc.ListChannelsRequest(),
+        request,
     )
     channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
     # Get the name of each channel
@@ -311,14 +342,15 @@ async def run(connection_name: str) -> None:
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
             )
         await fill_channel_names(client, lnd_events_group)
-
-        async_subscribe(Events.LND_INVOICE, invoice_report)
-        async_subscribe(Events.LND_PAYMENT, payment_report)
-        async_subscribe(Events.HTLC_EVENT, htlc_event_report)
+        # It is important to subscribe to the track_events function before the reporting functions
+        # The track_events function will group events and report them when the group is complete
         async_subscribe(
             [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
             track_events,
         )
+        async_subscribe(Events.LND_INVOICE, invoice_report)
+        async_subscribe(Events.LND_PAYMENT, payment_report)
+        async_subscribe(Events.HTLC_EVENT, htlc_event_report)
         tasks = [
             invoices_loop(client=client, lnd_events_group=lnd_events_group),
             payments_loop(client=client, lnd_events_group=lnd_events_group),

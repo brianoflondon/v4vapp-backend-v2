@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
@@ -101,7 +101,10 @@ class LndEventsGroup:
                     event.incoming_htlc_id or event.outgoing_htlc_id
                 )
             case "Invoice":
-                return True
+                invoice_group = self.get_invoice_list_by_pre_image(event.r_preimage)
+                if self.is_invoice_expired(event):
+                    return True
+                return True if len(invoice_group) == 2 else False
             case "Payment":
                 return True
             case "ChannelName":
@@ -122,7 +125,10 @@ class LndEventsGroup:
                     and event.outgoing_htlc_id != htlc_id
                 ]
             case "Invoice":
-                self.invoices.remove(event)
+                invoice_group = self.get_invoice_list_by_pre_image(event.r_preimage)
+                for invoice in invoice_group:
+                    self.invoices.remove(invoice)
+                self.clear_expired_invoices()
             case "Payment":
                 self.payments.remove(event)
             case _:
@@ -130,6 +136,23 @@ class LndEventsGroup:
 
     def list_groups(self) -> List[List[EventItem]]:
         return []
+
+    def report_event_counts(self) -> dict:
+        return {
+            "htlc_events": len(self.htlc_events),
+            "invoices": len(self.invoices),
+            "payments": len(self.payments),
+            "channel_names": len(self.channel_names),
+        }
+
+    def report_event_counts_str(self) -> str:
+        counts = self.report_event_counts()
+        return (
+            f"HTLC Events: {counts['htlc_events']}, "
+            f"Invoices: {counts['invoices']}, "
+            f"Payments: {counts['payments']}, "
+            f"Channel Names: {counts['channel_names']}"
+        )
 
     def message(self, event: EventItem, dest_alias: str = None) -> str:
         """
@@ -166,7 +189,8 @@ class LndEventsGroup:
             case routerrpc.HtlcEvent.EventType.FORWARD:
                 message_str = self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.UNKNOWN:
-                message_str = self.message_forward_event(htlc_id)
+                message_str = "Unknown"
+                # message_str = self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.SEND:
                 message_str = self.message_send_event(htlc_id, dest_alias)
             case routerrpc.HtlcEvent.EventType.RECEIVE:
@@ -449,6 +473,11 @@ class LndEventsGroup:
     def clear_invoices(self) -> None:
         self.invoices.clear()
 
+    def clear_expired_invoices(self) -> None:
+        self.invoices = [
+            invoice for invoice in self.invoices if not self.is_invoice_expired(invoice)
+        ]
+
     def lookup_invoice_by_htlc_id(self, htlc_id: int) -> lnrpc.Invoice:
         for invoice in self.invoices:
             if invoice and invoice.htlcs:
@@ -456,6 +485,30 @@ class LndEventsGroup:
                     if int(htlc_data.htlc_index) == int(htlc_id):
                         return invoice
         return None
+
+    def get_invoice_list_by_pre_image(self, pre_image: str) -> List[lnrpc.Invoice]:
+        answer = []
+        for invoice in self.invoices:
+            if invoice.r_preimage == pre_image:
+                answer.append(invoice)
+            return answer
+        return []
+
+    def is_invoice_expired(self, invoice: lnrpc.Invoice) -> bool:
+        """
+        Check if the event has expired.
+
+        Args:
+            event (lnrpc.Payment): The event to check.
+
+        Returns:
+            bool: True if the event has expired, False otherwise.
+        """
+        expiry_date = datetime.fromtimestamp(
+            invoice.creation_date + invoice.expiry, tz=timezone.utc
+        )
+        expired = datetime.now(tz=timezone.utc) > expiry_date
+        return expired
 
     # MARK: Payment Methods
     def add_payment(self, payment: lnrpc.Payment) -> int:

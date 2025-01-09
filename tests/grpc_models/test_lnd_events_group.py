@@ -109,6 +109,10 @@ def test_message_forward_events():
         # "tests/data/htlc_events_test_data2.safe_log"
     ):
         lnd_events_group.append(event)
+        lnd_events_group.complete_group(event=event)
+
+    print(lnd_events_group.report_event_counts())
+    print(lnd_events_group.report_event_counts_str())
 
     for group in lnd_events_group.list_groups_htlc():
         dest_alias = None
@@ -123,3 +127,11 @@ def test_message_forward_events():
                     #     matching_payment.payment_request, client
                     # )
         print(lnd_events_group.message(event=group[0], dest_alias=dest_alias))
+
+    for invoice in lnd_events_group.invoices:
+        print(lnd_events_group.message(event=invoice))
+
+    lnd_events_group.clear()
+
+    for invoice in lnd_events_group.invoices:
+        print(lnd_events_group.message(event=invoice))
