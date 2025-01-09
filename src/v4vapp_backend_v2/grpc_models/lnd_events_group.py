@@ -189,8 +189,7 @@ class LndEventsGroup:
             case routerrpc.HtlcEvent.EventType.FORWARD:
                 message_str = self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.UNKNOWN:
-                message_str = "Unknown"
-                # message_str = self.message_forward_event(htlc_id)
+                message_str = self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.SEND:
                 message_str = self.message_send_event(htlc_id, dest_alias)
             case routerrpc.HtlcEvent.EventType.RECEIVE:

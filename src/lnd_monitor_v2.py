@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import typer
 import sys
 import asyncio
@@ -54,18 +54,30 @@ async def track_events(
             type(event) == routerrpc.HtlcEvent
             and event.event_type != routerrpc.HtlcEvent.UNKNOWN
         ):
-            logger.info(
-                f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
-                extra={"notification": notification},
-            )
-            logger.info(
-                f"{client.icon} {lnd_events_group.report_event_counts_str()}",
-                extra={
-                    "notification": False,
-                    "event_counts": lnd_events_group.report_event_counts(),
-                },
-            )
-            await remove_event_group(event, client, lnd_events_group)
+            try:
+                htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+                if htlc_id:
+                    incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
+                        htlc_id
+                    )
+                if incoming_invoice:
+                    amount = incoming_invoice.value if incoming_invoice else 0
+                    notification = False if amount < 10 else notification
+            except Exception as e:
+                logger.exception(e)
+                pass
+        logger.info(
+            f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
+            extra={"notification": notification},
+        )
+        logger.info(
+            f"{client.icon} {lnd_events_group.report_event_counts_str()}",
+            extra={
+                "notification": False,
+                "event_counts": lnd_events_group.report_event_counts(),
+            },
+        )
+        await remove_event_group(event, client, lnd_events_group)
 
 
 async def check_dest_alias(
@@ -120,7 +132,7 @@ async def remove_event_group(
     Returns:
         None
     """
-    await asyncio.sleep(3)
+    # await asyncio.sleep(0.5)
     lnd_events_group.remove_group(event)
     logger.info(
         f"{client.icon} {lnd_events_group.report_event_counts_str()} <- removed group",
@@ -138,6 +150,8 @@ async def invoice_report(
         invoice.creation_date + invoice.expiry, tz=timezone.utc
     )
     time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
+    if time_to_expire.total_seconds() < 0:
+        time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
     logger.info(
         (
@@ -335,7 +349,10 @@ async def run(connection_name: str) -> None:
     """
     lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as client:
-        logger.info(f"{client.icon} 🔍 Monitoring node...")
+        logger.info(
+            f"{client.icon} 🔍 Monitoring node... {connection_name}",
+            extra={"notification": True},
+        )
 
         if client.get_info:
             logger.info(
