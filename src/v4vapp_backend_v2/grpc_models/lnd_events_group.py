@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Tuple
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict
@@ -154,7 +154,7 @@ class LndEventsGroup:
             f"Channel Names: {counts['channel_names']}"
         )
 
-    def message(self, event: EventItem, dest_alias: str = None) -> str:
+    def message(self, event: EventItem, dest_alias: str = None) -> Tuple[str, dict]:
         """
         Generates a message string based on the type of the given event.
         Args:
@@ -170,52 +170,58 @@ class LndEventsGroup:
             case "HtlcEvent":
                 return self.message_htlc_event(event, dest_alias)
             case "Invoice":
-                return f"🧾 Invoice: {event.value_msat//1000:,.0f}"
+                return f"🧾 Invoice: {event.value_msat//1000:,.0f}", {}
             case "Payment":
                 return self.message_payment_event(event, dest_alias)
             case "ChannelName":
-                return f"🔗 Channel: {event}"
+                return f"🔗 Channel: {event}", event.to_dict()
             case _:
-                return ""
+                return "", {}
 
     def message_htlc_event(
         self, event: routerrpc.HtlcEvent, dest_alias: str = None
-    ) -> str:
+    ) -> Tuple[str, dict]:
         htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
         # Special exception for when the htlc_id is 0 during the subscribe start up
         if htlc_id == 0 or not self.htlc_complete_group(htlc_id):
-            return f"{event_type_name(event.event_type)} {htlc_id} in progress"
+            return f"{event_type_name(event.event_type)} {htlc_id} in progress", {
+                "htlc_id": htlc_id
+            }
         match event.event_type:
             case routerrpc.HtlcEvent.EventType.FORWARD:
-                message_str = self.message_forward_event(htlc_id)
+                return self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.UNKNOWN:
-                message_str = self.message_forward_event(htlc_id)
+                return self.message_forward_event(htlc_id)
             case routerrpc.HtlcEvent.EventType.SEND:
-                message_str = self.message_send_event(htlc_id, dest_alias)
+                return self.message_send_event(htlc_id, dest_alias)
             case routerrpc.HtlcEvent.EventType.RECEIVE:
-                message_str = self.message_receive_event(htlc_id)
+                return self.message_receive_event(htlc_id)
             case _:
-                message_str = f"no message {event_type_name(event.event_type)}"
-        return message_str
+                return f"no message {event_type_name(event.event_type)}"
+        return "", {}
 
     def message_payment_event(
         self, event: routerrpc.HtlcEvent, dest_alias: str = None
-    ) -> str:
+    ) -> Tuple[str, dict]:
         if not type(event) == lnrpc.Payment:
-            return ""
+            return "", {}
         creation_date = datetime.fromtimestamp(
             event.creation_time_ns / 1e9, tz=timezone.utc
         )
         in_flight_time = format_time_delta(
             datetime.now(tz=timezone.utc) - creation_date
         )
-
+        ans_dict = {
+            "creation_date": creation_date,
+            "in_flight_time": in_flight_time,
+            "dest_alias": dest_alias,
+        }
         return (
             f"💸 Payment: {event.value_msat//1000:,.0f} sats "
             f"to: {dest_alias or 'Unknown'} "
             f"in flight: {in_flight_time} "
             f"{payment_event_status_name(event.status)}"
-        )
+        ), ans_dict
 
     # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:
@@ -326,7 +332,7 @@ class LndEventsGroup:
     def clear_htlc_events(self) -> None:
         self.htlc_events.clear()
 
-    def message_forward_event(self, htlc_id: int) -> str:
+    def message_forward_event(self, htlc_id: int) -> Tuple[str, dict]:
         """
         Returns the message of the forward event in the HTLC group with the given HTLC ID.
 
@@ -381,7 +387,14 @@ class LndEventsGroup:
                 f"{to_channel} "
                 f"{end_message}"
             )
-            return message_str
+            ans_dict = {
+                "htlc_id": htlc_id,
+                "from_channel": from_channel,
+                "to_channel": to_channel,
+                "amount": self.forward_amt_fee(primary_event).forward_amount,
+                "fee": self.forward_amt_fee(primary_event).fee,
+            }
+            return message_str, ans_dict
 
     def forward_amt_fee(self, event: routerrpc.HtlcEvent) -> ForwardAmtFee:
         info = event.forward_event.info
@@ -400,7 +413,9 @@ class LndEventsGroup:
                 return payment
         return None
 
-    def message_send_event(self, htlc_id: int, dest_alias: str = None) -> str:
+    def message_send_event(
+        self, htlc_id: int, dest_alias: str = None
+    ) -> Tuple[str, dict]:
         """
         Constructs a message string based on the HTLC (Hashed Time-Locked Contract) event details.
         Args:
@@ -436,9 +451,16 @@ class LndEventsGroup:
             f"out {sent_via}. "
             f"{end_message}"
         )
-        return message_str
+        ans_dict = {
+            "htlc_id": htlc_id,
+            "amount": amount,
+            "sent_via": sent_via,
+            "dest_alias": dest_alias,
+            "end_message": end_message,
+        }
+        return message_str, ans_dict
 
-    def message_receive_event(self, htlc_id: int) -> str:
+    def message_receive_event(self, htlc_id: int) -> Tuple[str, dict]:
         group_list = self.by_htlc_id(htlc_id)
         primary_event = group_list[0]
         htlc_id = primary_event.incoming_htlc_id or primary_event.outgoing_htlc_id
@@ -461,7 +483,13 @@ class LndEventsGroup:
         message_str = (
             f"💵 Received {amount:,}{for_memo} via " f"{received_via}{htlc_id_str}"
         )
-        return message_str
+        ans_dict = {
+            "htlc_id": htlc_id,
+            "amount": amount,
+            "received_via": received_via,
+            "for_memo": for_memo,
+        }
+        return message_str, ans_dict
 
     # MARK: Invoice Methods
     def add_invoice(self, invoice: lnrpc.Invoice) -> int:

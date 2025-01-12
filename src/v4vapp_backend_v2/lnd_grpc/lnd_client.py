@@ -159,7 +159,7 @@ class LNDClient:
                         lnrpc.WalletBalanceRequest()
                     )
                     logger.warning(
-                        f"Connection to LND is OK Error "
+                        f"{self.icon} Connection to LND is OK Error "
                         f"cleared error_count: {error_count}",
                         extra={
                             "notification": True,

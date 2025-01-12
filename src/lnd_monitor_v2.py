@@ -66,17 +66,19 @@ async def track_events(
             except Exception as e:
                 logger.exception(e)
                 pass
-        logger.info(
-            f"{client.icon} {lnd_events_group.message(event, dest_alias=dest_alias)}",
-            extra={"notification": notification},
-        )
-        logger.info(
-            f"{client.icon} {lnd_events_group.report_event_counts_str()}",
-            extra={
-                "notification": False,
-                "event_counts": lnd_events_group.report_event_counts(),
-            },
-        )
+        message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
+        if " Attempted 0 " not in message_str:
+            logger.info(
+                f"{client.icon} {message_str}",
+                extra={"notification": notification, **ans_dict},
+            )
+            logger.debug(
+                f"{client.icon} {lnd_events_group.report_event_counts_str()}",
+                extra={
+                    "notification": False,
+                    "event_counts": lnd_events_group.report_event_counts(),
+                },
+            )
         await remove_event_group(event, client, lnd_events_group)
 
 
@@ -132,9 +134,9 @@ async def remove_event_group(
     Returns:
         None
     """
-    # await asyncio.sleep(0.5)
+    await asyncio.sleep(3)
     lnd_events_group.remove_group(event)
-    logger.info(
+    logger.debug(
         f"{client.icon} {lnd_events_group.report_event_counts_str()} <- removed group",
         extra={
             "notification": False,
@@ -153,7 +155,7 @@ async def invoice_report(
     if time_to_expire.total_seconds() < 0:
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
-    logger.info(
+    logger.debug(
         (
             f"{client.icon} Invoice: {invoice.add_index:>6} "
             f"amount: {invoice.value:>10,} sat {invoice.settle_index} "
@@ -173,7 +175,7 @@ async def payment_report(
     pre_image = payment.payment_preimage if payment.payment_preimage else ""
     dest_alias = await get_node_alias_from_pay_request(payment.payment_request, client)
     in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
-    logger.info(
+    logger.debug(
         (
             f"{client.icon} Payment: {payment.payment_index:>6} "
             f"amount: {payment.value_sat:>10,} sat "
@@ -202,7 +204,7 @@ async def htlc_event_report(
     )
     is_complete = lnd_events_group.complete_group(htlc_event)
     is_complete_str = "💎" if is_complete else "🔨"
-    logger.info(
+    logger.debug(
         (
             f"{client.icon} {is_complete_str} htlc:    {htlc_id:>6} {event_type} {preimage}"
         ),

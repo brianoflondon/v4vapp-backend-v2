@@ -1,6 +1,5 @@
-import json
-import pickle
 from google.protobuf.json_format import MessageToDict
+from grpc.aio import AioRpcError  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
@@ -79,16 +78,21 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
     try:
         logger.debug(f"get_node_info: {pub_key}")
         request = lnrpc.NodeInfoRequest(pub_key=pub_key)
-        response: lnrpc.NodeInfo = await client.call(
-            client.lightning_stub.GetNodeInfo,
-            request,
-        )
+        response = await client.lightning_stub.GetNodeInfo(request)
+        # response: lnrpc.NodeInfo = await client.call(
+        #     client.lightning_stub.GetNodeInfo,
+        #     request,
+        # )
         logger.debug(f"get_node_info: {pub_key} {response.node.alias}")
         return response
+    except AioRpcError as e:
+        logger.info(f"{client.icon} get_node_info {e.details()}", extra ={"original_error": e})
+        return lnrpc.NodeInfo()
+
     except LNDConnectionError as e:
         try:
             if e.args[1]._details == "unable to find node":
-                logger.warning(f"get_node_info: {pub_key} not found")
+                logger.warning(f"{client.icon} get_node_info: {pub_key} not found")
                 return lnrpc.NodeInfo()
         except Exception as e:
             pass
@@ -96,7 +100,7 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         return lnrpc.NodeInfo()
 
     except Exception as e:
-        logger.info(f"Failure get_node_info: {pub_key}")
+        logger.info(f"{client.icon} Failure get_node_info: {pub_key}")
         logger.exception(e)
         return lnrpc.NodeInfo()
 
