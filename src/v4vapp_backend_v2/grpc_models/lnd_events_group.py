@@ -97,9 +97,7 @@ class LndEventsGroup:
         event_type = event.__class__.__name__
         match event_type:
             case "HtlcEvent":
-                return self.htlc_complete_group(
-                    event.incoming_htlc_id or event.outgoing_htlc_id
-                )
+                return self.htlc_complete_group(event)
             case "Invoice":
                 invoice_group = self.get_invoice_list_by_pre_image(event.r_preimage)
                 if self.is_invoice_expired(event):
@@ -170,7 +168,10 @@ class LndEventsGroup:
             case "HtlcEvent":
                 return self.message_htlc_event(event, dest_alias)
             case "Invoice":
-                return f"🧾 Invoice: {event.value_msat//1000:,.0f}", {}
+                return (
+                    f"🧾 Invoice: {event.value_msat//1000:,.0f} ({event.add_index})",
+                    {},
+                )
             case "Payment":
                 return self.message_payment_event(event, dest_alias)
             case "ChannelName":
@@ -183,7 +184,7 @@ class LndEventsGroup:
     ) -> Tuple[str, dict]:
         htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
         # Special exception for when the htlc_id is 0 during the subscribe start up
-        if htlc_id == 0 or not self.htlc_complete_group(htlc_id):
+        if htlc_id == 0 or not self.htlc_complete_group(event):
             return f"{event_type_name(event.event_type)} {htlc_id} in progress", {
                 "htlc_id": htlc_id
             }
@@ -276,7 +277,7 @@ class LndEventsGroup:
                 grouped_events[htlc_id].append(event)
         return list(grouped_events.values())
 
-    def htlc_complete_group(self, htlc_id: int) -> bool:
+    def htlc_complete_group(self, event: routerrpc.HtlcEvent) -> bool:
         """
         Determines if an HTLC (Hashed Time-Locked Contract) group is complete based on the given
         HTLC ID.
@@ -297,8 +298,10 @@ class LndEventsGroup:
             - The group is complete if it contains 2 events.
         - For any other event type, the group is considered complete.
         """
-
+        htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
         group_list = self.by_htlc_id(htlc_id)
+        if not (event == group_list[-1]):
+            return False
         if group_list:
             match event_type_name(group_list[0].event_type):
                 case "FORWARD":
@@ -319,7 +322,8 @@ class LndEventsGroup:
                             for event in group_list:
                                 if event.final_htlc_event:
                                     event.final_htlc_event.settled = True
-                            return True
+                            if event == group_list[1]:
+                                return True
                     return False
                 case "SEND":
                     return True if len(group_list) == 2 else False
@@ -385,7 +389,7 @@ class LndEventsGroup:
                 f"{self.forward_amt_fee(primary_event).forward_amount:,.0f} "
                 f"{from_channel} → "
                 f"{to_channel} "
-                f"{end_message}"
+                f"{end_message} ({htlc_id})"
             )
             ans_dict = {
                 "htlc_id": htlc_id,
@@ -429,7 +433,18 @@ class LndEventsGroup:
         group_list = self.by_htlc_id(htlc_id)
         primary_event = group_list[0]
         secondary_event = group_list[1]
-        end_message = "✅ Settled" if secondary_event.settle_event else "❌ Not Settled"
+        if secondary_event.settle_event:
+            payment = self.search_payment_preimage(
+                secondary_event.settle_event.preimage
+            )
+            if payment:
+                fee = payment.fee_msat / 1000 if payment.fee_msat else 0
+            else:
+                fee = 0
+            end_message = f"fee: {fee:,.3f} ✅ Settled"
+        else:
+            end_message = "❌ Not Settled"
+
         start_message = "⚡️ Sent" if secondary_event.settle_event else "⚡️ Probing"
         if (
             primary_event.forward_event
@@ -449,7 +464,7 @@ class LndEventsGroup:
             f"{start_message} {amount:,.0f} "
             f"to {dest_alias or 'Unknown'} "
             f"out {sent_via}. "
-            f"{end_message}"
+            f"{end_message} ({htlc_id})"
         )
         ans_dict = {
             "htlc_id": htlc_id,
@@ -559,6 +574,22 @@ class LndEventsGroup:
         for payment in self.payments:
             if payment.htlc_id == htlc_id:
                 return payment
+        return None
+
+    def search_payment_preimage(self, pre_image: str) -> lnrpc.Payment:
+        """
+        Search for a payment in the payments list by preimage.
+
+        Args:
+            pre_image (str): The preimage to search for.
+
+        Returns:
+            lnrpc.Payment: The payment object if found, None otherwise.
+        """
+        for payment in self.payments:
+            for htlc in payment.htlcs:
+                if htlc.preimage == pre_image:
+                    return payment
         return None
 
     # MARK: Channel Name Methods

@@ -43,7 +43,7 @@ def test_lnd_events_group():
         if isinstance(event, routerrpc.HtlcEvent):
             htlc_id = lnd_events_group.add_htlc_event(event)
             assert event in lnd_events_group
-            print(htlc_id, lnd_events_group.htlc_complete_group(htlc_id))
+            print(htlc_id, lnd_events_group.htlc_complete_group(event))
         if isinstance(event, lnrpc.Invoice):
             add_index = lnd_events_group.add_invoice(event)
             assert event in lnd_events_group
@@ -63,7 +63,7 @@ def test_lnd_events_group():
     for htlc_event in lnd_events_group.htlc_events:
         htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
         print(htlc_id, MessageToDict(htlc_event, preserving_proto_field_name=True))
-        print(lnd_events_group.htlc_complete_group(htlc_id))
+        print(lnd_events_group.htlc_complete_group(htlc_event))
 
     lnd_events_group.clear_htlc_events()
     assert len(lnd_events_group.htlc_events) == 0
@@ -102,7 +102,7 @@ def test_channel_names():
         print(lnd_events_group.lookup_name(channel_name.channel_id))
 
 
-def test_message_forward_events():
+def test_message_all_events():
     lnd_events_group = LndEventsGroup()
     for event in read_log_file(
         "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
@@ -110,6 +110,7 @@ def test_message_forward_events():
     ):
         lnd_events_group.append(event)
         lnd_events_group.complete_group(event=event)
+        lnd_events_group.message(event=event)
 
     print(lnd_events_group.report_event_counts())
     print(lnd_events_group.report_event_counts_str())
@@ -135,3 +136,47 @@ def test_message_forward_events():
 
     for invoice in lnd_events_group.invoices:
         print(lnd_events_group.message(event=invoice))
+
+
+def test_message_forward_events():
+    lnd_events_group = LndEventsGroup()
+    for event in read_log_file(
+        "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
+        # "tests/data/htlc_events_test_data2.safe_log"
+    ):
+        lnd_events_group.append(event)
+
+    all_messages = []
+    for event in read_log_file(
+        "tests/data/lnd_events/v4vapp-backend-v2.safe_log.jsonl"
+        # "tests/data/htlc_events_test_data2.safe_log"
+    ):
+        # lnd_events_group.append(event)
+        lnd_events_group.complete_group(event=event)
+        message_str, extra_dict = lnd_events_group.message(event=event)
+        if lnd_events_group.complete_group(event=event):
+            notification = True if type(event) == routerrpc.HtlcEvent else False
+            if (
+                type(event) == routerrpc.HtlcEvent
+                and event.event_type != routerrpc.HtlcEvent.UNKNOWN
+            ):
+                try:
+                    htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+                    if htlc_id:
+                        incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
+                            htlc_id
+                        )
+                    print(incoming_invoice)
+                    if incoming_invoice:
+                        amount = incoming_invoice.value if incoming_invoice else 0
+                        notification = False if amount < 10 else notification
+                except Exception as e:
+                    print(e)
+                    pass
+            message_str, ans_dict = lnd_events_group.message(event, dest_alias="Test")
+            if message_str in all_messages:
+                print("Duplicate message: ", message_str)
+                if "Forwarded" in message_str or "Received" in message_str:
+                    assert False
+            all_messages.append(message_str)
+            print(message_str)
