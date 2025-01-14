@@ -300,12 +300,12 @@ class LndEventsGroup:
         """
         htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
         group_list = self.by_htlc_id(htlc_id)
-        if not (event == group_list[-1]):
-            return False
         if group_list:
             match event_type_name(group_list[0].event_type):
                 case "FORWARD":
                     if len(group_list) == 3:
+                        if not (event == group_list[-1]):
+                            return False
                         return True
                     if len(group_list) == 2:
                         has_forward_event = any(
