@@ -6,6 +6,9 @@ authors = ["Brian of London (home imac) <brian@v4v.app>"]
 license = "MIT"
 readme = "README.md"
 
+# Add this line to disable package mode
+package-mode = false
+
 [tool.poetry.dependencies]
 python = "^3.11"
 grpcio = "^1.63.0"
