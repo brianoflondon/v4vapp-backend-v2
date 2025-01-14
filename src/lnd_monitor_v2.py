@@ -72,13 +72,6 @@ async def track_events(
                 f"{client.icon} {message_str}",
                 extra={"notification": notification, **ans_dict},
             )
-            logger.debug(
-                f"{client.icon} {lnd_events_group.report_event_counts_str()}",
-                extra={
-                    "notification": False,
-                    "event_counts": lnd_events_group.report_event_counts(),
-                },
-            )
         await remove_event_group(event, client, lnd_events_group)
 
 
@@ -136,13 +129,6 @@ async def remove_event_group(
     """
     await asyncio.sleep(3)
     lnd_events_group.remove_group(event)
-    logger.debug(
-        f"{client.icon} {lnd_events_group.report_event_counts_str()} <- removed group",
-        extra={
-            "notification": False,
-            "event_counts": lnd_events_group.report_event_counts(),
-        },
-    )
 
 
 async def invoice_report(
