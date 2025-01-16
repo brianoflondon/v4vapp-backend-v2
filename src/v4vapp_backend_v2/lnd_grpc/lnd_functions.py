@@ -9,6 +9,9 @@ from v4vapp_backend_v2.models.htlc_event_models import ChannelName
 from v4vapp_backend_v2.grpc_models.lnd_events_group import LndChannelName
 
 
+node_alias_cache = {}
+
+
 async def get_channel_name(
     channel_id: int,
     client: LNDClient = None,
@@ -86,7 +89,9 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         logger.debug(f"get_node_info: {pub_key} {response.node.alias}")
         return response
     except AioRpcError as e:
-        logger.info(f"{client.icon} get_node_info {e.details()}", extra ={"original_error": e})
+        logger.info(
+            f"{client.icon} get_node_info {e.details()}", extra={"original_error": e}
+        )
         return lnrpc.NodeInfo()
 
     except LNDConnectionError as e:
@@ -118,6 +123,9 @@ async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -
     """
     try:
         # Decode the payment request
+        if pay_request == "":
+            logger.debug("Empty payment request", extra={"notification": False})
+            return "Unknown"
         decode_request = lnrpc.PayReqString(pay_req=pay_request)
         decode_response: lnrpc.PayReq = await client.call(
             client.lightning_stub.DecodePayReq,

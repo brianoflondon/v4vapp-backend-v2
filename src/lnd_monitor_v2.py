@@ -102,15 +102,23 @@ async def check_dest_alias(
             await asyncio.sleep(1)
             matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
             if matching_payment:
-                dest_alias = await get_node_alias_from_pay_request(
-                    matching_payment.payment_request, client
-                )
-                return dest_alias
+                if matching_payment.payment_request:
+                    dest_alias = await get_node_alias_from_pay_request(
+                        matching_payment.payment_request, client
+                    )
+                    return dest_alias
+                else:
+                    return "Keysend"
+    # Keysend payments outgoing do not have a payment request
     if type(event) == lnrpc.Payment:
-        dest_alias = await get_node_alias_from_pay_request(
-            event.payment_request, client
-        )
-        return dest_alias
+        if event.payment_request:
+            dest_alias = await get_node_alias_from_pay_request(
+                event.payment_request, client
+            )
+            return dest_alias
+        else:
+            return "Keysend"
+
     return ""
 
 
