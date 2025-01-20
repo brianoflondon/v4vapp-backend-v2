@@ -2,6 +2,8 @@ import asyncio
 import os
 import sys
 from typing import Any, AsyncGenerator, Callable
+from google.protobuf.json_format import MessageToDict
+
 
 import backoff
 from grpc import composite_channel_credentials  # type: ignore
@@ -126,7 +128,13 @@ class LNDClient:
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
                 lnrpc.GetInfoRequest()
             )
-            logger.info(f"{self.icon} Calling get_info")
+            get_info_dict = MessageToDict(
+                self.get_info, preserving_proto_field_name=True
+            )
+            logger.info(
+                f"{self.icon} Calling get_info {self.connection.name}",
+                extra={"get_info": get_info_dict},
+            )
             return self.get_info
         except Exception as e:
             logger.error(f"Error getting node info {e}", exc_info=True)
