@@ -366,9 +366,9 @@ class LndEventsGroup:
                     else:
                         amount = 0
                     failure_string = primary_event.link_fail_event.failure_string
-                    end_message = f"❌ Not Settled {amount:.0f} {failure_string}"
+                    end_message = f"❌ {amount:.0f} {failure_string}"
                 else:
-                    end_message = "❌ Not Settled"
+                    end_message = "❌"
 
             elif group_list[2].event_type == routerrpc.HtlcEvent.EventType.FORWARD and (
                 group_list[2].forward_fail_event or group_list[2].link_fail_event
@@ -383,7 +383,7 @@ class LndEventsGroup:
                     f"✅ Earned {self.forward_amt_fee(primary_event).fee:,.3f} "
                 )
             else:
-                end_message = "❌ Not Settled"
+                end_message = "❌"
             message_str = (
                 f"{start_message} "
                 f"{self.forward_amt_fee(primary_event).forward_amount:,.0f} "
@@ -441,9 +441,9 @@ class LndEventsGroup:
                 fee = payment.fee_msat / 1000 if payment.fee_msat else 0
             else:
                 fee = 0
-            end_message = f"fee: {fee:,.3f} ✅ Settled"
+            end_message = f"fee: {fee:,.3f} ✅"
         else:
-            end_message = "❌ Not Settled"
+            end_message = "❌"
 
         start_message = "⚡️ Sent" if secondary_event.settle_event else "⚡️ Probing"
         if (
