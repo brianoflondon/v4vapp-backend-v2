@@ -45,11 +45,14 @@ def modify_imports(file_path):
 
 def main():
     # Define the directory containing the generated files
+    print("Modifying import statements in generated Python files...")
     directory = "src/v4vapp_backend_v2/lnd_grpc"
 
     # Modify the import statements in all generated .py files
     for root, _, files in os.walk(directory):
+        print(f"Processing directory... {root}")
         for file_name in files:
+            print(f"Processing {file_name}...")
             if file_name.endswith(".py"):
                 file_path = os.path.join(root, file_name)
                 modify_imports(file_path)

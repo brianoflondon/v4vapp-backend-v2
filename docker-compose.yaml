@@ -1,10 +1,19 @@
 services:
 
-  v4vapp-backend-v2:
+  voltage-node-monitor:
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-    command: ["poetry", "run", "python", "context_manager.py"]
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
+
+  umbrel-node-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]

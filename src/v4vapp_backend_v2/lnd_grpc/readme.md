@@ -1,18 +1,28 @@
 Compiling the router.proto File
 To compile the router.proto file into Python code, you can use the following command:
 
+cd into src/v4vapp_backend_v2/lnd_grpc
+
 ```
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. router.proto
 ```
 ```
 python -m grpc_tools.protoc -I=. --python_out=. --grpc_python_out=. router.proto
 ```
+```
+python -m grpc_tools.protoc -I=. --python_out=. --grpc_python_out=. invoices.proto
+```
+
 
 After that needed to change the import statements adding `from . import`
 ```
 from . import lightning_pb2 as lightning__pb2
 from . import router_pb2 as router__pb2
 ```
+
+Use the Modify Import script
+
+`modify_imports.py`
 
 Explanation
 -I.: Specifies the directory in which to search for imports. The . means the current directory.

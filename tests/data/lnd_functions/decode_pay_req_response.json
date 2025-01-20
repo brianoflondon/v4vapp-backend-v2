@@ -1,0 +1,30 @@
+{
+    "destination": "0396693dee59afd67f178af392990d907d3a9679fa7ce00e806b8e373ff6b70bd8",
+    "payment_hash": "ca051bd5ef67cadbd211c5b48f3a8db9235bee608e2352366b2b4e1b8ac19554",
+    "num_satoshis": "100",
+    "timestamp": "1735547820",
+    "expiry": "86400",
+    "cltv_expiry": "40",
+    "payment_addr": "EXwI58+yBTq8tSOtAtxsl7cBHMbkm0De10eZDynVxj0=",
+    "num_msat": "100000",
+    "features": {
+        "8": {
+            "name": "tlv-onion",
+            "is_required": true,
+            "is_known": true
+        },
+        "14": {
+            "name": "payment-addr",
+            "is_required": true,
+            "is_known": true
+        },
+        "17": {
+            "name": "multi-path-payments",
+            "is_known": true
+        },
+        "25": {
+            "name": "route-blinding",
+            "is_known": true
+        }
+    }
+}

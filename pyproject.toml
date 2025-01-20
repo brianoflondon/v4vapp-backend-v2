@@ -6,6 +6,9 @@ authors = ["Brian of London (home imac) <brian@v4v.app>"]
 license = "MIT"
 readme = "README.md"
 
+# Add this line to disable package mode
+package-mode = false
+
 [tool.poetry.dependencies]
 python = "^3.11"
 grpcio = "^1.63.0"
@@ -20,6 +23,7 @@ pyyaml = "^6.0.2"
 types-pyyaml = "^6.0.12.20240917"
 httpx = "^0.27.2"
 toml = "^0.10.2"
+typer = "^0.15.1"
 
 
 [tool.poetry.group.dev.dependencies]

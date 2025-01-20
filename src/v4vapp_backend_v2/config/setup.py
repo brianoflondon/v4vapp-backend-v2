@@ -1,5 +1,6 @@
 import asyncio
 import atexit
+from datetime import timedelta
 import json
 import logging.config
 import logging.handlers
@@ -40,6 +41,7 @@ class LoggingConfig(BaseModel):
 
 class LndConnectionConfig(BaseModel):
     name: str = ""
+    icon: str = ""
     address: str = ""
     options: list = []
     certs_path: Path = Path(".certs/")
@@ -109,14 +111,48 @@ class Config(BaseModel):
             raise ValueError("Default connection not found in lnd_connections")
         return v
 
-    def list_lnd_connections(self) -> List[str]:
+    def list_connection_names(self) -> List[str]:
         return [connection.name for connection in self.lnd_connections]
 
+    @property
+    def connection_names(self) -> str:
+        """
+        Retrieve a list of connection names from the lnd_connections attribute.
+
+        Returns:
+            str: A list containing the names of all connections separated by ,.
+        """
+        return ", ".join([name for name in self.list_connection_names()])
+
     def connection(self, connection_name: str) -> LndConnectionConfig:
+        """
+        Retrieve the LndConnectionConfig for a given connection name.
+
+        Args:
+            connection_name (str): The name of the connection to retrieve.
+
+        Returns:
+            LndConnectionConfig: The configuration for the specified connection.
+
+        Raises:
+            ValueError: If the connection with the specified name is not found.
+        """
         for connection in self.lnd_connections:
             if connection.name == connection_name:
                 return connection
         raise ValueError(f"Connection {connection_name} not found in config")
+
+    def icon(self, connection_name: str) -> str:
+        """
+        Retrieves the icon associated with a given connection name.
+
+        Args:
+            connection_name (str): The name of the connection for which to retrieve the icon.
+
+        Returns:
+            str: The icon associated with the specified connection name.
+        """
+        return self.connection(connection_name).icon
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -179,6 +215,11 @@ class InternalConfig:
             self.setup_config()
             self.setup_logging()
             self._initialized = True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if hasattr(self, "notification_loop"):
+            if self.notification_loop is not None:
+                self.notification_loop.close()
 
     def setup_config(self) -> None:
         try:
@@ -287,7 +328,27 @@ class InternalConfig:
             logging.getLogger(handler).addHandler(handler)
             logging.getLogger(handler).setLevel(level)
 
-        logger.info(
-            f"Starting LND gRPC client v{__version__} config: {self.config.default_connection}",
-            extra={"notification": True},
-        )
+
+"""
+General purpose functions
+"""
+
+
+def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
+    """
+    Formats a timedelta object as a string.
+    If Days are present, the format is "X days, Y hours".
+    Otherwise, the format is "HH:MM:SS".
+    Args:
+        delta (timedelta): The timedelta object to format.
+
+    Returns:
+        str: The formatted string.
+    """
+    if delta.days:
+        return f"{delta.days} days, {delta.seconds // 3600} hours"
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if fractions:
+        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
