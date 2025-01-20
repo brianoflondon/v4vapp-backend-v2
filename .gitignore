@@ -166,7 +166,8 @@ cython_debug/
 .certs
 .certs/*
 
-# Ignore settings
+# Ignore settings and logs
 *.DS_Store
-logs/*
 config/config.yaml
+logs/*
+logs_docker/*
