@@ -1,9 +1,17 @@
 services:
-
-  voltage-node-monitor:
+  node-monitor:
     build:
       context: .
       dockerfile: Dockerfile
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+
+  voltage-node-monitor:
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
@@ -11,9 +19,9 @@ services:
     command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
 
   umbrel-node-monitor:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
