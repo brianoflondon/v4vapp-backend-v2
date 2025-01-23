@@ -41,6 +41,14 @@ class ForwardAmtFee:
         self.forward_amount = forward_amount
         self.fee = fee
 
+    @property
+    def fee_percent(self) -> float:
+        return self.fee / self.forward_amount * 100 if self.forward_amount else 0
+
+    @property
+    def fee_ppm(self) -> float:
+        return self.fee / self.forward_amount * 1_000_000 if self.forward_amount else 0
+
 
 EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment, LndChannelName]
 
@@ -382,6 +390,8 @@ class LndEventsGroup:
                 start_message = "💰 Forwarded"
                 end_message = (
                     f"✅ Earned {self.forward_amt_fee(primary_event).fee:,.3f} "
+                    f"{self.forward_amt_fee(primary_event).fee_percent:.2f}% "
+                    f"{self.forward_amt_fee(primary_event).fee_ppm:.0f} ppm"
                 )
             else:
                 end_message = "❌"
@@ -398,6 +408,8 @@ class LndEventsGroup:
                 "to_channel": to_channel,
                 "amount": self.forward_amt_fee(primary_event).forward_amount,
                 "fee": self.forward_amt_fee(primary_event).fee,
+                "fee_percent": self.forward_amt_fee(primary_event).fee_percent,
+                "fee_ppm": self.forward_amt_fee(primary_event).fee_ppm,
             }
             return message_str, ans_dict
 
