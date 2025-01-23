@@ -1,6 +1,6 @@
 import asyncio
 import atexit
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging.config
 import logging.handlers
@@ -352,3 +352,23 @@ def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
     if fractions:
         return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
     return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+
+def get_in_flight_time(creation_date: datetime) -> str:
+    """
+    Calculate the time in flight for a given datetime object.
+    Args:
+        creation_date (datetime): The datetime object to calculate the time in flight for.
+
+    Returns:
+        str: The formatted string representing the timedelta.
+    """
+
+    current_time = datetime.now(tz=timezone.utc)
+
+    if current_time < creation_date:
+        in_flight_time = format_time_delta(timedelta(seconds=0.1))
+    else:
+        in_flight_time = format_time_delta(current_time - creation_date)
+
+    return in_flight_time

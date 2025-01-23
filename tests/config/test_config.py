@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -8,6 +8,7 @@ from v4vapp_backend_v2.config.setup import (
     InternalConfig,
     StartupFailure,
     format_time_delta,
+    get_in_flight_time,
 )
 
 
@@ -100,3 +101,23 @@ def test_format_time_delta():
     for delta, expected in test_cases_with_fractions:
         assert format_time_delta(delta, fractions=True) == expected
 
+
+def test_get_in_flight_time_future_date():
+    # Test case where the current time is before the creation date
+    future_date = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    result = get_in_flight_time(future_date)
+    assert result == "00:00:00", f"Expected '00:00:00', but got {result}"
+
+
+def test_get_in_flight_time_past_date():
+    # Test case where the current time is after the creation date
+    past_date = datetime.now(tz=timezone.utc) - timedelta(days=1, hours=5, minutes=30)
+    result = get_in_flight_time(past_date)
+    assert result == "1 days, 5 hours", f"Expected '1 days, 5 hours', but got {result}"
+
+
+def test_get_in_flight_time_exact_date():
+    # Test case where the current time is exactly the creation date
+    exact_date = datetime.now(tz=timezone.utc)
+    result = get_in_flight_time(exact_date)
+    assert result == "00:00:00", f"Expected '00:00:00', but got {result}"

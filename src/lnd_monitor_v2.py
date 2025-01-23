@@ -21,7 +21,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
 )
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, format_time_delta, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, format_time_delta, get_in_flight_time, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
@@ -168,7 +168,8 @@ async def payment_report(
     )
     pre_image = payment.payment_preimage if payment.payment_preimage else ""
     dest_alias = await get_node_alias_from_pay_request(payment.payment_request, client)
-    in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
+    in_flight_time = get_in_flight_time(creation_date)
+    # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.debug(
         (
             f"{client.icon} Payment: {payment.payment_index:>6} "

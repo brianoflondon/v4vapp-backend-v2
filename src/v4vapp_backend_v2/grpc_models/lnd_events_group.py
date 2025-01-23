@@ -4,7 +4,7 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from google.protobuf.json_format import MessageToDict
 from typing import Union
-from v4vapp_backend_v2.config.setup import format_time_delta
+from v4vapp_backend_v2.config.setup import format_time_delta, get_in_flight_time
 
 
 def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
@@ -209,9 +209,10 @@ class LndEventsGroup:
         creation_date = datetime.fromtimestamp(
             event.creation_time_ns / 1e9, tz=timezone.utc
         )
-        in_flight_time = format_time_delta(
-            datetime.now(tz=timezone.utc) - creation_date
-        )
+        # in_flight_time = format_time_delta(
+        #     datetime.now(tz=timezone.utc) - creation_date
+        # )
+        in_flight_time = get_in_flight_time(creation_date)
         ans_dict = {
             "creation_date": creation_date,
             "in_flight_time": in_flight_time,
