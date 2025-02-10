@@ -44,3 +44,15 @@ async def test_mongodb_client_config(set_base_config_path: None):
     assert mongo_db.uri is not None
     print(mongo_db.uri)
     await mongo_db.connect()
+
+
+# skip this test if running on github actions
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
+@pytest.mark.asyncio
+async def test_mongodb_client_dev_config():
+    mongo_db = MongoDBClient()
+    assert mongo_db.uri is not None
+    print(mongo_db.uri)
+    await mongo_db.connect()
