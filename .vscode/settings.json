@@ -6,7 +6,10 @@
     },
     "cmake.configureOnOpen": true,
     "cSpell.words": [
+        "healthcheck",
         "htlc",
+        "imac",
+        "INITDB",
         "invoicesrpc",
         "invoicesstub",
         "lnrpc",

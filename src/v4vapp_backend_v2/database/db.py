@@ -7,6 +7,78 @@ from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
+from v4vapp_backend_v2.config.setup import logger, InternalConfig
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import ConnectionFailure
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class MongoDBClient:
+    def __init__(self, uri: str = None, db_name: str = "admin") -> None:
+        config = InternalConfig().config
+        self.db_config = config.database
+        if not uri:
+            uri = self.build_uri_from_config()
+        self.uri = uri
+        self.db_name = db_name
+        self.client = None
+        self.db = None
+
+    def build_uri_from_config(self):
+        hosts = ",".join(self.db_config.db_hosts)
+        return (
+            f"mongodb://{self.db_config.db_admin_user}:{self.db_config.db_admin_password}@{hosts}/"
+            f"?replicaSet={self.db_config.db_replica_set}&authSource={self.db_config.db_auth_source}"
+        )
+
+    async def connect(self):
+        try:
+            self.client = AsyncIOMotorClient(self.uri)
+            self.db = self.client[self.db_name]
+            # Test the connection
+            await self.client.admin.command("ping")
+            logger.info("Connected to MongoDB")
+        except ConnectionFailure as e:
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            self.client = None
+            self.db = None
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            self.client = None
+            self.db = None
+
+    async def disconnect(self):
+        if self.client:
+            self.client.close()
+            logger.info("Disconnected from MongoDB")
+
+    async def get_collection(self, collection_name: str):
+        if not self.client or not self.db:
+            await self.connect()
+        return self.db[collection_name]
+
+    async def insert_one(self, collection_name: str, document: dict):
+        collection = await self.get_collection(collection_name)
+        result = await collection.insert_one(document)
+        return result.inserted_id
+
+    async def find_one(self, collection_name: str, query: dict):
+        collection = await self.get_collection(collection_name)
+        document = await collection.find_one(query)
+        return document
+
+    async def update_one(self, collection_name: str, query: dict, update: dict):
+        collection = await self.get_collection(collection_name)
+        result = await collection.update_one(query, {"$set": update})
+        return result.modified_count
+
+    async def delete_one(self, collection_name: str, query: dict):
+        collection = await self.get_collection(collection_name)
+        result = await collection.delete_one(query)
+        return result.deleted_count
+
 
 class MyDBFlat:
     most_recent: LNDInvoice

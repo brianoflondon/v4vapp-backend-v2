@@ -60,6 +60,18 @@ class TelegramConfig(BaseModel):
     chat_id: int = 0
 
 
+class DatabaseConfig(BaseModel):
+    db_connection_string: str
+    db_admin_user: str
+    db_admin_password: str
+    db_replica_set: str
+    db_auth_source: str
+    db_hosts: List[str]
+    db_test_app_user: str
+    db_test_app_password: str
+    db_test_app_db: str
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -93,6 +105,7 @@ class Config(BaseModel):
     lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
+    database: DatabaseConfig
 
     @field_validator("lnd_connections")
     def unique_names(cls, v):

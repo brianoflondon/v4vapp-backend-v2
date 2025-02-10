@@ -21,6 +21,18 @@ on:
       - ".env*"
 
 jobs:
+  database:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - "37017:27017"
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: example
+
   test:
     runs-on: ubuntu-latest
     steps:
