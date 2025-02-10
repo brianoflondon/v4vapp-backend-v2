@@ -31,7 +31,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
-async def test_mongodb_client_local():
+async def test_mongodb_client_local(set_base_config_path: None):
     mongo_db = MongoDBClient("mongodb://localhost:37017", "test_db")
     assert mongo_db is not None
     assert mongo_db.uri == "mongodb://localhost:37017"
