@@ -8,6 +8,7 @@ on:
     branches:
       - "main"
       - "develop"
+      - "database-connection"
     tags:
       - "v*"
   pull_request:
