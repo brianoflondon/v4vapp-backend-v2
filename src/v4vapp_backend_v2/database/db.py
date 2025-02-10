@@ -24,11 +24,6 @@ class MyDBFlat:
             self.most_recent = invoice
 
 
-
-
-
-
-
 class MyDB:
     class LND:
         most_recent: LNDInvoice

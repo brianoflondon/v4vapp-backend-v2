@@ -1,0 +1,27 @@
+services:
+
+# Node Monitor is needed when developing and building, to build the image
+
+
+
+  voltage-node-monitor:
+    # depends_on:
+    #   - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/voltage:/app/logs
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
+    restart: unless-stopped
+
+  umbrel-node-monitor:
+    # depends_on:
+    #   - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/umbrel:/app/logs
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
+    restart: unless-stopped
