@@ -41,15 +41,12 @@ telegram:
   chat_id: -1000
 
 database:
-  db_connection_string: mongodb://admin:test-admin-password@home-imac.tail400e5.ts.net:27017,home-imac.tail400e5.ts.net:27018,home-imac.tail400e5.ts.net:27019,dave-v4vapp.tail400e5.ts.net:27017,edi-v4vapp.tail400e5.ts.net:27017/?replicaSet=rs0&authSource=admin
   db_admin_user: admin
   db_admin_password: test-admin-password
-  db_replica_set: rs0
+  db_replica_set:
   db_auth_source: admin
   db_hosts:
-    - home-imac.tail400e5.ts.net:27017
-    - home-imac.tail400e5.ts.net:27018
-    - home-imac.tail400e5.ts.net:27019
+    - localhost:37017
   db_test_app_user: test_app
   db_test_app_password: test_app_password
   db_test_app_db: test_app_db

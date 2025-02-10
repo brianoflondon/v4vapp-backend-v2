@@ -61,15 +61,15 @@ class TelegramConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
-    db_connection_string: str
-    db_admin_user: str
-    db_admin_password: str
-    db_replica_set: str
-    db_auth_source: str
-    db_hosts: List[str]
-    db_test_app_user: str
-    db_test_app_password: str
-    db_test_app_db: str
+    db_connection_string: str | None = None
+    db_admin_user: str | None = None
+    db_admin_password: str | None = None
+    db_replica_set: str | None = None
+    db_auth_source: str | None = None
+    db_hosts: List[str] | None = []
+    db_test_app_user: str | None = None
+    db_test_app_password: str | None = None
+    db_test_app_db: str | None = None
 
 
 class Config(BaseModel):

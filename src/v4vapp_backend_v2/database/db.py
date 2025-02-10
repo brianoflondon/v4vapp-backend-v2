@@ -21,6 +21,7 @@ class MongoDBClient:
         self.db_config = config.database
         if not uri:
             uri = self.build_uri_from_config()
+        print(uri)
         self.uri = uri
         self.db_name = db_name
         self.client = None
@@ -28,9 +29,15 @@ class MongoDBClient:
 
     def build_uri_from_config(self):
         hosts = ",".join(self.db_config.db_hosts)
+        if self.db_config.db_replica_set:
+            replica_set = f"&replicaSet={self.db_config.db_replica_set}"
+            auth_source = f"?authSource={self.db_config.db_auth_source}"
+        else:
+            replica_set = ""
+            auth_source = ""
         return (
             f"mongodb://{self.db_config.db_admin_user}:{self.db_config.db_admin_password}@{hosts}/"
-            f"?replicaSet={self.db_config.db_replica_set}&authSource={self.db_config.db_auth_source}"
+            f"{auth_source}{replica_set}"
         )
 
     async def connect(self):
@@ -44,10 +51,12 @@ class MongoDBClient:
             logger.error(f"Failed to connect to MongoDB: {e}")
             self.client = None
             self.db = None
+            raise e
         except Exception as e:
             logger.error(f"Failed to connect to MongoDB: {e}")
             self.client = None
             self.db = None
+            raise e
 
     async def disconnect(self):
         if self.client:

@@ -12,17 +12,17 @@ services:
     image: mongo:8.0
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
     ports:
-      - "37017:27017"  # Expose container's 27017 on host port 37017
+      - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
     healthcheck:
-      test: ["CMD", "mongosh", "--username", "admin", "--password", "example", "--eval", "db.runCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
       interval: 10s
       timeout: 5s
       retries: 5
-    volumes:
-      - mongo_data:/data/db
-      - mongo_config:/data/configdb
+    # volumes:
+    #   - mongo_data:/data/db
+    #   - mongo_config:/data/configdb
 
 
 volumes:

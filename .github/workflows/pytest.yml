@@ -28,7 +28,7 @@ jobs:
           - "37017:27017"
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: example
+          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
         # Optionally, you can add a healthcheck here if needed
         # like test: ["CMD", "mongo", "--username", "admin", "--password", "example", "--eval", "db.runCommand({ ping: 1 })"]
 
