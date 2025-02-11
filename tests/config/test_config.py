@@ -36,12 +36,22 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
+def test_valid_config_file(set_base_config_path: None):
+    config_file = Path("tests/data/config", "config.yaml")
+    with open(config_file) as f_in:
+        raw_config = safe_load(f_in)
+    assert raw_config is not None
+
+
 def test_internal_config(set_base_config_path: None):
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
 
-    internal_config = InternalConfig()
+    try:
+        internal_config = InternalConfig()
+    except StartupFailure as e:
+        print(e)
     assert internal_config is not None
     assert internal_config.config is not None
     int_config = internal_config.config
