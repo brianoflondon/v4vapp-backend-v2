@@ -60,16 +60,64 @@ class TelegramConfig(BaseModel):
     chat_id: int = 0
 
 
+class DatabaseDetailsConfig(BaseModel):
+    db_name: str
+    db_user: str
+    db_password: str
+    db_roles: List[str]
+
+
 class DatabaseConfig(BaseModel):
-    db_connection_string: str | None = None
-    db_admin_user: str | None = None
-    db_admin_password: str | None = None
-    db_replica_set: str | None = None
-    db_auth_source: str | None = None
+    db_connection_string: str | None = ""
+    db_admin_user: str | None = ""
+    db_admin_password: str | None = ""
+    db_replica_set: str | None = ""
+    db_auth_source: str | None = ""
     db_hosts: List[str] | None = []
-    db_test_app_user: str | None = None
-    db_test_app_password: str | None = None
-    db_test_app_db: str | None = None
+    db_details: List[DatabaseDetailsConfig] | None = []
+
+    @property
+    def db_names(self) -> List[str]:
+        return [detail.db_name for detail in self.db_details]
+
+    @property
+    def db_admin_detail(self) -> DatabaseDetailsConfig:
+        """
+        Retrieve the database details configuration for the admin user.
+        Returns:
+            DatabaseDetailsConfig: The configuration details for the admin user,
+                                   or None if no matching details are found.
+        """
+
+        return DatabaseDetailsConfig(
+            db_name=self.db_auth_source,
+            db_user=self.db_admin_user,
+            db_password=self.db_admin_password,
+            db_roles=["root"],
+        )
+        return None
+
+    def get_db_detail(self, db_name: str, db_user: str = None) -> DatabaseDetailsConfig:
+        """
+        Retrieve the database details configuration for a given database name and optional user.
+        Args:
+            db_name (str): The name of the database to retrieve details for.
+            db_user (str, optional): The user associated with the database. Defaults to None.
+        Returns:
+            DatabaseDetailsConfig: The configuration details for the specified database and user,
+                                   or None if no matching details are found.
+        """
+        if db_name not in self.db_names:
+            return None
+        if db_user:
+            for detail in self.db_details:
+                if detail.db_name == db_name and detail.db_user == db_user:
+                    return detail
+        if self.db_details:
+            for detail in self.db_details:
+                if detail.db_name == db_name:
+                    return detail
+        return None
 
 
 class Config(BaseModel):
