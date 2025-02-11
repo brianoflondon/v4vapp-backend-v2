@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from enum import StrEnum
 import json
 import posixpath
@@ -77,10 +78,11 @@ class MongoDBClient:
             self.db_detail = self.db_config.db_admin_detail
         self.db_user = self.db_detail.db_user if db_user is None else db_user
         self.uri = self._build_uri_from_config()
-        self.client = None
         self.db = None
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.error = None
+        self.client = None
+        self.admin_client = AsyncIOMotorClient(self.admin_uri)
 
     @property
     def db_password(self) -> str:
@@ -136,17 +138,17 @@ class MongoDBClient:
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
         # Need an admin client to check if the database exists
-        admin_client = AsyncIOMotorClient(self.admin_uri)
-        database_names = await admin_client.list_database_names()
-        admin_db = admin_client[self.db_config.db_auth_source]
+        admin_db = self.admin_client[self.db_config.db_auth_source]
         if self.db_name not in self.db_config.db_names:
             raise ConnectionFailure(
                 f"Database Configuration for {self.db_name} not found"
             )
         # Create the database with the user configuration
         # Note: this will change the user's password if the user exists
-        admin_client_db = admin_client[self.db_name]
-        await admin_client_db["startup_collection"].insert_one({"startup": "complete"})
+        admin_client_db = self.admin_client[self.db_name]
+        await admin_client_db["startup_collection"].insert_one(
+            {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
+        )
         create_user = {
             "createUser": self.db_user,
             "pwd": self.db_password,
@@ -157,9 +159,9 @@ class MongoDBClient:
         }
         try:
             users = await admin_db.command("usersInfo")
-            if self.db_user in [user["user"] for user in users["users"]]:
-                self.health_check = MongoDBStatus.CONNECTED
-                return
+            # if self.db_user in [user["user"] for user in users["users"]]:
+            #     self.health_check = MongoDBStatus.CONNECTED
+            #     return
             await admin_db.command(create_user)
             logger.info(
                 f"Created database {self.db_name} "
@@ -187,11 +189,11 @@ class MongoDBClient:
 
     async def connect(self):
         try:
-            self.client = AsyncIOMotorClient(self.uri)
+            self.client = AsyncIOMotorClient(self.uri, tz_aware=True)
             # Test the connection
             if self.db_name != "admin":
                 await self._check_db()
-            await self.client.admin.command("ping")
+            await self.admin_client["admin"].command("ping")
             self.db = self.client[self.db_name]
             logger.info(f"Connected to MongoDB {self.db}")
 

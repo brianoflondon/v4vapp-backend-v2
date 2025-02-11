@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import pytest
 from v4vapp_backend_v2.database.db import MongoDBClient
+from pymongo.errors import OperationFailure
 
 
 os.environ["TESTING"] = "True"
@@ -21,16 +22,6 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
 
 
-
-# @pytest.fixture(autouse=True)
-# def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
-#     # Reset the singleton instance before each test
-#     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-#     yield
-#     # Reset the singleton instance after each test
-#     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-
-
 @pytest.mark.asyncio
 async def test_mongodb_client_local(set_base_config_path: None):
     """
@@ -45,10 +36,15 @@ async def test_mongodb_client_local(set_base_config_path: None):
         AssertionError: If the MongoDBClient instance is None or if the URI does not match the expected value.
     """
     async with MongoDBClient("admin") as admin_db:
-        admin_db.client["test_db"].command(
+        ans = await admin_db.client["test_db"].command(
             {"dropDatabase": 1, "comment": "Drop the database during testing"}
         )
-
+        assert ans.get("ok") == 1
+        try:
+            ans = await admin_db.client["test_db"].command({"dropUser": "test_user"})
+            assert ans.get("ok") == 1
+        except OperationFailure as e:
+            pass
     async with MongoDBClient("test_db") as mongo_db:
         assert mongo_db is not None
         test_collection = await mongo_db.get_collection("startup_collection")
@@ -64,7 +60,7 @@ async def test_mongodb_client_local(set_base_config_path: None):
         assert ans.get("startup") == "complete"
 
     async with MongoDBClient("admin") as admin_db:
-        admin_db.client["test_db"].command(
+        ans = await admin_db.client["test_db"].command(
             {"dropDatabase": 1, "comment": "Drop the database during testing"}
         )
 
