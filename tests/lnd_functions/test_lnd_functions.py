@@ -14,6 +14,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from google.protobuf.json_format import Parse
 
 
+@pytest.fixture(autouse=True)
+def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
@@ -38,7 +47,6 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         return_value=MagicMock(GetNodeInfo=mock_method),
     ):
         yield
-
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 

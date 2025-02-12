@@ -14,6 +14,15 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 os.environ["TESTING"] = "True"
 
 
+@pytest.fixture(autouse=True)
+def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
