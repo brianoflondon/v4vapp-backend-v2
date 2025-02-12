@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import pytest
@@ -20,6 +21,32 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     yield
+    # Unpatch the monkeypatch
+    monkeypatch.undo()
+
+
+@pytest.fixture(autouse=True)
+def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
+async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
+    # Drop the collection and user
+    async with MongoDBClient(conn_name, db_name, db_user) as test_client:
+        ans = await test_client.db.drop_collection("startup_collection")
+        assert ans.get("ok") == 1
+        ans = await test_client.drop_user()
+        assert ans.get("ok") == 1
+    await drop_database("conn_1", "test_db")
+
+
+async def drop_database(conn_name: str, db_name: str) -> None:
+    async with MongoDBClient(conn_name) as admin_client:
+        await admin_client.drop_database(db_name)
 
 
 @pytest.mark.asyncio
@@ -39,6 +66,7 @@ async def test_admin_db_local_docker_container(set_base_config_path: None):
     # Test straight connection to the Admin database
     async with MongoDBClient(db_conn="conn_1") as admin_db:
         assert admin_db is not None
+    await drop_database("conn_1", "test_db")
 
 
 @pytest.mark.asyncio
@@ -126,78 +154,84 @@ async def test_mongodb_client_local(set_base_config_path: None):
         assert "startup_collection" in [
             collection["name"] for collection in collections
         ]
-        find = await test_client.find_one("startup_collection", {"startup": "complete"})
-        print(find)
-    # async with MongoDBClient("admin") as admin_db:
-    #     ans = await admin_db.client["test_db"].command(
-    #         {"dropDatabase": 1, "comment": "Drop the database during testing"}
-    #     )
-    #     assert ans.get("ok") == 1
-    #     try:
-    #         ans = await admin_db.client["test_db"].command({"dropUser": "test_user"})
-    #         assert ans.get("ok") == 1
-    #     except OperationFailure as e:
-    #         pass
-    # async with MongoDBClient("test_db") as mongo_db:
-    #     assert mongo_db is not None
-    #     test_collection = await mongo_db.get_collection("startup_collection")
-    #     assert test_collection is not None
-    #     ans = await mongo_db.find_one("startup_collection", {})
-    #     assert ans
-    #     assert ans.get("startup") == "complete"
+        find_1 = await test_client.find_one(
+            "startup_collection", {"startup": "complete"}
+        )
 
-    # # Second connection will encounter a database already exists and
-    # # user exists
-    # async with MongoDBClient("test_db") as mongo_db:
-    #     ans = await mongo_db.find_one("startup_collection", {})
-    #     assert ans.get("startup") == "complete"
-
-    # async with MongoDBClient("admin") as admin_db:
-    #     ans = await admin_db.client["test_db"].command(
-    #         {"dropDatabase": 1, "comment": "Drop the database during testing"}
-    #     )
+    # Run a second time to check that the database and user already exist
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        assert test_client is not None
+        find_2 = await test_client.find_one(
+            "startup_collection", {"startup": "complete"}
+        )
+    # Second run doesn't change the startup
+    assert find_1 == find_2
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
-@pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
-)
 @pytest.mark.asyncio
-async def test_mongodb_client_config_uri(set_base_config_path: None):
-    mongo_db = MongoDBClient()
-    assert mongo_db.uri is not None
-    await mongo_db.connect()
-
-
-@pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
-)
-@pytest.mark.asyncio
-async def test_check_create_db(set_base_config_path: None):
-    mongo_db = MongoDBClient(db_name="test_db")
-    assert mongo_db.uri is not None
-    await mongo_db.connect()
-    await mongo_db.insert_one("test_collection", {"test": "test"})
-    await mongo_db.disconnect()
-
-
-# skip this test if running on github actions
-@pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
-)
-@pytest.mark.asyncio
-async def test_mongodb_client_dev_config():
+async def test_mongodb_multiple_databases(set_base_config_path: None):
     """
-    Test the MongoDB client development configuration in the config directory
-
-    This test function performs the following steps:
-    1. Creates an instance of `MongoDBClient`.
-    2. Asserts that the `uri` attribute of the `MongoDBClient` instance is not None.
-    3. Prints the `uri` attribute.
-    4. Connects to the MongoDB instance asynchronously.
-
-    Raises:
-        AssertionError: If the `uri` attribute is None.
+    Multiple simultaneous connections to different databases with different users.
     """
-    mongo_db = MongoDBClient()
-    assert mongo_db.uri is not None
-    await mongo_db.connect()
+    async with MongoDBClient("conn_1", "test_db2", "test_user2") as test2_client:
+        assert test2_client.db is not None
+        async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+            assert test_client.db is not None
+            assert test_client.db_name == "test_db"
+
+    await drop_collection_and_user("conn_1", "test_db2", "test_user2")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_get_collection(set_base_config_path: None):
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        collection = await test_client.get_collection("startup_collection")
+        ans = await collection.find_one({"startup": "complete"})
+        assert ans is not None
+    await drop_collection_and_user("conn_1", "test_db2", "test_user2")
+
+
+@pytest.mark.asyncio
+async def test_insert_one_find_one(set_base_config_path: None):
+    collection_name = "new_collection"
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        insert_ans = await test_client.insert_one(
+            collection_name,
+            {collection_name: "test", "timestamp": datetime.now(tz=timezone.utc)},
+        )
+        assert insert_ans is not None
+        find_one_ans = await test_client.find_one(
+            collection_name, {collection_name: "test"}
+        )
+        assert find_one_ans is not None
+        find_one_fail_ans = await test_client.find_one(
+            collection_name, {collection_name: "fail"}
+        )
+        assert find_one_fail_ans is None
+    await drop_collection_and_user("conn_1", "test_db2", "test_user2")
+
+
+@pytest.mark.asyncio
+async def test_update_one_delete_one(set_base_config_path: None):
+    collection_name = "update_delete"
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        insert_ans = await test_client.insert_one(
+            collection_name,
+            {collection_name: "test", "timestamp": datetime.now(tz=timezone.utc)},
+        )
+        assert insert_ans is not None
+        update_ans = await test_client.update_one(
+            collection_name, {collection_name: "test"}, {collection_name: "updated"}
+        )
+        assert update_ans is not None
+        find_one_ans = await test_client.find_one(
+            collection_name, {collection_name: "updated"}
+        )
+        assert find_one_ans is not None
+        delete_ans = await test_client.delete_one(
+            collection_name, {collection_name: "updated"}
+        )
+        assert delete_ans is not None
+    await drop_collection_and_user("conn_1", "test_db2", "test_user2")

@@ -4,6 +4,8 @@ import json
 import posixpath
 import tempfile
 
+from bson import ObjectId
+
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -12,6 +14,7 @@ from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 from v4vapp_backend_v2.config.setup import logger, InternalConfig
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pymongo.errors import ConnectionFailure, OperationFailure
+from pymongo.results import UpdateResult, DeleteResult
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,12 +55,12 @@ class MongoDBClient:
         self.hosts = ",".join(self.db_config.db_hosts) if db_conn else "localhost"
         self.db_name = db_name
         self.db_user = db_user
+        self.validate_user_db()
         self.db_password = (
             self.db_config.dbs[self.db_name].db_users[self.db_user].password
         )
         self.db_roles = self.db_config.dbs[self.db_name].db_users[self.db_user].roles
         self.collections = self.db_config.dbs[db_name].collections
-        self.validate_user_db()
         self.uri = uri if uri else self._build_uri_from_config()
         self.health_check: MongoDBStatus = MongoDBStatus.VALIDATED
         self.kwargs = kwargs
@@ -158,43 +161,20 @@ class MongoDBClient:
         except OperationFailure as e:
             # If the user already exists, ignore the error
             if e.code not in [11000, 51003]:
+                create_user = {} if not create_user else create_user
+                logger.error(
+                    f"Failed to create user {self.db_user}: {e}",
+                    extra={"error": str(e), "create_user": create_user},
+                )
                 raise e
             pass
         except Exception as e:
+            create_user = {} if not create_user else create_user
             logger.error(
                 f"Failed to create user {self.db_user}: {e}",
                 extra={"error": e, "create_user": create_user},
             )
             pass
-        # try:
-        #     users = await admin_db.command("usersInfo")
-        #     # if self.db_user in [user["user"] for user in users["users"]]:
-        #     #     self.health_check = MongoDBStatus.CONNECTED
-        #     #     return
-        #     await admin_db.command(create_user)
-        #     logger.info(
-        #         f"Created database {self.db_name} "
-        #         f"with user {self.db_user} "
-        #         f"with roles {self.db_detail.db_roles}",
-        #         extra=create_user,
-        #     )
-        #     self.health_check = MongoDBStatus.CONNECTED
-        # except OperationFailure as e:
-        #     logger.warning(f"{e.details.get('errmsg')}")
-        #     if e.code != 51003:
-        #         self.health_check = MongoDBStatus.ERROR
-        #         self.error = e
-        #         raise e
-        #     self.health_check = MongoDBStatus.CONNECTED
-        # except Exception as e:
-        #     logger.error(
-        #         f"Failed to create user {self.db_user} "
-        #         f"with roles {self.db_detail.db_roles}: {e}",
-        #         extra=create_user,
-        #     )
-        #     self.health_check = MongoDBStatus.ERROR
-        #     self.error = e
-        #     raise e
 
     async def list_users(self) -> list:
         """
@@ -207,8 +187,6 @@ class MongoDBClient:
             return []
         users_info = await self.admin_client[self.db_name].command("usersInfo")
         return [user["user"] for user in users_info["users"]]
-
-    # ... existing code ...
 
     async def connect(self):
         try:
@@ -247,25 +225,36 @@ class MongoDBClient:
             await self.connect()
         return self.db[collection_name]
 
-    async def insert_one(self, collection_name: str, document: dict):
+    async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
         collection = await self.get_collection(collection_name)
         result = await collection.insert_one(document)
         return result.inserted_id
 
-    async def find_one(self, collection_name: str, query: dict):
+    async def find_one(self, collection_name: str, query: dict) -> dict:
         collection = await self.get_collection(collection_name)
         document = await collection.find_one(query)
         return document
 
-    async def update_one(self, collection_name: str, query: dict, update: dict):
+    async def update_one(
+        self, collection_name: str, query: dict, update: dict
+    ) -> UpdateResult:
         collection = await self.get_collection(collection_name)
         result = await collection.update_one(query, {"$set": update})
-        return result.modified_count
+        return result
 
-    async def delete_one(self, collection_name: str, query: dict):
+    async def delete_one(self, collection_name: str, query: dict) -> DeleteResult:
         collection = await self.get_collection(collection_name)
         result = await collection.delete_one(query)
-        return result.deleted_count
+        return result
+
+    async def drop_user(self) -> dict:
+        admin_db = self.admin_client[self.db_name]
+        ans = await admin_db.command({"dropUser": self.db_user})
+        return ans
+
+    async def drop_database(self, db_name) -> dict:
+        ans = await self.admin_client.drop_database(db_name)
+        return ans
 
     async def __aenter__(self):
         await self.connect()
