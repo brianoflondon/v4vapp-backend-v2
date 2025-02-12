@@ -29,8 +29,6 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        # Optionally, you can add a healthcheck here if needed
-        # like test: ["CMD", "mongo", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
 
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +62,18 @@ jobs:
       - name: Install dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction
+          poetry install --no-interaction --with dev
+
+      # Check Poetry version and virtual environment status
+      - name: Check Poetry version
+        run: poetry --version
+
+      - name: Check virtual environment
+        run: poetry env info
+
+      # List installed packages
+      - name: List installed packages
+        run: poetry show
 
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
