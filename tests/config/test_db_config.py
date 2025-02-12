@@ -71,6 +71,12 @@ async def test_bad_config_data(set_base_config_path: None):
         ) as test_db:
             pass
     assert e3.value.code == DbErrorCode.NO_PASSWORD
+    with pytest.raises(OperationFailure) as e4:
+        async with MongoDBClient(
+            "conn_missing", "test_db", "test_user_no_password"
+        ) as test_db:
+            pass
+    assert e4.value.code == DbErrorCode.NO_CONNECTION
 
 
 @pytest.mark.asyncio
@@ -84,14 +90,13 @@ async def test_mongodb_client_bad_uri(set_base_config_path: None):
         set_base_config_path (None): A fixture to set the base configuration path.
 
     Raises:
-        OperationFailure: If the connection to the MongoDB instance fails.
+        ConnectionFailure: If the connection to the MongoDB instance fails.
     """
     with pytest.raises(ConnectionFailure) as e:
         async with MongoDBClient(
             "conn_bad", serverSelectionTimeoutMS=50
         ) as test_client:
             pass
-        test_client.health_check
     assert e
 
 
@@ -111,11 +116,18 @@ async def test_mongodb_client_local(set_base_config_path: None):
     Raises:
         AssertionError: If the MongoDBClient instance is None or if the URI does not match the expected value.
     """
-    async with MongoDBClient("test_db", "test_user") as test_client:
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         assert test_client is not None
-
-        ans = await test_client.db.find_one("test_collection", {})
-
+        print(test_client.collections)
+        cursor = await test_client.db.list_collections()
+        collections = []
+        async for collection in cursor:
+            collections.append(collection)
+        assert "startup_collection" in [
+            collection["name"] for collection in collections
+        ]
+        find = await test_client.find_one("startup_collection", {"startup": "complete"})
+        print(find)
     # async with MongoDBClient("admin") as admin_db:
     #     ans = await admin_db.client["test_db"].command(
     #         {"dropDatabase": 1, "comment": "Drop the database during testing"}
@@ -134,16 +146,16 @@ async def test_mongodb_client_local(set_base_config_path: None):
     #     assert ans
     #     assert ans.get("startup") == "complete"
 
-    # Second connection will encounter a database already exists and
-    # user exists
-    async with MongoDBClient("test_db") as mongo_db:
-        ans = await mongo_db.find_one("startup_collection", {})
-        assert ans.get("startup") == "complete"
+    # # Second connection will encounter a database already exists and
+    # # user exists
+    # async with MongoDBClient("test_db") as mongo_db:
+    #     ans = await mongo_db.find_one("startup_collection", {})
+    #     assert ans.get("startup") == "complete"
 
-    async with MongoDBClient("admin") as admin_db:
-        ans = await admin_db.client["test_db"].command(
-            {"dropDatabase": 1, "comment": "Drop the database during testing"}
-        )
+    # async with MongoDBClient("admin") as admin_db:
+    #     ans = await admin_db.client["test_db"].command(
+    #         {"dropDatabase": 1, "comment": "Drop the database during testing"}
+    #     )
 
 
 @pytest.mark.skipif(

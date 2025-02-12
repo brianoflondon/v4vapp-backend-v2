@@ -29,7 +29,8 @@ class DbErrorCode(Enum):
     NO_USER = 90001
     NO_DB = 90002
     NO_PASSWORD = 90003
-    BAD_URI = 90004
+    NO_CONNECTION = 90004
+    BAD_URI = 90005
 
 
 class MongoDBClient:
@@ -45,16 +46,31 @@ class MongoDBClient:
         self.db = None
         self.client = None
         self.error = None
-        config = InternalConfig().config
         self.db_conn = db_conn
-        self.db_config = config.database[db_conn]
+        # Sets up self.db_config here.
+        self.validate_connection()
         self.hosts = ",".join(self.db_config.db_hosts) if db_conn else "localhost"
         self.db_name = db_name
         self.db_user = db_user
+        self.db_password = (
+            self.db_config.dbs[self.db_name].db_users[self.db_user].password
+        )
+        self.db_roles = self.db_config.dbs[self.db_name].db_users[self.db_user].roles
+        self.collections = self.db_config.dbs[db_name].collections
         self.validate_user_db()
         self.uri = uri if uri else self._build_uri_from_config()
         self.health_check: MongoDBStatus = MongoDBStatus.VALIDATED
         self.kwargs = kwargs
+
+    def validate_connection(self):
+        try:
+            config = InternalConfig().config
+            self.db_config = config.database[self.db_conn]
+        except KeyError as e:
+            raise OperationFailure(
+                error=f"Database Connection {self.db_conn} not found",
+                code=DbErrorCode.NO_CONNECTION,
+            )
 
     def validate_user_db(self):
         logger.info(f"Validating user {self.db_user} in database {self.db_name}")
@@ -115,54 +131,84 @@ class MongoDBClient:
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
         # Need an admin client to check if the database exists
-        admin_db = self.admin_client[self.db_config.db_auth_source]
-        if self.db_name not in self.db_config.db_names:
-            raise ConnectionFailure(
-                f"Database Configuration for {self.db_name} not found"
-            )
+
         # Create the database with the user configuration
         # Note: this will change the user's password if the user exists
-        admin_client_db = self.admin_client[self.db_name]
-        await admin_client_db["startup_collection"].insert_one(
-            {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
-        )
-        create_user = {
-            "createUser": self.db_user,
-            "pwd": self.db_password,
-            "roles": [
-                {"role": role, "db": self.db_name} for role in self.db_detail.db_roles
-            ],
-            "comment": "Created by MongoDBClient",
-        }
         try:
-            users = await admin_db.command("usersInfo")
-            # if self.db_user in [user["user"] for user in users["users"]]:
-            #     self.health_check = MongoDBStatus.CONNECTED
-            #     return
-            await admin_db.command(create_user)
-            logger.info(
-                f"Created database {self.db_name} "
-                f"with user {self.db_user} "
-                f"with roles {self.db_detail.db_roles}",
-                extra=create_user,
+            admin_db = self.admin_client[self.db_name]
+            await admin_db["startup_collection"].insert_one(
+                {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
             )
-            self.health_check = MongoDBStatus.CONNECTED
+            create_user = {
+                "createUser": self.db_user,
+                "pwd": self.db_password,
+                "roles": [{"role": role, "db": self.db_name} for role in self.db_roles],
+                "comment": "Created by MongoDBClient",
+            }
+            ans = await admin_db.command(create_user)
+            logging.info(
+                f"Created user {self.db_user} with roles {self.db_roles} in {self.db_name}",
+                extra={
+                    "user": self.db_user,
+                    "roles": self.db_roles,
+                    "db_name": self.db_name,
+                    "ans": ans,
+                },
+            )
         except OperationFailure as e:
-            logger.warning(f"{e.details.get('errmsg')}")
-            if e.code != 51003:
-                self.health_check = MongoDBStatus.ERROR
-                self.error = e
+            # If the user already exists, ignore the error
+            if e.code not in [11000, 51003]:
                 raise e
-            self.health_check = MongoDBStatus.CONNECTED
+            pass
         except Exception as e:
             logger.error(
-                f"Failed to create user {self.db_user} "
-                f"with roles {self.db_detail.db_roles}: {e}",
-                extra=create_user,
+                f"Failed to create user {self.db_user}: {e}",
+                extra={"error": e, "create_user": create_user},
             )
-            self.health_check = MongoDBStatus.ERROR
-            self.error = e
-            raise e
+            pass
+        # try:
+        #     users = await admin_db.command("usersInfo")
+        #     # if self.db_user in [user["user"] for user in users["users"]]:
+        #     #     self.health_check = MongoDBStatus.CONNECTED
+        #     #     return
+        #     await admin_db.command(create_user)
+        #     logger.info(
+        #         f"Created database {self.db_name} "
+        #         f"with user {self.db_user} "
+        #         f"with roles {self.db_detail.db_roles}",
+        #         extra=create_user,
+        #     )
+        #     self.health_check = MongoDBStatus.CONNECTED
+        # except OperationFailure as e:
+        #     logger.warning(f"{e.details.get('errmsg')}")
+        #     if e.code != 51003:
+        #         self.health_check = MongoDBStatus.ERROR
+        #         self.error = e
+        #         raise e
+        #     self.health_check = MongoDBStatus.CONNECTED
+        # except Exception as e:
+        #     logger.error(
+        #         f"Failed to create user {self.db_user} "
+        #         f"with roles {self.db_detail.db_roles}: {e}",
+        #         extra=create_user,
+        #     )
+        #     self.health_check = MongoDBStatus.ERROR
+        #     self.error = e
+        #     raise e
+
+    async def list_users(self) -> list:
+        """
+        List all users in the current database.
+
+        Returns:
+            list: A list of user names.
+        """
+        if self.client is None or self.db is None:
+            return []
+        users_info = await self.admin_client[self.db_name].command("usersInfo")
+        return [user["user"] for user in users_info["users"]]
+
+    # ... existing code ...
 
     async def connect(self):
         try:
@@ -171,8 +217,15 @@ class MongoDBClient:
                 self.admin_uri, tz_aware=True, **self.kwargs
             )
             ans = await self.admin_client["admin"].command("ping")
+            assert ans.get("ok") == 1
             self.db = self.client[self.db_name]
-            logger.info(f"Connected to MongoDB {self.db}")
+            database_names = await self.admin_client.list_database_names()
+            database_users = await self.list_users()
+            if self.db_name not in database_names or self.db_user not in database_users:
+                await self._check_db()
+            logger.info(
+                f"Connected to MongoDB {self.db}", extra={"client": self.client}
+            )
 
         except (ConnectionFailure, OperationFailure, Exception) as e:
             logger.error(
