@@ -9,6 +9,7 @@ from v4vapp_backend_v2.config.setup import (
     StartupFailure,
     format_time_delta,
     get_in_flight_time,
+    Config,
 )
 
 
@@ -36,11 +37,18 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
-def test_valid_config_file(set_base_config_path: None):
+def test_valid_config_file_and_model_validate(set_base_config_path: None):
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
     assert raw_config is not None
+
+    try:
+        config = Config.model_validate(raw_config)
+        assert config is not None
+    except Exception as e:
+        print(e)
+        assert False
 
 
 def test_internal_config(set_base_config_path: None):

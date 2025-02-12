@@ -47,52 +47,69 @@ telegram:
 
 ################# TEST CONFIG #################
 database:
-  db_hosts:
-    - localhost:27017
-  db_replica_set: rs0
-  dbs:
-    admin:
-      db_users:
-        admin:
-          password: test-admin-password
-          roles:
-            - readWrite
-            - dbAdmin
-    test_db:
-      db_users:
-        test_user:
-          password: test_user_password
-          roles:
-            - readWrite
-            - dbAdmin
-        test_read_user:
-          password: test_read_password
-          roles:
-            - read
-      collections:
-        test_collection:
-          test_index:
-            key: { "test": 1 }
-            unique: true
-          test_index2:
-            key: { "test2": 1, "test3": -1 }
-            unique: false
-        test_collection2: {}
+  conn_bad:
+    db_hosts:
+      - localhost:11111
+    dbs:
+      admin:
+        db_users:
+          admin:
+            password: test-admin-password
+            roles:
+              - root
+  conn_1:
+    db_hosts:
+      - localhost:37017
+    db_replica_set:
+    dbs:
+      admin:
+        db_users:
+          admin:
+            password: test-admin-password
+            roles:
+              - root
+              - readWrite
+              - dbAdmin
+      test_db:
+        db_users:
+          test_user:
+            password: test_user_password
+            roles:
+              - readWrite
+              - dbAdmin
+          test_read_user:
+            password: test_read_password
+            roles:
+              - read
+          test_user_no_password:
+            password: ""
+            roles:
+              - readWrite
+        collections:
+          test_collection:
+            test_index:
+              key: { "test": 1 }
+              unique: true
+            test_index2:
+              key: { "test2": 1, "test3": -1 }
+              unique: false
+          test_collection2: {}
 
-    test_db2:
-      db_users:
-        test_user2:
-          password: test_user2_password
-          roles:
-            - readWrite
-            - dbAdmin
-          collections:
-            test2_collection:
-            test2_collection2:
-        test_read_user2:
-          password: test_read_password2
-          roles:
-            - read
+      test_db2:
+        db_users:
+          test_user2:
+            password: test_user2_password
+            roles:
+              - readWrite
+              - dbAdmin
+            collections:
+              test2_collection:
+              test2_collection2:
+          test_read_user2:
+            password: test_read_password2
+            roles:
+              - read
+
 ################# TEST CONFIG #################
 
 # database:

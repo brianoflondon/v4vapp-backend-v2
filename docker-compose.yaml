@@ -20,14 +20,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    volumes:
-      - mongo_data:/data/db
-      - mongo_config:/data/configdb
+    # volumes:
+    #   - mongo_data:/data/db
+    #   - mongo_config:/data/configdb
 
 
-volumes:
-  mongo_data:
-  mongo_config:
+# volumes:
+#   mongo_data:
+#   mongo_config:
 
 
   # voltage-node-monitor:

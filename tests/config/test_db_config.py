@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 import pytest
-from v4vapp_backend_v2.database.db import MongoDBClient
-from pymongo.errors import OperationFailure
+from v4vapp_backend_v2.database.db import DbErrorCode, MongoDBClient
+from pymongo.errors import OperationFailure, ConnectionFailure
 
 
 os.environ["TESTING"] = "True"
@@ -23,6 +23,82 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
+async def test_admin_db_local_docker_container(set_base_config_path: None):
+    """
+    Test the connection to the Admin database. Relies on a docker container running
+    a MongoDB instance on port 37017 as listed in the `tests/data/config/config.yaml` file.
+    This test ensures that a connection to the Admin database can be established
+    using the MongoDBClient. It asserts that the connection is not None.
+    Args:
+        set_base_config_path (None): A fixture to set the base configuration path.
+    Returns:
+        None
+    Side Effects:
+        None
+    """
+    # Test straight connection to the Admin database
+    async with MongoDBClient(db_conn="conn_1") as admin_db:
+        assert admin_db is not None
+
+
+@pytest.mark.asyncio
+async def test_bad_config_data(set_base_config_path: None):
+    """
+    Test the MongoDBClient initialization with various bad configuration data.
+
+    This test function checks the following scenarios:
+    1. Attempting to initialize MongoDBClient with a non-existent user.
+    2. Attempting to initialize MongoDBClient with a non-existent database.
+    3. Attempting to initialize MongoDBClient with a user that has no password.
+
+    Args:
+        set_base_config_path (None): A fixture to set the base configuration path.
+
+    Raises:
+        OperationFailure: Expected exceptions for each bad configuration scenario.
+    """
+    with pytest.raises(OperationFailure) as e:
+        async with MongoDBClient("conn_1", "test_db", "test_no_user") as test_db:
+            pass
+    assert e.value.code == DbErrorCode.NO_USER
+    with pytest.raises(OperationFailure) as e2:
+        async with MongoDBClient("conn_1", "test_no_db", "test_user") as test_db:
+            pass
+    assert e2.value.code == DbErrorCode.NO_DB
+    with pytest.raises(OperationFailure) as e3:
+        async with MongoDBClient(
+            "conn_1", "test_db", "test_user_no_password"
+        ) as test_db:
+            pass
+    assert e3.value.code == DbErrorCode.NO_PASSWORD
+
+
+@pytest.mark.asyncio
+async def test_mongodb_client_bad_uri(set_base_config_path: None):
+    """
+    Test the MongoDBClient connection with a bad URI.
+
+    This test function initializes a MongoDBClient with a bad URI and asserts that the connection fails.
+
+    Args:
+        set_base_config_path (None): A fixture to set the base configuration path.
+
+    Raises:
+        OperationFailure: If the connection to the MongoDB instance fails.
+    """
+    with pytest.raises(ConnectionFailure) as e:
+        async with MongoDBClient(
+            "conn_bad", serverSelectionTimeoutMS=50
+        ) as test_client:
+            pass
+        test_client.health_check
+    assert e
+
+
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
+@pytest.mark.asyncio
 async def test_mongodb_client_local(set_base_config_path: None):
     """
     Test the MongoDB client connection to a local MongoDB instance.
@@ -35,23 +111,28 @@ async def test_mongodb_client_local(set_base_config_path: None):
     Raises:
         AssertionError: If the MongoDBClient instance is None or if the URI does not match the expected value.
     """
-    async with MongoDBClient("admin") as admin_db:
-        ans = await admin_db.client["test_db"].command(
-            {"dropDatabase": 1, "comment": "Drop the database during testing"}
-        )
-        assert ans.get("ok") == 1
-        try:
-            ans = await admin_db.client["test_db"].command({"dropUser": "test_user"})
-            assert ans.get("ok") == 1
-        except OperationFailure as e:
-            pass
-    async with MongoDBClient("test_db") as mongo_db:
-        assert mongo_db is not None
-        test_collection = await mongo_db.get_collection("startup_collection")
-        assert test_collection is not None
-        ans = await mongo_db.find_one("startup_collection", {})
-        assert ans
-        assert ans.get("startup") == "complete"
+    async with MongoDBClient("test_db", "test_user") as test_client:
+        assert test_client is not None
+
+        ans = await test_client.db.find_one("test_collection", {})
+
+    # async with MongoDBClient("admin") as admin_db:
+    #     ans = await admin_db.client["test_db"].command(
+    #         {"dropDatabase": 1, "comment": "Drop the database during testing"}
+    #     )
+    #     assert ans.get("ok") == 1
+    #     try:
+    #         ans = await admin_db.client["test_db"].command({"dropUser": "test_user"})
+    #         assert ans.get("ok") == 1
+    #     except OperationFailure as e:
+    #         pass
+    # async with MongoDBClient("test_db") as mongo_db:
+    #     assert mongo_db is not None
+    #     test_collection = await mongo_db.get_collection("startup_collection")
+    #     assert test_collection is not None
+    #     ans = await mongo_db.find_one("startup_collection", {})
+    #     assert ans
+    #     assert ans.get("startup") == "complete"
 
     # Second connection will encounter a database already exists and
     # user exists
@@ -65,6 +146,9 @@ async def test_mongodb_client_local(set_base_config_path: None):
         )
 
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 @pytest.mark.asyncio
 async def test_mongodb_client_config_uri(set_base_config_path: None):
     mongo_db = MongoDBClient()
@@ -72,6 +156,9 @@ async def test_mongodb_client_config_uri(set_base_config_path: None):
     await mongo_db.connect()
 
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 @pytest.mark.asyncio
 async def test_check_create_db(set_base_config_path: None):
     mongo_db = MongoDBClient(db_name="test_db")

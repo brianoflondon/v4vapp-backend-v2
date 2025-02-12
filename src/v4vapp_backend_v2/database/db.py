@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 import json
 import posixpath
 import tempfile
@@ -19,78 +19,60 @@ logger = logging.getLogger(__name__)
 
 class MongoDBStatus(StrEnum):
     UNKNOWN = "unknown"
+    VALIDATED = "validated"
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
     ERROR = "error"
 
 
+class DbErrorCode(Enum):
+    NO_USER = 90001
+    NO_DB = 90002
+    NO_PASSWORD = 90003
+    BAD_URI = 90004
+
+
 class MongoDBClient:
-    """
-    A client for connecting to and interacting with a MongoDB database using Motor, an async driver for MongoDB.
-
-    Attributes:
-        uri (str): The MongoDB URI.
-        db_name (str): The name of the database to connect to.
-        client (AsyncIOMotorClient): The Motor client instance.
-        db (Database): The Motor database instance.
-
-    Methods:
-        __init__(uri: str = None, db_name: str = "admin"):
-            Initializes the MongoDBClient with the given URI and database name.
-
-        __del__():
-            Closes the MongoDB client connection when the instance is deleted.
-
-        _build_uri_from_config():
-            Builds the MongoDB URI from the configuration.
-
-        _check_db():
-            Checks if the client is connected to the MongoDB database.
-
-        async connect():
-            Connects to the MongoDB database.
-
-        async disconnect():
-            Disconnects from the MongoDB database.
-
-        async get_collection(collection_name: str):
-            Retrieves a collection from the MongoDB database.
-
-        async insert_one(collection_name: str, document: dict):
-            Inserts a single document into a collection.
-
-        async find_one(collection_name: str, query: dict):
-            Finds a single document in a collection.
-
-        async update_one(collection_name: str, query: dict, update: dict):
-            Updates a single document in a collection.
-
-        async delete_one(collection_name: str, query: dict):
-            Deletes a single document from a collection.
-    """
-
-    def __init__(self, db_name: str = "admin", db_user: str = None) -> None:
-        config = InternalConfig().config
-        self.db_config = config.database
-        self.db_name = db_name
-        self.db_detail = self.db_config.get_db_detail(db_name, db_user)
-        if not self.db_detail:
-            self.db_detail = self.db_config.db_admin_detail
-        self.db_user = self.db_detail.db_user if db_user is None else db_user
-        self.uri = self._build_uri_from_config()
-        self.db = None
+    def __init__(
+        self,
+        db_conn: str,
+        db_name: str = "admin",
+        db_user: str = "admin",
+        uri: str = None,
+        **kwargs,
+    ) -> None:
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
-        self.error = None
+        self.db = None
         self.client = None
-        self.admin_client = AsyncIOMotorClient(self.admin_uri)
+        self.error = None
+        config = InternalConfig().config
+        self.db_conn = db_conn
+        self.db_config = config.database[db_conn]
+        self.hosts = ",".join(self.db_config.db_hosts) if db_conn else "localhost"
+        self.db_name = db_name
+        self.db_user = db_user
+        self.validate_user_db()
+        self.uri = uri if uri else self._build_uri_from_config()
+        self.health_check: MongoDBStatus = MongoDBStatus.VALIDATED
+        self.kwargs = kwargs
 
-    @property
-    def db_password(self) -> str:
-        return (
-            self.db_config.db_admin_password
-            if self.db_user == self.db_config.db_admin_user
-            else self.db_detail.db_password
-        )
+    def validate_user_db(self):
+        logger.info(f"Validating user {self.db_user} in database {self.db_name}")
+        if not self.db_name in self.db_config.dbs:
+            raise OperationFailure(
+                error=f"User: {self.db_user} not in {self.db_name}",
+                code=DbErrorCode.NO_DB,
+            )
+        if not self.db_user in self.db_config.dbs[self.db_name].db_users:
+            raise OperationFailure(
+                error=f"No database {self.db_name}",
+                code=DbErrorCode.NO_USER,
+            )
+        if not bool(self.db_config.dbs[self.db_name].db_users[self.db_user].password):
+            raise OperationFailure(
+                error=f"No password for user {self.db_user} in {self.db_name}",
+                code=DbErrorCode.NO_PASSWORD,
+            )
 
     def __del__(self):
         if self.client:
@@ -102,9 +84,7 @@ class MongoDBClient:
 
     @property
     def admin_uri(self):
-        return self._build_uri_from_config(
-            self.db_config.db_auth_source, self.db_config.db_admin_user
-        )
+        return self._build_uri_from_config("admin", "admin")
 
     def _build_uri_from_config(self, db_name: str = None, db_user: str = None) -> str:
         """
@@ -119,19 +99,16 @@ class MongoDBClient:
         """
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
-        db_password = (
-            self.db_config.db_admin_password
-            if db_user == self.db_config.db_admin_user
-            else self.db_detail.db_password
-        )
-        hosts = ",".join(self.db_config.db_hosts)
+        db_password = self.db_config.dbs[db_name].db_users[db_user].password
+
         if self.db_config.db_replica_set:
             replica_set = f"&replicaSet={self.db_config.db_replica_set}"
         else:
             replica_set = ""
         auth_source = f"?authSource={db_name}"
         return (
-            f"mongodb://{db_user}:{db_password}@{hosts}/" f"{auth_source}{replica_set}"
+            f"mongodb://{db_user}:{db_password}@{self.hosts}/"
+            f"{auth_source}{replica_set}"
         )
 
     async def _check_db(self):
@@ -189,23 +166,22 @@ class MongoDBClient:
 
     async def connect(self):
         try:
-            self.client = AsyncIOMotorClient(self.uri, tz_aware=True)
-            # Test the connection
-            if self.db_name != "admin":
-                await self._check_db()
-            await self.admin_client["admin"].command("ping")
+            self.client = AsyncIOMotorClient(self.uri, tz_aware=True, **self.kwargs)
+            self.admin_client = AsyncIOMotorClient(
+                self.admin_uri, tz_aware=True, **self.kwargs
+            )
+            ans = await self.admin_client["admin"].command("ping")
             self.db = self.client[self.db_name]
             logger.info(f"Connected to MongoDB {self.db}")
 
-        except ConnectionFailure as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
+        except (ConnectionFailure, OperationFailure, Exception) as e:
+            logger.error(
+                f"Failed to connect to MongoDB: {e}",
+                extra={"uri": self.uri, "error": str(e)},
+            )
             self.client = None
             self.db = None
-            raise e
-        except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            self.client = None
-            self.db = None
+            self.health_check = MongoDBStatus.ERROR
             raise e
 
     async def disconnect(self):

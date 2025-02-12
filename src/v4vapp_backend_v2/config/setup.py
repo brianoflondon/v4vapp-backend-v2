@@ -79,15 +79,10 @@ class DatabaseDetailsConfig(BaseModel):
     collections: Optional[Dict[str, CollectionConfig]] = None
 
 
-class DatabaseConfig(BaseModel):
+class DatabaseConnectionConfig(BaseModel):
     db_hosts: List[str]
     db_replica_set: Optional[str] = None
-    dbs: Dict[str, DatabaseDetailsConfig]
-
-
-class Config(BaseModel):
-    version: str
-    database: DatabaseConfig
+    dbs: Optional[Dict[str, DatabaseDetailsConfig]] = None
 
 
 class Config(BaseModel):
@@ -123,7 +118,7 @@ class Config(BaseModel):
     lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
-    database: DatabaseConfig
+    database: Dict[str, DatabaseConnectionConfig]
 
     @field_validator("lnd_connections")
     def unique_names(cls, v):
