@@ -42,6 +42,7 @@ from v4vapp_backend_v2.models.invoice_models import (
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
+DATABASE_NAME = "lnd_monitor_v2"
 
 app = typer.Typer()
 
@@ -163,7 +164,7 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
         None
     """
     async with MongoDBClient(
-        "local_connection", "lnd_monitor_v2", "lnd_monitor"
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         try:
             invoice_pyd = protobuf_invoice_to_pydantic(invoice)
@@ -375,7 +376,7 @@ async def fill_channel_names(
 async def read_all_invoices(client: LNDClient) -> None:
 
     async with MongoDBClient(
-        "local_connection", "lnd_monitor_v2", "lnd_monitor"
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         index_offset = 0
         num_max_invoices = 1000
@@ -423,6 +424,8 @@ async def run(connection_name: str) -> None:
     Returns:
         None
     """
+    global DATABASE_NAME
+    DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
     lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as client:
         await read_all_invoices(client)
