@@ -285,7 +285,7 @@ class HtlcTrackingList(BaseModel):
         for invoice in self.invoices:
             if invoice and invoice.htlcs:
                 for htlc_data in invoice.htlcs:
-                    if int(htlc_data["htlc_index"]) == int(htlc_id):
+                    if htlc_data.htlc_index == int(htlc_id):
                         return invoice
         return None
 
@@ -293,7 +293,7 @@ class HtlcTrackingList(BaseModel):
         invoice = self.lookup_invoice(add_index)
         if invoice and invoice.htlcs:
             for htlc in invoice.htlcs:
-                return htlc["htlc_index"]
+                return htlc.htlc_index
         return None
 
     @property

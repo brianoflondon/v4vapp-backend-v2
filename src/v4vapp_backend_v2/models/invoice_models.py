@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel, ConfigDict, Field, validator
 from datetime import datetime, timezone
 from bson import Int64
@@ -46,17 +46,17 @@ class Invoice(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     memo: str = ""
-    r_preimage: Optional[str] = None
-    r_hash: Optional[str] = None
+    r_preimage: str | None = None
+    r_hash: str | None = None
     value: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     settled: bool = False
     creation_date: datetime
     settle_date: datetime | None = None
-    payment_request: Optional[str] = None
-    description_hash: Optional[str] = None
+    payment_request: str | None = None
+    description_hash: str | None = None
     expiry: int | None = None
-    fallback_addr: Optional[str] = None
+    fallback_addr: str | None = None
     cltv_expiry: int
     route_hints: List[dict] | None = None
     private: bool | None = None
@@ -69,7 +69,7 @@ class Invoice(BaseModel):
     htlcs: List[InvoiceHTLC] | None = None
     features: dict
     is_keysend: bool = False
-    payment_addr: Optional[str] = None
+    payment_addr: str | None = None
     is_amp: bool = False
     amp_invoice_state: dict | None = None
 

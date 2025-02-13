@@ -71,7 +71,7 @@ def test_log_file_invoices():
         for invoice in tracking.invoices:
             if invoice.htlcs:
                 assert invoice == tracking.lookup_invoice_by_htlc_id(
-                    int(invoice.htlcs[0]["htlc_index"])
+                    int(invoice.htlcs[0].htlc_index)
                 )
             assert invoice == tracking.lookup_invoice(invoice.add_index)
 
