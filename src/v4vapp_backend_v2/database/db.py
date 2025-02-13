@@ -45,6 +45,19 @@ class MongoDBClient:
         uri: str = None,
         **kwargs,
     ) -> None:
+        """
+        Initializes the database connection and configuration.
+
+        Args:
+            db_conn (str): The database connection string.
+            db_name (str, optional): The name of the database. Defaults to "admin".
+            db_user (str, optional): The database user. Defaults to "admin".
+            uri (str, optional): The URI for the database connection. Defaults to None.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            None
+        """
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.db = None
         self.client = None
@@ -230,16 +243,49 @@ class MongoDBClient:
         result = await collection.insert_one(document)
         return result.inserted_id
 
+    async def insert_many(
+        self, collection_name: str, documents: list
+    ) -> list[ObjectId]:
+        """
+        Insert multiple documents into a specified collection.
+            ordered=False is used to continue inserting documents even if one fails.
+        Args:
+            collection_name (str): The name of the collection to insert documents into.
+            documents (list): A list of documents to be inserted.
+        Returns:
+            list[ObjectId]: A list of ObjectIds of the inserted documents.
+        """
+        collection = await self.get_collection(collection_name)
+        result = await collection.insert_many(documents, ordered=False)
+        return result.inserted_ids
+
     async def find_one(self, collection_name: str, query: dict) -> dict:
+        """
+        Asynchronously find a single document in the specified collection that matches the given query.
+
+        Args:
+            collection_name (str): The name of the collection to search in.
+            query (dict): The query criteria to match the document.
+
+        Returns:
+            dict: The document that matches the query, or None if no document is found.
+        """
         collection = await self.get_collection(collection_name)
         document = await collection.find_one(query)
         return document
 
     async def update_one(
+        self, collection_name: str, query: dict, update: dict, **kwargs
+    ) -> UpdateResult:
+        collection = await self.get_collection(collection_name)
+        result = await collection.update_one(query, {"$set": update}, **kwargs)
+        return result
+
+    async def update_many(
         self, collection_name: str, query: dict, update: dict
     ) -> UpdateResult:
         collection = await self.get_collection(collection_name)
-        result = await collection.update_one(query, {"$set": update})
+        result = await collection.update_many(query, {"$set": update}, upsert=True)
         return result
 
     async def delete_one(self, collection_name: str, query: dict) -> DeleteResult:
@@ -329,6 +375,6 @@ class MyDB:
 
 
 # Create a temporary file
-db = MyDBFlat()
+# db = MyDBFlat()
 
 # subscribe(Events.LND_INVOICE_CREATED, db.update_most_recent)

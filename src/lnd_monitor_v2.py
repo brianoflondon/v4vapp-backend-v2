@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 import typer
 import sys
 import asyncio
-from typing import Optional, Annotated, List
-from google.protobuf.json_format import MessageToDict
+from typing import Any, Optional, Annotated, List
+from google.protobuf.json_format import MessageToDict, ParseDict
 
 
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
@@ -21,11 +21,24 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
 )
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, format_time_delta, get_in_flight_time, logger
+from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
+    format_time_delta,
+    get_in_flight_time,
+    logger,
+)
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
+from v4vapp_backend_v2.database.db import MongoDBClient
+from pymongo.errors import BulkWriteError
+from v4vapp_backend_v2.models.invoice_models import (
+    Invoice,
+    ListInvoiceResponse,
+    protobuf_invoice_to_pydantic,
+    protobuf_to_pydantic,
+)
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -137,6 +150,30 @@ async def remove_event_group(
     """
     await asyncio.sleep(3)
     lnd_events_group.remove_group(event)
+
+
+async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
+    """
+    Asynchronously stores an invoice in the MongoDB database.
+
+    Args:
+        invoice (lnrpc.Invoice): The invoice to store.
+
+    Returns:
+        None
+    """
+    async with MongoDBClient(
+        "local_connection", "lnd_monitor_v2", "lnd_monitor"
+    ) as db_client:
+        try:
+            invoice_pyd = protobuf_invoice_to_pydantic(invoice)
+        except Exception as e:
+            logger.info(e)
+            return
+        query = {"r_hash": invoice_pyd.r_hash}
+        invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
+        logger.info(f"New invoice recorded: {ans}", extra={"db_ans": ans})
 
 
 async def invoice_report(
@@ -335,6 +372,48 @@ async def fill_channel_names(
         )
 
 
+async def read_all_invoices(client: LNDClient) -> None:
+
+    async with MongoDBClient(
+        "local_connection", "lnd_monitor_v2", "lnd_monitor"
+    ) as db_client:
+        index_offset = 0
+        num_max_invoices = 1000
+        while True:
+            request = lnrpc.ListInvoiceRequest(
+                pending_only=False,
+                index_offset=index_offset,
+                num_max_invoices=num_max_invoices,
+            )
+            invoices_raw: lnrpc.ListInvoiceResponse = await client.call(
+                client.lightning_stub.ListInvoices,
+                request,
+            )
+            invoices_dict = MessageToDict(
+                invoices_raw, preserving_proto_field_name=True
+            )
+            list_invoices = protobuf_to_pydantic(invoices_raw)
+
+            index_offset = list_invoices.last_index_offset
+            # tasks = []
+            insert_data = []
+            for invoice in list_invoices.invoices:
+                print(
+                    invoice.add_index,
+                    invoice.settle_index,
+                    invoice.value,
+                )
+                insert_data.append(
+                    invoice.model_dump(exclude_none=True, exclude_unset=True)
+                )
+            try:
+                await db_client.insert_many("invoices", insert_data)
+            except BulkWriteError as e:
+                pass
+            if len(invoices_dict.get("invoices")) < num_max_invoices:
+                break
+
+
 async def run(connection_name: str) -> None:
     """
     Main function to run the node monitor.
@@ -346,6 +425,7 @@ async def run(connection_name: str) -> None:
     """
     lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as client:
+        await read_all_invoices(client)
         logger.info(
             f"{client.icon} 🔍 Monitoring node... {connection_name}",
             extra={"notification": True},
@@ -363,6 +443,7 @@ async def run(connection_name: str) -> None:
             track_events,
         )
         async_subscribe(Events.LND_INVOICE, invoice_report)
+        async_subscribe(Events.LND_INVOICE, db_store_invoice)
         async_subscribe(Events.LND_PAYMENT, payment_report)
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
         tasks = [
