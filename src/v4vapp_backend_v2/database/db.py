@@ -143,13 +143,29 @@ class MongoDBClient:
             f"{auth_source}{replica_set}"
         )
 
-    async def _check_db(self):
+    async def _check_create_db(self):
+        """
+        Asynchronously checks if the MongoDB database exists and creates it if it does not.
+
+        This method performs the following steps:
+        1. Checks if the MongoDB client is connected.
+        2. Uses the admin client to check if the database exists.
+        3. Creates the database with the user configuration.
+        4. Creates a user with the specified roles in the database.
+
+        Raises:
+            ConnectionFailure: If the MongoDB client is not connected.
+            OperationFailure: If there is an error creating the user, except for specific error codes (11000, 51003).
+
+        Logs:
+            Info: When a user is successfully created with roles in the database.
+            Error: When there is a failure to create the user, with details of the error and user creation command.
+
+        Note:
+            This method will change the user's password if the user already exists.
+        """
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
-        # Need an admin client to check if the database exists
-
-        # Create the database with the user configuration
-        # Note: this will change the user's password if the user exists
         try:
             admin_db = self.admin_client[self.db_name]
             await admin_db["startup_collection"].insert_one(
@@ -189,6 +205,37 @@ class MongoDBClient:
             )
             pass
 
+    async def _check_indexes(self):
+        """
+        Asynchronously checks and creates indexes for the collections in the database.
+
+        This method iterates through the collections defined in the database configuration
+        and creates the specified indexes if they do not already exist.
+
+        Raises:
+            ConnectionFailure: If the MongoDB client is not connected.
+        """
+        if not self.client:
+            raise ConnectionFailure("Not connected to MongoDB")
+        if (
+            self.db_config.dbs[self.db_name].collections is None
+            or not self.db_config.dbs[self.db_name].collections
+        ):
+            return
+        for collection_name, collection_config in self.db_config.dbs[
+            self.db_name
+        ].collections.items():
+            if collection_config and collection_config.indexes:
+                for index_name, index_value in collection_config.indexes.items():
+                    try:
+                        await self.db[collection_name].create_index(
+                            index_value.index_key,
+                            unique=index_value.unique,
+                            name=index_name,
+                        )
+                    except Exception as ex:
+                        print(ex)
+
     async def list_users(self) -> list:
         """
         List all users in the current database.
@@ -213,7 +260,8 @@ class MongoDBClient:
             database_names = await self.admin_client.list_database_names()
             database_users = await self.list_users()
             if self.db_name not in database_names or self.db_user not in database_users:
-                await self._check_db()
+                await self._check_create_db()
+                await self._check_indexes()
             logger.info(
                 f"Connected to MongoDB {self.db}", extra={"client": self.client}
             )

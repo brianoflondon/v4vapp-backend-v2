@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import pytest
 from v4vapp_backend_v2.database.db import DbErrorCode, MongoDBClient
-from pymongo.errors import OperationFailure, ConnectionFailure
+from pymongo.errors import OperationFailure, ConnectionFailure, DuplicateKeyError
 
 
 os.environ["TESTING"] = "True"
@@ -41,7 +41,7 @@ async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -
         assert ans.get("ok") == 1
         ans = await test_client.drop_user()
         assert ans.get("ok") == 1
-    await drop_database("conn_1", "test_db")
+    await drop_database(conn_name=conn_name, db_name=db_name)
 
 
 async def drop_database(conn_name: str, db_name: str) -> None:
@@ -235,3 +235,47 @@ async def test_update_one_delete_one(set_base_config_path: None):
         )
         assert delete_ans is not None
     await drop_collection_and_user("conn_1", "test_db2", "test_user2")
+
+
+@pytest.mark.asyncio
+async def test_fill_database_with_data_index_test(set_base_config_path: None):
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        collection_name = "index_test"
+        index_key = [("timestamp", -1), ("field_1", 1)]
+        test_client.db[collection_name].create_index(
+            keys=index_key, name="timestamp", unique=True
+        )
+        for i in range(10):
+            data = {
+                "field_1": f"test_{i}",
+                "field_2": f"test_{i}",
+                "field_3": f"test_{i}",
+                "field_4": f"test_{i}",
+                "field_5": f"test_{i}",
+                "timestamp": datetime.now(tz=timezone.utc),
+            }
+            await test_client.insert_one(collection_name, data)
+        try:
+            await test_client.insert_one(collection_name, data)
+        except Exception as e:
+            print(e)
+        cursor = test_client.db[collection_name].find({})
+        count = 0
+        async for _ in cursor:
+            count += 1
+        assert count == 10
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_check_indexes(set_base_config_path: None):
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        await test_client._check_indexes()
+        ans = await test_client.insert_one("test_collection", {"test": "test"})
+        assert ans is not None
+        with pytest.raises(DuplicateKeyError):
+            ans = await test_client.insert_one("test_collection", {"test": "test"})
+        await test_client._check_indexes()
+    await drop_collection_and_user("conn_1", "test_db", "test_user")

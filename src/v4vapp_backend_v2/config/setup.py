@@ -6,11 +6,12 @@ import logging.config
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, override
+from typing import Any, Dict, List, Optional, Protocol, Tuple, override
 
 import colorlog
 from pydantic import BaseModel, field_validator, model_validator
 from yaml import safe_load
+from pymongo.operations import _IndexKeyHint
 
 from v4vapp_backend_v2 import __version__
 
@@ -61,12 +62,12 @@ class TelegramConfig(BaseModel):
 
 
 class IndexConfig(BaseModel):
-    key: Optional[Dict[str, int]] = None
-    unique: Optional[bool] = False
+    index_key: _IndexKeyHint | None = None
+    unique: Optional[bool] = None
 
 
 class CollectionConfig(BaseModel):
-    indexes: Optional[Dict[str, IndexConfig]] = None
+    indexes: Dict[str, IndexConfig] | None = None
 
 
 class DatabaseUserConfig(BaseModel):
@@ -76,7 +77,7 @@ class DatabaseUserConfig(BaseModel):
 
 class DatabaseDetailsConfig(BaseModel):
     db_users: Dict[str, DatabaseUserConfig]
-    collections: Optional[Dict[str, CollectionConfig]] = None
+    collections: Optional[Dict[str, CollectionConfig | None]] = None
 
 
 class DatabaseConnectionConfig(BaseModel):

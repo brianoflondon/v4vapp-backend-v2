@@ -87,13 +87,15 @@ database:
               - readWrite
         collections:
           test_collection:
-            test_index:
-              key: { "test": 1 }
-              unique: true
-            test_index2:
-              key: { "test2": 1, "test3": -1 }
-              unique: false
-          test_collection2: {}
+            indexes:
+              test_index:
+                index_key: [["test", 1]]
+                unique: true
+              test_index2:
+                index_key: [["test2", 1], ["test3", -1]]
+                unique: false
+          test_collection2:
+          test_collection3:
 
       test_db2:
         db_users:
@@ -109,7 +111,6 @@ database:
             password: test_read_password2
             roles:
               - read
-
 ################# TEST CONFIG #################
 
 # database:
