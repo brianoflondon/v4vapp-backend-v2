@@ -3,10 +3,10 @@ from enum import Enum, StrEnum, auto
 import json
 import posixpath
 import tempfile
-
+from timeit import default_timer as timer
 from bson import ObjectId
 
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import format_time_delta, logger
 from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
@@ -15,9 +15,6 @@ from v4vapp_backend_v2.config.setup import logger, InternalConfig
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pymongo.errors import ConnectionFailure, OperationFailure
 from pymongo.results import UpdateResult, DeleteResult
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class MongoDBStatus(StrEnum):
@@ -58,6 +55,7 @@ class MongoDBClient:
         Returns:
             None
         """
+        self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.db = None
         self.client = None
@@ -89,7 +87,10 @@ class MongoDBClient:
             )
 
     def validate_user_db(self):
-        logger.info(f"Validating user {self.db_user} in database {self.db_name}")
+        elapsed_time = timer() - self.start_connection
+        logger.info(
+            f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
+        )
         if not self.db_name in self.db_config.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
@@ -112,7 +113,17 @@ class MongoDBClient:
             self.client = None
             self.health_check = MongoDBStatus.DISCONNECTED
             self.db = None
-            logger.info("Disconnected from MongoDB")
+            time_connected = timer() - self.start_connection
+            logger.info(
+                f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s",
+                extra={
+                    "client": self.client,
+                    "db_name": self.db_name,
+                    "db_user": self.db_user,
+                    "db": self.db,
+                    "time_connected": time_connected,
+                },
+            )
 
     @property
     def admin_uri(self):
@@ -234,7 +245,7 @@ class MongoDBClient:
                             name=index_name,
                         )
                     except Exception as ex:
-                        print(ex)
+                        logger.error(ex)
 
     async def list_users(self) -> list:
         """
@@ -263,7 +274,13 @@ class MongoDBClient:
                 await self._check_create_db()
                 await self._check_indexes()
             logger.info(
-                f"Connected to MongoDB {self.db}", extra={"client": self.client}
+                f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s",
+                extra={
+                    "client": self.client,
+                    "db_name": self.db_name,
+                    "db_user": self.db_user,
+                    "db": self.db,
+                },
             )
 
         except (ConnectionFailure, OperationFailure, Exception) as e:
@@ -278,8 +295,18 @@ class MongoDBClient:
 
     async def disconnect(self):
         if self.client:
+            time_connected = timer() - self.start_connection
+            logger.info(
+                f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}",
+                extra={
+                    "client": self.client,
+                    "db_name": self.db_name,
+                    "db_user": self.db_user,
+                    "db": self.db,
+                    "time_connected": time_connected,
+                },
+            )
             self.client.close()
-            logger.info("Disconnected from MongoDB")
 
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
         if self.client is None or self.db is None:

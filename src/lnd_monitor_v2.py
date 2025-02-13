@@ -380,6 +380,7 @@ async def read_all_invoices(client: LNDClient) -> None:
     ) as db_client:
         index_offset = 0
         num_max_invoices = 1000
+        logger.info(f"{client.icon} Reading all invoices...")
         while True:
             request = lnrpc.ListInvoiceRequest(
                 pending_only=False,
@@ -390,20 +391,12 @@ async def read_all_invoices(client: LNDClient) -> None:
                 client.lightning_stub.ListInvoices,
                 request,
             )
-            invoices_dict = MessageToDict(
-                invoices_raw, preserving_proto_field_name=True
-            )
             list_invoices = protobuf_to_pydantic(invoices_raw)
 
             index_offset = list_invoices.last_index_offset
             # tasks = []
             insert_data = []
             for invoice in list_invoices.invoices:
-                print(
-                    invoice.add_index,
-                    invoice.settle_index,
-                    invoice.value,
-                )
                 insert_data.append(
                     invoice.model_dump(exclude_none=True, exclude_unset=True)
                 )
@@ -411,7 +404,10 @@ async def read_all_invoices(client: LNDClient) -> None:
                 await db_client.insert_many("invoices", insert_data)
             except BulkWriteError as e:
                 pass
-            if len(invoices_dict.get("invoices")) < num_max_invoices:
+            if len(list_invoices.invoices) < num_max_invoices:
+                logger.info(
+                    f"{client.icon} Finished reading {len(list_invoices.invoices)+index_offset } invoices..."
+                )
                 break
 
 
