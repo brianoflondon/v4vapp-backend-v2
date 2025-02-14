@@ -1,5 +1,5 @@
 services:
-  db-check:
+  node-monitor:
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,28 +24,30 @@ services:
     #   - mongo_data:/data/db
     #   - mongo_config:/data/configdb
 
+  voltage-node-monitor:
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/voltage:/app/logs
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
 
-# volumes:
-#   mongo_data:
-#   mongo_config:
+  umbrel-node-monitor:
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/umbrel:/app/logs
+    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
 
+volumes:
+  mongo_data:
+  mongo_config:
 
-  # voltage-node-monitor:
-  #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
-  #   volumes:
-  #     - ./.certs:/app/.certs
-  #     - ./config:/app/config
-  #     - ./logs_docker/voltage:/app/logs
-  #   command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
-
-  # umbrel-node-monitor:
-  #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
-  #   volumes:
-  #     - ./.certs:/app/.certs
-  #     - ./config:/app/config
-  #     - ./logs_docker/umbrel:/app/logs
-  #   command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
+networks:
+  repl-mongo_repl-set:
+    driver: external

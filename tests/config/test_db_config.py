@@ -122,7 +122,7 @@ async def test_mongodb_client_bad_uri(set_base_config_path: None):
     """
     with pytest.raises(ConnectionFailure) as e:
         async with MongoDBClient(
-            "conn_bad", serverSelectionTimeoutMS=50
+            "conn_bad", serverSelectionTimeoutMS=50, retry=False
         ) as test_client:
             pass
     assert e

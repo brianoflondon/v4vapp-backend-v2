@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from enum import Enum, StrEnum, auto
 import json
@@ -40,6 +41,7 @@ class MongoDBClient:
         db_name: str = "admin",
         db_user: str = "admin",
         uri: str = None,
+        retry: bool = True,
         **kwargs,
     ) -> None:
         """
@@ -51,7 +53,7 @@ class MongoDBClient:
             db_user (str, optional): The database user. Defaults to "admin".
             uri (str, optional): The URI for the database connection. Defaults to None.
             **kwargs: Additional keyword arguments.
-
+            retry (bool, optional): Whether to retry the connection. Defaults to True.
         Returns:
             None
         """
@@ -74,6 +76,7 @@ class MongoDBClient:
         self.collections = self.db_config.dbs[db_name].collections
         self.uri = uri if uri else self._build_uri_from_config()
         self.health_check: MongoDBStatus = MongoDBStatus.VALIDATED
+        self.retry = retry
         self.kwargs = kwargs
 
     def validate_connection(self):
@@ -189,7 +192,7 @@ class MongoDBClient:
                 "comment": "Created by MongoDBClient",
             }
             ans = await admin_db.command(create_user)
-            logging.info(
+            logger.info(
                 f"Created user {self.db_user} with roles {self.db_roles} in {self.db_name}",
                 extra={
                     "user": self.db_user,
@@ -260,38 +263,50 @@ class MongoDBClient:
         return [user["user"] for user in users_info["users"]]
 
     async def connect(self):
-        try:
-            self.client = AsyncIOMotorClient(self.uri, tz_aware=True, **self.kwargs)
-            self.admin_client = AsyncIOMotorClient(
-                self.admin_uri, tz_aware=True, **self.kwargs
-            )
-            ans = await self.admin_client["admin"].command("ping")
-            assert ans.get("ok") == 1
-            self.db = self.client[self.db_name]
-            database_names = await self.admin_client.list_database_names()
-            database_users = await self.list_users()
-            if self.db_name not in database_names or self.db_user not in database_users:
-                await self._check_create_db()
-                await self._check_indexes()
-            logger.info(
-                f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s",
-                extra={
-                    "client": self.client,
-                    "db_name": self.db_name,
-                    "db_user": self.db_user,
-                    "db": self.db,
-                },
-            )
+        count = 0
+        while True:
+            try:
+                count += 1
+                self.client = AsyncIOMotorClient(self.uri, tz_aware=True, **self.kwargs)
+                self.admin_client = AsyncIOMotorClient(
+                    self.admin_uri, tz_aware=True, **self.kwargs
+                )
+                ans = await self.admin_client["admin"].command("ping")
+                assert ans.get("ok") == 1
+                self.db = self.client[self.db_name]
+                database_names = await self.admin_client.list_database_names()
+                database_users = await self.list_users()
+                if (
+                    self.db_name not in database_names
+                    or self.db_user not in database_users
+                ):
+                    await self._check_create_db()
+                    await self._check_indexes()
+                logger.info(
+                    f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s",
+                    extra={
+                        "client": self.client,
+                        "db_name": self.db_name,
+                        "db_user": self.db_user,
+                        "db": self.db,
+                    },
+                )
+                self.health_check = MongoDBStatus.CONNECTED
+                return
 
-        except (ConnectionFailure, OperationFailure, Exception) as e:
-            logger.error(
-                f"Failed to connect to MongoDB: {e}",
-                extra={"uri": self.uri, "error": str(e)},
-            )
-            self.client = None
-            self.db = None
-            self.health_check = MongoDBStatus.ERROR
-            raise e
+            except (ConnectionFailure, OperationFailure, Exception) as e:
+                logger.error(
+                    f"Attempt {count} Failed to connect to MongoDB: {e}",
+                    extra={"uri": self.uri, "error": str(e)},
+                )
+                self.client = None
+                self.db = None
+                self.health_check = MongoDBStatus.ERROR
+                # give me a sleep time which is 1 + count * 2 or 30
+                if not self.retry or count > 500:
+                    raise e
+                sleep_time = min(1 + count * 2, 30)  # Exponential backoff
+                await asyncio.sleep(sleep_time)
 
     async def disconnect(self):
         if self.client:
