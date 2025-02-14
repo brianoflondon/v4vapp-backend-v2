@@ -14,7 +14,8 @@
         "invoicesstub",
         "lnrpc",
         "routerrpc",
-        "routerstub"
+        "routerstub",
+        "Unpatch"
     ],
     "python.testing.pytestArgs": [
         "tests",

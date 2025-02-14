@@ -91,7 +91,7 @@ class MongoDBClient:
 
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
-        logger.info(
+        logger.debug(
             f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
         )
         if not self.db_name in self.db_config.dbs:
@@ -118,7 +118,8 @@ class MongoDBClient:
             self.db = None
             time_connected = timer() - self.start_connection
             logger.info(
-                f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s",
+                f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s "
+                f"{(hex(id(self)))}",
                 extra={
                     "client": self.client,
                     "db_name": self.db_name,
@@ -283,12 +284,14 @@ class MongoDBClient:
                     await self._check_create_db()
                     await self._check_indexes()
                 logger.info(
-                    f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s",
+                    f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s "
+                    f"{(hex(id(self)))} {count}",
                     extra={
                         "client": self.client,
                         "db_name": self.db_name,
                         "db_user": self.db_user,
                         "db": self.db,
+                        "id_self": (hex(id(self))),
                     },
                 )
                 self.health_check = MongoDBStatus.CONNECTED
@@ -312,13 +315,15 @@ class MongoDBClient:
         if self.client:
             time_connected = timer() - self.start_connection
             logger.info(
-                f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}",
+                f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
+                f"{(hex(id(self)))}",
                 extra={
                     "client": self.client,
                     "db_name": self.db_name,
                     "db_user": self.db_user,
                     "db": self.db,
                     "time_connected": time_connected,
+                    "id_self": (hex(id(self))),
                 },
             )
             self.client.close()

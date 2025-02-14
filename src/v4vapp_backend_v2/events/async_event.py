@@ -5,7 +5,7 @@ from v4vapp_backend_v2.config.setup import logger
 
 AsyncCallable = Callable[..., Awaitable[None]]
 
-async_subscribers: Dict[Events, list[AsyncCallable]] = dict()
+async_subscribers: Dict[Events, list[AsyncCallable]] = {}
 
 
 def async_subscribe(event_names: Events | List[Events], subscriber: AsyncCallable):
@@ -35,7 +35,10 @@ def async_subscribe(event_names: Events | List[Events], subscriber: AsyncCallabl
 def async_publish(event_name: Events, *args: Any) -> None:
     if event_name in async_subscribers:
         for subscriber in async_subscribers[event_name]:
-            asyncio.create_task(subscriber(*args))
+            if asyncio.iscoroutinefunction(subscriber):
+                asyncio.create_task(subscriber(*args))
+            else:
+                logger.error(f"Subscriber {subscriber} is not a coroutine function")
 
             # try:
             #     await subscriber(*args)
@@ -55,7 +58,7 @@ def get_subscribers_for_event(event_name: Events):
     return async_subscribers.get(event_name, [])
 
 
-def remove_subscriber(event_name: Events, subscriber: callable):
+def remove_subscriber(event_name: Events, subscriber: Callable):
     if event_name not in async_subscribers:
         return
     async_subscribers[event_name].remove(subscriber)
@@ -66,7 +69,3 @@ def remove_subscriber(event_name: Events, subscriber: callable):
 def remove_all_subscribers(event_name: Events):
     if event_name in async_subscribers:
         del async_subscribers[event_name]
-
-
-def remove_all_subscribers():
-    async_subscribers.clear()

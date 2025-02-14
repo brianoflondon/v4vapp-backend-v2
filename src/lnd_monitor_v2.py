@@ -61,6 +61,13 @@ async def track_events(
     """
     event_id = lnd_events_group.append(event)
     dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
+    message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
+    event_dict = MessageToDict(event, preserving_proto_field_name=True)
+    logger.info(
+        f"{client.icon} {message_str}",
+        extra={"notification": False, "event": event_dict, **ans_dict},
+    )
+    await asyncio.sleep(0.5)
     if lnd_events_group.complete_group(event=event):
         notification = True if type(event) == routerrpc.HtlcEvent else False
         if (
@@ -148,6 +155,7 @@ async def remove_event_group(
     Returns:
         None
     """
+    logger.debug(f"Removing event group: {MessageToDict(event)}")
     await asyncio.sleep(10)
     lnd_events_group.remove_group(event)
 
@@ -174,7 +182,7 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
         invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
         logger.info(
-            f"New invoice recorded: {invoice.add_index:>6} {invoice.r_hash}",
+            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
             extra={"db_ans": ans},
         )
 
@@ -400,6 +408,7 @@ async def read_all_invoices(client: LNDClient) -> None:
     ) as db_client:
         index_offset = 0
         num_max_invoices = 1000
+        total_invoices = 0
         logger.info(f"{client.icon} Reading all invoices...")
         while True:
             request = lnrpc.ListInvoiceRequest(
@@ -433,7 +442,7 @@ async def read_all_invoices(client: LNDClient) -> None:
                 logger.info(
                     f"{client.icon} {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
-                # ans = await db_client.insert_many("invoices", insert_data)
+                total_invoices += len(list_invoices.invoices)
             except BulkWriteError as e:
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
@@ -488,10 +497,10 @@ async def run(connection_name: str) -> None:
             [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
             track_events,
         )
+        async_subscribe(Events.LND_INVOICE, db_store_invoice)
         async_subscribe(Events.LND_INVOICE, invoice_report)
         async_subscribe(Events.LND_PAYMENT, payment_report)
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-        async_subscribe(Events.LND_INVOICE, db_store_invoice)
         tasks = [
             read_all_invoices(client),
             invoices_loop(client=client, lnd_events_group=lnd_events_group),
