@@ -6,7 +6,7 @@ from typing import Generator
 import pytest
 from pydantic import ValidationError
 
-from v4vapp_backend_v2.models.htlc_event_models import HtlcTrackingList
+from v4vapp_backend_v2.depreciated.htlc_event_models import HtlcTrackingList
 from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 
