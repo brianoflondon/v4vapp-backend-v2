@@ -26,6 +26,7 @@ class BSONInt64(Int64):
 
 
 class InvoiceHTLC(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     chan_id: BSONInt64
     htlc_index: BSONInt64 | None = None
     amt_msat: BSONInt64
@@ -37,9 +38,6 @@ class InvoiceHTLC(BaseModel):
     custom_records: dict | None = None
     mpp_total_amt_msat: BSONInt64 | None = None
     amp: dict | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class Invoice(BaseModel):
@@ -75,12 +73,10 @@ class Invoice(BaseModel):
 
 
 class ListInvoiceResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     invoices: List[Invoice]
     last_index_offset: BSONInt64
     first_index_offset: BSONInt64
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 def convert_timestamp_to_datetime(timestamp):
@@ -164,5 +160,3 @@ def protobuf_to_pydantic(message) -> ListInvoiceResponse:
             print(e)
         pass
     return ListInvoiceResponse.model_validate(message_dict)
-
-
