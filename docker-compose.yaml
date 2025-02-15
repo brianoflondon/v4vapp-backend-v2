@@ -8,7 +8,7 @@ services:
       # - ./.certs:/app/.certs
       - ./config:/app/config
 
-  mongo:
+  mongo-pytest-local:
     image: mongo:8.0
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin

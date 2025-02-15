@@ -110,6 +110,10 @@ class MongoDBClient:
                 code=DbErrorCode.NO_PASSWORD,
             )
 
+    @property
+    def hex_id(self):
+        return hex(id(self))
+
     def __del__(self):
         if self.client:
             self.client.close()
@@ -119,7 +123,7 @@ class MongoDBClient:
             time_connected = timer() - self.start_connection
             logger.info(
                 f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s "
-                f"{(hex(id(self)))}",
+                f"{self.hex_id}",
                 extra={
                     "client": self.client,
                     "db_name": self.db_name,
@@ -285,13 +289,13 @@ class MongoDBClient:
                     await self._check_indexes()
                 logger.info(
                     f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s "
-                    f"{(hex(id(self)))} {count}",
+                    f"{self.hex_id} {count}",
                     extra={
                         "client": self.client,
                         "db_name": self.db_name,
                         "db_user": self.db_user,
                         "db": self.db,
-                        "id_self": (hex(id(self))),
+                        "id_self": self.hex_id,
                     },
                 )
                 self.health_check = MongoDBStatus.CONNECTED
@@ -316,14 +320,14 @@ class MongoDBClient:
             time_connected = timer() - self.start_connection
             logger.info(
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
-                f"{(hex(id(self)))}",
+                f"{self.hex_id}",
                 extra={
                     "client": self.client,
                     "db_name": self.db_name,
                     "db_user": self.db_user,
                     "db": self.db,
                     "time_connected": time_connected,
-                    "id_self": (hex(id(self))),
+                    "id_self": self.hex_id,
                 },
             )
             self.client.close()

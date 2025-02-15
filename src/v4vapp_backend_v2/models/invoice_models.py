@@ -84,10 +84,41 @@ class ListInvoiceResponse(BaseModel):
 
 
 def convert_timestamp_to_datetime(timestamp):
+    """
+    Convert a Unix timestamp to a timezone-aware datetime object.
+
+    Args:
+        timestamp (float or int): The Unix timestamp to convert.
+
+    Returns:
+        datetime: A timezone-aware datetime object in UTC.
+
+    Raises:
+        ValueError: If the timestamp cannot be converted to a float.
+    """
     return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
 
 
 def convert_datetime_fields(invoice: dict) -> dict:
+    """
+    Converts timestamp fields in an invoice dictionary to datetime objects.
+
+    This function checks for the presence of specific timestamp fields in the
+    provided invoice dictionary and converts them to datetime objects using
+    the `convert_timestamp_to_datetime` function. The fields that are converted
+    include:
+    - "creation_date"
+    - "settle_date"
+    - "accept_time" (within each HTLC in the "htlcs" list)
+    - "resolve_time" (within each HTLC in the "htlcs" list)
+
+    Args:
+        invoice (dict): The invoice dictionary containing timestamp fields.
+
+    Returns:
+        dict: The invoice dictionary with the specified timestamp fields
+              converted to datetime objects.
+    """
     if "creation_date" in invoice:
         invoice["creation_date"] = convert_timestamp_to_datetime(
             invoice["creation_date"]
@@ -103,6 +134,16 @@ def convert_datetime_fields(invoice: dict) -> dict:
 
 
 def protobuf_invoice_to_pydantic(invoice: lnrpc.Invoice) -> Invoice:
+    """
+    Converts a protobuf Invoice object to a Pydantic Invoice model.
+
+    Args:
+        invoice (lnrpc.Invoice): The protobuf Invoice object to be converted.
+
+    Returns:
+        Invoice: The converted Pydantic Invoice model. If an error occurs during validation,
+                 an empty Invoice model is returned.
+    """
     invoice_dict = MessageToDict(invoice, preserving_proto_field_name=True)
     invoice_dict = convert_datetime_fields(invoice_dict)
     try:
@@ -125,20 +166,3 @@ def protobuf_to_pydantic(message) -> ListInvoiceResponse:
     return ListInvoiceResponse.model_validate(message_dict)
 
 
-# Example usage
-def example_usage():
-    # Create a sample Protobuf message
-    invoice = lnrpc.Invoice()
-    invoice.value = 1234567890123456789  # int64 field
-    invoice.memo = "Test invoice"
-
-    response = lnrpc.ListInvoiceResponse()
-    response.invoices.extend([invoice])
-
-    # Convert the Protobuf message to a Pydantic model
-    response_model = protobuf_to_pydantic(response)
-    print(response_model)
-
-
-if __name__ == "__main__":
-    example_usage()

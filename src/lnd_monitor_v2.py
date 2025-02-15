@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 import typer
 import sys
 import asyncio
@@ -173,6 +174,7 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
+        logger.info(f"Storing invoice: {invoice.add_index} {db_client.hex_id}")
         try:
             invoice_pyd = protobuf_invoice_to_pydantic(invoice)
         except Exception as e:
@@ -183,7 +185,7 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
         logger.info(
             f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
-            extra={"db_ans": ans},
+            extra={"db_ans": ans.raw_result},
         )
 
 
@@ -447,7 +449,7 @@ async def read_all_invoices(client: LNDClient) -> None:
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
                 logger.info(
-                    f"{client.icon} Finished reading {len(insert_data) } invoices..."
+                    f"{client.icon} Finished reading {total_invoices} invoices..."
                 )
                 break
 

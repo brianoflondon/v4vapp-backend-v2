@@ -43,7 +43,7 @@ class LNDInvoice(Invoice):
             self.invoice_message(),
             extra={
                 "notification": send_notification,
-                "invoice": self.model_dump(exclude_none=True),
+                "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
             },
         )
 
