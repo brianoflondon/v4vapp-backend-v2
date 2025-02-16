@@ -9,7 +9,7 @@ from v4vapp_backend_v2.depreciated.htlc_event_models import (
     HtlcEvent,
     HtlcTrackingList,
 )
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.models.invoice_models import Invoice
 
 
 def read_log_file_channel_names(file_path: str) -> Generator[ChannelName, None, None]:
@@ -31,7 +31,7 @@ def read_log_file_channel_names(file_path: str) -> Generator[ChannelName, None, 
 
 def read_log_file_htlc_invoice(
     file_path: str,
-) -> Generator[HtlcEvent | LNDInvoice, None, None]:
+) -> Generator[HtlcEvent | Invoice, None, None]:
     with open(file_path, "r") as file:
         # Parse each line as JSON and yield the htlc_event data
         for line in file.readlines():
@@ -40,7 +40,7 @@ def read_log_file_htlc_invoice(
                 if "htlc_data" in log_entry:
                     yield HtlcEvent.model_validate(log_entry["htlc_data"])
                 if "invoice_data" in log_entry:
-                    yield LNDInvoice.model_validate(log_entry["invoice_data"])
+                    yield Invoice.model_validate(log_entry["invoice_data"])
 
             except ValidationError as e:
                 print(e)
@@ -74,7 +74,7 @@ def test_read_all_log():
             if complete:
                 print(f"✅ Complete group, Delete group {tracking.message(htlc_id)}")
                 tracking.delete_event(htlc_id)
-        if isinstance(item, LNDInvoice):
+        if isinstance(item, Invoice):
             tracking.add_invoice(item)
     print(tracking.events)
     tracking.remove_expired_invoices()

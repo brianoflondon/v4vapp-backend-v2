@@ -7,10 +7,7 @@ import tempfile
 from timeit import default_timer as timer
 from bson import ObjectId
 
-from v4vapp_backend_v2.config.setup import format_time_delta, logger
-from v4vapp_backend_v2.events.async_event import async_subscribe
-from v4vapp_backend_v2.events.event_models import Events
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.config.setup import logger
 
 from v4vapp_backend_v2.config.setup import logger, InternalConfig
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
@@ -83,7 +80,7 @@ class MongoDBClient:
         db_conn: str,
         db_name: str = "admin",
         db_user: str = "admin",
-        uri: str = None,
+        uri: str | None = None,
         retry: bool = True,
         **kwargs,
     ) -> None:
@@ -118,9 +115,9 @@ class MongoDBClient:
         self.db_roles = self.db_config.dbs[self.db_name].db_users[self.db_user].roles
         self.collections = self.db_config.dbs[db_name].collections
         self.uri = uri if uri else self._build_uri_from_config()
-        self.health_check: MongoDBStatus = MongoDBStatus.VALIDATED
         self.retry = retry
         self.kwargs = kwargs
+        self.health_check = MongoDBStatus.VALIDATED
 
     def validate_connection(self):
         try:
@@ -180,7 +177,7 @@ class MongoDBClient:
     def admin_uri(self):
         return self._build_uri_from_config("admin", "admin")
 
-    def _build_uri_from_config(self, db_name: str = None, db_user: str = None) -> str:
+    def _build_uri_from_config(self, db_name: str = "", db_user: str = "") -> str:
         """
         Constructs a MongoDB URI from the database configuration.
 

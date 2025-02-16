@@ -6,8 +6,7 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import LoggerFunction
 from v4vapp_backend_v2.events.async_event import async_subscribe
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
-
+from v4vapp_backend_v2.models.invoice_models import Invoice
 
 class HtlcInfo(BaseModel):
     incoming_timelock: int | None = None
@@ -223,7 +222,7 @@ class ChannelName(BaseModel):
 class HtlcTrackingList(BaseModel):
     events: list[HtlcEvent] = []
     names: Dict[int, str] = {}
-    invoices: list[LNDInvoice] = []
+    invoices: list[Invoice] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -238,7 +237,7 @@ class HtlcTrackingList(BaseModel):
         self.events.append(event)
         return htlc_id
 
-    def add_invoice(self, invoice: LNDInvoice) -> int:
+    def add_invoice(self, invoice: Invoice) -> int:
         add_index = invoice.add_index
         if add_index is None:
             return -1
@@ -255,7 +254,7 @@ class HtlcTrackingList(BaseModel):
         ]
 
     def remove_expired_invoices(self) -> None:
-        def check_expiry(invoice: LNDInvoice) -> bool:
+        def check_expiry(invoice: Invoice) -> bool:
             current_time = int(datetime.now(tz=timezone.utc).timestamp())
             return current_time > invoice.creation_date.timestamp() + (
                 invoice.expiry or 300
@@ -265,13 +264,13 @@ class HtlcTrackingList(BaseModel):
             if check_expiry(invoice):
                 self.remove_invoice(invoice.add_index)
 
-    def lookup_invoice(self, add_index: int) -> LNDInvoice | None:
+    def lookup_invoice(self, add_index: int) -> Invoice | None:
         for invoice in self.invoices:
             if invoice.add_index == add_index:
                 return invoice
         return None
 
-    def lookup_invoice_by_htlc_id(self, htlc_id: int) -> LNDInvoice | None:
+    def lookup_invoice_by_htlc_id(self, htlc_id: int) -> Invoice | None:
         """
         Lookup an invoice by its HTLC (Hashed TimeLock Contract) ID.
 
@@ -279,7 +278,7 @@ class HtlcTrackingList(BaseModel):
             htlc_id (int): The ID of the HTLC to search for.
 
         Returns:
-            LNDInvoice | None: The invoice containing the specified HTLC ID,
+            Invoice | None: The invoice containing the specified HTLC ID,
             or None if not found.
         """
         for invoice in self.invoices:

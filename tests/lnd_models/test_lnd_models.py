@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from v4vapp_backend_v2.depreciated.htlc_event_models import HtlcTrackingList
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.models.invoice_models import InvoiceHTLC, Invoice
 
 
 def validate_preimage(r_preimage_base64: str, r_hash_base64: str) -> bool:
@@ -41,14 +41,14 @@ def test_validate_preimage():
     assert validate_preimage(r_preimage_base64, r_hash_base64) is True
 
 
-def read_log_file_invoices(file_path: str) -> Generator[LNDInvoice, None, None]:
+def read_log_file_invoices(file_path: str) -> Generator[Invoice, None, None]:
     with open(file_path, "r") as file:
         # Parse each line as JSON and yield the htlc_event data
         for line in file.readlines():
             try:
                 log_entry = json.loads(line)
                 if "invoice_data" in log_entry:
-                    yield LNDInvoice.model_validate(log_entry["invoice_data"])
+                    yield Invoice.model_validate(log_entry["invoice_data"])
 
             except ValidationError as e:
                 print(e)
