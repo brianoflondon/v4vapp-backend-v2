@@ -79,8 +79,16 @@ class Invoice(BaseModel):
 
     is_lndtohive: bool = False
 
-    def __init__(__pydantic_self__, **data: Any) -> None:
-        super().__init__(**data)
+    def __init__(
+        __pydantic_self__, lnrpc_invoice: lnrpc.Invoice = None, **data: Any
+    ) -> None:
+        if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
+            data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
+            invoice_dict = convert_datetime_fields(data_dict)
+        else:
+            invoice_dict = convert_datetime_fields(data)
+        super().__init__(**invoice_dict)
+
         # perform my check to see if this invoice can be paid to Hive
         if __pydantic_self__.memo:
             match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
@@ -117,11 +125,27 @@ class ListInvoiceResponse(BaseModel):
     last_index_offset: BSONInt64
     first_index_offset: BSONInt64
 
-    def __init__(__pydantic_self__, **data: Any) -> None:
+    def __init__(
+        __pydantic_self__,
+        lnrpc_list_invoice_response: lnrpc.ListInvoiceResponse = None,
+        **data: Any,
+    ) -> None:
+        if lnrpc_list_invoice_response and isinstance(
+            lnrpc_list_invoice_response, lnrpc.ListInvoiceResponse
+        ):
+            list_invoice_dict = MessageToDict(
+                lnrpc_list_invoice_response, preserving_proto_field_name=True
+            )
+            list_invoice_dict["invoices"] = [
+                Invoice.model_validate(invoice)
+                for invoice in list_invoice_dict["invoices"]
+            ]
+            super().__init__(**list_invoice_dict)
+        else:
+            super().__init__(**data)
+            if not __pydantic_self__.invoices:
+                __pydantic_self__.invoices = []
 
-        super().__init__(**data)
-        if not __pydantic_self__.invoices:
-            __pydantic_self__.invoices = []
 
 def convert_timestamp_to_datetime(timestamp):
     """
@@ -159,17 +183,31 @@ def convert_datetime_fields(invoice: dict) -> dict:
         dict: The invoice dictionary with the specified timestamp fields
               converted to datetime objects.
     """
-    if "creation_date" in invoice:
-        invoice["creation_date"] = convert_timestamp_to_datetime(
-            invoice["creation_date"]
-        )
-    if "settle_date" in invoice:
-        invoice["settle_date"] = convert_timestamp_to_datetime(invoice["settle_date"])
+
+    def convert_field(value: Any):
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, (int, float)):
+            return convert_timestamp_to_datetime(value)
+        if isinstance(value, str):
+            try:
+                return convert_timestamp_to_datetime(float(value))
+            except ValueError:
+                return value
+
+    keys = ["creation_date", "settle_date"]
+
+    for key in keys:
+        value = invoice.get(key)
+        if value:
+            invoice[key] = convert_field(value)
+
+    keys = ["accept_time", "resolve_time"]
     for htlc in invoice.get("htlcs", []):
-        if "accept_time" in htlc:
-            htlc["accept_time"] = convert_timestamp_to_datetime(htlc["accept_time"])
-        if "resolve_time" in htlc:
-            htlc["resolve_time"] = convert_timestamp_to_datetime(htlc["resolve_time"])
+        for key in keys:
+            value = htlc.get(key)
+            if value:
+                htlc[key] = convert_field(value)
     return invoice
 
 
@@ -198,9 +236,8 @@ def protobuf_to_pydantic(message) -> ListInvoiceResponse:
     message_dict = MessageToDict(message, preserving_proto_field_name=True)
     for invoice in message_dict.get("invoices", []):
         invoice = convert_datetime_fields(invoice)
-        try:
-            invoice_model = Invoice.model_validate(invoice)
-        except Exception as e:
-            print(e)
-        pass
+        # try:
+        #     invoice_model = Invoice.model_validate(invoice)
+        # except Exception as e:
+        #     print(e)
     return ListInvoiceResponse.model_validate(message_dict)

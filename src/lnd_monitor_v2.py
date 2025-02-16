@@ -36,6 +36,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from pymongo.errors import BulkWriteError
 from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
+    ListInvoiceResponse,
     protobuf_invoice_to_pydantic,
     protobuf_to_pydantic,
 )
@@ -158,7 +159,7 @@ async def remove_event_group(
     lnd_events_group.remove_group(event)
 
 
-async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
+async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
     """
     Asynchronously stores an invoice in the MongoDB database.
 
@@ -171,9 +172,9 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
-        logger.info(f"Storing invoice: {invoice.add_index} {db_client.hex_id}")
+        logger.info(f"Storing invoice: {lnrpc_invoice.add_index} {db_client.hex_id}")
         try:
-            invoice_pyd = protobuf_invoice_to_pydantic(invoice)
+            invoice_pyd = protobuf_invoice_to_pydantic(lnrpc_invoice)
         except Exception as e:
             logger.info(e)
             return
@@ -187,20 +188,20 @@ async def db_store_invoice(invoice: lnrpc.Invoice, *args: Any) -> None:
 
 
 async def invoice_report(
-    invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
+    lnrpc_invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
-        invoice.creation_date + invoice.expiry, tz=timezone.utc
+        lnrpc_invoice.creation_date + lnrpc_invoice.expiry, tz=timezone.utc
     )
     time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
     if time_to_expire.total_seconds() < 0:
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
-    invoice_dict = MessageToDict(invoice, preserving_proto_field_name=True)
+    invoice_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
     logger.info(
         (
-            f"{client.icon} Invoice: {invoice.add_index:>6} "
-            f"amount: {invoice.value:>10,} sat {invoice.settle_index} "
+            f"{client.icon} Invoice: {lnrpc_invoice.add_index:>6} "
+            f"amount: {lnrpc_invoice.value:>10,} sat {lnrpc_invoice.settle_index} "
             f"expiry: {time_to_expire_str} "
             f"{invoice_dict.get('r_hash')}"
         ),
@@ -209,27 +210,27 @@ async def invoice_report(
 
 
 async def payment_report(
-    payment: lnrpc.Payment, client: LNDClient, lnd_events_group: LndEventsGroup
+    lnrpc_payment: lnrpc.Payment, client: LNDClient, lnd_events_group: LndEventsGroup
 ) -> None:
-    status = lnrpc.Payment.PaymentStatus.Name(payment.status)
+    status = lnrpc.Payment.PaymentStatus.Name(lnrpc_payment.status)
     creation_date = datetime.fromtimestamp(
-        payment.creation_time_ns / 1e9, tz=timezone.utc
+        lnrpc_payment.creation_time_ns / 1e9, tz=timezone.utc
     )
-    pre_image = payment.payment_preimage if payment.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(payment.payment_request, client)
+    pre_image = lnrpc_payment.payment_preimage if lnrpc_payment.payment_preimage else ""
+    dest_alias = await get_node_alias_from_pay_request(lnrpc_payment.payment_request, client)
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
         (
-            f"{client.icon} Payment: {payment.payment_index:>6} "
-            f"amount: {payment.value_sat:>10,} sat "
+            f"{client.icon} Payment: {lnrpc_payment.payment_index:>6} "
+            f"amount: {lnrpc_payment.value_sat:>10,} sat "
             f"dest: {dest_alias} "
             f"pre_image: {pre_image} "
             f"in flight: {in_flight_time} "
             f"{creation_date:%H:%M:%S} status: {status} "
-            f"{payment.payment_hash}"
+            f"{lnrpc_payment.payment_hash}"
         ),
-        extra={"payment": MessageToDict(payment, preserving_proto_field_name=True)},
+        extra={"payment": MessageToDict(lnrpc_payment, preserving_proto_field_name=True)},
     )
 
 
@@ -420,8 +421,7 @@ async def read_all_invoices(client: LNDClient) -> None:
                 client.lightning_stub.ListInvoices,
                 request,
             )
-            list_invoices = protobuf_to_pydantic(invoices_raw)
-
+            list_invoices = ListInvoiceResponse(invoices_raw)
             index_offset = list_invoices.first_index_offset
             insert_data = []
             tasks = []
