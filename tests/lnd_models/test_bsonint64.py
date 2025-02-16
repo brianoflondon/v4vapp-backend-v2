@@ -22,15 +22,15 @@ def test_bsonint64_from_int64():
 
 def test_bsonint64_invalid_string():
     value = "invalid_int64"
-    with pytest.raises(ValueError, match="Value invalid_int64 is not a valid int64"):
+    with pytest.raises(ValueError, match="Value invalid_int64 is not a valid Int64"):
         BSONInt64.validate(value, None)
 
 def test_bsonint64_invalid_type():
     value = 123.456
-    with pytest.raises(TypeError, match="Value 123.456 is not a valid int64"):
+    with pytest.raises(TypeError, match="Value 123.456 is not a valid Int64"):
         BSONInt64.validate(value, None)
 
 def test_bsonint64_none():
     value = None
-    with pytest.raises(TypeError, match="Value None is not a valid int64"):
+    with pytest.raises(TypeError, match="Value None is not a valid Int64"):
         BSONInt64.validate(value, None)

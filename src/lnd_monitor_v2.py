@@ -39,7 +39,7 @@ from v4vapp_backend_v2.models.invoice_models import (
     ListInvoiceResponse,
     protobuf_invoice_to_pydantic,
 )
-from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -174,7 +174,7 @@ async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
     ) as db_client:
         logger.info(f"Storing invoice: {lnrpc_invoice.add_index} {db_client.hex_id}")
         try:
-            invoice_pyd = protobuf_invoice_to_pydantic(lnrpc_invoice)
+            invoice_pyd = Invoice(lnrpc_invoice)
         except Exception as e:
             logger.info(e)
             return
@@ -186,6 +186,35 @@ async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
             extra={"db_ans": ans.raw_result},
         )
 
+
+async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
+    """
+    Asynchronously stores a payment in the MongoDB database.
+
+    Args:
+        payment (lnrpc.Payment): The payment to store.
+
+    Returns:
+        None
+    """
+    async with MongoDBClient(
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+    ) as db_client:
+        try:
+            logger.info(
+                f"Storing payment: {lnrpc_payment.payment_index} {db_client.hex_id}"
+            )
+            payment_pyd = Payment(lnrpc_payment)
+            query = {"payment_hash": payment_pyd.payment_hash}
+            payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
+            ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
+            logger.info(
+                f"New payment recorded: {payment_pyd.payment_index:>6} {payment_pyd.payment_hash}",
+                extra={"db_ans": ans.raw_result},
+            )
+        except Exception as e:
+            logger.info(e)
+            return
 
 async def invoice_report(
     lnrpc_invoice: lnrpc.Invoice,
@@ -491,8 +520,8 @@ async def read_all_payments(client: LNDClient) -> None:
             )
             list_payments = ListPaymentsResponse(payments_raw)
             index_offset = payments_raw.first_index_offset
-            with open("list_payments_raw.bin", "wb") as f:
-                f.write(payments_raw.SerializeToString())
+            # with open("list_payments_raw.bin", "wb") as f:
+            #     f.write(payments_raw.SerializeToString())
             insert_data = []
             tasks = []
             for payment in list_payments.payments:
@@ -568,6 +597,7 @@ async def run(connection_name: str) -> None:
             track_events,
         )
         async_subscribe(Events.LND_INVOICE, db_store_invoice)
+        async_subscribe(Events.LND_PAYMENT, db_store_payment)
         async_subscribe(Events.LND_INVOICE, invoice_report)
         async_subscribe(Events.LND_PAYMENT, payment_report)
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
