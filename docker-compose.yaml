@@ -5,8 +5,24 @@ services:
       dockerfile: Dockerfile
     image: node-monitor:latest
     volumes:
-      - ./.certs:/app/.certs
+      # - ./.certs:/app/.certs
       - ./config:/app/config
+
+  mongo-pytest-local:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    ports:
+      - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
+    healthcheck:
+      test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # volumes:
+    #   - mongo_data:/data/db
+    #   - mongo_config:/data/configdb
 
   voltage-node-monitor:
     depends_on:
@@ -27,3 +43,11 @@ services:
       - ./config:/app/config
       - ./logs_docker/umbrel:/app/logs
     command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
+
+volumes:
+  mongo_data:
+  mongo_config:
+
+networks:
+  repl-mongo_repl-set:
+    driver: external

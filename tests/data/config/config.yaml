@@ -1,3 +1,4 @@
+################# TEST CONFIG #################
 version: "0.1.0-test"
 
 logging:
@@ -11,6 +12,8 @@ logging:
     httpx: WARNING
 
 default_connection: example
+
+################# TEST CONFIG #################
 
 lnd_connections:
   - name: example
@@ -32,6 +35,8 @@ lnd_connections:
     cert_filename: tls-fake.safe-cert
     use_proxy: http://proxy.example.com:8888
 
+################# TEST CONFIG #################
+
 tailscale:
   tailnet_name: anything.ts.net
   notification_server: https://something
@@ -39,3 +44,94 @@ tailscale:
 
 telegram:
   chat_id: -1000
+
+################# TEST CONFIG #################
+database:
+  conn_bad:
+    db_hosts:
+      - localhost:11111
+    dbs:
+      admin:
+        db_users:
+          admin:
+            password: test-admin-password
+            roles:
+              - root
+  conn_1:
+    db_hosts:
+      - localhost:37017
+    db_replica_set:
+    dbs:
+      admin:
+        db_users:
+          admin:
+            password: test-admin-password
+            roles:
+              - root
+              - readWrite
+              - dbAdmin
+      test_db:
+        db_users:
+          test_user:
+            password: test_user_password
+            roles:
+              - readWrite
+              - dbAdmin
+          test_read_user:
+            password: test_read_password
+            roles:
+              - read
+          test_user_no_password:
+            password: ""
+            roles:
+              - readWrite
+        collections:
+          test_collection:
+            indexes:
+              test_index:
+                index_key: [["test", 1]]
+                unique: true
+              test_index2:
+                index_key: [["test2", 1], ["test3", -1]]
+                unique: false
+          test_collection2:
+          test_collection3:
+
+      test_db2:
+        db_users:
+          test_user2:
+            password: test_user2_password
+            roles:
+              - readWrite
+              - dbAdmin
+            collections:
+              test2_collection:
+              test2_collection2:
+          test_read_user2:
+            password: test_read_password2
+            roles:
+              - read
+################# TEST CONFIG #################
+
+# database:
+#   db_admin_user: admin
+#   db_admin_password: test-admin-password
+#   db_admin_db_name
+#   db_replica_set:
+#   db_auth_source: admin
+#   db_hosts:
+#     - localhost:37017
+#   db_details:
+#     - db_name: test_db
+#     - db_users:
+#       db_user:
+#         - test_user:
+#       db_password: test_password
+#       db_roles:
+#         - readWrite
+#         - dbAdmin
+#     - db_name: test_db2
+#       db_user: test_user2
+#       db_password: test_password2
+#       db_roles:
+#         - readWrite

@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime
 import hashlib
 import json
 from typing import Generator
@@ -6,8 +7,14 @@ from typing import Generator
 import pytest
 from pydantic import ValidationError
 
-from v4vapp_backend_v2.models.htlc_event_models import HtlcTrackingList
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
+from v4vapp_backend_v2.depreciated.htlc_event_models import HtlcTrackingList
+from v4vapp_backend_v2.models.invoice_models import (
+    Invoice,
+    ListInvoiceResponse,
+    protobuf_to_pydantic,
+)
+
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 
 
 def validate_preimage(r_preimage_base64: str, r_hash_base64: str) -> bool:
@@ -41,14 +48,14 @@ def test_validate_preimage():
     assert validate_preimage(r_preimage_base64, r_hash_base64) is True
 
 
-def read_log_file_invoices(file_path: str) -> Generator[LNDInvoice, None, None]:
+def read_log_file_invoices(file_path: str) -> Generator[Invoice, None, None]:
     with open(file_path, "r") as file:
         # Parse each line as JSON and yield the htlc_event data
         for line in file.readlines():
             try:
                 log_entry = json.loads(line)
                 if "invoice_data" in log_entry:
-                    yield LNDInvoice.model_validate(log_entry["invoice_data"])
+                    yield Invoice.model_validate(log_entry["invoice_data"])
 
             except ValidationError as e:
                 print(e)
@@ -71,7 +78,7 @@ def test_log_file_invoices():
         for invoice in tracking.invoices:
             if invoice.htlcs:
                 assert invoice == tracking.lookup_invoice_by_htlc_id(
-                    int(invoice.htlcs[0]["htlc_index"])
+                    int(invoice.htlcs[0].htlc_index)
                 )
             assert invoice == tracking.lookup_invoice(invoice.add_index)
 
@@ -104,3 +111,58 @@ def test_remove_expired_invoices():
     except ValidationError as e:
         print(e)
         assert False
+
+
+"""
+This was the snippet of code use to create the test data:
+            request = lnrpc.ListInvoiceRequest(
+                pending_only=False,
+                index_offset=index_offset,
+                num_max_invoices=num_max_invoices,
+                reversed=True,
+            )
+            invoices_raw: lnrpc.ListInvoiceResponse = await client.call(
+                client.lightning_stub.ListInvoices,
+                request,
+            )
+            with open("list_invoices_raw.bin", "wb") as f:
+                f.write(invoices_raw.SerializeToString())
+"""
+
+
+def read_list_invoices_raw(file_path: str) -> lnrpc.ListInvoiceResponse:
+    with open(file_path, "rb") as file:
+        return lnrpc.ListInvoiceResponse.FromString(file.read())
+
+
+def test_read_list_invoices_raw():
+    """
+    Test the `read_list_invoices_raw` function to ensure it correctly reads and processes
+    raw invoice data from a binary file.
+
+    This test performs the following checks:
+    1. Verifies that `read_list_invoices_raw` returns a non-empty response.
+    2. Ensures the response is an instance of `lnrpc.ListInvoiceResponse`.
+    3. Converts the response to a Pydantic model using `protobuf_to_pydantic` and verifies the conversion.
+    4. Converts the response to a `ListInvoiceResponse` model and verifies the conversion.
+    5. Checks that the two converted responses are equal.
+    6. Iterates through each invoice in the response and verifies that the `creation_date` attribute
+       is an instance of `datetime`.
+
+    Raises:
+        AssertionError: If any of the assertions fail.
+    """
+    lnrpc_list_invoices = read_list_invoices_raw(
+        "tests/data/lnd_lists/list_invoices_raw.bin"
+    )
+    assert lnrpc_list_invoices
+    assert isinstance(lnrpc_list_invoices, lnrpc.ListInvoiceResponse)
+    list_invoice_response = protobuf_to_pydantic(lnrpc_list_invoices)
+    assert list_invoice_response
+    list_invoice_response2 = ListInvoiceResponse(lnrpc_list_invoices)
+    assert list_invoice_response2
+    assert list_invoice_response == list_invoice_response2
+
+    for lnrpc_invoice in lnrpc_list_invoices.invoices:
+        invoice = Invoice(lnrpc_invoice)
+        assert isinstance(invoice.creation_date, datetime)

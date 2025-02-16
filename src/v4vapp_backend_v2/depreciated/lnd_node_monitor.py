@@ -16,7 +16,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscription
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_channel_name,
 )
-from v4vapp_backend_v2.models.htlc_event_models import (
+from v4vapp_backend_v2.depreciated.htlc_event_models import (
     ChannelName,
     HtlcEvent,
     HtlcTrackingList,

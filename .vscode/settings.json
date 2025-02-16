@@ -6,12 +6,17 @@
     },
     "cmake.configureOnOpen": true,
     "cSpell.words": [
+        "bsonint",
+        "healthcheck",
         "htlc",
+        "imac",
+        "INITDB",
         "invoicesrpc",
         "invoicesstub",
         "lnrpc",
         "routerrpc",
-        "routerstub"
+        "routerstub",
+        "Unpatch"
     ],
     "python.testing.pytestArgs": [
         "tests",

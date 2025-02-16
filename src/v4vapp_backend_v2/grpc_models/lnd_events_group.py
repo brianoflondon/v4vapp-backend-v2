@@ -55,8 +55,8 @@ EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment, LndChannelN
 
 class LndEventsGroup:
     htlc_events: List[routerrpc.HtlcEvent] = []
-    invoices: List[lnrpc.Invoice] = []
-    payments: List[lnrpc.Payment] = []
+    lnrpc_invoices: List[lnrpc.Invoice] = []
+    lnrpc_payments: List[lnrpc.Payment] = []
     channel_names: dict[int, LndChannelName] = {}
 
     def __init__(
@@ -66,8 +66,8 @@ class LndEventsGroup:
         payments: List[lnrpc.Payment] = [],
     ) -> None:
         self.htlc_events = htlc_events
-        self.invoices = invoices
-        self.payments = payments
+        self.lnrpc_invoices = invoices
+        self.lnrpc_payments = payments
 
     # MARK: Universal Methods
 
@@ -133,10 +133,10 @@ class LndEventsGroup:
             case "Invoice":
                 invoice_group = self.get_invoice_list_by_pre_image(event.r_preimage)
                 for invoice in invoice_group:
-                    self.invoices.remove(invoice)
+                    self.lnrpc_invoices.remove(invoice)
                 self.clear_expired_invoices()
             case "Payment":
-                self.payments.remove(event)
+                self.lnrpc_payments.remove(event)
             case _:
                 pass
 
@@ -146,8 +146,8 @@ class LndEventsGroup:
     def report_event_counts(self) -> dict:
         return {
             "htlc_events": len(self.htlc_events),
-            "invoices": len(self.invoices),
-            "payments": len(self.payments),
+            "invoices": len(self.lnrpc_invoices),
+            "payments": len(self.lnrpc_payments),
             "channel_names": len(self.channel_names),
         }
 
@@ -425,7 +425,7 @@ class LndEventsGroup:
         return ForwardAmtFee(forward_amount=0, fee=0)
 
     def get_payment_by_pre_image(self, pre_image: str) -> lnrpc.Payment:
-        for payment in self.payments:
+        for payment in self.lnrpc_payments:
             if payment.payment_preimage == pre_image:
                 return payment
         return None
@@ -522,19 +522,21 @@ class LndEventsGroup:
     # MARK: Invoice Methods
     def add_invoice(self, invoice: lnrpc.Invoice) -> int:
         add_index = invoice.add_index or 0
-        self.invoices.append(invoice)
+        self.lnrpc_invoices.append(invoice)
         return add_index
 
     def clear_invoices(self) -> None:
-        self.invoices.clear()
+        self.lnrpc_invoices.clear()
 
     def clear_expired_invoices(self) -> None:
-        self.invoices = [
-            invoice for invoice in self.invoices if not self.is_invoice_expired(invoice)
+        self.lnrpc_invoices = [
+            invoice
+            for invoice in self.lnrpc_invoices
+            if not self.is_invoice_expired(invoice)
         ]
 
     def lookup_invoice_by_htlc_id(self, htlc_id: int) -> lnrpc.Invoice:
-        for invoice in self.invoices:
+        for invoice in self.lnrpc_invoices:
             if invoice and invoice.htlcs:
                 for htlc_data in invoice.htlcs:
                     if int(htlc_data.htlc_index) == int(htlc_id):
@@ -543,7 +545,7 @@ class LndEventsGroup:
 
     def get_invoice_list_by_pre_image(self, pre_image: str) -> List[lnrpc.Invoice]:
         answer = []
-        for invoice in self.invoices:
+        for invoice in self.lnrpc_invoices:
             if invoice.r_preimage == pre_image:
                 answer.append(invoice)
             return answer
@@ -568,11 +570,11 @@ class LndEventsGroup:
     # MARK: Payment Methods
     def add_payment(self, payment: lnrpc.Payment) -> int:
         payment_index = payment.payment_index or 0
-        self.payments.append(payment)
+        self.lnrpc_payments.append(payment)
         return payment_index
 
     def clear_payments(self) -> None:
-        self.payments.clear()
+        self.lnrpc_payments.clear()
 
     def search_payment(self, htlc_id: int) -> lnrpc.Payment:
         """
@@ -584,7 +586,7 @@ class LndEventsGroup:
         Returns:
             lnrpc.Payment: The payment object if found, None otherwise.
         """
-        for payment in self.payments:
+        for payment in self.lnrpc_payments:
             if payment.htlc_id == htlc_id:
                 return payment
         return None
@@ -599,7 +601,7 @@ class LndEventsGroup:
         Returns:
             lnrpc.Payment: The payment object if found, None otherwise.
         """
-        for payment in self.payments:
+        for payment in self.lnrpc_payments:
             for htlc in payment.htlcs:
                 if htlc.preimage == pre_image:
                     return payment
@@ -626,9 +628,9 @@ class LndEventsGroup:
             case routerrpc.HtlcEvent:
                 return item in self.htlc_events
             case lnrpc.Invoice:
-                return item in self.invoices
+                return item in self.lnrpc_invoices
             case lnrpc.Payment:
-                return item in self.payments
+                return item in self.lnrpc_payments
             case _:
                 if isinstance(item, LndChannelName):
                     return item.channel_id in self.channel_names
@@ -637,8 +639,12 @@ class LndEventsGroup:
     def to_dict(self) -> dict:
         return {
             "htlc_events": [self._event_to_dict(event) for event in self.htlc_events],
-            "invoices": [self._event_to_dict(invoice) for invoice in self.invoices],
-            "payments": [self._event_to_dict(payment) for payment in self.payments],
+            "invoices": [
+                self._event_to_dict(invoice) for invoice in self.lnrpc_invoices
+            ],
+            "payments": [
+                self._event_to_dict(payment) for payment in self.lnrpc_payments
+            ],
         }
 
     def _event_to_dict(self, event: EventItem) -> dict:

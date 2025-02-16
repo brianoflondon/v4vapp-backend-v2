@@ -6,11 +6,12 @@ import logging.config
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Any, List, Protocol, override
+from typing import Any, Dict, List, Optional, Protocol, Tuple, override
 
 import colorlog
 from pydantic import BaseModel, field_validator, model_validator
 from yaml import safe_load
+from pymongo.operations import _IndexKeyHint
 
 from v4vapp_backend_v2 import __version__
 
@@ -60,6 +61,31 @@ class TelegramConfig(BaseModel):
     chat_id: int = 0
 
 
+class IndexConfig(BaseModel):
+    index_key: _IndexKeyHint | None = None
+    unique: Optional[bool] = None
+
+
+class CollectionConfig(BaseModel):
+    indexes: Dict[str, IndexConfig] | None = None
+
+
+class DatabaseUserConfig(BaseModel):
+    password: str
+    roles: List[str]
+
+
+class DatabaseDetailsConfig(BaseModel):
+    db_users: Dict[str, DatabaseUserConfig]
+    collections: Optional[Dict[str, CollectionConfig | None]] = None
+
+
+class DatabaseConnectionConfig(BaseModel):
+    db_hosts: List[str]
+    db_replica_set: Optional[str] = None
+    dbs: Optional[Dict[str, DatabaseDetailsConfig]] = None
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -93,6 +119,7 @@ class Config(BaseModel):
     lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
+    database: Dict[str, DatabaseConnectionConfig]
 
     @field_validator("lnd_connections")
     def unique_names(cls, v):
@@ -233,9 +260,10 @@ class InternalConfig:
         try:
             self.config = Config.model_validate(config)
         except ValueError as ex:
-            print(f"Invalid configuration: {ex}")
+            print("Invalid configuration:")
+            print(ex)
             # exit the program with an error but no stack trace
-            raise (StartupFailure("Invalid configuration"))
+            raise StartupFailure(ex)
 
     def setup_logging(self):
         try:

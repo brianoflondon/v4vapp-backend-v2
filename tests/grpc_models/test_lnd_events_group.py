@@ -56,8 +56,8 @@ def test_lnd_events_group():
     # Test the fall through case
     assert 1 not in lnd_events_group
 
-    print("Invoices: ", len(lnd_events_group.invoices))
-    print("Payments: ", len(lnd_events_group.payments))
+    print("Invoices: ", len(lnd_events_group.lnrpc_invoices))
+    print("Payments: ", len(lnd_events_group.lnrpc_payments))
     print("HTLC Events: ", len(lnd_events_group.htlc_events))
 
     for htlc_event in lnd_events_group.htlc_events:
@@ -129,12 +129,12 @@ def test_message_all_events():
                     # )
         print(lnd_events_group.message(event=group[0], dest_alias=dest_alias))
 
-    for invoice in lnd_events_group.invoices:
+    for invoice in lnd_events_group.lnrpc_invoices:
         print(lnd_events_group.message(event=invoice))
 
     lnd_events_group.clear()
 
-    for invoice in lnd_events_group.invoices:
+    for invoice in lnd_events_group.lnrpc_invoices:
         print(lnd_events_group.message(event=invoice))
 
 

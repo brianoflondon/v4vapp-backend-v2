@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
+import json
 import typer
 import sys
 import asyncio
-from typing import Optional, Annotated, List
-from google.protobuf.json_format import MessageToDict
+from typing import Any, Optional, Annotated, List
+from google.protobuf.json_format import MessageToDict, ParseDict
 
 
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
@@ -21,14 +22,28 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
 )
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, format_time_delta, get_in_flight_time, logger
+from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
+    format_time_delta,
+    get_in_flight_time,
+    logger,
+)
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
+from v4vapp_backend_v2.database.db import MongoDBClient
+from pymongo.errors import BulkWriteError
+from v4vapp_backend_v2.models.invoice_models import (
+    Invoice,
+    ListInvoiceResponse,
+    protobuf_invoice_to_pydantic,
+    protobuf_to_pydantic,
+)
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
+DATABASE_NAME = "lnd_monitor_v2"
 
 app = typer.Typer()
 
@@ -48,6 +63,10 @@ async def track_events(
     """
     event_id = lnd_events_group.append(event)
     dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
+    message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
+    # The delay is necessary to allow the group to complete because sometimes Invoices and
+    # Payments are not received in the right order with the HtlcEvents
+    await asyncio.sleep(0.5)
     if lnd_events_group.complete_group(event=event):
         notification = True if type(event) == routerrpc.HtlcEvent else False
         if (
@@ -72,7 +91,7 @@ async def track_events(
                 f"{client.icon} {message_str}",
                 extra={"notification": notification, **ans_dict},
             )
-        await remove_event_group(event, client, lnd_events_group)
+        asyncio.create_task(remove_event_group(event, client, lnd_events_group))
 
 
 async def check_dest_alias(
@@ -135,51 +154,83 @@ async def remove_event_group(
     Returns:
         None
     """
-    await asyncio.sleep(3)
+    logger.debug(f"Removing event group: {MessageToDict(event)}")
+    await asyncio.sleep(10)
     lnd_events_group.remove_group(event)
 
 
+async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
+    """
+    Asynchronously stores an invoice in the MongoDB database.
+
+    Args:
+        invoice (lnrpc.Invoice): The invoice to store.
+
+    Returns:
+        None
+    """
+    async with MongoDBClient(
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+    ) as db_client:
+        logger.info(f"Storing invoice: {lnrpc_invoice.add_index} {db_client.hex_id}")
+        try:
+            invoice_pyd = protobuf_invoice_to_pydantic(lnrpc_invoice)
+        except Exception as e:
+            logger.info(e)
+            return
+        query = {"r_hash": invoice_pyd.r_hash}
+        invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
+        logger.info(
+            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+            extra={"db_ans": ans.raw_result},
+        )
+
+
 async def invoice_report(
-    invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
+    lnrpc_invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
-        invoice.creation_date + invoice.expiry, tz=timezone.utc
+        lnrpc_invoice.creation_date + lnrpc_invoice.expiry, tz=timezone.utc
     )
     time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
     if time_to_expire.total_seconds() < 0:
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
-    logger.debug(
+    invoice_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
+    logger.info(
         (
-            f"{client.icon} Invoice: {invoice.add_index:>6} "
-            f"amount: {invoice.value:>10,} sat {invoice.settle_index} "
+            f"{client.icon} Invoice: {lnrpc_invoice.add_index:>6} "
+            f"amount: {lnrpc_invoice.value:>10,} sat {lnrpc_invoice.settle_index} "
             f"expiry: {time_to_expire_str} "
+            f"{invoice_dict.get('r_hash')}"
         ),
-        extra={"invoice": MessageToDict(invoice, preserving_proto_field_name=True)},
+        extra={"invoice": invoice_dict},
     )
 
 
 async def payment_report(
-    payment: lnrpc.Payment, client: LNDClient, lnd_events_group: LndEventsGroup
+    lnrpc_payment: lnrpc.Payment, client: LNDClient, lnd_events_group: LndEventsGroup
 ) -> None:
-    status = lnrpc.Payment.PaymentStatus.Name(payment.status)
+    status = lnrpc.Payment.PaymentStatus.Name(lnrpc_payment.status)
     creation_date = datetime.fromtimestamp(
-        payment.creation_time_ns / 1e9, tz=timezone.utc
+        lnrpc_payment.creation_time_ns / 1e9, tz=timezone.utc
     )
-    pre_image = payment.payment_preimage if payment.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(payment.payment_request, client)
+    pre_image = lnrpc_payment.payment_preimage if lnrpc_payment.payment_preimage else ""
+    dest_alias = await get_node_alias_from_pay_request(lnrpc_payment.payment_request, client)
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
-    logger.debug(
+    logger.info(
         (
-            f"{client.icon} Payment: {payment.payment_index:>6} "
-            f"amount: {payment.value_sat:>10,} sat "
+            f"{client.icon} Payment: {lnrpc_payment.payment_index:>6} "
+            f"amount: {lnrpc_payment.value_sat:>10,} sat "
             f"dest: {dest_alias} "
             f"pre_image: {pre_image} "
             f"in flight: {in_flight_time} "
-            f"{creation_date:%H:%M:%S} status: {status}"
+            f"{creation_date:%H:%M:%S} status: {status} "
+            f"{lnrpc_payment.payment_hash}"
         ),
-        extra={"payment": MessageToDict(payment, preserving_proto_field_name=True)},
+        extra={"payment": MessageToDict(lnrpc_payment, preserving_proto_field_name=True)},
     )
 
 
@@ -219,7 +270,10 @@ async def invoices_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> 
     Returns:
         None
     """
-    request_sub = lnrpc.InvoiceSubscription(add_index=0, settle_index=0)
+    recent_invoice = await get_most_recent_invoice()
+    request_sub = lnrpc.InvoiceSubscription(
+        add_index=recent_invoice.add_index, settle_index=recent_invoice.settle_index
+    )
     while True:
         try:
             async for invoice in client.call_async_generator(
@@ -335,6 +389,84 @@ async def fill_channel_names(
         )
 
 
+async def read_all_invoices(client: LNDClient) -> None:
+    """
+    Reads all invoices from the LND client and inserts them into a MongoDB collection.
+
+    This function continuously fetches invoices from the LND client in batches and inserts them into a MongoDB collection.
+    It stops fetching when the number of invoices in a batch is less than the maximum number of invoices per batch.
+
+    Args:
+        client (LNDClient): The LND client used to fetch invoices.
+
+    Returns:
+        None
+    """
+
+    async with MongoDBClient(
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+    ) as db_client:
+        index_offset = 0
+        num_max_invoices = 1000
+        total_invoices = 0
+        logger.info(f"{client.icon} Reading all invoices...")
+        while True:
+            request = lnrpc.ListInvoiceRequest(
+                pending_only=False,
+                index_offset=index_offset,
+                num_max_invoices=num_max_invoices,
+                reversed=True,
+            )
+            invoices_raw: lnrpc.ListInvoiceResponse = await client.call(
+                client.lightning_stub.ListInvoices,
+                request,
+            )
+            list_invoices = ListInvoiceResponse(invoices_raw)
+            index_offset = list_invoices.first_index_offset
+            insert_data = []
+            tasks = []
+            for invoice in list_invoices.invoices:
+                insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
+                insert_data.append(insert_one)
+                query = {"r_hash": invoice.r_hash}
+                tasks.append(
+                    db_client.update_one(
+                        "invoices", query=query, update=insert_one, upsert=True
+                    )
+                )
+            try:
+                ans = await asyncio.gather(*tasks)
+                modified = [a.modified_count for a in ans]
+                inserted = [a.did_upsert for a in ans]
+                logger.info(
+                    f"{client.icon} {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+                )
+                total_invoices += len(list_invoices.invoices)
+            except BulkWriteError as e:
+                pass
+            if len(list_invoices.invoices) < num_max_invoices:
+                logger.info(
+                    f"{client.icon} Finished reading {total_invoices} invoices..."
+                )
+                break
+
+
+async def get_most_recent_invoice() -> Invoice:
+    async with MongoDBClient(
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+    ) as db_client:
+        query = {}
+        sort = [("creation_date", -1)]
+        collection = db_client.db.get_collection("invoices")
+        cursor = collection.find(query)
+        cursor.sort(sort)
+        async for ans in cursor:
+            invoice = Invoice(**ans)
+            break
+        logger.info(f"Most recent invoice: {invoice.add_index} {invoice.settle_index}")
+        return invoice
+
+
 async def run(connection_name: str) -> None:
     """
     Main function to run the node monitor.
@@ -344,6 +476,8 @@ async def run(connection_name: str) -> None:
     Returns:
         None
     """
+    global DATABASE_NAME
+    DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
     lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as client:
         logger.info(
@@ -362,10 +496,12 @@ async def run(connection_name: str) -> None:
             [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
             track_events,
         )
+        async_subscribe(Events.LND_INVOICE, db_store_invoice)
         async_subscribe(Events.LND_INVOICE, invoice_report)
         async_subscribe(Events.LND_PAYMENT, payment_report)
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
         tasks = [
+            read_all_invoices(client),
             invoices_loop(client=client, lnd_events_group=lnd_events_group),
             payments_loop(client=client, lnd_events_group=lnd_events_group),
             htlc_events_loop(client=client, lnd_events_group=lnd_events_group),

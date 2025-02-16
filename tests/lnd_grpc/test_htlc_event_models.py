@@ -3,7 +3,7 @@ from typing import Generator
 
 from pydantic import ValidationError
 
-from v4vapp_backend_v2.models.htlc_event_models import (
+from v4vapp_backend_v2.depreciated.htlc_event_models import (
     ChannelName,
     EventType,
     HtlcEvent,
