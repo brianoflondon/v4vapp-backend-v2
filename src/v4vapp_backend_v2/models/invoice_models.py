@@ -1,9 +1,15 @@
-from typing import List
+from typing import Any, List
 from pydantic import BaseModel, ConfigDict, Field, validator
 from datetime import datetime, timezone
 from bson import Int64
 from google.protobuf.json_format import MessageToDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.config.setup import LoggerFunction
+import re
+
+# This is the regex for finding if a given message is an LND invoice to pay.
+# This looks for #v4vapp v4vapp
+LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
 
 
 class BSONInt64(Int64):
@@ -70,6 +76,39 @@ class Invoice(BaseModel):
     payment_addr: str | None = None
     is_amp: bool = False
     amp_invoice_state: dict | None = None
+
+    is_lndtohive: bool = False
+
+    def __init__(__pydantic_self__, **data: Any) -> None:
+        super().__init__(**data)
+        # perform my check to see if this invoice can be paid to Hive
+        if __pydantic_self__.memo:
+            match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
+            if match:
+                __pydantic_self__.is_lndtohive = True
+
+    def invoice_message(self) -> str:
+        if self.settled:
+            return (
+                f"✅ Settled invoice {self.add_index} "
+                f"with memo {self.memo} {self.value:,.0f} sats"
+            )
+        else:
+            return (
+                f"✅ Valid   invoice {self.add_index} "
+                f"with memo {self.memo} {self.value:,.0f} sats"
+            )
+
+    def invoice_log(
+        self, logger_func: LoggerFunction, send_notification: bool = False
+    ) -> None:
+        logger_func(
+            self.invoice_message(),
+            extra={
+                "notification": send_notification,
+                "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
+            },
+        )
 
 
 class ListInvoiceResponse(BaseModel):
@@ -144,10 +183,10 @@ def protobuf_invoice_to_pydantic(invoice: lnrpc.Invoice) -> Invoice:
     invoice_dict = convert_datetime_fields(invoice_dict)
     try:
         invoice_model = Invoice.model_validate(invoice_dict)
+        return invoice_model
     except Exception as e:
         print(e)
         return Invoice()
-    return invoice_model
 
 
 def protobuf_to_pydantic(message) -> ListInvoiceResponse:

@@ -63,11 +63,8 @@ async def track_events(
     event_id = lnd_events_group.append(event)
     dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
     message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
-    event_dict = MessageToDict(event, preserving_proto_field_name=True)
-    logger.info(
-        f"{client.icon} {message_str}",
-        extra={"notification": False, "event": event_dict, **ans_dict},
-    )
+    # The delay is necessary to allow the group to complete because sometimes Invoices and
+    # Payments are not received in the right order with the HtlcEvents
     await asyncio.sleep(0.5)
     if lnd_events_group.complete_group(event=event):
         notification = True if type(event) == routerrpc.HtlcEvent else False

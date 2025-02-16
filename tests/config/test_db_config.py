@@ -258,7 +258,7 @@ async def test_fill_database_with_data_index_test(set_base_config_path: None):
             await test_client.insert_one(collection_name, data)
         try:
             await test_client.insert_one(collection_name, data)
-        except Exception as e:
+        except DuplicateKeyError as e:
             print(e)
         cursor = test_client.db[collection_name].find({})
         count = 0

@@ -34,6 +34,49 @@ class DbErrorCode(Enum):
     BAD_URI = 90005
 
 
+def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
+    def decorator(func):
+        """
+        A decorator that retries a function upon encountering specific exceptions.
+
+        This decorator retries the decorated asynchronous function when it raises
+        either a `ConnectionFailure` or `OperationFailure` exception. The function
+        will be retried up to `max_retries` times, with an initial delay of
+        `initial_delay` seconds between attempts. The delay between retries will
+        increase by a factor of `backoff_factor` after each attempt.
+
+        Args:
+            func (Callable): The asynchronous function to be decorated.
+
+        Returns:
+            Callable: The decorated function with retry logic.
+
+        Raises:
+            ConnectionFailure: If the maximum number of retries is reached.
+            OperationFailure: If the maximum number of retries is reached.
+        """
+
+        async def wrapper(*args, **kwargs):
+            retries = 0
+            delay = initial_delay
+            while retries < max_retries:
+                try:
+                    return await func(*args, **kwargs)
+                except (ConnectionFailure, OperationFailure) as e:
+                    retries += 1
+                    if retries >= max_retries:
+                        raise e
+                    logger.warning(
+                        f"Retrying {func.__name__} due to {e}. Attempt {retries}/{max_retries}. Retrying in {delay} seconds."
+                    )
+                    await asyncio.sleep(delay)
+                    delay *= backoff_factor
+
+        return wrapper
+
+    return decorator
+
+
 class MongoDBClient:
     def __init__(
         self,
@@ -407,73 +450,3 @@ class MongoDBClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.disconnect()
-
-
-class MyDBFlat:
-    most_recent: LNDInvoice
-    most_recent_settled: LNDInvoice
-
-    def __init__(self):
-        self.most_recent = LNDInvoice.model_construct()
-        self.most_recent_settled = LNDInvoice.model_construct()
-        async_subscribe(Events.LND_INVOICE, self.update_most_recent)
-
-    async def update_most_recent(self, invoice: LNDInvoice):
-        if invoice.settled:
-            self.most_recent_settled = invoice
-        else:
-            self.most_recent = invoice
-
-
-class MyDB:
-    class LND:
-        most_recent: LNDInvoice
-        most_recent_settled: LNDInvoice
-
-    def __init__(self):
-        self._TEMP_FILE = posixpath.join(tempfile.gettempdir(), "database.json")
-        self.LND.most_recent = LNDInvoice.model_construct()
-        self.LND.most_recent_settled = LNDInvoice.model_construct()
-
-        try:
-            with open(self._TEMP_FILE, "r") as f:
-                invoices_json = json.load(f)
-
-                self.LND.most_recent = LNDInvoice.model_construct(
-                    invoices_json["most_recent"]
-                )
-                self.LND.most_recent_settled = LNDInvoice.model_construct(
-                    invoices_json["most_recent_settled"]
-                )
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"File {self._TEMP_FILE} not found.")
-            logger.warning(e, extra={"json": {"file": self._TEMP_FILE}})
-            logger.warning(f"Most recent invoice: {self.LND.most_recent}")
-
-    def update_most_recent(self, invoice: LNDInvoice):
-        output = {}
-        if invoice.settled:
-            self.LND.most_recent_settled = invoice
-            output = {
-                "most_recent": self.LND.most_recent.model_dump(),
-                "most_recent_settled": self.LND.most_recent_settled.model_dump(),
-            }
-        else:
-            self.LND.most_recent = invoice
-            output = {
-                "most_recent": self.LND.most_recent.model_dump(),
-                "most_recent_settled": self.LND.most_recent_settled.model_dump(),
-            }
-
-        with open(self._TEMP_FILE, "w") as f:
-            json.dump(output, f, default=str)
-            logger.debug(
-                f"Updated most recent invoice: {invoice.add_index} {invoice.settled}",
-                extra=output,
-            )
-
-
-# Create a temporary file
-# db = MyDBFlat()
-
-# subscribe(Events.LND_INVOICE_CREATED, db.update_most_recent)
