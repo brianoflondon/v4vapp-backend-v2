@@ -15,6 +15,7 @@ from v4vapp_backend_v2.models.invoice_models import (
 )
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 
 def validate_preimage(r_preimage_base64: str, r_hash_base64: str) -> bool:
@@ -166,3 +167,18 @@ def test_read_list_invoices_raw():
     for lnrpc_invoice in lnrpc_list_invoices.invoices:
         invoice = Invoice(lnrpc_invoice)
         assert isinstance(invoice.creation_date, datetime)
+
+
+def read_list_payments_raw(file_path: str) -> lnrpc.ListPaymentsResponse:
+    with open(file_path, "rb") as file:
+        return lnrpc.ListPaymentsResponse.FromString(file.read())
+
+
+def test_read_list_payments_raw():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+    assert len(list_payment_response.payments) == 1000

@@ -40,6 +40,7 @@ from v4vapp_backend_v2.models.invoice_models import (
     protobuf_invoice_to_pydantic,
     protobuf_to_pydantic,
 )
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -188,7 +189,9 @@ async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
 
 
 async def invoice_report(
-    lnrpc_invoice: lnrpc.Invoice, client: LNDClient, lnd_events_group: LndEventsGroup = None
+    lnrpc_invoice: lnrpc.Invoice,
+    client: LNDClient,
+    lnd_events_group: LndEventsGroup = None,
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
         lnrpc_invoice.creation_date + lnrpc_invoice.expiry, tz=timezone.utc
@@ -217,7 +220,9 @@ async def payment_report(
         lnrpc_payment.creation_time_ns / 1e9, tz=timezone.utc
     )
     pre_image = lnrpc_payment.payment_preimage if lnrpc_payment.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(lnrpc_payment.payment_request, client)
+    dest_alias = await get_node_alias_from_pay_request(
+        lnrpc_payment.payment_request, client
+    )
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
@@ -230,7 +235,9 @@ async def payment_report(
             f"{creation_date:%H:%M:%S} status: {status} "
             f"{lnrpc_payment.payment_hash}"
         ),
-        extra={"payment": MessageToDict(lnrpc_payment, preserving_proto_field_name=True)},
+        extra={
+            "payment": MessageToDict(lnrpc_payment, preserving_proto_field_name=True)
+        },
     )
 
 
@@ -451,6 +458,70 @@ async def read_all_invoices(client: LNDClient) -> None:
                 break
 
 
+async def read_all_payments(client: LNDClient) -> None:
+    """
+    Reads all payments from the LND client and inserts them into a MongoDB collection.
+
+    This function continuously fetches payments from the LND client in batches and inserts them into a MongoDB collection.
+    It stops fetching when the number of payments in a batch is less than the maximum number of payments per batch.
+
+    Args:
+        client (LNDClient): The LND client used to fetch payments.
+
+    Returns:
+        None
+    """
+
+    async with MongoDBClient(
+        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+    ) as db_client:
+        index_offset = 0
+        num_max_payments = 1000
+        total_payments = 0
+        logger.info(f"{client.icon} Reading all payments...")
+        while True:
+            request = lnrpc.ListPaymentsRequest(
+                include_incomplete=True,
+                index_offset=index_offset,
+                max_payments=num_max_payments,
+                reversed=True,
+            )
+            payments_raw: lnrpc.ListPaymentsResponse = await client.call(
+                client.lightning_stub.ListPayments,
+                request,
+            )
+            # list_payments = ListPaymentsResponse(payments_raw)
+            index_offset = payments_raw.first_index_offset
+            with open("list_payments_raw.bin", "wb") as f:
+                f.write(payments_raw.SerializeToString())
+            insert_data = []
+            tasks = []
+            # for payment in list_payments.payments:
+            #     insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
+            #     insert_data.append(insert_one)
+            #     query = {"payment_hash": payment.payment_hash}
+            #     tasks.append(
+            #         db_client.update_one(
+            #             "payments", query=query, update=insert_one, upsert=True
+            #         )
+            #     )
+            # try:
+            #     ans = await asyncio.gather(*tasks)
+            #     modified = [a.modified_count for a in ans]
+            #     inserted = [a.did_upsert for a in ans]
+            #     logger.info(
+            #         f"{client.icon} {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+            #     )
+            #     total_payments += len(list_payments.payments)
+            # except BulkWriteError as e:
+            #     pass
+            if len(list_payments.payments) < num_max_payments:
+                logger.info(
+                    f"{client.icon} Finished reading {total_payments} payments..."
+                )
+                break
+
+
 async def get_most_recent_invoice() -> Invoice:
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
@@ -484,7 +555,7 @@ async def run(connection_name: str) -> None:
             f"{client.icon} 🔍 Monitoring node... {connection_name}",
             extra={"notification": True},
         )
-
+        await read_all_payments(client)
         if client.get_info:
             logger.info(
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
