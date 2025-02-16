@@ -11,15 +11,15 @@ from v4vapp_backend_v2.models.protobuf_pydantic_conversion_models import (
 
 
 class Hop(BaseModel):
-    chan_id: BSONInt64
-    chan_capacity: BSONInt64
-    amt_to_forward: BSONInt64
+    chan_id: str
+    chan_capacity: BSONInt64 | None = None
+    amt_to_forward: BSONInt64 | None = None
     fee: BSONInt64 | None = None
     expiry: int
     amt_to_forward_msat: BSONInt64
     fee_msat: BSONInt64 | None = None
     pub_key: str
-    tlv_payload: bool
+    tlv_payload: bool | None = None
     metadata: Optional[bytes] = None
     blinding_point: Optional[bytes] = None
     encrypted_data: Optional[bytes] = None
@@ -39,7 +39,7 @@ class HTLCAttempt(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     attempt_id: BSONInt64
-    status: str
+    status: str | None = None
     attempt_time_ns: BSONInt64
     resolve_time_ns: Optional[BSONInt64] = None
     preimage: Optional[str] = None
@@ -55,8 +55,8 @@ class Payment(BaseModel):
     creation_date: datetime | None = None
     fee: Optional[BSONInt64] = None
     payment_preimage: str
-    value_sat: BSONInt64
-    value_msat: BSONInt64
+    value_sat: BSONInt64 | None = None
+    value_msat: BSONInt64 | None = None
     payment_request: str | None = None
     status: str
     fee_sat: BSONInt64 | None = None

@@ -14,11 +14,15 @@ class BSONInt64(Int64):
             try:
                 value = Int64(value)
             except ValueError:
-                raise ValueError(f"Value {value} is not a valid int64")
+                raise ValueError(f"Value {value} is not a valid Int64")
         elif isinstance(value, int):
             value = Int64(value)
         elif not isinstance(value, Int64):
-            raise TypeError(f"Value {value} is not a valid int64")
+            raise TypeError(f"Value {value} is not a valid Int64")
+            # Check if the value is within the 64-bit integer range
+        if not (-(2**63) <= value < 2**63):
+            raise ValueError(f"Value {value} exceeds 64-bit signed integer range")
+
         return value
 
 
@@ -83,6 +87,8 @@ def convert_datetime_fields(invoice: dict) -> dict:
     for key in keys:
         value = invoice.get(key)
         if value:
+            if key == "creation_time_ns":
+                value = float(value) / 1e9
             invoice[key] = convert_field(value)
 
     keys = ["accept_time", "resolve_time"]

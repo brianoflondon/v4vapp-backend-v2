@@ -38,7 +38,6 @@ from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
     ListInvoiceResponse,
     protobuf_invoice_to_pydantic,
-    protobuf_to_pydantic,
 )
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
@@ -446,7 +445,7 @@ async def read_all_invoices(client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{client.icon} {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+                    f"{client.icon} Invoices {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_invoices += len(list_invoices.invoices)
             except BulkWriteError as e:
@@ -490,31 +489,33 @@ async def read_all_payments(client: LNDClient) -> None:
                 client.lightning_stub.ListPayments,
                 request,
             )
-            # list_payments = ListPaymentsResponse(payments_raw)
+            list_payments = ListPaymentsResponse(payments_raw)
             index_offset = payments_raw.first_index_offset
             with open("list_payments_raw.bin", "wb") as f:
                 f.write(payments_raw.SerializeToString())
             insert_data = []
             tasks = []
-            # for payment in list_payments.payments:
-            #     insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
-            #     insert_data.append(insert_one)
-            #     query = {"payment_hash": payment.payment_hash}
-            #     tasks.append(
-            #         db_client.update_one(
-            #             "payments", query=query, update=insert_one, upsert=True
-            #         )
-            #     )
-            # try:
-            #     ans = await asyncio.gather(*tasks)
-            #     modified = [a.modified_count for a in ans]
-            #     inserted = [a.did_upsert for a in ans]
-            #     logger.info(
-            #         f"{client.icon} {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
-            #     )
-            #     total_payments += len(list_payments.payments)
-            # except BulkWriteError as e:
-            #     pass
+            for payment in list_payments.payments:
+                insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
+                insert_data.append(insert_one)
+                query = {"payment_hash": payment.payment_hash}
+                tasks.append(
+                    db_client.update_one(
+                        "payments", query=query, update=insert_one, upsert=True
+                    )
+                )
+            try:
+                ans = await asyncio.gather(*tasks)
+                modified = [a.modified_count for a in ans]
+                inserted = [a.did_upsert for a in ans]
+                logger.info(
+                    f"{client.icon} Payments {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+                )
+                total_payments += len(list_payments.payments)
+            except BulkWriteError as e:
+                pass
+            except Exception as e:
+                logger.exception(e)
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
                     f"{client.icon} Finished reading {total_payments} payments..."
@@ -555,7 +556,6 @@ async def run(connection_name: str) -> None:
             f"{client.icon} 🔍 Monitoring node... {connection_name}",
             extra={"notification": True},
         )
-        await read_all_payments(client)
         if client.get_info:
             logger.info(
                 f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
@@ -573,6 +573,7 @@ async def run(connection_name: str) -> None:
         async_subscribe(Events.HTLC_EVENT, htlc_event_report)
         tasks = [
             read_all_invoices(client),
+            read_all_payments(client),
             invoices_loop(client=client, lnd_events_group=lnd_events_group),
             payments_loop(client=client, lnd_events_group=lnd_events_group),
             htlc_events_loop(client=client, lnd_events_group=lnd_events_group),
