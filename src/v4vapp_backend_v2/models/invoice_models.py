@@ -117,6 +117,11 @@ class ListInvoiceResponse(BaseModel):
     last_index_offset: BSONInt64
     first_index_offset: BSONInt64
 
+    def __init__(__pydantic_self__, **data: Any) -> None:
+
+        super().__init__(**data)
+        if not __pydantic_self__.invoices:
+            __pydantic_self__.invoices = []
 
 def convert_timestamp_to_datetime(timestamp):
     """
