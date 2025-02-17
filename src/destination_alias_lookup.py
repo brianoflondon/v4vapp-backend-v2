@@ -1,15 +1,46 @@
 import asyncio
 import sys
 from typing import Annotated, Optional
+from bson import ObjectId
 import typer
 
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_node_info
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from lnd_monitor_v2 import CONFIG, logger
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.payment_models import NodeAlias, Payment
 
 app = typer.Typer()
+
+
+async def get_all_pub_key_aliases(database: str) -> dict[str, str]:
+    """
+    Get all the pub keys from the database.
+    Args:
+        database (str): The database to query.
+
+    Returns:
+        set: A set of all the pub keys.
+    """
+    all_pub_key_aliases = {}
+    async with MongoDBClient(
+        db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
+    ) as db_client:
+        cursor = await db_client.find("pub_keys", {})
+        async for document in cursor:
+            all_pub_key_aliases[document["pub_key"]] = document["alias"]
+    return all_pub_key_aliases
+
+
+def get_final_destination(payment_alias: list[str]) -> str:
+    if len(payment_alias) == 1:
+        return payment_alias[0]
+    if payment_alias[-1] == "Unknown":
+        if payment_alias[-2] == "magnetron":
+            return "Muun User"
+        elif payment_alias[-2] == "ACINQ":
+            return "Phoenix User"
+    return payment_alias[-1]
 
 
 async def run(node: str, database: str):
@@ -22,8 +53,7 @@ async def run(node: str, database: str):
     Returns:
         None
     """
-
-    all_pub_keys = set()
+    all_pub_key_aliases = await get_all_pub_key_aliases(database)
     all_aliases = {}
     async with MongoDBClient(
         db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
@@ -36,24 +66,40 @@ async def run(node: str, database: str):
                 pub_keys = payment.destination_pub_keys
                 if not pub_keys:
                     continue
-                all_pub_keys.update(pub_keys)
-                payment_aliases = {}
+                payment_aliases = []
+                route = []
                 for pub_key in pub_keys:
-                    if pub_key not in all_aliases:
+                    if pub_key not in all_pub_key_aliases.keys():
                         node_info = await get_node_info(pub_key, lnd_client)
                         if node_info.node.alias:
                             all_aliases[pub_key] = node_info.node.alias
                         else:
-                            all_aliases[pub_key] = "Unknown"
-                    payment_aliases[pub_key] = all_aliases[pub_key]
-                reversed_aliases = " -> ".join(
-                    reversed([alias for alias in payment_aliases.values()])
-                )
-                print(f"{reversed_aliases}\n")
-                print("-------------")
+                            all_aliases[pub_key] = f"Unknown {pub_key[-6:]}"
+                        ans = await db_client.update_one(
+                            collection_name="pub_keys",
+                            query={"pub_key": pub_key},
+                            update={"alias": all_aliases[pub_key]},
+                            upsert=True,
+                        )
+                        all_pub_key_aliases[pub_key] = all_aliases[pub_key]
+                        hop_alias = NodeAlias(pub_key=pub_key, alias=all_aliases[pub_key])
+                        route += [hop_alias]
+                    payment_aliases.append(all_pub_key_aliases[pub_key])
 
-    for pub_key, alias in all_aliases.items():
-        print(pub_key, alias)
+                final_destination = get_final_destination(payment_aliases)
+                reversed_aliases = " <- ".join(reversed(payment_aliases))
+                logger.info(f"{final_destination}  || {reversed_aliases}")
+                payment_id = ObjectId(document["_id"])
+                ans = await db_client.update_one(
+                    "payments",
+                    query={"_id": payment_id},
+                    update={
+                        "reversed_aliases": reversed_aliases,
+                        "destination_alias": final_destination,
+                    },
+                    upsert=True,
+                )
+                pass
 
     # async with MongoDBClient(
     #     db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"

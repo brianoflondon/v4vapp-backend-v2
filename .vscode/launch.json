@@ -13,13 +13,25 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "destination lookup",
+            "name": "Umbrel destination lookup",
             "type": "debugpy",
+            "consoleName": "Umbrel Destination",
             "request": "launch",
             "program": "${workspaceFolder}/src/destination_alias_lookup.py",
             "args": [
                 "lnd_monitor_v2_umbrel",
                 "umbrel"
+            ],
+        },
+        {
+            "name": "Voltage destination lookup",
+            "type": "debugpy",
+            "consoleName": "Voltage Destination",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/destination_alias_lookup.py",
+            "args": [
+                "lnd_monitor_v2_voltage",
+                "voltage"
             ],
         },
         {

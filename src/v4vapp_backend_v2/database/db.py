@@ -289,16 +289,24 @@ class MongoDBClient:
         for collection_name, collection_config in self.db_config.dbs[
             self.db_name
         ].collections.items():
+            list_indexes = await self.db[collection_name].list_indexes().to_list(length=None)
             if collection_config and collection_config.indexes:
                 for index_name, index_value in collection_config.indexes.items():
-                    try:
-                        await self.db[collection_name].create_index(
-                            index_value.index_key,
-                            unique=index_value.unique,
-                            name=index_name,
-                        )
-                    except Exception as ex:
-                        logger.error(ex)
+                    if not self._check_index_exists(list_indexes, index_name):
+                        try:
+                            await self.db[collection_name].create_index(
+                                index_value.index_key,
+                                unique=index_value.unique,
+                                name=index_name,
+                            )
+                        except Exception as ex:
+                            logger.error(ex)
+
+    def _check_index_exists(self, indexes, index_name):
+        for index in indexes:
+            if index.get('name') == index_name:
+                return True
+        return False
 
     async def list_users(self) -> list:
         """
@@ -331,7 +339,7 @@ class MongoDBClient:
                     or self.db_user not in database_users
                 ):
                     await self._check_create_db()
-                    await self._check_indexes()
+                await self._check_indexes()
                 logger.info(
                     f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s "
                     f"{self.hex_id} {count}",

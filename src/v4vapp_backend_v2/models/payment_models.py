@@ -1,9 +1,8 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from google.protobuf.json_format import MessageToDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.config.setup import LoggerFunction
 from v4vapp_backend_v2.models.pydantic_helpers import (
     BSONInt64,
     convert_datetime_fields,
@@ -24,7 +23,6 @@ class Hop(BaseModel):
     blinding_point: Optional[bytes] = None
     encrypted_data: Optional[bytes] = None
     total_amt_msat: Optional[BSONInt64] = None
-    
 
 
 class Route(BaseModel):
@@ -48,7 +46,18 @@ class HTLCAttempt(BaseModel):
     failure: Optional[dict] = None
 
 
-class Payment(BaseModel):
+class NodeAlias(BaseModel):
+    pub_key: str
+    alias: str
+
+
+class PaymentExtra(BaseModel):
+    destination_alias: str | None = None
+    reversed_aliases: str | None = None
+    hop_aliases: List[NodeAlias] | None = None
+
+
+class Payment(PaymentExtra):
     """
     Payment model representing a payment transaction.
 
@@ -95,7 +104,6 @@ class Payment(BaseModel):
     payment_index: BSONInt64
     failure_reason: str | None = None
     htlcs: List[HTLCAttempt] | None = None
-    destination_alias: str | None = None
 
     def __init__(
         __pydantic_self__, lnrpc_payment: lnrpc.Payment = None, **data: Any
