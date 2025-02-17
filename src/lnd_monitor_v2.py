@@ -207,7 +207,9 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
             payment_pyd = Payment(lnrpc_payment)
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
-            ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
+            ans = await db_client.update_one(
+                "payments", query, payment_dict, upsert=True
+            )
             logger.info(
                 f"New payment recorded: {payment_pyd.payment_index:>6} {payment_pyd.payment_hash}",
                 extra={"db_ans": ans.raw_result},
@@ -215,6 +217,7 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
         except Exception as e:
             logger.info(e)
             return
+
 
 async def invoice_report(
     lnrpc_invoice: lnrpc.Invoice,

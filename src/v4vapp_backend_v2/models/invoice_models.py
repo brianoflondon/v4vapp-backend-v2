@@ -4,7 +4,7 @@ from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import LoggerFunction
-from v4vapp_backend_v2.models.protobuf_pydantic_conversion_models import BSONInt64, convert_datetime_fields
+from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 import re
 

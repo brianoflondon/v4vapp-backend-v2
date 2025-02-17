@@ -182,3 +182,6 @@ def test_read_list_payments_raw():
     assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
     list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
     assert len(list_payment_response.payments) == 1000
+    for payment in list_payment_response.payments:
+        assert isinstance(payment.creation_date, datetime)
+        print(payment.destination_pub_key)

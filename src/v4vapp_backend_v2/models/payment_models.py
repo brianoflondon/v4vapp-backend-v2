@@ -1,10 +1,10 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from google.protobuf.json_format import MessageToDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import LoggerFunction
-from v4vapp_backend_v2.models.protobuf_pydantic_conversion_models import (
+from v4vapp_backend_v2.models.pydantic_helpers import (
     BSONInt64,
     convert_datetime_fields,
 )
@@ -48,6 +48,35 @@ class HTLCAttempt(BaseModel):
 
 
 class Payment(BaseModel):
+    """
+    Payment model representing a payment transaction.
+
+    Attributes:
+        payment_hash (str | None): The hash of the payment.
+        value (Optional[BSONInt64]): The value of the payment.
+        creation_date (datetime | None): The creation date of the payment.
+        fee (Optional[BSONInt64]): The fee associated with the payment.
+        payment_preimage (str): The preimage of the payment.
+        value_sat (BSONInt64 | None): The value of the payment in satoshis.
+        value_msat (BSONInt64 | None): The value of the payment in millisatoshis.
+        payment_request (str | None): The payment request string.
+        status (str): The status of the payment.
+        fee_sat (BSONInt64 | None): The fee of the payment in satoshis.
+        fee_msat (BSONInt64 | None): The fee of the payment in millisatoshis.
+        creation_time_ns (datetime): The creation time of the payment in nanoseconds.
+        payment_index (BSONInt64): The index of the payment.
+        failure_reason (str | None): The reason for payment failure, if any.
+        htlcs (List[HTLCAttempt] | None): The HTLC attempts associated with the payment.
+        destination_alias (str | None): The alias of the payment destination (needs to be looked up not sent by LND)
+
+    Methods:
+        __init__(lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
+            Initializes a Payment instance with data from an lnrpc.Payment object or provided data.
+
+        destination_pub_key() -> str:
+            Returns the public key of the payment destination.
+    """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     payment_hash: str | None = None
@@ -65,6 +94,7 @@ class Payment(BaseModel):
     payment_index: BSONInt64
     failure_reason: str | None = None
     htlcs: List[HTLCAttempt] | None = None
+    destination_alias: str | None = None
 
     def __init__(
         __pydantic_self__, lnrpc_payment: lnrpc.Payment = None, **data: Any
@@ -75,6 +105,26 @@ class Payment(BaseModel):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
+
+    @property
+    def destination_pub_key(self) -> Tuple[str, str]:
+        """
+        Retrieves the public keys of the destination hops in the HTLC route.
+
+        Returns:
+            Tuple[str, str]: A tuple containing the public key of the last hop and the second to last hop in the route.
+                             If there is only one hop, the second element of the tuple will be an empty string.
+                             If there are no hops, an empty string is returned.
+        """
+        if self.htlcs and self.htlcs[-1].route and self.htlcs[-1].route.hops:
+            if len(self.htlcs[-1].route.hops) == 1:
+                return self.htlcs[-1].route.hops[-1].pub_key, ""
+            return (
+                self.htlcs[-1].route.hops[-1].pub_key,
+                self.htlcs[-1].route.hops[-2].pub_key,
+            )
+
+        return "", ""
 
 
 class ListPaymentsResponse(BaseModel):
