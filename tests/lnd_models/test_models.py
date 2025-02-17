@@ -174,7 +174,7 @@ def read_list_payments_raw(file_path: str) -> lnrpc.ListPaymentsResponse:
         return lnrpc.ListPaymentsResponse.FromString(file.read())
 
 
-def test_read_list_payments_raw():
+def test_read_list_payments_raw_destination_pub_keys():
     lnrpc_list_payments = read_list_payments_raw(
         "tests/data/lnd_lists/list_payments_raw.bin"
     )
@@ -184,4 +184,21 @@ def test_read_list_payments_raw():
     assert len(list_payment_response.payments) == 1000
     for payment in list_payment_response.payments:
         assert isinstance(payment.creation_date, datetime)
-        print(payment.destination_pub_key)
+        try:
+            payment.destination_pub_keys
+        except Exception as e:
+            print(e)
+            assert False
+
+
+def test_read_list_payments_pydantic_conversions():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+
+    list_payment_response_dict = list_payment_response.model_dump()
+    list_payment_response2 = ListPaymentsResponse.model_validate(list_payment_response_dict)
+    assert list_payment_response == list_payment_response2

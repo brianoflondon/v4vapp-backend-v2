@@ -13,6 +13,16 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "destination lookup",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/destination_alias_lookup.py",
+            "args": [
+                "lnd_monitor_v2_umbrel",
+                "umbrel"
+            ],
+        },
+        {
             "name": "CLI Help",
             "type": "debugpy",
             "consoleName": "CLI Help",

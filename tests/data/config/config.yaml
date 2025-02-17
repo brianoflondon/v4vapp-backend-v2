@@ -46,6 +46,9 @@ telegram:
   chat_id: -1000
 
 ################# TEST CONFIG #################
+
+default_database_connection: conn_1
+
 database:
   conn_bad:
     db_hosts:

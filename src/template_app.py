@@ -22,6 +22,12 @@ async def run(node: str):
 
 @app.command()
 def main(
+    database: Annotated[
+        str,
+        typer.Argument(
+            help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
+        ),
+    ],
     node: Annotated[
         Optional[str],
         typer.Argument(
@@ -31,14 +37,15 @@ def main(
                 f"Choose from: {CONFIG.connection_names}"
             )
         ),
-    ] = CONFIG.default_connection
+    ] = CONFIG.default_connection,
 ):
     f"""
     Main function to do what you want.
     Args:
         node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
-        {CONFIG.connection_names}
+        connections: {CONFIG.connection_names}
+        databases: {CONFIG.database_names}
 
     Returns:
         None
@@ -47,6 +54,7 @@ def main(
     logger.info(
         f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
     )
+    logger.info(f"{icon} ✅ Database: {database}")
     asyncio.run(run(node))
     print("👋 Goodbye!")
 

@@ -5,12 +5,17 @@ import json
 import posixpath
 import tempfile
 from timeit import default_timer as timer
+from typing import Any
 from bson import ObjectId
 
 from v4vapp_backend_v2.config.setup import logger
 
 from v4vapp_backend_v2.config.setup import logger, InternalConfig
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorCollection,
+    AsyncIOMotorCursor,
+)
 from pymongo.errors import ConnectionFailure, OperationFailure
 from pymongo.results import UpdateResult, DeleteResult
 
@@ -375,6 +380,8 @@ class MongoDBClient:
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
         if self.client is None or self.db is None:
             await self.connect()
+        if self.db is None:
+            raise ConnectionFailure("Not connected to MongoDB")
         return self.db[collection_name]
 
     async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
@@ -398,7 +405,7 @@ class MongoDBClient:
         result = await collection.insert_many(documents, ordered=False)
         return result.inserted_ids
 
-    async def find_one(self, collection_name: str, query: dict) -> dict:
+    async def find_one(self, collection_name: str, query: dict) -> Any | None:
         """
         Asynchronously find a single document in the specified collection that matches the given query.
 
@@ -412,6 +419,23 @@ class MongoDBClient:
         collection = await self.get_collection(collection_name)
         document = await collection.find_one(query)
         return document
+
+    async def find(
+        self, collection_name: str, query: dict, *args, **kwargs
+    ) -> AsyncIOMotorCursor:
+        """
+        Asynchronously find multiple documents in a specified collection based on a query.
+
+        Args:
+            collection_name (str): The name of the collection to search in.
+            query (dict): The query dictionary to filter the documents.
+
+        Returns:
+            AsyncIOMotorCollection: A cursor to the documents that match the query.
+        """
+        collection = await self.get_collection(collection_name)
+        cursor = collection.find(query, *args, **kwargs)
+        return cursor
 
     async def update_one(
         self, collection_name: str, query: dict, update: dict, **kwargs

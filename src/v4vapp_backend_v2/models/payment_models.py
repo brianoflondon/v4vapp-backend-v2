@@ -24,6 +24,7 @@ class Hop(BaseModel):
     blinding_point: Optional[bytes] = None
     encrypted_data: Optional[bytes] = None
     total_amt_msat: Optional[BSONInt64] = None
+    
 
 
 class Route(BaseModel):
@@ -73,8 +74,8 @@ class Payment(BaseModel):
         __init__(lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
             Initializes a Payment instance with data from an lnrpc.Payment object or provided data.
 
-        destination_pub_key() -> str:
-            Returns the public key of the payment destination.
+        destination_pub_keys() -> List[str]:
+            Returns the public keys of the payment hops
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -107,7 +108,22 @@ class Payment(BaseModel):
         super().__init__(**payment_dict)
 
     @property
-    def destination_pub_key(self) -> Tuple[str, str]:
+    def get_succeeded_htlc(self) -> HTLCAttempt | None:
+        """
+        Retrieves the HTLC attempt with status 'SUCCEEDED'.
+
+        Returns:
+            Optional[HTLCAttempt]: The HTLC attempt with status 'SUCCEEDED', or None if not found.
+        """
+        if not self.htlcs:
+            return None
+        for htlc in self.htlcs:
+            if htlc.status == "SUCCEEDED":
+                return htlc
+        return None
+
+    @property
+    def destination_pub_keys(self) -> List[str | None]:
         """
         Retrieves the public keys of the destination hops in the HTLC route.
 
@@ -116,15 +132,12 @@ class Payment(BaseModel):
                              If there is only one hop, the second element of the tuple will be an empty string.
                              If there are no hops, an empty string is returned.
         """
-        if self.htlcs and self.htlcs[-1].route and self.htlcs[-1].route.hops:
-            if len(self.htlcs[-1].route.hops) == 1:
-                return self.htlcs[-1].route.hops[-1].pub_key, ""
-            return (
-                self.htlcs[-1].route.hops[-1].pub_key,
-                self.htlcs[-1].route.hops[-2].pub_key,
-            )
-
-        return "", ""
+        ans = []
+        htlc = self.get_succeeded_htlc
+        if htlc:
+            for pub_key in htlc.route.hops:
+                ans.append(pub_key.pub_key)
+        return ans
 
 
 class ListPaymentsResponse(BaseModel):

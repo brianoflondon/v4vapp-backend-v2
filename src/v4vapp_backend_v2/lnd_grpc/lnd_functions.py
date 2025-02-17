@@ -88,7 +88,7 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         logger.debug(f"get_node_info: {pub_key} {response.node.alias}")
         return response
     except AioRpcError as e:
-        logger.info(
+        logger.debug(
             f"{client.icon} get_node_info {e.details()}", extra={"original_error": e}
         )
         return lnrpc.NodeInfo()

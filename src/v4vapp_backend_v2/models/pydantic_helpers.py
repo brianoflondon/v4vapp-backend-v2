@@ -42,12 +42,12 @@ def convert_timestamp_to_datetime(timestamp: int | float) -> datetime:
     return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
 
 
-def convert_datetime_fields(invoice: dict) -> dict:
+def convert_datetime_fields(item: dict) -> dict:
     """
-    Converts timestamp fields in an invoice dictionary to datetime objects.
+    Converts timestamp fields in an item dictionary to datetime objects.
 
     This function checks for the presence of specific timestamp fields in the
-    provided invoice dictionary and converts them to datetime objects using
+    provided item dictionary and converts them to datetime objects using
     the `convert_timestamp_to_datetime` function. The fields that are converted
     include:
     - "creation_date"
@@ -56,10 +56,10 @@ def convert_datetime_fields(invoice: dict) -> dict:
     - "resolve_time" (within each HTLC in the "htlcs" list)
 
     Args:
-        invoice (dict): The invoice dictionary containing timestamp fields.
+        item (dict): The item dictionary containing timestamp fields.
 
     Returns:
-        dict: The invoice dictionary with the specified timestamp fields
+        dict: The item dictionary with the specified timestamp fields
               converted to datetime objects.
     """
 
@@ -85,16 +85,20 @@ def convert_datetime_fields(invoice: dict) -> dict:
     keys = ["creation_date", "settle_date", "creation_time_ns"]
 
     for key in keys:
-        value = invoice.get(key)
-        if value:
-            if key == "creation_time_ns":
-                value = float(value) / 1e9
-            invoice[key] = convert_field(value)
+        value = item.get(key)
+        if not value or isinstance(value, datetime):
+            continue
+        if key == "creation_time_ns":
+            value = float(value) / 1e9
+        item[key] = convert_field(value)
 
     keys = ["accept_time", "resolve_time"]
-    for htlc in invoice.get("htlcs", []):
+    if "htlcs" not in item:
+        return item
+    for htlc in item.get("htlcs") or []:
         for key in keys:
             value = htlc.get(key)
-            if value:
-                htlc[key] = convert_field(value)
-    return invoice
+            if not value or isinstance(value, datetime):
+                continue
+            htlc[key] = convert_field(value)
+    return item

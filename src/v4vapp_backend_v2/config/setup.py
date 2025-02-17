@@ -83,7 +83,7 @@ class DatabaseDetailsConfig(BaseModel):
 class DatabaseConnectionConfig(BaseModel):
     db_hosts: List[str]
     db_replica_set: Optional[str] = None
-    dbs: Optional[Dict[str, DatabaseDetailsConfig]] = None
+    dbs: Dict[str, DatabaseDetailsConfig]
 
 
 class Config(BaseModel):
@@ -116,6 +116,7 @@ class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
     default_connection: str = ""
+    default_database_connection: str = ""
     lnd_connections: List[LndConnectionConfig]
     tailscale: TailscaleConfig
     telegram: TelegramConfig
@@ -138,6 +139,17 @@ class Config(BaseModel):
             raise ValueError("Default connection not found in lnd_connections")
         return v
 
+    @model_validator(mode="after")
+    def check_default_database_connection(cls, v):
+        # Check that the default connection is in the list of connections
+        # if it is given.
+        if (
+            v.default_database_connection
+            and v.default_database_connection not in v.database.keys()
+        ):
+            raise ValueError("Default database connection not found in database")
+        return v
+
     def list_connection_names(self) -> List[str]:
         return [connection.name for connection in self.lnd_connections]
 
@@ -150,6 +162,16 @@ class Config(BaseModel):
             str: A list containing the names of all connections separated by ,.
         """
         return ", ".join([name for name in self.list_connection_names()])
+
+    @property
+    def database_names(self) -> str:
+        """
+        Retrieve a list of database names from the database attribute.
+
+        Returns:
+            str: A list containing the names of all databases separated by ,.
+        """
+        return ", ".join(self.database[self.default_database_connection].dbs.keys())
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
         """
