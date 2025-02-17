@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
 from google.protobuf.json_format import MessageToDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -52,9 +52,30 @@ class NodeAlias(BaseModel):
 
 
 class PaymentExtra(BaseModel):
-    destination_alias: str | None = None
-    reversed_aliases: str | None = None
-    hop_aliases: List[NodeAlias] | None = None
+    route: list[NodeAlias] | None = None
+
+    @computed_field
+    def destination(self) -> str:
+        if not self.route:
+            return "Unknown"
+        if len(self.route) == 1:
+            return self.route[0].alias
+        if self.route[-1].alias == "Unknown":
+            if self.route[-2].alias == "magnetron":
+                return "Muun User"
+            elif self.route[-2].alias == "ACINQ":
+                return "Phoenix User"
+        return self.route[-1].alias
+
+    @computed_field
+    def route_str(self) -> str:
+        """
+        Returns a string representation of the route.
+
+        Returns:
+            str: A string representation of the route.
+        """
+        return " -> ".join([hop.alias for hop in self.route])
 
 
 class Payment(PaymentExtra):
