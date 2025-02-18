@@ -31,7 +31,7 @@ async def update_payment_route_with_alias(
     db_client: MongoDBClient,
     lnd_client: LNDClient,
     payment: Payment,
-    pub_key: str,
+    pub_keys: list[str | None],
     fill_cache: bool = False,
     col_pub_keys: str = "pub_keys",
 ):
@@ -63,32 +63,35 @@ async def update_payment_route_with_alias(
             db_client, col_pub_keys
         )
 
-    if not LOCAL_PUB_KEY_ALIAS_CACHE:
-        # Find the alias for the pub key one by one.
-        alias = await db_client.find_one("pub_keys", {"pub_key": pub_key})
-        if alias:
-            LOCAL_PUB_KEY_ALIAS_CACHE = {alias["pub_key"]: alias["alias"]}
-        else:
-            LOCAL_PUB_KEY_ALIAS_CACHE = {}
+    for pub_key in pub_keys:
+        if not LOCAL_PUB_KEY_ALIAS_CACHE:
+            # Find the alias for the pub key one by one.
+            alias = await db_client.find_one("pub_keys", {"pub_key": pub_key})
+            if alias:
+                LOCAL_PUB_KEY_ALIAS_CACHE = {alias["pub_key"]: alias["alias"]}
+            else:
+                LOCAL_PUB_KEY_ALIAS_CACHE = {}
 
-    if pub_key not in LOCAL_PUB_KEY_ALIAS_CACHE.keys():
-        node_info = await get_node_info(pub_key, lnd_client)
-        if node_info.node.alias:
-            hop_alias = NodeAlias(pub_key=pub_key, alias=node_info.node.alias)
+        if pub_key not in LOCAL_PUB_KEY_ALIAS_CACHE.keys():
+            node_info = await get_node_info(pub_key, lnd_client)
+            if node_info.node.alias:
+                hop_alias = NodeAlias(pub_key=pub_key, alias=node_info.node.alias)
+            else:
+                hop_alias = NodeAlias(pub_key=pub_key, alias=f"Unknown {pub_key[-6:]}")
+            db_ans = await db_client.update_one(
+                collection_name=col_pub_keys,
+                query={"pub_key": pub_key},
+                update=hop_alias.model_dump(),
+                upsert=True,
+            )
+            logger.debug(
+                f"Updated alias for {pub_key} to {hop_alias.alias}",
+                extra={"pub_key": pub_key, "alias": hop_alias.alias, db_ans: db_ans},
+            )
+            LOCAL_PUB_KEY_ALIAS_CACHE[pub_key] = hop_alias.alias
+            payment.route.append(hop_alias)
         else:
-            hop_alias = NodeAlias(pub_key=pub_key, alias=f"Unknown {pub_key[-6:]}")
-        db_ans = await db_client.update_one(
-            collection_name=col_pub_keys,
-            query={"pub_key": pub_key},
-            update=hop_alias.model_dump(),
-            upsert=True,
-        )
-        logger.debug(
-            f"Updated alias for {pub_key} to {hop_alias.alias}",
-            extra={"pub_key": pub_key, "alias": hop_alias.alias, db_ans: db_ans},
-        )
-        LOCAL_PUB_KEY_ALIAS_CACHE[pub_key] = hop_alias.alias
-        payment.route.append(hop_alias)
-    else:
-        hop_alias = NodeAlias(pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key])
-        payment.route.append(hop_alias)
+            hop_alias = NodeAlias(
+                pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key]
+            )
+            payment.route.append(hop_alias)

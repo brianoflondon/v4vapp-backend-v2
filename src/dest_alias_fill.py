@@ -20,17 +20,6 @@ CONFIG = INTERNAL_CONFIG.config
 app = typer.Typer()
 
 
-def get_final_destination(payment_alias: list[str]) -> str:
-    if len(payment_alias) == 1:
-        return payment_alias[0]
-    if payment_alias[-1] == "Unknown":
-        if payment_alias[-2] == "magnetron":
-            return "Muun User"
-        elif payment_alias[-2] == "ACINQ":
-            return "Phoenix User"
-    return payment_alias[-1]
-
-
 @async_time_stats_decorator()
 async def main_worker(node: str, database: str):
     """
@@ -65,15 +54,14 @@ async def main_worker(node: str, database: str):
                 if payment.route or not pub_keys:
                     continue
 
-                for pub_key in pub_keys:
-                    await update_payment_route_with_alias(
-                        db_client=db_client,
-                        lnd_client=lnd_client,
-                        payment=payment,
-                        pub_key=pub_key,
-                        fill_cache=True,
-                        col_pub_keys="pub_keys",
-                    )
+                await update_payment_route_with_alias(
+                    db_client=db_client,
+                    lnd_client=lnd_client,
+                    payment=payment,
+                    pub_keys=pub_keys,
+                    fill_cache=True,
+                    col_pub_keys="pub_keys",
+                )
 
                 # logger.info(f"{payment.destination}  || {payment.route_str}")
                 payment_id = ObjectId(document["_id"])

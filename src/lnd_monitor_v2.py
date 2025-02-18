@@ -426,7 +426,7 @@ async def fill_channel_names(
         )
 
 
-async def read_all_invoices(client: LNDClient) -> None:
+async def read_all_invoices(lnd_client: LNDClient) -> None:
     """
     Reads all invoices from the LND client and inserts them into a MongoDB collection.
 
@@ -436,7 +436,7 @@ async def read_all_invoices(client: LNDClient) -> None:
     number of invoices per batch.
 
     Args:
-        client (LNDClient): The LND client used to fetch invoices.
+        lnd_client (LNDClient): The LND client used to fetch invoices.
 
     Returns:
         None
@@ -448,7 +448,7 @@ async def read_all_invoices(client: LNDClient) -> None:
         index_offset = 0
         num_max_invoices = 1000
         total_invoices = 0
-        logger.info(f"{client.icon} Reading all invoices...")
+        logger.info(f"{lnd_client.icon} Reading all invoices...")
         while True:
             request = lnrpc.ListInvoiceRequest(
                 pending_only=False,
@@ -456,8 +456,8 @@ async def read_all_invoices(client: LNDClient) -> None:
                 num_max_invoices=num_max_invoices,
                 reversed=True,
             )
-            invoices_raw: lnrpc.ListInvoiceResponse = await client.call(
-                client.lightning_stub.ListInvoices,
+            invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
+                lnd_client.lightning_stub.ListInvoices,
                 request,
             )
             list_invoices = ListInvoiceResponse(invoices_raw)
@@ -478,7 +478,8 @@ async def read_all_invoices(client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{client.icon} Invoices {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+                    f"{lnd_client.icon} Invoices {index_offset}... "
+                    f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_invoices += len(list_invoices.invoices)
             except BulkWriteError as e:
@@ -486,20 +487,22 @@ async def read_all_invoices(client: LNDClient) -> None:
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
                 logger.info(
-                    f"{client.icon} Finished reading {total_invoices} invoices..."
+                    f"{lnd_client.icon} Finished reading {total_invoices} invoices..."
                 )
                 break
 
 
-async def read_all_payments(client: LNDClient) -> None:
+async def read_all_payments(lnd_client: LNDClient) -> None:
     """
     Reads all payments from the LND client and inserts them into a MongoDB collection.
 
-    This function continuously fetches payments from the LND client in batches and inserts them into a MongoDB collection.
-    It stops fetching when the number of payments in a batch is less than the maximum number of payments per batch.
+    This function continuously fetches payments from the LND client in batches and
+    inserts them into a MongoDB collection.
+    It stops fetching when the number of payments in a batch is less than the
+    maximum number of payments per batch.
 
     Args:
-        client (LNDClient): The LND client used to fetch payments.
+        lnd_client (LNDClient): The LND client used to fetch payments.
 
     Returns:
         None
@@ -511,7 +514,7 @@ async def read_all_payments(client: LNDClient) -> None:
         index_offset = 0
         num_max_payments = 1000
         total_payments = 0
-        logger.info(f"{client.icon} Reading all payments...")
+        logger.info(f"{lnd_client.icon} Reading all payments...")
         while True:
             request = lnrpc.ListPaymentsRequest(
                 include_incomplete=True,
@@ -519,14 +522,12 @@ async def read_all_payments(client: LNDClient) -> None:
                 max_payments=num_max_payments,
                 reversed=True,
             )
-            payments_raw: lnrpc.ListPaymentsResponse = await client.call(
-                client.lightning_stub.ListPayments,
+            payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
+                lnd_client.lightning_stub.ListPayments,
                 request,
             )
             list_payments = ListPaymentsResponse(payments_raw)
             index_offset = payments_raw.first_index_offset
-            # with open("list_payments_raw.bin", "wb") as f:
-            #     f.write(payments_raw.SerializeToString())
             insert_data = []
             tasks = []
             for payment in list_payments.payments:
@@ -543,7 +544,8 @@ async def read_all_payments(client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{client.icon} Payments {index_offset}... modified: {sum(modified)} inserted: {sum(inserted)}"
+                    f"{lnd_client.icon} Payments {index_offset}... "
+                    f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_payments += len(list_payments.payments)
             except BulkWriteError as e:
@@ -553,7 +555,7 @@ async def read_all_payments(client: LNDClient) -> None:
                 logger.exception(e)
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
-                    f"{client.icon} Finished reading {total_payments} payments..."
+                    f"{lnd_client.icon} Finished reading {total_payments} payments..."
                 )
                 break
 
@@ -593,11 +595,13 @@ async def run(connection_name: str) -> None:
         )
         if client.get_info:
             logger.info(
-                f"{client.icon} Node: {client.get_info.alias} pub_key: {client.get_info.identity_pubkey}"
+                f"{client.icon} Node: {client.get_info.alias} "
+                f"pub_key: {client.get_info.identity_pubkey}"
             )
         await fill_channel_names(client, lnd_events_group)
-        # It is important to subscribe to the track_events function before the reporting functions
-        # The track_events function will group events and report them when the group is complete
+        # It is important to subscribe to the track_events function
+        # before the reporting functions The track_events function will
+        # group events and report them when the group is complete
         async_subscribe(
             [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
             track_events,
@@ -648,7 +652,8 @@ def main(
     """
     icon = CONFIG.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
+        f"{icon} ✅ LND gRPC client started. "
+        f"Monitoring node: {node} {icon}. Version: {CONFIG.version}"
     )
     asyncio.run(run(node))
     logger.info("👋 Goodbye!")
