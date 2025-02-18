@@ -1,23 +1,22 @@
 import asyncio
-from datetime import datetime, timezone
-from enum import Enum, StrEnum, auto
 import json
 import posixpath
 import tempfile
+from datetime import datetime, timezone
+from enum import Enum, StrEnum, auto
 from timeit import default_timer as timer
 from typing import Any
+
 from bson import ObjectId
-
-from v4vapp_backend_v2.config.setup import logger
-
-from v4vapp_backend_v2.config.setup import logger, InternalConfig
 from motor.motor_asyncio import (
     AsyncIOMotorClient,
     AsyncIOMotorCollection,
     AsyncIOMotorCursor,
 )
 from pymongo.errors import ConnectionFailure, OperationFailure
-from pymongo.results import UpdateResult, DeleteResult
+from pymongo.results import DeleteResult, UpdateResult
+
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 class MongoDBStatus(StrEnum):
@@ -289,7 +288,9 @@ class MongoDBClient:
         for collection_name, collection_config in self.db_config.dbs[
             self.db_name
         ].collections.items():
-            list_indexes = await self.db[collection_name].list_indexes().to_list(length=None)
+            list_indexes = (
+                await self.db[collection_name].list_indexes().to_list(length=None)
+            )
             if collection_config and collection_config.indexes:
                 for index_name, index_value in collection_config.indexes.items():
                     if not self._check_index_exists(list_indexes, index_name):
@@ -304,7 +305,7 @@ class MongoDBClient:
 
     def _check_index_exists(self, indexes, index_name):
         for index in indexes:
-            if index.get('name') == index_name:
+            if index.get("name") == index_name:
                 return True
         return False
 
@@ -383,10 +384,15 @@ class MongoDBClient:
                     "id_self": self.hex_id,
                 },
             )
+            self.health_check = MongoDBStatus.DISCONNECTED
             self.client.close()
 
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
-        if self.client is None or self.db is None:
+        if (
+            self.client is None
+            or self.db is None
+            or self.health_check != MongoDBStatus.CONNECTED
+        ):
             await self.connect()
         if self.db is None:
             raise ConnectionFailure("Not connected to MongoDB")

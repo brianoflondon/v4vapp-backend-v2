@@ -428,6 +428,19 @@ def get_in_flight_time(creation_date: datetime) -> str:
 
 
 def async_time_decorator(func):
+    """
+    A decorator that wraps an asynchronous function to log its execution time and handle exceptions.
+
+    Args:
+        func (coroutine function): The asynchronous function to be wrapped.
+
+    Returns:
+        coroutine function: The wrapped asynchronous function.
+
+    The wrapper logs the execution time of the function and, in case of an exception,
+    logs the error along with the time taken before the exception occurred.
+    """
+
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         start_time = time.time()
@@ -453,6 +466,25 @@ def async_time_decorator(func):
 
 
 def async_time_stats_decorator(runs=1):
+    """
+    A decorator to measure and log the execution time of an asynchronous function.
+
+    This decorator logs the execution time of the decorated function and maintains
+    a list of execution times for a specified number of runs. Once the number of
+    runs is reached, it logs the average execution time and the standard deviation
+    (if applicable), then resets the timings list.
+
+    Args:
+        func (Callable): The asynchronous function to be decorated.
+
+    Returns:
+        Callable: The wrapped function with timing and logging functionality.
+
+    Raises:
+        Exception: Re-raises any exception encountered during the execution of the
+        decorated function, after logging the failure and execution time.
+    """
+
     def decorator(func):
         timings = []
 
@@ -475,7 +507,7 @@ def async_time_stats_decorator(runs=1):
                         f"Runs: {len(timings)}"
                     )
                     if len(timings) > 1:
-                        print(f"Std Dev: {stdev(timings):.4f}s")
+                        logger.info(f"Std Dev: {stdev(timings):.4f}s")
                     timings = []  # Reset after reporting
 
                 return result

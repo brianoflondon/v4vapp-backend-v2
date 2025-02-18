@@ -17,7 +17,7 @@
             "type": "debugpy",
             "consoleName": "Umbrel Destination",
             "request": "launch",
-            "program": "${workspaceFolder}/src/destination_alias_lookup.py",
+            "program": "${workspaceFolder}/src/dest_alias_fill.py",
             "args": [
                 "lnd_monitor_v2_umbrel",
                 "umbrel"
@@ -28,7 +28,7 @@
             "type": "debugpy",
             "consoleName": "Voltage Destination",
             "request": "launch",
-            "program": "${workspaceFolder}/src/destination_alias_lookup.py",
+            "program": "${workspaceFolder}/src/dest_alias_fill.py",
             "args": [
                 "lnd_monitor_v2_voltage",
                 "voltage"

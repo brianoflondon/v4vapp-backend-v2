@@ -143,11 +143,11 @@ class LNDClient:
     async def disconnect(self):
         if self.channel is not None:
             await self.channel.close(grace=2)
-            print(f"{self.icon} Disconnecting from LND")
             self.channel = None
             self.lightning_stub = None
             self.router_stub = None
             self.invoices_stub = None
+            logger.info(f"{self.icon} Disconnected from LND")
 
     async def check_connection(
         self,

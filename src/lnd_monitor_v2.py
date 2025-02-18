@@ -1,25 +1,13 @@
-from datetime import datetime, timedelta, timezone
-import json
-import typer
-import sys
 import asyncio
-from typing import Any, Optional, Annotated, List
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Any, List, Optional
+
+import typer
 from google.protobuf.json_format import MessageToDict, ParseDict
+from pymongo.errors import BulkWriteError
 
-
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
-    get_channel_name,
-    get_node_alias_from_pay_request,
-)
-from v4vapp_backend_v2.grpc_models.lnd_events_group import (
-    LndChannelName,
-    LndEventsGroup,
-    EventItem,
-)
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
-    LNDConnectionError,
-    LNDSubscriptionError,
-)
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import (
@@ -28,12 +16,23 @@ from v4vapp_backend_v2.config.setup import (
     get_in_flight_time,
     logger,
 )
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-
+from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
-from v4vapp_backend_v2.database.db import MongoDBClient
-from pymongo.errors import BulkWriteError
+from v4vapp_backend_v2.grpc_models.lnd_events_group import (
+    EventItem,
+    LndChannelName,
+    LndEventsGroup,
+)
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
+    LNDConnectionError,
+    LNDSubscriptionError,
+)
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_channel_name,
+    get_node_alias_from_pay_request,
+)
 from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
     ListInvoiceResponse,
@@ -615,7 +614,7 @@ async def run(connection_name: str) -> None:
         try:
             await asyncio.gather(*tasks)
         except (asyncio.CancelledError, KeyboardInterrupt):
-            print("👋 Received signal to stop. Exiting...")
+            logger.info("👋 Received signal to stop. Exiting...")
             await client.channel.close()
             INTERNAL_CONFIG.__exit__(None, None, None)
 
@@ -648,7 +647,7 @@ def main(
         f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
     )
     asyncio.run(run(node))
-    print("👋 Goodbye!")
+    logger.info("👋 Goodbye!")
 
 
 if __name__ == "__main__":
@@ -657,7 +656,7 @@ if __name__ == "__main__":
         logger.name = "lnd_monitor_v2"
         app()
     except KeyboardInterrupt:
-        print("👋 Goodbye!")
+        logger.info("👋 Goodbye!")
         sys.exit(0)
 
     except Exception as e:
