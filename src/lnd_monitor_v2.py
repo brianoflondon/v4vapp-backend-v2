@@ -44,9 +44,10 @@ app = typer.Typer()
 
 
 async def track_events(
-    event: EventItem,
+    htlc_event: EventItem,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
+    **kwargs: Any,
 ) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
@@ -56,20 +57,22 @@ async def track_events(
     Returns:
         None
     """
-    event_id = lnd_events_group.append(event)
-    dest_alias = await check_dest_alias(event, lnd_client, lnd_events_group, event_id)
-    message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
+    event_id = lnd_events_group.append(htlc_event)
+    dest_alias = await check_dest_alias(
+        htlc_event, lnd_client, lnd_events_group, event_id
+    )
+    message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
     # The delay is necessary to allow the group to complete because sometimes
     # Invoices and Payments are not received in the right order with the HtlcEvents
     await asyncio.sleep(0.5)
-    if lnd_events_group.complete_group(event=event):
-        notification = True if isinstance(event, routerrpc.HtlcEvent) else False
+    if lnd_events_group.complete_group(event=htlc_event):
+        notification = True if isinstance(htlc_event, routerrpc.HtlcEvent) else False
         if (
-            isinstance(event, routerrpc.HtlcEvent)
-            and event.event_type != routerrpc.HtlcEvent.UNKNOWN
+            isinstance(htlc_event, routerrpc.HtlcEvent)
+            and htlc_event.event_type != routerrpc.HtlcEvent.UNKNOWN
         ):
             try:
-                htlc_id = event.incoming_htlc_id or event.outgoing_htlc_id
+                htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
                 if htlc_id:
                     incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
                         htlc_id
@@ -80,17 +83,21 @@ async def track_events(
             except Exception as e:
                 logger.exception(e)
                 pass
-        message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
+        message_str, ans_dict = lnd_events_group.message(
+            htlc_event, dest_alias=dest_alias
+        )
         if " Attempted 0 " not in message_str:
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={"notification": notification, **ans_dict},
             )
-        asyncio.create_task(remove_event_group(event, lnd_client, lnd_events_group))
+        asyncio.create_task(
+            remove_event_group(htlc_event, lnd_client, lnd_events_group)
+        )
 
 
 async def check_dest_alias(
-    event: EventItem,
+    htlc_event: EventItem,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
     event_id: int,
@@ -114,7 +121,7 @@ async def check_dest_alias(
     Returns:
         str: The destination alias if found, otherwise an empty string.
     """
-    if isinstance(event, routerrpc.HtlcEvent):
+    if isinstance(htlc_event, routerrpc.HtlcEvent):
         pre_image = lnd_events_group.get_htlc_event_pre_image(event_id)
         if pre_image:
             # Wait for the payment to complete
@@ -129,10 +136,10 @@ async def check_dest_alias(
                 else:
                     return "Keysend"
     # Keysend payments outgoing do not have a payment request
-    if isinstance(event, lnrpc.Payment):
-        if event.payment_request:
+    if isinstance(htlc_event, lnrpc.Payment):
+        if htlc_event.payment_request:
             dest_alias = await get_node_alias_from_pay_request(
-                event.payment_request, lnd_client
+                htlc_event.payment_request, lnd_client
             )
             return dest_alias
         else:
@@ -142,7 +149,7 @@ async def check_dest_alias(
 
 
 async def remove_event_group(
-    event: EventItem, lnd_client: LNDClient, lnd_events_group: LndEventsGroup
+    htlc_event: EventItem, lnd_client: LNDClient, lnd_events_group: LndEventsGroup
 ) -> None:
     """
     Asynchronously removes an event from the specified LndEventsGroup after a delay.
@@ -155,12 +162,12 @@ async def remove_event_group(
     Returns:
         None
     """
-    logger.debug(f"Removing event group: {MessageToDict(event)}")
+    logger.debug(f"Removing event group: {MessageToDict(htlc_event)}")
     await asyncio.sleep(10)
-    lnd_events_group.remove_group(event)
+    lnd_events_group.remove_group(htlc_event)
 
 
-async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
+async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> None:
     """
     Asynchronously stores an invoice in the MongoDB database.
 
@@ -173,9 +180,9 @@ async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
-        logger.info(f"Storing invoice: {lnrpc_invoice.add_index} {db_client.hex_id}")
+        logger.info(f"Storing invoice: {htlc_event.add_index} {db_client.hex_id}")
         try:
-            invoice_pyd = Invoice(lnrpc_invoice)
+            invoice_pyd = Invoice(htlc_event)
         except Exception as e:
             logger.info(e)
             return
@@ -188,7 +195,9 @@ async def db_store_invoice(lnrpc_invoice: lnrpc.Invoice, *args: Any) -> None:
         )
 
 
-async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
+async def db_store_payment(
+    htlc_event: lnrpc.Payment, lnd_client: LNDClient, *args: Any, **kwargs
+) -> None:
     """
     Asynchronously stores a payment in the MongoDB database.
 
@@ -203,10 +212,16 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
     ) as db_client:
         try:
             logger.info(
-                f"Storing payment: {lnrpc_payment.payment_index} {db_client.hex_id}"
+                f"Storing payment: {htlc_event.payment_index} {db_client.hex_id}"
             )
-            payment_pyd = Payment(lnrpc_payment)
-
+            payment_pyd = Payment(htlc_event)
+            await update_payment_route_with_alias(
+                db_client=db_client,
+                lnd_client=lnd_client,
+                payment=payment_pyd,
+                fill_cache=True,
+                col_pub_keys="pub_keys",
+            )
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
             ans = await db_client.update_one(
@@ -223,22 +238,22 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
 
 
 async def invoice_report(
-    lnrpc_invoice: lnrpc.Invoice,
+    htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup = None,
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
-        lnrpc_invoice.creation_date + lnrpc_invoice.expiry, tz=timezone.utc
+        htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
     )
     time_to_expire = expiry_datetime - datetime.now(tz=timezone.utc)
     if time_to_expire.total_seconds() < 0:
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
-    invoice_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
+    invoice_dict = MessageToDict(htlc_event, preserving_proto_field_name=True)
     logger.info(
         (
-            f"{lnd_client.icon} Invoice: {lnrpc_invoice.add_index:>6} "
-            f"amount: {lnrpc_invoice.value:>10,} sat {lnrpc_invoice.settle_index} "
+            f"{lnd_client.icon} Invoice: {htlc_event.add_index:>6} "
+            f"amount: {htlc_event.value:>10,} sat {htlc_event.settle_index} "
             f"expiry: {time_to_expire_str} "
             f"{invoice_dict.get('r_hash')}"
         ),
@@ -247,33 +262,31 @@ async def invoice_report(
 
 
 async def payment_report(
-    lnrpc_payment: lnrpc.Payment,
+    htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
 ) -> None:
-    status = lnrpc.Payment.PaymentStatus.Name(lnrpc_payment.status)
+    status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(
-        lnrpc_payment.creation_time_ns / 1e9, tz=timezone.utc
+        htlc_event.creation_time_ns / 1e9, tz=timezone.utc
     )
-    pre_image = lnrpc_payment.payment_preimage if lnrpc_payment.payment_preimage else ""
+    pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
     dest_alias = await get_node_alias_from_pay_request(
-        lnrpc_payment.payment_request, lnd_client
+        htlc_event.payment_request, lnd_client
     )
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
         (
-            f"{lnd_client.icon} Payment: {lnrpc_payment.payment_index:>6} "
-            f"amount: {lnrpc_payment.value_sat:>10,} sat "
+            f"{lnd_client.icon} Payment: {htlc_event.payment_index:>6} "
+            f"amount: {htlc_event.value_sat:>10,} sat "
             f"dest: {dest_alias} "
             f"pre_image: {pre_image} "
             f"in flight: {in_flight_time} "
             f"{creation_date:%H:%M:%S} status: {status} "
-            f"{lnrpc_payment.payment_hash}"
+            f"{htlc_event.payment_hash}"
         ),
-        extra={
-            "payment": MessageToDict(lnrpc_payment, preserving_proto_field_name=True)
-        },
+        extra={"payment": MessageToDict(htlc_event, preserving_proto_field_name=True)},
     )
 
 
@@ -332,7 +345,7 @@ async def invoices_loop(
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
                     Events.LND_INVOICE,
-                    lnrpc_invoice=lnrpc_invoice,
+                    htlc_event=lnrpc_invoice,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
                 )
@@ -347,6 +360,9 @@ async def invoices_loop(
                 "🔴 Connection error in invoices_loop", exc_info=e, stack_info=True
             )
             raise e
+        except Exception as e:
+            logger.exception(e)
+            pass
 
 
 async def payments_loop(
@@ -362,7 +378,10 @@ async def payments_loop(
             ):
                 lnrpc_payment: lnrpc.Payment
                 async_publish(
-                    Events.LND_PAYMENT, lnrpc_payment, lnd_client, lnd_events_group
+                    Events.LND_PAYMENT,
+                    htlc_event=lnrpc_payment,
+                    lnd_client=lnd_client,
+                    lnd_events_group=lnd_events_group,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -375,6 +394,9 @@ async def payments_loop(
                 "🔴 Connection error in payments_loop", exc_info=e, stack_info=True
             )
             raise e
+        except Exception as e:
+            logger.exception(e)
+            pass
 
 
 async def htlc_events_loop(
@@ -390,7 +412,10 @@ async def htlc_events_loop(
             ):
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
-                    Events.HTLC_EVENT, htlc_event, lnd_client, lnd_events_group
+                    Events.HTLC_EVENT,
+                    htlc_event=htlc_event,
+                    lnd_client=lnd_client,
+                    lnd_events_group=lnd_events_group,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -403,6 +428,9 @@ async def htlc_events_loop(
                 "🔴 Connection error in payments_loop", exc_info=e, stack_info=True
             )
             raise e
+        except Exception as e:
+            logger.exception(e)
+            pass
 
 
 async def transactions_loop(lnd_client: LNDClient) -> None:
