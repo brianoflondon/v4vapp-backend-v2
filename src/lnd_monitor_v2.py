@@ -7,7 +7,6 @@ import typer
 from google.protobuf.json_format import MessageToDict
 from pymongo.errors import BulkWriteError
 
-from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import (
@@ -24,6 +23,7 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndChannelName,
     LndEventsGroup,
 )
+from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
@@ -203,7 +203,7 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
                 f"Storing payment: {lnrpc_payment.payment_index} {db_client.hex_id}"
             )
             payment_pyd = Payment(lnrpc_payment)
-            
+
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
             ans = await db_client.update_one(
@@ -300,7 +300,9 @@ async def htlc_event_report(
     )
 
 
-async def invoices_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def invoices_loop(
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
     Args:
@@ -315,15 +317,15 @@ async def invoices_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> 
     )
     while True:
         try:
-            async for invoice in client.call_async_generator(
-                client.lightning_stub.SubscribeInvoices,
+            async for invoice in lnd_client.call_async_generator(
+                lnd_client.lightning_stub.SubscribeInvoices,
                 request_sub,
                 call_name="SubscribeInvoices",
             ):
                 invoice: lnrpc.Invoice
-                async_publish(Events.LND_INVOICE, invoice, client, lnd_events_group)
+                async_publish(Events.LND_INVOICE, invoice, lnd_client, lnd_events_group)
         except LNDSubscriptionError as e:
-            await client.check_connection(
+            await lnd_client.check_connection(
                 original_error=e.original_error, call_name="SubscribeInvoices"
             )
             pass
@@ -335,19 +337,21 @@ async def invoices_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> 
             raise e
 
 
-async def payments_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def payments_loop(
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
-            async for payment in client.call_async_generator(
-                client.router_stub.TrackPayments,
+            async for payment in lnd_client.call_async_generator(
+                lnd_client.router_stub.TrackPayments,
                 request,
                 call_name="TrackPayments",
             ):
                 payment: lnrpc.Payment
-                async_publish(Events.LND_PAYMENT, payment, client, lnd_events_group)
+                async_publish(Events.LND_PAYMENT, payment, lnd_client, lnd_events_group)
         except LNDSubscriptionError as e:
-            await client.check_connection(
+            await lnd_client.check_connection(
                 original_error=e.original_error, call_name="TrackPayments"
             )
             pass
@@ -359,19 +363,23 @@ async def payments_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> 
             raise e
 
 
-async def htlc_events_loop(client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def htlc_events_loop(
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
+) -> None:
     request = routerrpc.SubscribeHtlcEventsRequest()
     while True:
         try:
-            async for htlc_event in client.call_async_generator(
-                client.router_stub.SubscribeHtlcEvents,
+            async for htlc_event in lnd_client.call_async_generator(
+                lnd_client.router_stub.SubscribeHtlcEvents,
                 request,
                 call_name="SubscribeHtlcEvents",
             ):
                 htlc_event: routerrpc.HtlcEvent
-                async_publish(Events.HTLC_EVENT, htlc_event, client, lnd_events_group)
+                async_publish(
+                    Events.HTLC_EVENT, htlc_event, lnd_client, lnd_events_group
+                )
         except LNDSubscriptionError as e:
-            await client.check_connection(
+            await lnd_client.check_connection(
                 original_error=e.original_error, call_name="SubscribeHtlcEvents"
             )
             pass
@@ -383,15 +391,15 @@ async def htlc_events_loop(client: LNDClient, lnd_events_group: LndEventsGroup) 
             raise e
 
 
-async def transactions_loop(client: LNDClient) -> None:
+async def transactions_loop(lnd_client: LNDClient) -> None:
     request_sub = lnrpc.GetTransactionsRequest(
         start_height=0,
         end_height=0,
     )
-    logger.info(f"{client.icon} 🔍 Monitoring transactions...")
+    logger.info(f"{lnd_client.icon} 🔍 Monitoring transactions...")
     while True:
-        async for transaction in client.call_async_generator(
-            client.lightning_stub.SubscribeTransactions,
+        async for transaction in lnd_client.call_async_generator(
+            lnd_client.lightning_stub.SubscribeTransactions,
             request_sub,
         ):
             transaction: lnrpc.Transaction
@@ -399,11 +407,11 @@ async def transactions_loop(client: LNDClient) -> None:
 
 
 async def fill_channel_names(
-    client: LNDClient, lnd_events_group: LndEventsGroup
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
 ) -> None:
     request = lnrpc.ListChannelsRequest()
-    channels = await client.call(
-        client.lightning_stub.ListChannels,
+    channels = await lnd_client.call(
+        lnd_client.lightning_stub.ListChannels,
         request,
     )
     channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
@@ -413,7 +421,7 @@ async def fill_channel_names(
         tasks.append(
             get_channel_name(
                 channel_id=int(channel["chan_id"]),
-                client=client,
+                client=lnd_client,
             )
         )
     names_list: List[LndChannelName] = await asyncio.gather(*tasks)
@@ -421,7 +429,7 @@ async def fill_channel_names(
         lnd_events_group.append(channel_name)
         logger.info(
             (
-                f"{client.icon} "
+                f"{lnd_client.icon} "
                 f"Channel {channel_name.channel_id} -> {channel_name.name}"
             ),
             extra={"channel_name": channel_name.to_dict()},
@@ -623,9 +631,9 @@ async def run(connection_name: str) -> None:
         tasks = [
             read_all_invoices(client),
             read_all_payments(client),
-            invoices_loop(client=client, lnd_events_group=lnd_events_group),
-            payments_loop(client=client, lnd_events_group=lnd_events_group),
-            htlc_events_loop(client=client, lnd_events_group=lnd_events_group),
+            invoices_loop(lnd_client=client, lnd_events_group=lnd_events_group),
+            payments_loop(lnd_client=client, lnd_events_group=lnd_events_group),
+            htlc_events_loop(lnd_client=client, lnd_events_group=lnd_events_group),
         ]
         await asyncio.gather(*tasks)
         try:
