@@ -1,7 +1,5 @@
 import asyncio
-import functools
 import sys
-import time
 from typing import Annotated, Optional
 
 import typer
@@ -13,37 +11,13 @@ from v4vapp_backend_v2.config.setup import (
     logger,
 )
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.helpers.pub_key_alias import (
-    get_all_pub_key_aliases,
-    update_payment_route_with_alias,
-)
+from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_node_info
-from v4vapp_backend_v2.models.payment_models import NodeAlias, Payment
+from v4vapp_backend_v2.models.payment_models import Payment
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
 app = typer.Typer()
-
-
-# @async_time_stats_decorator()
-# async def get_all_pub_key_aliases(database: str) -> dict[str, str]:
-#     """
-#     Get all the pub keys from the database.
-#     Args:
-#         database (str): The database to query.
-
-#     Returns:
-#         set: A set of all the pub keys.
-#     """
-#     all_pub_key_aliases = {}
-#     async with MongoDBClient(
-#         db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
-#     ) as db_client:
-#         cursor = await db_client.find("pub_keys", {})
-#         async for document in cursor:
-#             all_pub_key_aliases[document["pub_key"]] = document["alias"]
-#     return all_pub_key_aliases
 
 
 def get_final_destination(payment_alias: list[str]) -> str:
@@ -57,7 +31,7 @@ def get_final_destination(payment_alias: list[str]) -> str:
     return payment_alias[-1]
 
 
-# @async_time_stats_decorator()
+@async_time_stats_decorator()
 async def main_worker(node: str, database: str):
     """
     Main function to run the LND gRPC client.
@@ -68,16 +42,20 @@ async def main_worker(node: str, database: str):
     Returns:
         None
     """
-    # all_pub_key_aliases = {}
+    payments_changed = 0
     async with MongoDBClient(
         db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
     ) as db_client:
         async with LNDClient(node) as lnd_client:
             cursor = await db_client.find("payments", {})
-            tasks = []
+            task_blocks = [[]]
+            task_block_limit = 1000
+            count = 0
             async for document in cursor:
                 try:
                     payment = Payment.model_validate(document)
+                    if payment.route:
+                        continue
                     payment.route = []
                 except Exception as e:
                     logger.error(f"Error validating payment: {e}")
@@ -99,7 +77,10 @@ async def main_worker(node: str, database: str):
 
                 # logger.info(f"{payment.destination}  || {payment.route_str}")
                 payment_id = ObjectId(document["_id"])
-                tasks.append(
+                block_count = count // task_block_limit
+                if len(task_blocks) < block_count + 1:
+                    task_blocks.append([])
+                task_blocks[block_count].append(
                     db_client.update_one(
                         "payments",
                         query={"_id": payment_id},
@@ -110,41 +91,26 @@ async def main_worker(node: str, database: str):
                         upsert=True,
                     )
                 )
-            ans = await asyncio.gather(*tasks)
-            logger.info(f"Updated {len(ans)} payments.")
+                count += 1
+                # tasks.append(
+                #     db_client.update_one(
+                #         "payments",
+                #         query={"_id": payment_id},
+                #         update=payment.model_dump(
+                #             exclude_none=True,
+                #             exclude_unset=True,
+                #         ),
+                #         upsert=True,
+                #     )
+                # )
+                payments_changed += 1
+            ans = []
+            for tasks in task_blocks:
+                ans = await asyncio.gather(*tasks)
 
-
-# async def update_payment_route_with_alias(
-#     db_client: MongoDBClient,
-#     lnd_client: LNDClient,
-#     payment: Payment,
-#     pub_key: str,
-#     all_pub_key_aliases: dict[str, str] = None,
-# ):
-#     if not all_pub_key_aliases:
-#         alias = await db_client.find_one("pub_keys", {"pub_key": pub_key})
-#         if alias:
-#             all_pub_key_aliases = {alias["pub_key"]: alias["alias"]}
-#         else:
-#             all_pub_key_aliases = {}
-
-#     if pub_key not in all_pub_key_aliases.keys():
-#         node_info = await get_node_info(pub_key, lnd_client)
-#         if node_info.node.alias:
-#             hop_alias = NodeAlias(pub_key=pub_key, alias=node_info.node.alias)
-#         else:
-#             hop_alias = NodeAlias(pub_key=pub_key, alias=f"Unknown {pub_key[-6:]}")
-#         ans = await db_client.update_one(
-#             collection_name="pub_keys",
-#             query={"pub_key": pub_key},
-#             update=hop_alias.model_dump(),
-#             upsert=True,
-#         )
-#         all_pub_key_aliases[pub_key] = hop_alias.alias
-#         payment.route.append(hop_alias)
-#     else:
-#         hop_alias = NodeAlias(pub_key=pub_key, alias=all_pub_key_aliases[pub_key])
-#         payment.route.append(hop_alias)
+            logger.info(
+                f"Payments Changed: {payments_changed} Updated {len(ans)} payments."
+            )
 
 
 @app.command()
