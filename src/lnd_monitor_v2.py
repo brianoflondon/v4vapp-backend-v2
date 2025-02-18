@@ -32,10 +32,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_channel_name,
     get_node_alias_from_pay_request,
 )
-from v4vapp_backend_v2.models.invoice_models import (
-    Invoice,
-    ListInvoiceResponse,
-)
+from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
 INTERNAL_CONFIG = InternalConfig()
@@ -61,13 +58,13 @@ async def track_events(
     event_id = lnd_events_group.append(event)
     dest_alias = await check_dest_alias(event, client, lnd_events_group, event_id)
     message_str, ans_dict = lnd_events_group.message(event, dest_alias=dest_alias)
-    # The delay is necessary to allow the group to complete because sometimes Invoices and
-    # Payments are not received in the right order with the HtlcEvents
+    # The delay is necessary to allow the group to complete because sometimes
+    # Invoices and Payments are not received in the right order with the HtlcEvents
     await asyncio.sleep(0.5)
     if lnd_events_group.complete_group(event=event):
-        notification = True if type(event) == routerrpc.HtlcEvent else False
+        notification = True if isinstance(event, routerrpc.HtlcEvent) else False
         if (
-            type(event) == routerrpc.HtlcEvent
+            isinstance(event, routerrpc.HtlcEvent)
             and event.event_type != routerrpc.HtlcEvent.UNKNOWN
         ):
             try:
@@ -97,10 +94,12 @@ async def check_dest_alias(
     """
     Asynchronously checks the destination alias for a given event.
 
-    This function checks if the provided event is of type `routerrpc.HtlcEvent`. If so, it retrieves the pre-image
-    associated with the event ID from the `lnd_events_group`. If a pre-image is found, it waits for the payment to
-    complete, then retrieves the matching payment using the pre-image. If a matching payment is found, it fetches
-    the destination alias from the payment request using the provided LND client.
+    This function checks if the provided event is of type `routerrpc.HtlcEvent`.
+    If so, it retrieves the pre-image associated with the event ID from the
+    `lnd_events_group`. If a pre-image is found, it waits for the payment to
+    complete, then retrieves the matching payment using the pre-image. If a matching
+    payment is found, it fetches the destination alias from the payment request
+    using the provided LND client.
 
     Args:
         event (EventItem): The event to check.
@@ -111,7 +110,7 @@ async def check_dest_alias(
     Returns:
         str: The destination alias if found, otherwise an empty string.
     """
-    if type(event) == routerrpc.HtlcEvent:
+    if isinstance(event, routerrpc.HtlcEvent):
         pre_image = lnd_events_group.get_htlc_event_pre_image(event_id)
         if pre_image:
             # Wait for the payment to complete
@@ -126,7 +125,7 @@ async def check_dest_alias(
                 else:
                     return "Keysend"
     # Keysend payments outgoing do not have a payment request
-    if type(event) == lnrpc.Payment:
+    if isinstance(event, lnrpc.Payment):
         if event.payment_request:
             dest_alias = await get_node_alias_from_pay_request(
                 event.payment_request, client
@@ -146,7 +145,8 @@ async def remove_event_group(
 
     Args:
         event (EventItem): The event to be removed from the group.
-        lnd_events_group (LndEventsGroup): The group from which the event will be removed.
+        lnd_events_group (LndEventsGroup): The group from which the event will be
+            removed.
 
     Returns:
         None
@@ -208,7 +208,8 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
                 "payments", query, payment_dict, upsert=True
             )
             logger.info(
-                f"New payment recorded: {payment_pyd.payment_index:>6} {payment_pyd.payment_hash}",
+                f"New payment recorded: {payment_pyd.payment_index:>6} "
+                f"{payment_pyd.payment_hash}",
                 extra={"db_ans": ans.raw_result},
             )
         except Exception as e:
@@ -287,7 +288,8 @@ async def htlc_event_report(
     is_complete_str = "💎" if is_complete else "🔨"
     logger.debug(
         (
-            f"{client.icon} {is_complete_str} htlc:    {htlc_id:>6} {event_type} {preimage}"
+            f"{client.icon} {is_complete_str} htlc:    {htlc_id:>6} "
+            f"{event_type} {preimage}"
         ),
         extra={
             "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True),
@@ -428,8 +430,10 @@ async def read_all_invoices(client: LNDClient) -> None:
     """
     Reads all invoices from the LND client and inserts them into a MongoDB collection.
 
-    This function continuously fetches invoices from the LND client in batches and inserts them into a MongoDB collection.
-    It stops fetching when the number of invoices in a batch is less than the maximum number of invoices per batch.
+    This function continuously fetches invoices from the LND client in batches
+    and inserts them into a MongoDB collection.
+    It stops fetching when the number of invoices in a batch is less than the maximum
+    number of invoices per batch.
 
     Args:
         client (LNDClient): The LND client used to fetch invoices.
@@ -478,6 +482,7 @@ async def read_all_invoices(client: LNDClient) -> None:
                 )
                 total_invoices += len(list_invoices.invoices)
             except BulkWriteError as e:
+                logger.debug(e.details)
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
                 logger.info(
@@ -542,6 +547,7 @@ async def read_all_payments(client: LNDClient) -> None:
                 )
                 total_payments += len(list_payments.payments)
             except BulkWriteError as e:
+                logger.debug(e.details)
                 pass
             except Exception as e:
                 logger.exception(e)
