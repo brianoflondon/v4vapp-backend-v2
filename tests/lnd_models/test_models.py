@@ -1,20 +1,19 @@
 import base64
-from datetime import datetime
 import hashlib
 import json
+from datetime import datetime
 from typing import Generator
 
 import pytest
 from pydantic import ValidationError
 
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.depreciated.htlc_event_models import HtlcTrackingList
 from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
     ListInvoiceResponse,
     protobuf_to_pydantic,
 )
-
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 
@@ -200,5 +199,24 @@ def test_read_list_payments_pydantic_conversions():
     list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
 
     list_payment_response_dict = list_payment_response.model_dump()
-    list_payment_response2 = ListPaymentsResponse.model_validate(list_payment_response_dict)
+    list_payment_response2 = ListPaymentsResponse.model_validate(
+        list_payment_response_dict
+    )
     assert list_payment_response == list_payment_response2
+
+
+def test_route_in_payments():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+
+    for payment in list_payment_response.payments:
+        try:
+            print(payment.destination_pub_keys)
+            print(payment.destination)
+        except Exception as e:
+            print(e)
+            assert False

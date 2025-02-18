@@ -1,12 +1,11 @@
-from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
+from typing import Any, List, Optional
+
 from google.protobuf.json_format import MessageToDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.models.pydantic_helpers import (
-    BSONInt64,
-    convert_datetime_fields,
-)
+from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
 class Hop(BaseModel):
