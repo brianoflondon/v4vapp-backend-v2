@@ -75,6 +75,8 @@ class PaymentExtra(BaseModel):
         Returns:
             str: A string representation of the route.
         """
+        if not self.route:
+            return "Unknown"
         return " -> ".join([hop.alias for hop in self.route])
 
 
