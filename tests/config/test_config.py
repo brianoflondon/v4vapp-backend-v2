@@ -5,11 +5,11 @@ import pytest
 from yaml import safe_load
 
 from v4vapp_backend_v2.config.setup import (
+    Config,
     InternalConfig,
     StartupFailure,
     format_time_delta,
     get_in_flight_time,
-    Config,
 )
 
 

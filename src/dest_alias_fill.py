@@ -33,7 +33,7 @@ async def main_worker(node: str, database: str):
     """
     payments_changed = 0
     async with MongoDBClient(
-        db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
+        db_conn=CONFIG.default_db_connection, db_name=database, db_user="default"
     ) as db_client:
         async with LNDClient(node) as lnd_client:
             cursor = await db_client.find("payments", {})

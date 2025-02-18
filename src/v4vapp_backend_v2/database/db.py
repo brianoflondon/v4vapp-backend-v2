@@ -94,7 +94,7 @@ class MongoDBClient:
         Initializes the database connection and configuration.
 
         Args:
-            db_conn (str): The database connection string.
+            db_conn (str): The database connection name from config.
             db_name (str, optional): The name of the database. Defaults to "admin".
             db_user (str, optional): The database user. Defaults to "admin".
             uri (str, optional): The URI for the database connection. Defaults to None.
@@ -110,16 +110,16 @@ class MongoDBClient:
         self.error = None
         self.db_conn = db_conn
         # Sets up self.db_config here.
-        self.validate_connection()
-        self.hosts = ",".join(self.db_config.db_hosts) if db_conn else "localhost"
         self.db_name = db_name
         self.db_user = db_user
+        self.validate_connection()
+        self.hosts = ",".join(self.db_connection.hosts) if db_conn else "localhost"
         self.validate_user_db()
         self.db_password = (
-            self.db_config.dbs[self.db_name].db_users[self.db_user].password
+            self.dbs[self.db_name].db_users[self.db_user].password
         )
-        self.db_roles = self.db_config.dbs[self.db_name].db_users[self.db_user].roles
-        self.collections = self.db_config.dbs[db_name].collections
+        self.db_roles = self.dbs[self.db_name].db_users[self.db_user].roles
+        self.collections = self.dbs[self.db_name].collections
         self.uri = uri if uri else self._build_uri_from_config()
         self.retry = retry
         self.kwargs = kwargs
@@ -128,7 +128,12 @@ class MongoDBClient:
     def validate_connection(self):
         try:
             self.config = InternalConfig().config
-            self.db_config = self.config.database[self.db_conn]
+            self.db_connection = self.config.db_connections[self.db_conn]
+
+            if self.db_name == "admin":
+                self.dbs = self.db_connection.admin_dbs
+            else:
+                self.dbs = self.config.dbs
         except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
@@ -141,17 +146,17 @@ class MongoDBClient:
             f"Validating user {self.db_user} in database {self.db_name} "
             f"{elapsed_time:.3f}s"
         )
-        if self.db_name not in self.db_config.dbs:
+        if self.db_name not in self.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
                 code=DbErrorCode.NO_DB,
             )
-        if self.db_user not in self.db_config.dbs[self.db_name].db_users:
+        if self.db_user not in self.dbs[self.db_name].db_users:
             raise OperationFailure(
                 error=f"No database {self.db_name}",
                 code=DbErrorCode.NO_USER,
             )
-        if not bool(self.db_config.dbs[self.db_name].db_users[self.db_user].password):
+        if not bool(self.dbs[self.db_name].db_users[self.db_user].password):
             raise OperationFailure(
                 error=f"No password for user {self.db_user} in {self.db_name}",
                 code=DbErrorCode.NO_PASSWORD,
@@ -198,10 +203,13 @@ class MongoDBClient:
         """
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
-        db_password = self.db_config.dbs[db_name].db_users[db_user].password
+        if db_name == "admin":
+            db_password = self.db_connection.admin_dbs["admin"].db_users["admin"].password
+        else:
+            db_password = self.db_password
 
-        if self.db_config.db_replica_set:
-            replica_set = f"&replicaSet={self.db_config.db_replica_set}"
+        if self.db_connection.replica_set:
+            replica_set = f"&replicaSet={self.db_connection.replica_set}"
         else:
             replica_set = ""
         auth_source = f"?authSource={db_name}"
@@ -290,11 +298,11 @@ class MongoDBClient:
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
         if (
-            self.db_config.dbs[self.db_name].collections is None
-            or not self.db_config.dbs[self.db_name].collections
+            self.dbs[self.db_name].collections is None
+            or not self.dbs[self.db_name].collections
         ):
             return
-        for collection_name, collection_config in self.db_config.dbs[
+        for collection_name, collection_config in self.dbs[
             self.db_name
         ].collections.items():
             list_indexes = (

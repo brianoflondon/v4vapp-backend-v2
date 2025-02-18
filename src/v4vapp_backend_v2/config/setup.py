@@ -82,9 +82,9 @@ class DatabaseDetailsConfig(BaseModel):
 
 
 class DatabaseConnectionConfig(BaseModel):
-    db_hosts: List[str]
-    db_replica_set: Optional[str] = None
-    dbs: Dict[str, DatabaseDetailsConfig]
+    hosts: List[str]
+    replica_set: str | None = None
+    admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
 
 
 class Config(BaseModel):
@@ -119,11 +119,14 @@ class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
     default_connection: str = ""
-    default_database_connection: str = ""
-    lnd_connections: List[LndConnectionConfig]
+    default_db_connection: str = ""
+    lnd_connections: List[
+        LndConnectionConfig
+    ]  # TODO #14 Convert this to a dict not a list
     tailscale: TailscaleConfig
     telegram: TelegramConfig
-    database: Dict[str, DatabaseConnectionConfig]
+    db_connections: Dict[str, DatabaseConnectionConfig]
+    dbs: Dict[str, DatabaseDetailsConfig]
 
     @field_validator("lnd_connections")
     def unique_names(cls, v):
@@ -143,12 +146,12 @@ class Config(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def check_default_database_connection(cls, v):
+    def check_default_db_connection(cls, v):
         # Check that the default connection is in the list of connections
         # if it is given.
         if (
-            v.default_database_connection
-            and v.default_database_connection not in v.database.keys()
+            v.default_db_connection
+            and v.default_db_connection not in v.db_connections.keys()
         ):
             raise ValueError("Default database connection not found in database")
         return v
@@ -174,7 +177,7 @@ class Config(BaseModel):
         Returns:
             str: A list containing the names of all databases separated by ,.
         """
-        return ", ".join(self.database[self.default_database_connection].dbs.keys())
+        return ", ".join(self.dbs.keys())
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
         """
