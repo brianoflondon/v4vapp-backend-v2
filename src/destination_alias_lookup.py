@@ -1,21 +1,28 @@
 import asyncio
+import functools
 import sys
+import time
 from typing import Annotated, Optional
-from bson import ObjectId
+
 import typer
+from bson import ObjectId
 
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_node_info
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from lnd_monitor_v2 import CONFIG, logger
-from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.models.payment_models import (
-    NodeAlias,
-    Payment,
+from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
+    async_time_stats_decorator,
+    logger,
 )
+from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_node_info
+from v4vapp_backend_v2.models.payment_models import NodeAlias, Payment
 
+INTERNAL_CONFIG = InternalConfig()
+CONFIG = INTERNAL_CONFIG.config
 app = typer.Typer()
 
 
+@async_time_stats_decorator()
 async def get_all_pub_key_aliases(database: str) -> dict[str, str]:
     """
     Get all the pub keys from the database.
@@ -46,6 +53,7 @@ def get_final_destination(payment_alias: list[str]) -> str:
     return payment_alias[-1]
 
 
+@async_time_stats_decorator()
 async def run(node: str, database: str):
     """
     Main function to run the LND gRPC client.
@@ -57,17 +65,20 @@ async def run(node: str, database: str):
         None
     """
     all_pub_key_aliases = await get_all_pub_key_aliases(database)
-    all_aliases = {}
+    # all_pub_key_aliases = {}
     async with MongoDBClient(
         db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
     ) as db_client:
         async with LNDClient(node) as lnd_client:
             cursor = await db_client.find("payments", {})
             tasks = []
+            # Temp code to fix the database
+            # payments_collection = await db_client.get_collection("payments")
+            # result = await payments_collection.update_many(
+            #     {},
+            #     {"$unset": {"destination_alias": "", "reversed_aliases": ""}},
+            # )
             async for document in cursor:
-                document.pop("route", None)
-                document.pop("destination_alias", None)
-                document.pop("reversed_aliases", None)
                 try:
                     payment = Payment.model_validate(document)
                     payment.route = []
@@ -80,30 +91,11 @@ async def run(node: str, database: str):
                     continue
 
                 for pub_key in pub_keys:
-                    if pub_key not in all_pub_key_aliases.keys():
-                        node_info = await get_node_info(pub_key, lnd_client)
-                        if node_info.node.alias:
-                            all_aliases[pub_key] = node_info.node.alias
-                        else:
-                            all_aliases[pub_key] = f"Unknown {pub_key[-6:]}"
-                        hop_alias = NodeAlias(
-                            pub_key=pub_key, alias=all_aliases[pub_key]
-                        )
-                        ans = await db_client.update_one(
-                            collection_name="pub_keys",
-                            query={"pub_key": pub_key},
-                            update=hop_alias.model_dump(),
-                            upsert=True,
-                        )
-                        all_pub_key_aliases[pub_key] = all_aliases[pub_key]
-                        payment.route.append(hop_alias)
-                    else:
-                        hop_alias = NodeAlias(
-                            pub_key=pub_key, alias=all_pub_key_aliases[pub_key]
-                        )
-                        payment.route.append(hop_alias)
+                    await update_payment_route_with_alias(
+                        db_client, lnd_client, payment, pub_key, all_pub_key_aliases
+                    )
 
-                logger.info(f"{payment.destination}  || {payment.route_str}")
+                # logger.info(f"{payment.destination}  || {payment.route_str}")
                 payment_id = ObjectId(document["_id"])
                 tasks.append(
                     db_client.update_one(
@@ -116,15 +108,41 @@ async def run(node: str, database: str):
                         upsert=True,
                     )
                 )
-            await asyncio.gather(*tasks)
+            ans = await asyncio.gather(*tasks)
+            logger.info(f"Updated {len(ans)} payments.")
 
-    # async with MongoDBClient(
-    #     db_conn=CONFIG.default_database_connection, db_name=database, db_user="default"
-    # ) as db_client:
-    #     for pub_key, alias in all_aliases.items():
-    #         await db_client.update_one(
-    #             "payments", {"destination_pub_keys": pub_key}, {"$set": {"destination_alias": alias}}
-    #         )
+
+async def update_payment_route_with_alias(
+    db_client: MongoDBClient,
+    lnd_client: LNDClient,
+    payment: Payment,
+    pub_key: str,
+    all_pub_key_aliases: dict[str, str] = None,
+):
+    if not all_pub_key_aliases:
+        alias = await db_client.find_one("pub_keys", {"pub_key": pub_key})
+        if alias:
+            all_pub_key_aliases = {alias["pub_key"]: alias["alias"]}
+        else:
+            all_pub_key_aliases = {}
+
+    if pub_key not in all_pub_key_aliases.keys():
+        node_info = await get_node_info(pub_key, lnd_client)
+        if node_info.node.alias:
+            hop_alias = NodeAlias(pub_key=pub_key, alias=node_info.node.alias)
+        else:
+            hop_alias = NodeAlias(pub_key=pub_key, alias=f"Unknown {pub_key[-6:]}")
+        ans = await db_client.update_one(
+            collection_name="pub_keys",
+            query={"pub_key": pub_key},
+            update=hop_alias.model_dump(),
+            upsert=True,
+        )
+        all_pub_key_aliases[pub_key] = hop_alias.alias
+        payment.route.append(hop_alias)
+    else:
+        hop_alias = NodeAlias(pub_key=pub_key, alias=all_pub_key_aliases[pub_key])
+        payment.route.append(hop_alias)
 
 
 @app.command()
@@ -159,7 +177,8 @@ def main(
     """
     icon = CONFIG.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
+        f"{icon} ✅ LND gRPC client started. Monitoring node: "
+        f"{node} {icon}. Version: {CONFIG.version}"
     )
     logger.info(f"{icon} ✅ Database: {database}")
     asyncio.run(run(node, database))
