@@ -1,11 +1,10 @@
 import asyncio
-import json
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, List, Optional
 
 import typer
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import MessageToDict
 from pymongo.errors import BulkWriteError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -36,7 +35,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
     ListInvoiceResponse,
-    protobuf_invoice_to_pydantic,
 )
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
