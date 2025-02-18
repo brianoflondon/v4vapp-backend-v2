@@ -3,17 +3,16 @@ from grpc.aio import AioRpcError  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.grpc_models.lnd_events_group import LndChannelName
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
-from v4vapp_backend_v2.grpc_models.lnd_events_group import LndChannelName
-
 
 node_alias_cache = {}
 
 
 async def get_channel_name(
     channel_id: int,
-    client: LNDClient = None,
+    lnd_client: LNDClient = None,
     own_pub_key: str = None,
 ) -> LndChannelName:
     """
@@ -37,8 +36,8 @@ async def get_channel_name(
 
     request = lnrpc.ChanInfoRequest(chan_id=channel_id)
     try:
-        response = await client.call(
-            client.lightning_stub.GetChanInfo,
+        response = await lnd_client.call(
+            lnd_client.lightning_stub.GetChanInfo,
             request,
         )
         chan_info = MessageToDict(response, preserving_proto_field_name=True)
@@ -46,14 +45,14 @@ async def get_channel_name(
         node2_pub = chan_info.get("node2_pub")
 
         if not own_pub_key:
-            own_pub_key = client.get_info.identity_pubkey
+            own_pub_key = lnd_client.get_info.identity_pubkey
             # own_pub_key = await get_node_pub_key(connection_name)
 
         # Determine the partner node's public key
         partner_pub_key = node1_pub if own_pub_key != node1_pub else node2_pub
 
         # Get the node info of the partner node
-        node_info = await get_node_info(partner_pub_key, client)
+        node_info = await get_node_info(partner_pub_key, lnd_client)
         # node_info = MessageToDict(response, preserving_proto_field_name=True)
 
         return LndChannelName(channel_id=channel_id, name=node_info.node.alias)
