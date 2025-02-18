@@ -181,7 +181,8 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         logger.info(
-            f"{DATABASE_ICON} Storing invoice: {htlc_event.add_index} {db_client.hex_id}"
+            f"{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
+            f"{db_client.hex_id}"
         )
         try:
             invoice_pyd = Invoice(htlc_event)
@@ -638,7 +639,8 @@ async def get_most_recent_invoice() -> Invoice:
             invoice = Invoice(**ans)
             break
         logger.info(
-            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
+            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} "
+            f"{invoice.settle_index}"
         )
         return invoice
 

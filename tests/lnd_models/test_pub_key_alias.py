@@ -1,5 +1,5 @@
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
+# from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 
