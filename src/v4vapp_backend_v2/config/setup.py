@@ -85,6 +85,7 @@ class DatabaseConnectionConfig(BaseModel):
     hosts: List[str]
     replica_set: str | None = None
     admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
+    icon: str | None = None
 
 
 class Config(BaseModel):

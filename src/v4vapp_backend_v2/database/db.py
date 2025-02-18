@@ -115,9 +115,7 @@ class MongoDBClient:
         self.validate_connection()
         self.hosts = ",".join(self.db_connection.hosts) if db_conn else "localhost"
         self.validate_user_db()
-        self.db_password = (
-            self.dbs[self.db_name].db_users[self.db_user].password
-        )
+        self.db_password = self.dbs[self.db_name].db_users[self.db_user].password
         self.db_roles = self.dbs[self.db_name].db_users[self.db_user].roles
         self.collections = self.dbs[self.db_name].collections
         self.uri = uri if uri else self._build_uri_from_config()
@@ -173,7 +171,7 @@ class MongoDBClient:
             self.health_check = MongoDBStatus.DISCONNECTED
             self.db = None
             time_connected = timer() - self.start_connection
-            logger.info(
+            logger.debug(
                 f"{DATABASE_ICON} "
                 f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s "
                 f"{self.hex_id}",
@@ -204,7 +202,9 @@ class MongoDBClient:
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
         if db_name == "admin":
-            db_password = self.db_connection.admin_dbs["admin"].db_users["admin"].password
+            db_password = (
+                self.db_connection.admin_dbs["admin"].db_users["admin"].password
+            )
         else:
             db_password = self.db_password
 
@@ -317,6 +317,10 @@ class MongoDBClient:
                                 unique=index_value.unique,
                                 name=index_name,
                             )
+                            logger.info(
+                                f"{DATABASE_ICON} Created index {index_name} "
+                                f"in {collection_name}"
+                            )
                         except Exception as ex:
                             logger.error(ex)
 
@@ -358,7 +362,7 @@ class MongoDBClient:
                 ):
                     await self._check_create_db()
                 await self._check_indexes()
-                logger.info(
+                logger.debug(
                     f"{DATABASE_ICON} "
                     f"Connected to MongoDB {self.db_name} "
                     f"after {timer() - self.start_connection:.3f}s "
@@ -391,7 +395,7 @@ class MongoDBClient:
     async def disconnect(self):
         if self.client:
             time_connected = timer() - self.start_connection
-            logger.info(
+            logger.debug(
                 f"{DATABASE_ICON} "
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
                 f"{self.hex_id}",

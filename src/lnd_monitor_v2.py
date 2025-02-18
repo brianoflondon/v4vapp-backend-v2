@@ -180,19 +180,19 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
-        logger.info(
+        logger.debug(
             f"{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
             f"{db_client.hex_id}"
         )
         try:
             invoice_pyd = Invoice(htlc_event)
         except Exception as e:
-            logger.info(e)
+            logger.warning(e)
             return
         query = {"r_hash": invoice_pyd.r_hash}
         invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
-        logger.info(
+        logger.debug(
             f"{DATABASE_ICON} "
             f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result},
