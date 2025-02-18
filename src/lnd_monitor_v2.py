@@ -7,6 +7,7 @@ import typer
 from google.protobuf.json_format import MessageToDict
 from pymongo.errors import BulkWriteError
 
+from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import (
@@ -202,6 +203,7 @@ async def db_store_payment(lnrpc_payment: lnrpc.Payment, *args: Any) -> None:
                 f"Storing payment: {lnrpc_payment.payment_index} {db_client.hex_id}"
             )
             payment_pyd = Payment(lnrpc_payment)
+            
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
             ans = await db_client.update_one(
@@ -531,6 +533,13 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
             insert_data = []
             tasks = []
             for payment in list_payments.payments:
+                await update_payment_route_with_alias(
+                    db_client=db_client,
+                    lnd_client=lnd_client,
+                    payment=payment,
+                    fill_cache=True,
+                    col_pub_keys="pub_keys",
+                )
                 insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
                 insert_data.append(insert_one)
                 query = {"payment_hash": payment.payment_hash}
