@@ -16,7 +16,6 @@ from pydantic import BaseModel, field_validator, model_validator
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
 
-
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
 

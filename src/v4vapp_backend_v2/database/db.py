@@ -1,9 +1,6 @@
 import asyncio
-import json
-import posixpath
-import tempfile
 from datetime import datetime, timezone
-from enum import Enum, StrEnum, auto
+from enum import Enum, StrEnum
 from timeit import default_timer as timer
 from typing import Any
 
@@ -33,6 +30,9 @@ class DbErrorCode(Enum):
     NO_PASSWORD = 90003
     NO_CONNECTION = 90004
     BAD_URI = 90005
+
+
+DATABASE_ICON = "📁"
 
 
 def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
@@ -68,7 +68,9 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     if retries >= max_retries:
                         raise e
                     logger.warning(
-                        f"Retrying {func.__name__} due to {e}. Attempt {retries}/{max_retries}. Retrying in {delay} seconds."
+                        f"Retrying {func.__name__} due to {e}. "
+                        f"Attempt {retries}/{max_retries}. "
+                        f"Retrying in {delay} s."
                     )
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
@@ -125,9 +127,9 @@ class MongoDBClient:
 
     def validate_connection(self):
         try:
-            config = InternalConfig().config
-            self.db_config = config.database[self.db_conn]
-        except KeyError as e:
+            self.config = InternalConfig().config
+            self.db_config = self.config.database[self.db_conn]
+        except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
                 code=DbErrorCode.NO_CONNECTION,
@@ -136,14 +138,15 @@ class MongoDBClient:
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
         logger.debug(
-            f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
+            f"Validating user {self.db_user} in database {self.db_name} "
+            f"{elapsed_time:.3f}s"
         )
-        if not self.db_name in self.db_config.dbs:
+        if self.db_name not in self.db_config.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
                 code=DbErrorCode.NO_DB,
             )
-        if not self.db_user in self.db_config.dbs[self.db_name].db_users:
+        if self.db_user not in self.db_config.dbs[self.db_name].db_users:
             raise OperationFailure(
                 error=f"No database {self.db_name}",
                 code=DbErrorCode.NO_USER,
@@ -166,6 +169,7 @@ class MongoDBClient:
             self.db = None
             time_connected = timer() - self.start_connection
             logger.info(
+                f"{DATABASE_ICON} "
                 f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s "
                 f"{self.hex_id}",
                 extra={
@@ -208,7 +212,8 @@ class MongoDBClient:
 
     async def _check_create_db(self):
         """
-        Asynchronously checks if the MongoDB database exists and creates it if it does not.
+        Asynchronously checks if the MongoDB database exists and creates
+        it if it does not.
 
         This method performs the following steps:
         1. Checks if the MongoDB client is connected.
@@ -218,11 +223,13 @@ class MongoDBClient:
 
         Raises:
             ConnectionFailure: If the MongoDB client is not connected.
-            OperationFailure: If there is an error creating the user, except for specific error codes (11000, 51003).
+            OperationFailure: If there is an error creating the user,
+                except for specific error codes (11000, 51003).
 
         Logs:
             Info: When a user is successfully created with roles in the database.
-            Error: When there is a failure to create the user, with details of the error and user creation command.
+            Error: When there is a failure to create the user,
+                with details of the error and user creation command.
 
         Note:
             This method will change the user's password if the user already exists.
@@ -242,7 +249,9 @@ class MongoDBClient:
             }
             ans = await admin_db.command(create_user)
             logger.info(
-                f"Created user {self.db_user} with roles {self.db_roles} in {self.db_name}",
+                f"{DATABASE_ICON} "
+                f"Created user {self.db_user} with "
+                f"roles {self.db_roles} in {self.db_name}",
                 extra={
                     "user": self.db_user,
                     "roles": self.db_roles,
@@ -272,8 +281,8 @@ class MongoDBClient:
         """
         Asynchronously checks and creates indexes for the collections in the database.
 
-        This method iterates through the collections defined in the database configuration
-        and creates the specified indexes if they do not already exist.
+        This method iterates through the collections defined in the database
+        configuration and creates the specified indexes if they do not already exist.
 
         Raises:
             ConnectionFailure: If the MongoDB client is not connected.
@@ -342,7 +351,9 @@ class MongoDBClient:
                     await self._check_create_db()
                 await self._check_indexes()
                 logger.info(
-                    f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s "
+                    f"{DATABASE_ICON} "
+                    f"Connected to MongoDB {self.db_name} "
+                    f"after {timer() - self.start_connection:.3f}s "
                     f"{self.hex_id} {count}",
                     extra={
                         "client": self.client,
@@ -373,6 +384,7 @@ class MongoDBClient:
         if self.client:
             time_connected = timer() - self.start_connection
             logger.info(
+                f"{DATABASE_ICON} "
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
                 f"{self.hex_id}",
                 extra={
@@ -421,7 +433,8 @@ class MongoDBClient:
 
     async def find_one(self, collection_name: str, query: dict) -> Any | None:
         """
-        Asynchronously find a single document in the specified collection that matches the given query.
+        Asynchronously find a single document in the specified collection that
+        matches the given query.
 
         Args:
             collection_name (str): The name of the collection to search in.
@@ -438,7 +451,8 @@ class MongoDBClient:
         self, collection_name: str, query: dict, *args, **kwargs
     ) -> AsyncIOMotorCursor:
         """
-        Asynchronously find multiple documents in a specified collection based on a query.
+        Asynchronously find multiple documents in a specified collection
+        based on a query.
 
         Args:
             collection_name (str): The name of the collection to search in.

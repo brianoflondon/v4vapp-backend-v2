@@ -15,7 +15,7 @@ from v4vapp_backend_v2.config.setup import (
     get_in_flight_time,
     logger,
 )
-from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
@@ -180,7 +180,9 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
     async with MongoDBClient(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
-        logger.info(f"Storing invoice: {htlc_event.add_index} {db_client.hex_id}")
+        logger.info(
+            f"{DATABASE_ICON} Storing invoice: {htlc_event.add_index} {db_client.hex_id}"
+        )
         try:
             invoice_pyd = Invoice(htlc_event)
         except Exception as e:
@@ -190,6 +192,7 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
         invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
         logger.info(
+            f"{DATABASE_ICON} "
             f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result},
         )
@@ -211,9 +214,6 @@ async def db_store_payment(
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         try:
-            logger.info(
-                f"Storing payment: {htlc_event.payment_index} {db_client.hex_id}"
-            )
             payment_pyd = Payment(htlc_event)
             await update_payment_route_with_alias(
                 db_client=db_client,
@@ -222,12 +222,18 @@ async def db_store_payment(
                 fill_cache=True,
                 col_pub_keys="pub_keys",
             )
+            logger.info(
+                f"{lnd_client.icon} "
+                f"Storing payment: {htlc_event.payment_index} "
+                f"{db_client.hex_id} {payment_pyd.route_str}"
+            )
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
             ans = await db_client.update_one(
                 "payments", query, payment_dict, upsert=True
             )
             logger.info(
+                f"{lnd_client.icon} "
                 f"New payment recorded: {payment_pyd.payment_index:>6} "
                 f"{payment_pyd.payment_hash}",
                 extra={"db_ans": ans.raw_result},
@@ -631,7 +637,9 @@ async def get_most_recent_invoice() -> Invoice:
         async for ans in cursor:
             invoice = Invoice(**ans)
             break
-        logger.info(f"Most recent invoice: {invoice.add_index} {invoice.settle_index}")
+        logger.info(
+            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
+        )
         return invoice
 
 
@@ -688,33 +696,39 @@ async def run(connection_name: str) -> None:
 
 @app.command()
 def main(
-    node: Annotated[
+    lnd_node: Annotated[
         Optional[str],
         typer.Argument(
             help=(
-                f"The node to monitor. If not provided, defaults to the value: "
+                f"The LND node to monitor. If not provided, defaults to the value: "
                 f"{CONFIG.default_connection}.\n"
                 f"Choose from: {CONFIG.connection_names}"
             )
         ),
-    ] = CONFIG.default_connection
+    ] = CONFIG.default_connection,
+    database: Annotated[
+        str,
+        typer.Argument(
+            help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
+        ),
+    ] = "lnd_monitor_v2_voltage",
 ):
     f"""
     Main function to run the node monitor.
     Args:
-        node (Annotated[Optional[str], Argument]): The node to monitor.
+        lnd_node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
         {CONFIG.connection_names}
 
     Returns:
         None
     """
-    icon = CONFIG.icon(node)
+    icon = CONFIG.icon(lnd_node)
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
-        f"Monitoring node: {node} {icon}. Version: {CONFIG.version}"
+        f"Monitoring node: {lnd_node} {icon}. Version: {CONFIG.version}"
     )
-    asyncio.run(run(node))
+    asyncio.run(run(lnd_node))
     logger.info("👋 Goodbye!")
 
 

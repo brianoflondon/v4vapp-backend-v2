@@ -4,7 +4,6 @@ import json
 from datetime import datetime
 from typing import Generator
 
-import pytest
 from pydantic import ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -137,16 +136,20 @@ def read_list_invoices_raw(file_path: str) -> lnrpc.ListInvoiceResponse:
 
 def test_read_list_invoices_raw():
     """
-    Test the `read_list_invoices_raw` function to ensure it correctly reads and processes
+    Test the `read_list_invoices_raw` function to ensure it correctly
+    reads and processes
     raw invoice data from a binary file.
 
     This test performs the following checks:
     1. Verifies that `read_list_invoices_raw` returns a non-empty response.
     2. Ensures the response is an instance of `lnrpc.ListInvoiceResponse`.
-    3. Converts the response to a Pydantic model using `protobuf_to_pydantic` and verifies the conversion.
-    4. Converts the response to a `ListInvoiceResponse` model and verifies the conversion.
+    3. Converts the response to a Pydantic model using `protobuf_to_pydantic`
+    and verifies the conversion.
+    4. Converts the response to a `ListInvoiceResponse` model and
+    verifies the conversion.
     5. Checks that the two converted responses are equal.
-    6. Iterates through each invoice in the response and verifies that the `creation_date` attribute
+    6. Iterates through each invoice in the response and verifies
+    that the `creation_date` attribute
        is an instance of `datetime`.
 
     Raises:

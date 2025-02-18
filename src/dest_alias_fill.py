@@ -94,11 +94,11 @@ def main(
             help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
         ),
     ],
-    node: Annotated[
+    lnd_node: Annotated[
         Optional[str],
         typer.Argument(
             help=(
-                f"The node to monitor. If not provided, defaults to the value: "
+                f"The LND node to monitor. If not provided, defaults to the value: "
                 f"{CONFIG.default_connection}.\n"
                 f"Choose from: {CONFIG.connection_names}"
             )
@@ -116,13 +116,13 @@ def main(
     Returns:
         None
     """
-    icon = CONFIG.icon(node)
+    icon = CONFIG.icon(lnd_node)
     logger.info(
         f"{icon} ✅ LND gRPC client started. Monitoring node: "
-        f"{node} {icon}. Version: {CONFIG.version}"
+        f"{lnd_node} {icon}. Version: {CONFIG.version}"
     )
     logger.info(f"{icon} ✅ Database: {database}")
-    asyncio.run(main_worker(node, database))
+    asyncio.run(main_worker(lnd_node, database))
     logger.info("👋 Goodbye!")
 
 
