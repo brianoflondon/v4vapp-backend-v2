@@ -52,7 +52,7 @@ class NodeAlias(BaseModel):
 
 
 class PaymentExtra(BaseModel):
-    route: list[NodeAlias] | None = None
+    route: list[NodeAlias] | None = []
 
     @computed_field
     def destination(self) -> str:
@@ -100,11 +100,13 @@ class Payment(PaymentExtra):
         payment_index (BSONInt64): The index of the payment.
         failure_reason (str | None): The reason for payment failure, if any.
         htlcs (List[HTLCAttempt] | None): The HTLC attempts associated with the payment.
-        destination_alias (str | None): The alias of the payment destination (needs to be looked up not sent by LND)
+        destination_alias (str | None): The alias of the payment destination
+            (needs to be looked up not sent by LND)
 
     Methods:
         __init__(lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
-            Initializes a Payment instance with data from an lnrpc.Payment object or provided data.
+            Initializes a Payment instance with data from an lnrpc.Payment
+                object or provided data.
 
         destination_pub_keys() -> List[str]:
             Returns the public keys of the payment hops
@@ -144,7 +146,8 @@ class Payment(PaymentExtra):
         Retrieves the HTLC attempt with status 'SUCCEEDED'.
 
         Returns:
-            Optional[HTLCAttempt]: The HTLC attempt with status 'SUCCEEDED', or None if not found.
+            Optional[HTLCAttempt]: The HTLC attempt with status 'SUCCEEDED', or None
+            if not found.
         """
         if not self.htlcs:
             return None
@@ -159,9 +162,10 @@ class Payment(PaymentExtra):
         Retrieves the public keys of the destination hops in the HTLC route.
 
         Returns:
-            Tuple[str, str]: A tuple containing the public key of the last hop and the second to last hop in the route.
-                             If there is only one hop, the second element of the tuple will be an empty string.
-                             If there are no hops, an empty string is returned.
+            Tuple[str, str]: A tuple containing the public key of the last hop and
+            the second to last hop in the route. If there is only one hop, the second
+            element of the tuple will be an empty string. If there are no hops,
+            an empty string is returned.
         """
         ans = []
         htlc = self.get_succeeded_htlc

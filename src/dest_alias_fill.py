@@ -43,25 +43,21 @@ async def main_worker(node: str, database: str):
             async for document in cursor:
                 try:
                     payment = Payment.model_validate(document)
-                    if payment.route:
-                        continue
-                    payment.route = []
                 except Exception as e:
                     logger.error(f"Error validating payment: {e}")
                     pass
-                # unpack a tuple of the payment model destination pub_key
-                pub_keys = payment.destination_pub_keys
-                if payment.route or not pub_keys:
-                    continue
-
-                await update_payment_route_with_alias(
-                    db_client=db_client,
-                    lnd_client=lnd_client,
-                    payment=payment,
-                    pub_keys=pub_keys,
-                    fill_cache=True,
-                    col_pub_keys="pub_keys",
+                tasks = []
+                tasks.append(
+                    update_payment_route_with_alias(
+                        db_client=db_client,
+                        lnd_client=lnd_client,
+                        payment=payment,
+                        fill_cache=True,
+                        col_pub_keys="pub_keys",
+                        force_update=False,
+                    )
                 )
+                await asyncio.gather(*tasks)
 
                 # logger.info(f"{payment.destination}  || {payment.route_str}")
                 payment_id = ObjectId(document["_id"])
@@ -80,17 +76,6 @@ async def main_worker(node: str, database: str):
                     )
                 )
                 count += 1
-                # tasks.append(
-                #     db_client.update_one(
-                #         "payments",
-                #         query={"_id": payment_id},
-                #         update=payment.model_dump(
-                #             exclude_none=True,
-                #             exclude_unset=True,
-                #         ),
-                #         upsert=True,
-                #     )
-                # )
                 payments_changed += 1
             ans = []
             for tasks in task_blocks:

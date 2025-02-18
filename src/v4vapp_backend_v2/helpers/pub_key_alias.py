@@ -31,8 +31,9 @@ async def update_payment_route_with_alias(
     db_client: MongoDBClient,
     lnd_client: LNDClient,
     payment: Payment,
-    pub_keys: list[str | None],
+    pub_keys: list[str | None] = None,
     fill_cache: bool = False,
+    force_update: bool = False,
     col_pub_keys: str = "pub_keys",
 ):
     """
@@ -63,6 +64,10 @@ async def update_payment_route_with_alias(
             db_client, col_pub_keys
         )
 
+    if not pub_keys:
+        pub_keys = payment.destination_pub_keys
+    if not (force_update and payment.route) or not pub_keys:
+        return
     for pub_key in pub_keys:
         if not LOCAL_PUB_KEY_ALIAS_CACHE:
             # Find the alias for the pub key one by one.
