@@ -96,7 +96,8 @@ class Config(BaseModel):
         version (str): The version of the configuration. Default is "1".
         logging (LoggingConfig): Configuration for logging.
         default_connection (str): The default connection name.
-        lnd_connections (List[LndConnectionConfig]): List of LND connection configurations.
+        lnd_connections (List[LndConnectionConfig]):
+            List of LND connection configurations.
         tailscale (TailscaleConfig): Configuration for Tailscale.
         telegram (TelegramConfig): Configuration for Telegram.
 
@@ -105,7 +106,8 @@ class Config(BaseModel):
             Validates that all LND connections have unique names.
 
         check_default_connection(cls, v):
-            Validates that the default connection is present in the list of LND connections.
+            Validates that the default connection is present in the
+            list of LND connections.
 
         list_lnd_connections(self) -> List[str]:
             Returns a list of names of all LND connections.
@@ -198,7 +200,8 @@ class Config(BaseModel):
         Retrieves the icon associated with a given connection name.
 
         Args:
-            connection_name (str): The name of the connection for which to retrieve the icon.
+            connection_name (str): The name of the connection for which
+            to retrieve the icon.
 
         Returns:
             str: The icon associated with the specified connection name.
@@ -410,7 +413,8 @@ def get_in_flight_time(creation_date: datetime) -> str:
     """
     Calculate the time in flight for a given datetime object.
     Args:
-        creation_date (datetime): The datetime object to calculate the time in flight for.
+        creation_date (datetime): The datetime object to calculate
+        the time in flight for.
 
     Returns:
         str: The formatted string representing the timedelta.
@@ -428,7 +432,8 @@ def get_in_flight_time(creation_date: datetime) -> str:
 
 def async_time_decorator(func):
     """
-    A decorator that wraps an asynchronous function to log its execution time and handle exceptions.
+    A decorator that wraps an asynchronous function to log its execution
+    time and handle exceptions.
 
     Args:
         func (coroutine function): The asynchronous function to be wrapped.

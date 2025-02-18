@@ -23,13 +23,13 @@ async def get_channel_name(
         connection_name (str): The name of the connection to use for the LND client.
 
     Returns:
-        ChannelName: An instance of ChannelName containing the channel ID and the name of the
-                     channel. If the channel ID is invalid or an error occurs, the name will be
-                     "Unknown".
+        ChannelName: An instance of ChannelName containing the channel ID and the
+                     name of the channel. If the channel ID is invalid or an error
+                     occurs, the name will be "Unknown".
 
     Raises:
-        Exception: Logs any exceptions that occur during the process and returns a ChannelName
-                   with "Unknown" name.
+        Exception: Logs any exceptions that occur during the process and returns
+                   a ChannelName with "Unknown" name.
     """
     if not channel_id:
         return LndChannelName(channel_id=0, name="Unknown")
@@ -70,7 +70,8 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         client (LNDClient): The LND client to use for making the request.
 
     Returns:
-        lnrpc.NodeInfo: The information about the node, or an empty dictionary if an error occurs.
+        lnrpc.NodeInfo: The information about the node, or an empty dictionary
+        if an error occurs.
 
     Raises:
         Exception: If there is an error while fetching the node information.
@@ -97,7 +98,7 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
             if e.args[1]._details == "unable to find node":
                 logger.warning(f"{client.icon} get_node_info: {pub_key} not found")
                 return lnrpc.NodeInfo()
-        except Exception as e:
+        except Exception:
             pass
         logger.exception(e)
         return lnrpc.NodeInfo()

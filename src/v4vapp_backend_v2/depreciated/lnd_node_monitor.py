@@ -311,7 +311,8 @@ def main(
     """
     icon = config.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {config.version}"
+        f"{icon} ✅ LND gRPC client started. Monitoring node: "
+        f"{node} {icon}. Version: {config.version}"
     )
     asyncio.run(run(node))
 

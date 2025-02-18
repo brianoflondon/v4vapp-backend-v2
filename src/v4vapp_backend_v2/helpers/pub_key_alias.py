@@ -66,7 +66,9 @@ async def update_payment_route_with_alias(
 
     if not pub_keys:
         pub_keys = payment.destination_pub_keys
-    if not (force_update and payment.route) or not pub_keys:
+        if not pub_keys:
+            return
+    if (payment.route and not force_update):
         return
     for pub_key in pub_keys:
         if not LOCAL_PUB_KEY_ALIAS_CACHE:
