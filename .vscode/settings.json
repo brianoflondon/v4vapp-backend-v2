@@ -15,6 +15,7 @@
         "invoicesrpc",
         "invoicesstub",
         "lnrpc",
+        "mongomock",
         "Muun",
         "routerrpc",
         "routerstub",

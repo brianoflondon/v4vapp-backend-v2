@@ -58,18 +58,18 @@ async def update_payment_route_with_alias(
     Returns:
         None
     """
+    if not pub_keys:
+        pub_keys = payment.destination_pub_keys
+        if not pub_keys:
+            return
+    if payment.route and not force_update:
+        return
     global LOCAL_PUB_KEY_ALIAS_CACHE
     if fill_cache and not LOCAL_PUB_KEY_ALIAS_CACHE:
         LOCAL_PUB_KEY_ALIAS_CACHE = await get_all_pub_key_aliases(
             db_client, col_pub_keys
         )
 
-    if not pub_keys:
-        pub_keys = payment.destination_pub_keys
-        if not pub_keys:
-            return
-    if (payment.route and not force_update):
-        return
     for pub_key in pub_keys:
         if not LOCAL_PUB_KEY_ALIAS_CACHE:
             # Find the alias for the pub key one by one.
@@ -96,9 +96,9 @@ async def update_payment_route_with_alias(
                 extra={"pub_key": pub_key, "alias": hop_alias.alias, db_ans: db_ans},
             )
             LOCAL_PUB_KEY_ALIAS_CACHE[pub_key] = hop_alias.alias
-            payment.route.append(hop_alias)
         else:
             hop_alias = NodeAlias(
                 pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key]
             )
-            payment.route.append(hop_alias)
+        # Update the payment route with the alias.
+        payment.route.append(hop_alias)

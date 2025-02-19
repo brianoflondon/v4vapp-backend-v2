@@ -76,6 +76,8 @@ class PaymentExtra(BaseModel):
         """
         if not self.route:
             return "Unknown"
+
+        route_fees_ppm = self.route_fees_ppm
         return " -> ".join([hop.alias for hop in self.route])
 
 
@@ -172,6 +174,23 @@ class Payment(PaymentExtra):
             for pub_key in htlc.route.hops:
                 ans.append(pub_key.pub_key)
         return ans
+
+    @property
+    def route_fees_ppm(self) -> dict[str, float]:
+        """
+        Calculates the fee in parts per million (ppm) for each hop in the route.
+
+        Returns:
+            dict[str, float]: A dict of fee ppm values for each hop.
+        """
+        fee_ppm_dict: dict[str, float] = {}
+        htlc = self.get_succeeded_htlc
+        if htlc and htlc.route:
+            for hop in htlc.route.hops:
+                if hop.fee_msat and hop.amt_to_forward_msat:
+                    fee_ppm = (hop.fee_msat / hop.amt_to_forward_msat) * 1_000_000
+                    fee_ppm_dict[hop.pub_key] = fee_ppm
+        return fee_ppm_dict
 
 
 class ListPaymentsResponse(BaseModel):

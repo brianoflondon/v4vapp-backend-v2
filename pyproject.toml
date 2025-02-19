@@ -35,6 +35,8 @@ types-toml = "^0.10.8.20240310"
 pytest-cov = "^6.0.0"
 mypy = "^1.15.0"
 black = "^25.1.0"
+mongomock-motor = "^0.0.35"
+pytest-mock = "^3.14.0"
 
 [build-system]
 requires = ["poetry-core"]

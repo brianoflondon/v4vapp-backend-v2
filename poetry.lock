@@ -505,6 +505,40 @@ files = [
 ]
 
 [[package]]
+name = "mongomock"
+version = "4.3.0"
+description = "Fake pymongo stub for testing simple MongoDB-dependent code"
+optional = false
+python-versions = "*"
+files = [
+    {file = "mongomock-4.3.0-py2.py3-none-any.whl", hash = "sha256:5ef86bd12fc8806c6e7af32f21266c61b6c4ba96096f85129852d1c4fec1327e"},
+    {file = "mongomock-4.3.0.tar.gz", hash = "sha256:32667b79066fabc12d4f17f16a8fd7361b5f4435208b3ba32c226e52212a8c30"},
+]
+
+[package.dependencies]
+packaging = "*"
+pytz = "*"
+sentinels = "*"
+
+[package.extras]
+pyexecjs = ["pyexecjs"]
+pymongo = ["pymongo"]
+
+[[package]]
+name = "mongomock-motor"
+version = "0.0.35"
+description = "Library for mocking AsyncIOMotorClient built on top of mongomock."
+optional = false
+python-versions = "<4.0,>=3.8"
+files = [
+    {file = "mongomock_motor-0.0.35-py3-none-any.whl", hash = "sha256:ea18d51887c77fc4e3c0491c33fdc4c0963308319168658d0fe907227b46e9d3"},
+    {file = "mongomock_motor-0.0.35.tar.gz", hash = "sha256:123aae6286013e0cfbcb3bd331120ef5cd01b26719d1bea561759fb415ffa091"},
+]
+
+[package.dependencies]
+mongomock = ">=4.1.2,<5.0.0"
+
+[[package]]
 name = "motor"
 version = "3.7.0"
 description = "Non-blocking MongoDB driver for Tornado or asyncio"
@@ -961,6 +995,34 @@ pytest = ">=4.6"
 testing = ["fields", "hunter", "process-tests", "pytest-xdist", "virtualenv"]
 
 [[package]]
+name = "pytest-mock"
+version = "3.14.0"
+description = "Thin-wrapper around the mock package for easier use with pytest"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pytest-mock-3.14.0.tar.gz", hash = "sha256:2719255a1efeceadbc056d6bf3df3d1c5015530fb40cf347c0f9afac88410bd0"},
+    {file = "pytest_mock-3.14.0-py3-none-any.whl", hash = "sha256:0b72c38033392a5f4621342fe11e9219ac11ec9d375f8e2a0c164539e0d70f6f"},
+]
+
+[package.dependencies]
+pytest = ">=6.2.5"
+
+[package.extras]
+dev = ["pre-commit", "pytest-asyncio", "tox"]
+
+[[package]]
+name = "pytz"
+version = "2025.1"
+description = "World timezone definitions, modern and historical"
+optional = false
+python-versions = "*"
+files = [
+    {file = "pytz-2025.1-py2.py3-none-any.whl", hash = "sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57"},
+    {file = "pytz-2025.1.tar.gz", hash = "sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e"},
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 description = "YAML parser and emitter for Python"
@@ -1039,6 +1101,16 @@ pygments = ">=2.13.0,<3.0.0"
 
 [package.extras]
 jupyter = ["ipywidgets (>=7.5.1,<9)"]
+
+[[package]]
+name = "sentinels"
+version = "1.0.0"
+description = "Various objects to denote special meanings in python"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sentinels-1.0.0.tar.gz", hash = "sha256:7be0704d7fe1925e397e92d18669ace2f619c92b5d4eb21a89f31e026f9ff4b1"},
+]
 
 [[package]]
 name = "setuptools"
@@ -1168,4 +1240,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "6a97bc015e891ff427c3cc7fb4c2c30dd5ba68692d4260f7817542037a07c20a"
+content-hash = "720eabb2c8e7e2095d2eff28c972a7e550f1242fce122a8fb5da012ff59f5b12"
