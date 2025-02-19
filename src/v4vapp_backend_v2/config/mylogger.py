@@ -170,7 +170,10 @@ class CustomNotificationHandler(logging.Handler):
             and hasattr(record, "error_code")
             and hasattr(record, "error_code_clear")
         ):
-            elapsed_time = self.error_codes[record.error_code].elapsed_time
+            error_code_obj = self.error_codes.get(record.error_code)
+            elapsed_time = (
+                error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
+            )
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message = (
                 f"✅ Error code {record.error_code} "

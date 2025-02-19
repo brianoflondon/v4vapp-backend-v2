@@ -88,18 +88,16 @@ class PaymentExtra(BaseModel):
             return "Unknown"
 
         route_fees_ppm = self.route_fees_ppm
-        ans = ""
-        if route_fees_ppm:
-            ans = " -> ".join(
-                [
-                    (
-                        f"{hop.alias}"
-                        if route_fees_ppm.get(hop.pub_key) is None
-                        else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
-                    )
-                    for hop in self.route
-                ]
-            )
+        ans = " -> ".join(
+            [
+                (
+                    f"{hop.alias}"
+                    if route_fees_ppm.get(hop.pub_key) is None
+                    else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
+                )
+                for hop in self.route
+            ]
+        )
         return ans
 
 

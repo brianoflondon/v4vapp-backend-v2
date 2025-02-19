@@ -61,10 +61,9 @@ async def track_events(
     dest_alias = await check_dest_alias(
         htlc_event, lnd_client, lnd_events_group, event_id
     )
-    message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
+    # message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
     # The delay is necessary to allow the group to complete because sometimes
     # Invoices and Payments are not received in the right order with the HtlcEvents
-    await asyncio.sleep(0.5)
     if lnd_events_group.complete_group(event=htlc_event):
         notification = True if isinstance(htlc_event, routerrpc.HtlcEvent) else False
         if (
@@ -86,7 +85,8 @@ async def track_events(
         message_str, ans_dict = lnd_events_group.message(
             htlc_event, dest_alias=dest_alias
         )
-        if " Attempted 0 " not in message_str:
+        if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
+            await asyncio.sleep(0.2)
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={"notification": notification, **ans_dict},
@@ -659,7 +659,7 @@ async def run(connection_name: str) -> None:
     lnd_events_group = LndEventsGroup()
     async with LNDClient(connection_name) as lnd_client:
         logger.info(
-            f"{lnd_client.icon} 🔍 Monitoring node... {connection_name}",
+            f"{lnd_client.icon} 🔍 Monitoring node... {connection_name} {DATABASE_NAME}",
             extra={"notification": True},
         )
         if lnd_client.get_info:
