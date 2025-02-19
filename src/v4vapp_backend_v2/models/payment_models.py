@@ -55,6 +55,16 @@ class PaymentExtra(BaseModel):
 
     @computed_field
     def destination(self) -> str:
+        """
+        Determines the destination based on the route.
+        Returns:
+            str: The alias of the destination. If the route is empty, returns "Unknown".
+                If the route has only one element, returns the alias of that element.
+                If the last element in the route has an alias of "Unknown", checks the second to last element:
+                    - If the alias is "magnetron", returns "Muun User".
+                    - If the alias is "ACINQ", returns "Phoenix User".
+                Otherwise, returns the alias of the last element in the route.
+        """
         if not self.route:
             return "Unknown"
         if len(self.route) == 1:
@@ -69,7 +79,7 @@ class PaymentExtra(BaseModel):
     @computed_field
     def route_str(self) -> str:
         """
-        Returns a string representation of the route.
+        Returns a string representation of the route with fees in ppm
 
         Returns:
             str: A string representation of the route.
@@ -78,7 +88,19 @@ class PaymentExtra(BaseModel):
             return "Unknown"
 
         route_fees_ppm = self.route_fees_ppm
-        return " -> ".join([hop.alias for hop in self.route])
+        ans = ""
+        if route_fees_ppm:
+            ans = " -> ".join(
+                [
+                    (
+                        f"{hop.alias}"
+                        if route_fees_ppm.get(hop.pub_key) is None
+                        else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
+                    )
+                    for hop in self.route
+                ]
+            )
+        return ans
 
 
 class Payment(PaymentExtra):
@@ -191,6 +213,18 @@ class Payment(PaymentExtra):
                     fee_ppm = (hop.fee_msat / hop.amt_to_forward_msat) * 1_000_000
                     fee_ppm_dict[hop.pub_key] = fee_ppm
         return fee_ppm_dict
+
+    @computed_field
+    def fee_ppm(self) -> int:
+        """
+        Calculates the fee in parts per million (ppm) for the payment.
+
+        Returns:
+            float: The fee in ppm.
+        """
+        if self.fee_msat and self.value_msat:
+            return int((self.fee_msat / self.value_msat) * 1_000_000)
+        return 0
 
 
 class ListPaymentsResponse(BaseModel):
