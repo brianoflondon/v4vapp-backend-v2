@@ -227,13 +227,15 @@ class LndEventsGroup:
             "in_flight_time": in_flight_time,
             "dest_alias": dest_alias,
         }
-        return (
+        ans = (
             f"💸 Payment: {event.value_msat//1000:,.0f} sats "
-            f"(event.payment_index) "
+            f"({event.payment_index}) "
             f"to: {dest_alias or 'Unknown'} "
             f"in flight: {in_flight_time} "
-            f"{payment_event_status_name(event.status)} {event.payment_index}",
-        ), ans_dict
+            f"{payment_event_status_name(event.status)}"
+        )
+
+        return ans, ans_dict
 
     # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:
