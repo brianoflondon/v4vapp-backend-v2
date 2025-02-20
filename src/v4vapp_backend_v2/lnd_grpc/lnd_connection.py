@@ -29,8 +29,8 @@ class LNDConnectionSettings:
 
     def __init__(self, connection_name: str) -> None:
         try:
-            lnd_config = InternalConfig().config.connection(connection_name)
-        except ValueError as e:
+            lnd_config = InternalConfig().config.lnd_connections[connection_name]
+        except KeyError as e:
             message = f"Connection name {connection_name} not found: {e}"
             logger.error(message, exc_info=True)
             raise LNDStartupError(message)
@@ -39,7 +39,7 @@ class LNDConnectionSettings:
             self.use_proxy = lnd_config.use_proxy
             os.environ["http_proxy"] = lnd_config.use_proxy
             logger.debug(f"Using proxy: {lnd_config.use_proxy}")
-        self.name = lnd_config.name
+        self.name = connection_name
         self.icon = lnd_config.icon
         self.address = lnd_config.address
         options_dict = lnd_config.options
@@ -63,7 +63,7 @@ class LNDConnectionSettings:
             with open(LND_CERTIFICATE_PATH, "rb") as f:
                 self.cert = f.read()
             logger.debug(
-                f"Setting up for connection to LND: {lnd_config.name} {self.address}"
+                f"Setting up for connection to LND: {self.name} {self.address}"
             )
         except FileNotFoundError as e:
             logger.error(f"Macaroon and cert files missing: {e}")

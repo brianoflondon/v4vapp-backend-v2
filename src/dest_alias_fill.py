@@ -91,7 +91,7 @@ def main(
     database: Annotated[
         str,
         typer.Argument(
-            help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
+            help=(f"The database to monitor." f"Choose from: {CONFIG.dbs_names}")
         ),
     ],
     lnd_node: Annotated[
@@ -99,24 +99,24 @@ def main(
         typer.Argument(
             help=(
                 f"The LND node to monitor. If not provided, defaults to the value: "
-                f"{CONFIG.default_connection}.\n"
-                f"Choose from: {CONFIG.connection_names}"
+                f"{CONFIG.default_lnd_connection}.\n"
+                f"Choose from: {CONFIG.lnd_connections_names}"
             )
         ),
-    ] = CONFIG.default_connection,
+    ] = CONFIG.default_lnd_connection,
 ):
     f"""
     Main function to do what you want.
     Args:
         node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
-        connections: {CONFIG.connection_names}
-        databases: {CONFIG.database_names}
+        connections: {CONFIG.lnd_connections_names}
+        databases: {CONFIG.dbs_names}
 
     Returns:
         None
     """
-    icon = CONFIG.icon(lnd_node)
+    icon = CONFIG.lnd_connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. Monitoring node: "
         f"{lnd_node} {icon}. Version: {CONFIG.version}"

@@ -11,12 +11,12 @@ logging:
     httpcore: WARNING
     httpx: WARNING
 
-default_connection: example
 
 ################# TEST CONFIG #################
+default_lnd_connection: example
 
 lnd_connections:
-  - name: example
+  example:
     icon: 🛟
     address: example.com:10009
     options:
@@ -26,7 +26,7 @@ lnd_connections:
     cert_filename: tls-fake.safe-cert
     # use_proxy: http://proxy.example.com:8888
 
-  - name: example2
+  example2:
     address: example.com:10009
     options:
       - grpc.ssl_target_name_override: example.com
@@ -48,6 +48,7 @@ telegram:
 ################# TEST CONFIG #################
 
 default_db_connection: conn_1
+default_dbb: test_db
 
 db_connections:
   conn_bad:

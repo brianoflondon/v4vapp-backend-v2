@@ -65,9 +65,12 @@ def test_internal_config(set_base_config_path: None):
     int_config = internal_config.config
     assert int_config.version == raw_config["version"]
     assert len(int_config.lnd_connections) == len(raw_config["lnd_connections"])
-    assert int_config.connection("example").name == "example"
-    with pytest.raises(ValueError):
-        int_config.connection("bad_example")
+    assert (
+        int_config.lnd_connections["example"].address
+        == raw_config["lnd_connections"]["example"]["address"]
+    )
+    with pytest.raises(KeyError):
+        int_config.lnd_connections["bad_example"]
 
 
 def test_singleton_config(set_base_config_path: None):

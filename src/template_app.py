@@ -1,10 +1,13 @@
 import asyncio
 import sys
 from typing import Annotated, Optional
+
 import typer
 
-from lnd_monitor_v2 import CONFIG, logger
+from lnd_monitor_v2 import InternalConfig, logger
 
+INTERNAL_CONFIG = InternalConfig()
+CONFIG = INTERNAL_CONFIG.config
 app = typer.Typer()
 
 
@@ -22,19 +25,25 @@ async def run(node: str):
 
 @app.command()
 def main(
+    database_connection: Annotated[
+        str | None,
+        typer.Argument(
+            help=(f"The database connection to use. Choose from: {CONFIG.dbs_names}")
+        ),
+    ] = CONFIG.default_db_connection,
     database: Annotated[
         str,
         typer.Argument(
-            help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
+            help=(f"The database to monitor." f"Choose from: {CONFIG.dbs_names}")
         ),
-    ],
+    ] = CONFIG.default_,
     node: Annotated[
         Optional[str],
         typer.Argument(
             help=(
-                f"The node to monitor. If not provided, defaults to the value: "
+                f"The Lightning node to monitor. If not provided, defaults to the value: "
                 f"{CONFIG.default_connection}.\n"
-                f"Choose from: {CONFIG.connection_names}"
+                f"Choose from: {CONFIG.lnd_connections_names}"
             )
         ),
     ] = CONFIG.default_connection,
@@ -44,8 +53,8 @@ def main(
     Args:
         node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
-        connections: {CONFIG.connection_names}
-        databases: {CONFIG.database_names}
+        connections: {CONFIG.lnd_connections_names}
+        databases: {CONFIG.dbs_names}
 
     Returns:
         None

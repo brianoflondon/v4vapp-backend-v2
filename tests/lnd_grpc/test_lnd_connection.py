@@ -24,7 +24,8 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     )
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH", test_config_logging_path
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
     )
     yield
 
@@ -34,7 +35,7 @@ def test_local_node_settings(set_base_config_path: None):
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
     settings = LNDConnectionSettings(connection_name="example")
-    assert settings.address == raw_config["lnd_connections"][0]["address"]
+    assert settings.address == raw_config["lnd_connections"]["example"]["address"]
 
 
 def test_bad_connection_name(set_base_config_path: None):

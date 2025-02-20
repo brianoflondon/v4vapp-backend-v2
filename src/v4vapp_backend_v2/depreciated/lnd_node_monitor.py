@@ -293,7 +293,7 @@ def main(
             help=(
                 f"The node to monitor. If not provided, defaults to the value: "
                 f"{config.default_connection}.\n"
-                f"Choose from: {config.connection_names}"
+                f"Choose from: {config.lnd_connections_names}"
             )
         ),
     ] = config.default_connection
@@ -304,7 +304,7 @@ def main(
         node (Annotated[Optional[str], Argument]): The node to monitor. If not provided,
         defaults to the value specified in config.default_connection.
         Choose from:
-        {config.connection_names}
+        {config.lnd_connections_names}
 
     Returns:
         None
