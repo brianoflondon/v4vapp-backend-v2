@@ -1,20 +1,19 @@
 import base64
-from datetime import datetime
 import hashlib
 import json
+from datetime import datetime
 from typing import Generator
 
-import pytest
 from pydantic import ValidationError
 
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.depreciated.htlc_event_models import HtlcTrackingList
 from v4vapp_backend_v2.models.invoice_models import (
     Invoice,
     ListInvoiceResponse,
     protobuf_to_pydantic,
 )
-
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 
 def validate_preimage(r_preimage_base64: str, r_hash_base64: str) -> bool:
@@ -137,16 +136,20 @@ def read_list_invoices_raw(file_path: str) -> lnrpc.ListInvoiceResponse:
 
 def test_read_list_invoices_raw():
     """
-    Test the `read_list_invoices_raw` function to ensure it correctly reads and processes
+    Test the `read_list_invoices_raw` function to ensure it correctly
+    reads and processes
     raw invoice data from a binary file.
 
     This test performs the following checks:
     1. Verifies that `read_list_invoices_raw` returns a non-empty response.
     2. Ensures the response is an instance of `lnrpc.ListInvoiceResponse`.
-    3. Converts the response to a Pydantic model using `protobuf_to_pydantic` and verifies the conversion.
-    4. Converts the response to a `ListInvoiceResponse` model and verifies the conversion.
+    3. Converts the response to a Pydantic model using `protobuf_to_pydantic`
+    and verifies the conversion.
+    4. Converts the response to a `ListInvoiceResponse` model and
+    verifies the conversion.
     5. Checks that the two converted responses are equal.
-    6. Iterates through each invoice in the response and verifies that the `creation_date` attribute
+    6. Iterates through each invoice in the response and verifies
+    that the `creation_date` attribute
        is an instance of `datetime`.
 
     Raises:
@@ -166,3 +169,57 @@ def test_read_list_invoices_raw():
     for lnrpc_invoice in lnrpc_list_invoices.invoices:
         invoice = Invoice(lnrpc_invoice)
         assert isinstance(invoice.creation_date, datetime)
+
+
+def read_list_payments_raw(file_path: str) -> lnrpc.ListPaymentsResponse:
+    with open(file_path, "rb") as file:
+        return lnrpc.ListPaymentsResponse.FromString(file.read())
+
+
+def test_read_list_payments_raw_destination_pub_keys():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+    assert len(list_payment_response.payments) == 1000
+    for payment in list_payment_response.payments:
+        assert isinstance(payment.creation_date, datetime)
+        try:
+            payment.destination_pub_keys
+        except Exception as e:
+            print(e)
+            assert False
+
+
+def test_read_list_payments_pydantic_conversions():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+
+    list_payment_response_dict = list_payment_response.model_dump()
+    list_payment_response2 = ListPaymentsResponse.model_validate(
+        list_payment_response_dict
+    )
+    assert list_payment_response == list_payment_response2
+
+
+def test_route_in_payments():
+    lnrpc_list_payments = read_list_payments_raw(
+        "tests/data/lnd_lists/list_payments_raw.bin"
+    )
+    assert lnrpc_list_payments
+    assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
+    list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
+
+    for payment in list_payment_response.payments:
+        try:
+            print(payment.destination_pub_keys)
+            print(payment.destination)
+        except Exception as e:
+            print(e)
+            assert False

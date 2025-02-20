@@ -1,18 +1,19 @@
 import asyncio
 from datetime import datetime, timezone
-from enum import Enum, StrEnum, auto
-import json
-import posixpath
-import tempfile
+from enum import Enum, StrEnum
 from timeit import default_timer as timer
+from typing import Any
+
 from bson import ObjectId
-
-from v4vapp_backend_v2.config.setup import logger
-
-from v4vapp_backend_v2.config.setup import logger, InternalConfig
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorCollection,
+    AsyncIOMotorCursor,
+)
 from pymongo.errors import ConnectionFailure, OperationFailure
-from pymongo.results import UpdateResult, DeleteResult
+from pymongo.results import DeleteResult, UpdateResult
+
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 class MongoDBStatus(StrEnum):
@@ -29,6 +30,9 @@ class DbErrorCode(Enum):
     NO_PASSWORD = 90003
     NO_CONNECTION = 90004
     BAD_URI = 90005
+
+
+DATABASE_ICON = "📁"
 
 
 def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
@@ -64,7 +68,9 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     if retries >= max_retries:
                         raise e
                     logger.warning(
-                        f"Retrying {func.__name__} due to {e}. Attempt {retries}/{max_retries}. Retrying in {delay} seconds."
+                        f"Retrying {func.__name__} due to {e}. "
+                        f"Attempt {retries}/{max_retries}. "
+                        f"Retrying in {delay} s."
                     )
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
@@ -88,7 +94,7 @@ class MongoDBClient:
         Initializes the database connection and configuration.
 
         Args:
-            db_conn (str): The database connection string.
+            db_conn (str): The database connection name from config.
             db_name (str, optional): The name of the database. Defaults to "admin".
             db_user (str, optional): The database user. Defaults to "admin".
             uri (str, optional): The URI for the database connection. Defaults to None.
@@ -104,16 +110,14 @@ class MongoDBClient:
         self.error = None
         self.db_conn = db_conn
         # Sets up self.db_config here.
-        self.validate_connection()
-        self.hosts = ",".join(self.db_config.db_hosts) if db_conn else "localhost"
         self.db_name = db_name
         self.db_user = db_user
+        self.validate_connection()
+        self.hosts = ",".join(self.db_connection.hosts) if db_conn else "localhost"
         self.validate_user_db()
-        self.db_password = (
-            self.db_config.dbs[self.db_name].db_users[self.db_user].password
-        )
-        self.db_roles = self.db_config.dbs[self.db_name].db_users[self.db_user].roles
-        self.collections = self.db_config.dbs[db_name].collections
+        self.db_password = self.dbs[self.db_name].db_users[self.db_user].password
+        self.db_roles = self.dbs[self.db_name].db_users[self.db_user].roles
+        self.collections = self.dbs[self.db_name].collections
         self.uri = uri if uri else self._build_uri_from_config()
         self.retry = retry
         self.kwargs = kwargs
@@ -121,9 +125,14 @@ class MongoDBClient:
 
     def validate_connection(self):
         try:
-            config = InternalConfig().config
-            self.db_config = config.database[self.db_conn]
-        except KeyError as e:
+            self.config = InternalConfig().config
+            self.db_connection = self.config.db_connections[self.db_conn]
+
+            if self.db_name == "admin":
+                self.dbs = self.db_connection.admin_dbs
+            else:
+                self.dbs = self.config.dbs
+        except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
                 code=DbErrorCode.NO_CONNECTION,
@@ -132,19 +141,20 @@ class MongoDBClient:
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
         logger.debug(
-            f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
+            f"Validating user {self.db_user} in database {self.db_name} "
+            f"{elapsed_time:.3f}s"
         )
-        if not self.db_name in self.db_config.dbs:
+        if self.db_name not in self.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
                 code=DbErrorCode.NO_DB,
             )
-        if not self.db_user in self.db_config.dbs[self.db_name].db_users:
+        if self.db_user not in self.dbs[self.db_name].db_users:
             raise OperationFailure(
                 error=f"No database {self.db_name}",
                 code=DbErrorCode.NO_USER,
             )
-        if not bool(self.db_config.dbs[self.db_name].db_users[self.db_user].password):
+        if not bool(self.dbs[self.db_name].db_users[self.db_user].password):
             raise OperationFailure(
                 error=f"No password for user {self.db_user} in {self.db_name}",
                 code=DbErrorCode.NO_PASSWORD,
@@ -161,7 +171,8 @@ class MongoDBClient:
             self.health_check = MongoDBStatus.DISCONNECTED
             self.db = None
             time_connected = timer() - self.start_connection
-            logger.info(
+            logger.debug(
+                f"{DATABASE_ICON} "
                 f"Deleted MongoDB Object {self.db_name} after {time_connected:.3f} s "
                 f"{self.hex_id}",
                 extra={
@@ -190,10 +201,15 @@ class MongoDBClient:
         """
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
-        db_password = self.db_config.dbs[db_name].db_users[db_user].password
+        if db_name == "admin":
+            db_password = (
+                self.db_connection.admin_dbs["admin"].db_users["admin"].password
+            )
+        else:
+            db_password = self.db_password
 
-        if self.db_config.db_replica_set:
-            replica_set = f"&replicaSet={self.db_config.db_replica_set}"
+        if self.db_connection.replica_set:
+            replica_set = f"&replicaSet={self.db_connection.replica_set}"
         else:
             replica_set = ""
         auth_source = f"?authSource={db_name}"
@@ -204,7 +220,8 @@ class MongoDBClient:
 
     async def _check_create_db(self):
         """
-        Asynchronously checks if the MongoDB database exists and creates it if it does not.
+        Asynchronously checks if the MongoDB database exists and creates
+        it if it does not.
 
         This method performs the following steps:
         1. Checks if the MongoDB client is connected.
@@ -214,11 +231,13 @@ class MongoDBClient:
 
         Raises:
             ConnectionFailure: If the MongoDB client is not connected.
-            OperationFailure: If there is an error creating the user, except for specific error codes (11000, 51003).
+            OperationFailure: If there is an error creating the user,
+                except for specific error codes (11000, 51003).
 
         Logs:
             Info: When a user is successfully created with roles in the database.
-            Error: When there is a failure to create the user, with details of the error and user creation command.
+            Error: When there is a failure to create the user,
+                with details of the error and user creation command.
 
         Note:
             This method will change the user's password if the user already exists.
@@ -238,7 +257,9 @@ class MongoDBClient:
             }
             ans = await admin_db.command(create_user)
             logger.info(
-                f"Created user {self.db_user} with roles {self.db_roles} in {self.db_name}",
+                f"{DATABASE_ICON} "
+                f"Created user {self.db_user} with "
+                f"roles {self.db_roles} in {self.db_name}",
                 extra={
                     "user": self.db_user,
                     "roles": self.db_roles,
@@ -268,8 +289,8 @@ class MongoDBClient:
         """
         Asynchronously checks and creates indexes for the collections in the database.
 
-        This method iterates through the collections defined in the database configuration
-        and creates the specified indexes if they do not already exist.
+        This method iterates through the collections defined in the database
+        configuration and creates the specified indexes if they do not already exist.
 
         Raises:
             ConnectionFailure: If the MongoDB client is not connected.
@@ -277,23 +298,37 @@ class MongoDBClient:
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
         if (
-            self.db_config.dbs[self.db_name].collections is None
-            or not self.db_config.dbs[self.db_name].collections
+            self.dbs[self.db_name].collections is None
+            or not self.dbs[self.db_name].collections
         ):
             return
-        for collection_name, collection_config in self.db_config.dbs[
+        for collection_name, collection_config in self.dbs[
             self.db_name
         ].collections.items():
+            list_indexes = (
+                await self.db[collection_name].list_indexes().to_list(length=None)
+            )
             if collection_config and collection_config.indexes:
                 for index_name, index_value in collection_config.indexes.items():
-                    try:
-                        await self.db[collection_name].create_index(
-                            index_value.index_key,
-                            unique=index_value.unique,
-                            name=index_name,
-                        )
-                    except Exception as ex:
-                        logger.error(ex)
+                    if not self._check_index_exists(list_indexes, index_name):
+                        try:
+                            await self.db[collection_name].create_index(
+                                index_value.index_key,
+                                unique=index_value.unique,
+                                name=index_name,
+                            )
+                            logger.info(
+                                f"{DATABASE_ICON} Created index {index_name} "
+                                f"in {collection_name}"
+                            )
+                        except Exception as ex:
+                            logger.error(ex)
+
+    def _check_index_exists(self, indexes, index_name):
+        for index in indexes:
+            if index.get("name") == index_name:
+                return True
+        return False
 
     async def list_users(self) -> list:
         """
@@ -326,9 +361,11 @@ class MongoDBClient:
                     or self.db_user not in database_users
                 ):
                     await self._check_create_db()
-                    await self._check_indexes()
-                logger.info(
-                    f"Connected to MongoDB {self.db_name} after {timer() - self.start_connection:.3f}s "
+                await self._check_indexes()
+                logger.debug(
+                    f"{DATABASE_ICON} "
+                    f"Connected to MongoDB {self.db_name} "
+                    f"after {timer() - self.start_connection:.3f}s "
                     f"{self.hex_id} {count}",
                     extra={
                         "client": self.client,
@@ -358,7 +395,8 @@ class MongoDBClient:
     async def disconnect(self):
         if self.client:
             time_connected = timer() - self.start_connection
-            logger.info(
+            logger.debug(
+                f"{DATABASE_ICON} "
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
                 f"{self.hex_id}",
                 extra={
@@ -370,11 +408,18 @@ class MongoDBClient:
                     "id_self": self.hex_id,
                 },
             )
+            self.health_check = MongoDBStatus.DISCONNECTED
             self.client.close()
 
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
-        if self.client is None or self.db is None:
+        if (
+            self.client is None
+            or self.db is None
+            or self.health_check != MongoDBStatus.CONNECTED
+        ):
             await self.connect()
+        if self.db is None:
+            raise ConnectionFailure("Not connected to MongoDB")
         return self.db[collection_name]
 
     async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
@@ -398,9 +443,10 @@ class MongoDBClient:
         result = await collection.insert_many(documents, ordered=False)
         return result.inserted_ids
 
-    async def find_one(self, collection_name: str, query: dict) -> dict:
+    async def find_one(self, collection_name: str, query: dict) -> Any | None:
         """
-        Asynchronously find a single document in the specified collection that matches the given query.
+        Asynchronously find a single document in the specified collection that
+        matches the given query.
 
         Args:
             collection_name (str): The name of the collection to search in.
@@ -412,6 +458,24 @@ class MongoDBClient:
         collection = await self.get_collection(collection_name)
         document = await collection.find_one(query)
         return document
+
+    async def find(
+        self, collection_name: str, query: dict, *args, **kwargs
+    ) -> AsyncIOMotorCursor:
+        """
+        Asynchronously find multiple documents in a specified collection
+        based on a query.
+
+        Args:
+            collection_name (str): The name of the collection to search in.
+            query (dict): The query dictionary to filter the documents.
+
+        Returns:
+            AsyncIOMotorCollection: A cursor to the documents that match the query.
+        """
+        collection = await self.get_collection(collection_name)
+        cursor = collection.find(query, *args, **kwargs)
+        return cursor
 
     async def update_one(
         self, collection_name: str, query: dict, update: dict, **kwargs

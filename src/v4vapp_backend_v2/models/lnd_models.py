@@ -1,51 +1,49 @@
-import re
-from datetime import datetime
-from typing import Any, Callable, List
+# import re
+# from typing import Any
 
-from pydantic import BaseModel
-from v4vapp_backend_v2.models.invoice_models import Invoice
+# from v4vapp_backend_v2.models.invoice_models import Invoice
 
-from v4vapp_backend_v2.config.setup import LoggerFunction
+# from v4vapp_backend_v2.config.setup import LoggerFunction
 
-# This is the regex for finding if a given message is an LND invoice to pay.
-# This looks for #v4vapp v4vapp
-LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
+# # This is the regex for finding if a given message is an LND invoice to pay.
+# # This looks for #v4vapp v4vapp
+# LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
 
 
-class LNDInvoice(Invoice):
+# class LNDInvoice(Invoice):
 
-    is_lndtohive: bool = False
+#     is_lndtohive: bool = False
 
-    def __init__(__pydantic_self__, **data: Any) -> None:
-        super().__init__(**data)
-        # perform my check to see if this invoice can be paid to Hive
-        if __pydantic_self__.memo:
-            match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
-            if match:
-                __pydantic_self__.is_lndtohive = True
+#     def __init__(__pydantic_self__, **data: Any) -> None:
+#         super().__init__(**data)
+#         # perform my check to see if this invoice can be paid to Hive
+#         if __pydantic_self__.memo:
+#             match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
+#             if match:
+#                 __pydantic_self__.is_lndtohive = True
 
-    def invoice_message(self) -> str:
-        if self.settled:
-            return (
-                f"✅ Settled invoice {self.add_index} "
-                f"with memo {self.memo} {self.value:,.0f} sats"
-            )
-        else:
-            return (
-                f"✅ Valid   invoice {self.add_index} "
-                f"with memo {self.memo} {self.value:,.0f} sats"
-            )
+#     def invoice_message(self) -> str:
+#         if self.settled:
+#             return (
+#                 f"✅ Settled invoice {self.add_index} "
+#                 f"with memo {self.memo} {self.value:,.0f} sats"
+#             )
+#         else:
+#             return (
+#                 f"✅ Valid   invoice {self.add_index} "
+#                 f"with memo {self.memo} {self.value:,.0f} sats"
+#             )
 
-    def invoice_log(
-        self, logger_func: LoggerFunction, send_notification: bool = False
-    ) -> None:
-        logger_func(
-            self.invoice_message(),
-            extra={
-                "notification": send_notification,
-                "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
-            },
-        )
+#     def invoice_log(
+#         self, logger_func: LoggerFunction, send_notification: bool = False
+#     ) -> None:
+#         logger_func(
+#             self.invoice_message(),
+#             extra={
+#                 "notification": send_notification,
+#                 "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
+#             },
+#         )
 
 
 # class LNDInvoice(BaseModel):

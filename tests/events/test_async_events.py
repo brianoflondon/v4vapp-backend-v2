@@ -76,7 +76,7 @@ async def test_async_publish():
 
 @pytest.mark.asyncio
 async def test_async_publish_wrong_args():
-    async def subscriber(x: int, y: int):
+    async def subscriber(x: int, y: int, z: int = 3):
         print("Subscriber called with", x, y)
         pass
 
@@ -85,7 +85,7 @@ async def test_async_publish_wrong_args():
         async_publish(Events.LND_PAYMENT, 1)
     except Exception as e:
         print(e)
-    async_publish(Events.LND_PAYMENT, 1, 2)
+    async_publish(Events.LND_PAYMENT, y=1, x=2)
     subscribers = get_subscribers()
     assert Events.LND_PAYMENT in subscribers
     assert subscriber in subscribers[Events.LND_PAYMENT]

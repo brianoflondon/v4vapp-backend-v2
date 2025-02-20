@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Union
+
+from google.protobuf.json_format import MessageToDict
+
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from google.protobuf.json_format import MessageToDict
-from typing import Union
 from v4vapp_backend_v2.config.setup import format_time_delta, get_in_flight_time
 
 
@@ -212,7 +213,7 @@ class LndEventsGroup:
     def message_payment_event(
         self, event: routerrpc.HtlcEvent, dest_alias: str = None
     ) -> Tuple[str, dict]:
-        if not type(event) == lnrpc.Payment:
+        if not isinstance(event, lnrpc.Payment):
             return "", {}
         creation_date = datetime.fromtimestamp(
             event.creation_time_ns / 1e9, tz=timezone.utc
@@ -226,12 +227,15 @@ class LndEventsGroup:
             "in_flight_time": in_flight_time,
             "dest_alias": dest_alias,
         }
-        return (
+        ans = (
             f"💸 Payment: {event.value_msat//1000:,.0f} sats "
+            f"({event.payment_index}) "
             f"to: {dest_alias or 'Unknown'} "
             f"in flight: {in_flight_time} "
             f"{payment_event_status_name(event.status)}"
-        ), ans_dict
+        )
+
+        return ans, ans_dict
 
     # MARK: HTLC Event Methods
     def add_htlc_event(self, htlc_event: routerrpc.HtlcEvent) -> int:

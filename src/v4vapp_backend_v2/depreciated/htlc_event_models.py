@@ -8,6 +8,7 @@ from v4vapp_backend_v2.config.setup import LoggerFunction
 from v4vapp_backend_v2.events.async_event import async_subscribe
 from v4vapp_backend_v2.models.invoice_models import Invoice
 
+
 class HtlcInfo(BaseModel):
     incoming_timelock: int | None = None
     outgoing_timelock: int | None = None
@@ -441,7 +442,7 @@ class HtlcTrackingList(BaseModel):
         else:
             sent_via = "Unknown"
 
-        message_str = f"{start_message} {amount:,.0f} " f"out {sent_via}. " f"{end_message}"
+        message_str = f"{start_message} {amount:,.0f} " f"out {sent_via}. {end_message}"
         return message_str
 
     def receive_message(self, group_list: List[HtlcEvent]) -> str:

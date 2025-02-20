@@ -123,7 +123,7 @@ async def test_mongodb_client_bad_uri(set_base_config_path: None):
     with pytest.raises(ConnectionFailure) as e:
         async with MongoDBClient(
             "conn_bad", serverSelectionTimeoutMS=50, retry=False
-        ) as test_client:
+        ) as _:
             pass
     assert e
 
@@ -278,4 +278,32 @@ async def test_check_indexes(set_base_config_path: None):
         with pytest.raises(DuplicateKeyError):
             ans = await test_client.insert_one("test_collection", {"test": "test"})
         await test_client._check_indexes()
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_find(set_base_config_path: None):
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        collection_name = "index_test"
+        index_key = [("timestamp", -1), ("field_1", 1)]
+        test_client.db[collection_name].create_index(
+            keys=index_key, name="timestamp", unique=True
+        )
+        insert_items = 10
+        for i in range(insert_items):
+            data = {
+                "field_1": f"test_{i}",
+                "field_2": f"test_{i}",
+                "field_3": f"test_{i}",
+                "field_4": f"test_{i}",
+                "field_5": f"test_{i}",
+                "timestamp": datetime.now(tz=timezone.utc),
+            }
+            await test_client.insert_one(collection_name, data)
+        cursor = await test_client.find(collection_name, {})
+        count = 0
+        async for _ in cursor:
+            count += 1
+        assert count == insert_items
     await drop_collection_and_user("conn_1", "test_db", "test_user")

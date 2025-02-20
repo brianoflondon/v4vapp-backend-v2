@@ -1,19 +1,20 @@
 import asyncio
 import atexit
-from datetime import datetime, timedelta, timezone
+import functools
 import json
 import logging.config
 import logging.handlers
 import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Tuple, override
+from statistics import mean, stdev
+from typing import Any, Dict, List, Optional, Protocol, override
 
 import colorlog
 from pydantic import BaseModel, field_validator, model_validator
-from yaml import safe_load
 from pymongo.operations import _IndexKeyHint
-
-from v4vapp_backend_v2 import __version__
+from yaml import safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
@@ -81,9 +82,10 @@ class DatabaseDetailsConfig(BaseModel):
 
 
 class DatabaseConnectionConfig(BaseModel):
-    db_hosts: List[str]
-    db_replica_set: Optional[str] = None
-    dbs: Optional[Dict[str, DatabaseDetailsConfig]] = None
+    hosts: List[str]
+    replica_set: str | None = None
+    admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
+    icon: str | None = None
 
 
 class Config(BaseModel):
@@ -94,7 +96,8 @@ class Config(BaseModel):
         version (str): The version of the configuration. Default is "1".
         logging (LoggingConfig): Configuration for logging.
         default_connection (str): The default connection name.
-        lnd_connections (List[LndConnectionConfig]): List of LND connection configurations.
+        lnd_connections (List[LndConnectionConfig]):
+            List of LND connection configurations.
         tailscale (TailscaleConfig): Configuration for Tailscale.
         telegram (TelegramConfig): Configuration for Telegram.
 
@@ -103,7 +106,8 @@ class Config(BaseModel):
             Validates that all LND connections have unique names.
 
         check_default_connection(cls, v):
-            Validates that the default connection is present in the list of LND connections.
+            Validates that the default connection is present in the
+            list of LND connections.
 
         list_lnd_connections(self) -> List[str]:
             Returns a list of names of all LND connections.
@@ -116,10 +120,14 @@ class Config(BaseModel):
     version: str = "1"
     logging: LoggingConfig
     default_connection: str = ""
-    lnd_connections: List[LndConnectionConfig]
+    default_db_connection: str = ""
+    lnd_connections: List[
+        LndConnectionConfig
+    ]  # TODO #14 Convert this to a dict not a list
     tailscale: TailscaleConfig
     telegram: TelegramConfig
-    database: Dict[str, DatabaseConnectionConfig]
+    db_connections: Dict[str, DatabaseConnectionConfig]
+    dbs: Dict[str, DatabaseDetailsConfig]
 
     @field_validator("lnd_connections")
     def unique_names(cls, v):
@@ -138,6 +146,17 @@ class Config(BaseModel):
             raise ValueError("Default connection not found in lnd_connections")
         return v
 
+    @model_validator(mode="after")
+    def check_default_db_connection(cls, v):
+        # Check that the default connection is in the list of connections
+        # if it is given.
+        if (
+            v.default_db_connection
+            and v.default_db_connection not in v.db_connections.keys()
+        ):
+            raise ValueError("Default database connection not found in database")
+        return v
+
     def list_connection_names(self) -> List[str]:
         return [connection.name for connection in self.lnd_connections]
 
@@ -150,6 +169,16 @@ class Config(BaseModel):
             str: A list containing the names of all connections separated by ,.
         """
         return ", ".join([name for name in self.list_connection_names()])
+
+    @property
+    def database_names(self) -> str:
+        """
+        Retrieve a list of database names from the database attribute.
+
+        Returns:
+            str: A list containing the names of all databases separated by ,.
+        """
+        return ", ".join(self.dbs.keys())
 
     def connection(self, connection_name: str) -> LndConnectionConfig:
         """
@@ -174,7 +203,8 @@ class Config(BaseModel):
         Retrieves the icon associated with a given connection name.
 
         Args:
-            connection_name (str): The name of the connection for which to retrieve the icon.
+            connection_name (str): The name of the connection for which
+            to retrieve the icon.
 
         Returns:
             str: The icon associated with the specified connection name.
@@ -386,7 +416,8 @@ def get_in_flight_time(creation_date: datetime) -> str:
     """
     Calculate the time in flight for a given datetime object.
     Args:
-        creation_date (datetime): The datetime object to calculate the time in flight for.
+        creation_date (datetime): The datetime object to calculate
+        the time in flight for.
 
     Returns:
         str: The formatted string representing the timedelta.
@@ -400,3 +431,102 @@ def get_in_flight_time(creation_date: datetime) -> str:
         in_flight_time = format_time_delta(current_time - creation_date)
 
     return in_flight_time
+
+
+def async_time_decorator(func):
+    """
+    A decorator that wraps an asynchronous function to log its execution
+    time and handle exceptions.
+
+    Args:
+        func (coroutine function): The asynchronous function to be wrapped.
+
+    Returns:
+        coroutine function: The wrapped asynchronous function.
+
+    The wrapper logs the execution time of the function and, in case of an exception,
+    logs the error along with the time taken before the exception occurred.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = await func(*args, **kwargs)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            logger.info(
+                f"Function '{func.__name__[:16]}' "
+                f"took {execution_time:.4f} seconds to execute"
+            )
+            return result
+        except Exception as e:
+            end_time = time.time()
+            execution_time = end_time - start_time
+            logger.info(
+                f"Function '{func.__name__[:16]}' "
+                f"failed after {execution_time:.4f} seconds with error: {str(e)}"
+            )
+            raise
+
+    return wrapper
+
+
+def async_time_stats_decorator(runs=1):
+    """
+    A decorator to measure and log the execution time of an asynchronous function.
+
+    This decorator logs the execution time of the decorated function and maintains
+    a list of execution times for a specified number of runs. Once the number of
+    runs is reached, it logs the average execution time and the standard deviation
+    (if applicable), then resets the timings list.
+
+    Args:
+        func (Callable): The asynchronous function to be decorated.
+
+    Returns:
+        Callable: The wrapped function with timing and logging functionality.
+
+    Raises:
+        Exception: Re-raises any exception encountered during the execution of the
+        decorated function, after logging the failure and execution time.
+    """
+
+    def decorator(func):
+        timings = []
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            nonlocal timings
+            start_time = time.time()
+            try:
+                result = await func(*args, **kwargs)
+                end_time = time.time()
+                execution_time = end_time - start_time
+                timings.append(execution_time)
+
+                if len(timings) >= runs:
+                    avg_time = mean(timings)
+                    logger.info(
+                        f"Function '{func.__name__[:16]}' stats - "
+                        f"Last: {execution_time:.4f}s, "
+                        f"Avg: {avg_time:.4f}s, "
+                        f"Runs: {len(timings)}"
+                    )
+                    if len(timings) > 1:
+                        logger.info(f"Std Dev: {stdev(timings):.4f}s")
+                    timings = []  # Reset after reporting
+
+                return result
+            except Exception as e:
+                end_time = time.time()
+                execution_time = end_time - start_time
+                logger.warning(
+                    f"Function '{func.__name__[:16]}' failed after "
+                    f"{execution_time:.4f}s with error: {str(e)}"
+                )
+                raise
+
+        return wrapper
+
+    return decorator

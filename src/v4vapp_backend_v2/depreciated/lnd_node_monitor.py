@@ -4,28 +4,24 @@ import json
 from datetime import datetime, timezone
 from typing import Annotated, AsyncGenerator, List, Optional
 
+import typer
 from google.protobuf.json_format import MessageToDict
 from pydantic import ValidationError
-import typer
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
-    get_channel_name,
-)
 from v4vapp_backend_v2.depreciated.htlc_event_models import (
     ChannelName,
     HtlcEvent,
     HtlcTrackingList,
 )
-from v4vapp_backend_v2.models.lnd_models import LNDInvoice
-from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.events.async_event import async_publish
-
-from v4vapp_backend_v2.database.db import db
+from v4vapp_backend_v2.events.event_models import Events
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, error_to_dict
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDFatalError, LNDSubscriptionError
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_channel_name
+from v4vapp_backend_v2.models.lnd_models import LNDInvoice
 
 config = InternalConfig().config
 global_tracking = HtlcTrackingList()
@@ -124,7 +120,6 @@ async def subscribe_invoices_loop(client: LNDClient) -> None:
                 )
                 async_publish(Events.LND_INVOICE, invoice)
                 invoice.invoice_log(logger.debug, send_notification)
-                # db.update_most_recent(invoice)
 
                 if invoice.settled:
                     settle_index = invoice.settle_index
@@ -249,7 +244,7 @@ async def fill_channel_list(client: LNDClient) -> None:
         tasks.append(
             get_channel_name(
                 channel_id=int(channel["chan_id"]),
-                client=client,
+                lnd_client=client,
                 own_pub_key=own_pub_key,
             )
         )
@@ -316,7 +311,8 @@ def main(
     """
     icon = config.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {config.version}"
+        f"{icon} ✅ LND gRPC client started. Monitoring node: "
+        f"{node} {icon}. Version: {config.version}"
     )
     asyncio.run(run(node))
 

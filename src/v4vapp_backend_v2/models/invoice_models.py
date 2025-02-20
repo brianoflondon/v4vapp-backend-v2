@@ -1,10 +1,11 @@
 from typing import Any, List
-from pydantic import BaseModel, ConfigDict, Field, validator
 from datetime import datetime, timezone
-from bson import Int64
 from google.protobuf.json_format import MessageToDict
+from pydantic import BaseModel, ConfigDict
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import LoggerFunction
+from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
+
 import re
 
 # This is the regex for finding if a given message is an LND invoice to pay.
@@ -12,27 +13,9 @@ import re
 LND_INVOICE_TAG = r"(.*)(#(v4vapp))"
 
 
-class BSONInt64(Int64):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value, field):
-        if isinstance(value, str):
-            try:
-                value = Int64(int(value))
-            except ValueError:
-                raise ValueError(f"Value {value} is not a valid int64")
-        elif isinstance(value, int):
-            value = Int64(value)
-        elif not isinstance(value, Int64):
-            raise TypeError(f"Value {value} is not a valid int64")
-        return value
-
-
 class InvoiceHTLC(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
     chan_id: BSONInt64
     htlc_index: BSONInt64 | None = None
     amt_msat: BSONInt64
@@ -146,69 +129,6 @@ class ListInvoiceResponse(BaseModel):
             if not __pydantic_self__.invoices:
                 __pydantic_self__.invoices = []
 
-
-def convert_timestamp_to_datetime(timestamp):
-    """
-    Convert a Unix timestamp to a timezone-aware datetime object.
-
-    Args:
-        timestamp (float or int): The Unix timestamp to convert.
-
-    Returns:
-        datetime: A timezone-aware datetime object in UTC.
-
-    Raises:
-        ValueError: If the timestamp cannot be converted to a float.
-    """
-    return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
-
-
-def convert_datetime_fields(invoice: dict) -> dict:
-    """
-    Converts timestamp fields in an invoice dictionary to datetime objects.
-
-    This function checks for the presence of specific timestamp fields in the
-    provided invoice dictionary and converts them to datetime objects using
-    the `convert_timestamp_to_datetime` function. The fields that are converted
-    include:
-    - "creation_date"
-    - "settle_date"
-    - "accept_time" (within each HTLC in the "htlcs" list)
-    - "resolve_time" (within each HTLC in the "htlcs" list)
-
-    Args:
-        invoice (dict): The invoice dictionary containing timestamp fields.
-
-    Returns:
-        dict: The invoice dictionary with the specified timestamp fields
-              converted to datetime objects.
-    """
-
-    def convert_field(value: Any):
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, (int, float)):
-            return convert_timestamp_to_datetime(value)
-        if isinstance(value, str):
-            try:
-                return convert_timestamp_to_datetime(float(value))
-            except ValueError:
-                return value
-
-    keys = ["creation_date", "settle_date"]
-
-    for key in keys:
-        value = invoice.get(key)
-        if value:
-            invoice[key] = convert_field(value)
-
-    keys = ["accept_time", "resolve_time"]
-    for htlc in invoice.get("htlcs", []):
-        for key in keys:
-            value = htlc.get(key)
-            if value:
-                htlc[key] = convert_field(value)
-    return invoice
 
 
 def protobuf_invoice_to_pydantic(invoice: lnrpc.Invoice) -> Invoice:
