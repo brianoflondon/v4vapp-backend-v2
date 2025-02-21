@@ -5,16 +5,12 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.helpers.pub_key_alias import (  # Replace with actual import
+from v4vapp_backend_v2.helpers.pub_key_alias import (
     LOCAL_PUB_KEY_ALIAS_CACHE,
     get_all_pub_key_aliases,
     update_payment_route_with_alias,
 )
-from v4vapp_backend_v2.models.payment_models import (  # Replace with actual imports
-    ListPaymentsResponse,
-    NodeAlias,
-    Payment,
-)
+from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse
 
 
 def read_list_payments_raw(file_path: str) -> lnrpc.ListPaymentsResponse:
@@ -28,7 +24,6 @@ def read_lnd_monitor_v2_voltage_pub_keys(file_path: str) -> dict:
     return mongodb_pub_keys
 
 
-# TODO: #13 this needs to be able to use the database and lnd client
 def test_route_in_payments():
     lnrpc_list_payments = read_list_payments_raw(
         "tests/data/lnd_lists/list_payments_raw.bin"

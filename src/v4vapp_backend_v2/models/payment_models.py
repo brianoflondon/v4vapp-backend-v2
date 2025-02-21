@@ -60,7 +60,8 @@ class PaymentExtra(BaseModel):
         Returns:
             str: The alias of the destination. If the route is empty, returns "Unknown".
                 If the route has only one element, returns the alias of that element.
-                If the last element in the route has an alias of "Unknown", checks the second to last element:
+                If the last element in the route has an alias of "Unknown",
+                    checks the second to last element:
                     - If the alias is "magnetron", returns "Muun User".
                     - If the alias is "ACINQ", returns "Phoenix User".
                 Otherwise, returns the alias of the last element in the route.

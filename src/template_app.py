@@ -41,7 +41,8 @@ def main(
         Optional[str],
         typer.Argument(
             help=(
-                f"The Lightning node to monitor. If not provided, defaults to the value: "
+                f"The Lightning node to monitor. If not provided, "
+                f"defaults to the value: "
                 f"{CONFIG.default_connection}.\n"
                 f"Choose from: {CONFIG.lnd_connections_names}"
             )
@@ -61,7 +62,8 @@ def main(
     """
     icon = CONFIG.icon(node)
     logger.info(
-        f"{icon} ✅ LND gRPC client started. Monitoring node: {node} {icon}. Version: {CONFIG.version}"
+        f"{icon} ✅ LND gRPC client started. Monitoring node: "
+        f"{node} {icon}. Version: {CONFIG.version}"
     )
     logger.info(f"{icon} ✅ Database: {database}")
     asyncio.run(run(node))

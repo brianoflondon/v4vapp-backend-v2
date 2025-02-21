@@ -53,7 +53,7 @@ async def drop_database(conn_name: str, db_name: str) -> None:
 async def test_admin_db_local_docker_container(set_base_config_path: None):
     """
     Test the connection to the Admin database. Relies on a docker container running
-    a MongoDB instance on port 37017 as listed in the `tests/data/config/config.yaml` file.
+    a MongoDB instance on port 37017 as listed in the `tests/data/config/config.yaml`.
     This test ensures that a connection to the Admin database can be established
     using the MongoDBClient. It asserts that the connection is not None.
     Args:
