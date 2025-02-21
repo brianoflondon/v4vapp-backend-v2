@@ -619,7 +619,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 logger.debug(e.details)
                 pass
             except Exception as e:
-                logger.exception(e)
+                logger.exception(str(e), extra={"error": e})
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
                     f"{lnd_client.icon} Finished reading {total_payments} payments..."
@@ -695,6 +695,13 @@ async def run(connection_name: str) -> None:
             logger.info("👋 Received signal to stop. Exiting...")
             await lnd_client.channel.close()
             INTERNAL_CONFIG.__exit__(None, None, None)
+
+    logger.info(
+        f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
+        f"Monitoring node: {connection_name}. Version: {CONFIG.version}",
+        extra={"notification": True},
+    )
+    await asyncio.sleep(1)
 
 
 @app.command()
