@@ -12,7 +12,7 @@ from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
 
 import colorlog
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, model_validator
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
 
@@ -42,7 +42,6 @@ class LoggingConfig(BaseModel):
 
 
 class LndConnectionConfig(BaseModel):
-    name: str = ""
     icon: str = ""
     address: str = ""
     options: list = []
@@ -119,59 +118,61 @@ class Config(BaseModel):
 
     version: str = "1"
     logging: LoggingConfig
-    default_connection: str = ""
+
+    # Defaults
+    default_lnd_connection: str = ""
     default_db_connection: str = ""
-    lnd_connections: List[
-        LndConnectionConfig
-    ]  # TODO #14 Convert this to a dict not a list
-    tailscale: TailscaleConfig
-    telegram: TelegramConfig
+    default_db_name: str = ""
+
+    # Connections and DB configs
+    lnd_connections: Dict[str, LndConnectionConfig]
     db_connections: Dict[str, DatabaseConnectionConfig]
     dbs: Dict[str, DatabaseDetailsConfig]
 
-    @field_validator("lnd_connections")
-    def unique_names(cls, v):
-        names = [conn.name for conn in v]
-        if len(names) != len(set(names)):
-            raise ValueError("Duplicate names found in lnd_connections")
-        return v
+    tailscale: TailscaleConfig
+    telegram: TelegramConfig
 
     @model_validator(mode="after")
-    def check_default_connection(cls, v):
+    def check_all_defaults(cls, v: Any):
         # Check that the default connection is in the list of connections
         # if it is given.
-        if v.default_connection and v.default_connection not in [
-            conn.name for conn in v.lnd_connections
-        ]:
+        print("Checking all defaults")
+        if (
+            v.default_lnd_connection
+            and v.default_lnd_connection not in v.lnd_connections.keys()
+        ):
             raise ValueError("Default connection not found in lnd_connections")
-        return v
-
-    @model_validator(mode="after")
-    def check_default_db_connection(cls, v):
-        # Check that the default connection is in the list of connections
-        # if it is given.
         if (
             v.default_db_connection
             and v.default_db_connection not in v.db_connections.keys()
         ):
             raise ValueError("Default database connection not found in database")
+        if v.default_db_name and v.default_db_name not in v.dbs.keys():
+            raise ValueError("Default database name not found in databases")
         return v
 
-    def list_connection_names(self) -> List[str]:
-        return [connection.name for connection in self.lnd_connections]
-
     @property
-    def connection_names(self) -> str:
+    def lnd_connections_names(self) -> str:
         """
         Retrieve a list of connection names from the lnd_connections attribute.
 
         Returns:
             str: A list containing the names of all connections separated by ,.
         """
-        return ", ".join([name for name in self.list_connection_names()])
+        return ", ".join(self.lnd_connections.keys())
 
     @property
-    def database_names(self) -> str:
+    def db_connections_names(self) -> str:
+        """
+        Retrieve a list of connection names from the db_connections attribute.
+
+        Returns:
+            str: A list containing the names of all connections separated by ,.
+        """
+        return ", ".join(self.db_connections.keys())
+
+    @property
+    def dbs_names(self) -> str:
         """
         Retrieve a list of database names from the database attribute.
 
@@ -180,36 +181,36 @@ class Config(BaseModel):
         """
         return ", ".join(self.dbs.keys())
 
-    def connection(self, connection_name: str) -> LndConnectionConfig:
-        """
-        Retrieve the LndConnectionConfig for a given connection name.
+    # def lnd_connection(self, connection_name: str) -> LndConnectionConfig:
+    #     """
+    #     Retrieve the LndConnectionConfig for a given connection name.
 
-        Args:
-            connection_name (str): The name of the connection to retrieve.
+    #     Args:
+    #         connection_name (str): The name of the connection to retrieve.
 
-        Returns:
-            LndConnectionConfig: The configuration for the specified connection.
+    #     Returns:
+    #         LndConnectionConfig: The configuration for the specified connection.
 
-        Raises:
-            ValueError: If the connection with the specified name is not found.
-        """
-        for connection in self.lnd_connections:
-            if connection.name == connection_name:
-                return connection
-        raise ValueError(f"Connection {connection_name} not found in config")
+    #     Raises:
+    #         ValueError: If the connection with the specified name is not found.
+    #     """
+    #     for connection in self.lnd_connections:
+    #         if connection.name == connection_name:
+    #             return connection
+    #     raise ValueError(f"Connection {connection_name} not found in config")
 
-    def icon(self, connection_name: str) -> str:
-        """
-        Retrieves the icon associated with a given connection name.
+    # def icon(self, connection_name: str) -> str:
+    #     """
+    #     Retrieves the icon associated with a given connection name.
 
-        Args:
-            connection_name (str): The name of the connection for which
-            to retrieve the icon.
+    #     Args:
+    #         connection_name (str): The name of the connection for which
+    #         to retrieve the icon.
 
-        Returns:
-            str: The icon associated with the specified connection name.
-        """
-        return self.connection(connection_name).icon
+    #     Returns:
+    #         str: The icon associated with the specified connection name.
+    #     """
+    #     return self.lnd_connection(connection_name).icon
 
 
 class ConsoleLogFilter(logging.Filter):

@@ -343,6 +343,7 @@ class MongoDBClient:
         return [user["user"] for user in users_info["users"]]
 
     async def connect(self):
+        error_code = ""
         count = 0
         while True:
             try:
@@ -376,18 +377,33 @@ class MongoDBClient:
                     },
                 )
                 self.health_check = MongoDBStatus.CONNECTED
+                if count > 1:
+                    logger.warning(
+                        f"Reconnected to MongoDB {self.db_name} after {count} attempts",
+                        extra={
+                            "uri": self.uri,
+                            "count": count,
+                            "error_code": error_code,
+                            "error_code_clear": True,
+                        },
+                    )
                 return
 
             except (ConnectionFailure, OperationFailure, Exception) as e:
+                error_code = e.code if hasattr(e, "code") else type(e).__name__
                 logger.error(
                     f"Attempt {count} Failed to connect to MongoDB: {e}",
-                    extra={"uri": self.uri, "error": str(e)},
+                    extra={
+                        "uri": self.uri,
+                        "error_code": error_code,
+                        "error_details": str(e),
+                    },
                 )
                 self.client = None
                 self.db = None
                 self.health_check = MongoDBStatus.ERROR
                 # give me a sleep time which is 1 + count * 2 or 30
-                if not self.retry or count > 500:
+                if not self.retry or count > 20:
                     raise e
                 sleep_time = min(1 + count * 2, 30)  # Exponential backoff
                 await asyncio.sleep(sleep_time)

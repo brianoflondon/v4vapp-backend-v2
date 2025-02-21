@@ -25,6 +25,7 @@ Methods:
         Raises NotImplementedError as email notification is not implemented yet.
 """
 
+import asyncio
 from logging import LogRecord
 from typing import Dict, Protocol
 
@@ -36,36 +37,31 @@ from v4vapp_backend_v2.config.setup import Config, InternalConfig, logger
 class NotificationProtocol(Protocol):
     def send_notification(
         self, message: str, record: LogRecord, alert_level: int = 1
-    ) -> None: ...
-
-
-class TelegramNotification:
-    def send_notification(
-        self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
-        """
-        Sends a notification with the given message, log record, and alert level.
-        Uses the separate event loop set up by the internal configuration.
-
-        Args:
-            message (str): The message to be sent in the notification.
-            record (LogRecord): The log record associated with the notification.
-            alert_level (int, optional): The alert level of the notification.
-            Defaults to 1.
-
-        Returns:
-            None
-        """
-        # Send notification to Telegram
-        # Assign the configuration to a local variable
         internal_config = InternalConfig()
         _config: Config = internal_config.config
 
-        internal_config.notification_loop.run_until_complete(
-            self._send_to_telegram(_config, message, record, alert_level)
+        loop = internal_config.notification_loop
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        loop.run_until_complete(
+            self._send_notification(_config, message, record, alert_level)
         )
 
-    async def _send_to_telegram(
+    async def _send_notification(
+        self,
+        _config: Config,
+        message: str,
+        record: LogRecord,
+        alert_level: int = 1,
+    ) -> None:
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class TelegramNotification(NotificationProtocol):
+    async def _send_notification(
         self,
         _config: Config,
         message: str,
@@ -107,8 +103,12 @@ class TelegramNotification:
             )
 
 
-class EmailNotification:
-    def send_notification(
-        self, message: str, record: LogRecord, alert_level: int = 1
+class EmailNotification(NotificationProtocol):
+    async def _send_notification(
+        self,
+        _config: Config,
+        message: str,
+        record: LogRecord,
+        alert_level: int = 1,
     ) -> None:
         raise NotImplementedError("Email notification is not implemented yet.")

@@ -61,7 +61,8 @@ async def track_events(
     dest_alias = await check_dest_alias(
         htlc_event, lnd_client, lnd_events_group, event_id
     )
-    # message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
+    # message_str, ans_dict = lnd_events_group.message(htlc_event,
+    # dest_alias=dest_alias)
     # The delay is necessary to allow the group to complete because sometimes
     # Invoices and Payments are not received in the right order with the HtlcEvents
     if lnd_events_group.complete_group(event=htlc_event):
@@ -618,7 +619,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 logger.debug(e.details)
                 pass
             except Exception as e:
-                logger.exception(e)
+                logger.exception(str(e), extra={"error": e})
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
                     f"{lnd_client.icon} Finished reading {total_payments} payments..."
@@ -695,6 +696,13 @@ async def run(connection_name: str) -> None:
             await lnd_client.channel.close()
             INTERNAL_CONFIG.__exit__(None, None, None)
 
+    logger.info(
+        f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
+        f"Monitoring node: {connection_name}. Version: {CONFIG.version}",
+        extra={"notification": True},
+    )
+    await asyncio.sleep(1)
+
 
 @app.command()
 def main(
@@ -703,29 +711,29 @@ def main(
         typer.Argument(
             help=(
                 f"The LND node to monitor. If not provided, defaults to the value: "
-                f"{CONFIG.default_connection}.\n"
-                f"Choose from: {CONFIG.connection_names}"
+                f"{CONFIG.default_lnd_connection}.\n"
+                f"Choose from: {CONFIG.lnd_connections_names}"
             )
         ),
-    ] = CONFIG.default_connection,
+    ] = CONFIG.default_lnd_connection,
     database: Annotated[
         str,
         typer.Argument(
-            help=(f"The database to monitor." f"Choose from: {CONFIG.database_names}")
+            help=(f"The database to monitor." f"Choose from: {CONFIG.dbs_names}")
         ),
-    ] = "lnd_monitor_v2_voltage",
+    ] = CONFIG.default_db_name,
 ):
     f"""
     Main function to run the node monitor.
     Args:
         lnd_node (Annotated[Optional[str], Argument]): The node to monitor.
         Choose from:
-        {CONFIG.connection_names}
+        {CONFIG.lnd_connections_names}
 
     Returns:
         None
     """
-    icon = CONFIG.icon(lnd_node)
+    icon = CONFIG.lnd_connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {CONFIG.version}"

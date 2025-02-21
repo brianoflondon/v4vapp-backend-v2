@@ -20,6 +20,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     # volumes:
     #   - mongo_data:/data/db
     #   - mongo_config:/data/configdb
@@ -33,6 +34,7 @@ services:
       - ./config:/app/config
       - ./logs_docker/voltage:/app/logs
     command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
+    restart: unless-stopped
 
   umbrel-node-monitor:
     depends_on:
@@ -43,6 +45,7 @@ services:
       - ./config:/app/config
       - ./logs_docker/umbrel:/app/logs
     command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
+    restart: unless-stopped
 
 volumes:
   mongo_data:
