@@ -10,7 +10,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorCollection,
     AsyncIOMotorCursor,
 )
-from pymongo.errors import ConnectionFailure, OperationFailure
+from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
 from pymongo.results import DeleteResult, UpdateResult
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -63,14 +63,28 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
             while retries < max_retries:
                 try:
                     return await func(*args, **kwargs)
+                except DuplicateKeyError as e:
+                    extra = {"error": str(e), "error_code": e.code, "retries": retries}
+                    logger.info(
+                        f"DuplicateKeyError: {e}. Not retrying.",
+                        extra=extra,
+                    )
+                    raise e
                 except (ConnectionFailure, OperationFailure) as e:
                     retries += 1
+                    extra = {"error": str(e), "error_code": e.code, "retries": retries}
                     if retries >= max_retries:
+                        logger.error(
+                            f"Failed to execute {func.__name__} after {retries} "
+                            f"attempts: {e}",
+                            extra=extra,
+                        )
                         raise e
                     logger.warning(
                         f"Retrying {func.__name__} due to {e}. "
                         f"Attempt {retries}/{max_retries}. "
-                        f"Retrying in {delay} s."
+                        f"Retrying in {delay} s.",
+                        extra=extra,
                     )
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
@@ -438,11 +452,13 @@ class MongoDBClient:
             raise ConnectionFailure("Not connected to MongoDB")
         return self.db[collection_name]
 
+    @retry_on_failure()
     async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
         collection = await self.get_collection(collection_name)
         result = await collection.insert_one(document)
         return result.inserted_id
 
+    @retry_on_failure()
     async def insert_many(
         self, collection_name: str, documents: list
     ) -> list[ObjectId]:
@@ -459,6 +475,7 @@ class MongoDBClient:
         result = await collection.insert_many(documents, ordered=False)
         return result.inserted_ids
 
+    @retry_on_failure()
     async def find_one(self, collection_name: str, query: dict) -> Any | None:
         """
         Asynchronously find a single document in the specified collection that
@@ -475,6 +492,7 @@ class MongoDBClient:
         document = await collection.find_one(query)
         return document
 
+    @retry_on_failure()
     async def find(
         self, collection_name: str, query: dict, *args, **kwargs
     ) -> AsyncIOMotorCursor:
@@ -493,6 +511,7 @@ class MongoDBClient:
         cursor = collection.find(query, *args, **kwargs)
         return cursor
 
+    @retry_on_failure()
     async def update_one(
         self, collection_name: str, query: dict, update: dict, **kwargs
     ) -> UpdateResult:
@@ -500,6 +519,7 @@ class MongoDBClient:
         result = await collection.update_one(query, {"$set": update}, **kwargs)
         return result
 
+    @retry_on_failure()
     async def update_many(
         self, collection_name: str, query: dict, update: dict
     ) -> UpdateResult:
@@ -507,16 +527,19 @@ class MongoDBClient:
         result = await collection.update_many(query, {"$set": update}, upsert=True)
         return result
 
+    @retry_on_failure()
     async def delete_one(self, collection_name: str, query: dict) -> DeleteResult:
         collection = await self.get_collection(collection_name)
         result = await collection.delete_one(query)
         return result
 
+    @retry_on_failure()
     async def drop_user(self) -> dict:
         admin_db = self.admin_client[self.db_name]
         ans = await admin_db.command({"dropUser": self.db_user})
         return ans
 
+    @retry_on_failure()
     async def drop_database(self, db_name) -> dict:
         ans = await self.admin_client.drop_database(db_name)
         return ans
