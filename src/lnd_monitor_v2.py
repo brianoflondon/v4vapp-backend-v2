@@ -74,11 +74,13 @@ async def track_events(
             try:
                 htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
                 if htlc_id:
-                    await asyncio.sleep(0.2)
+                    # logger.info(f"Waiting for incoming invoice... {htlc_id}")
+                    await asyncio.sleep(0.1)
                     incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
                         htlc_id
                     )
                 if incoming_invoice:
+                    # logger.info(f"Found incoming invoice... {htlc_id}")
                     amount = int(incoming_invoice.value_msat / 1000)
                     notification = False if amount < 10 else notification
             except Exception as e:
@@ -88,7 +90,6 @@ async def track_events(
             htlc_event, dest_alias=dest_alias
         )
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
-            await asyncio.sleep(0.2)
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={
@@ -542,7 +543,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{lnd_client.icon} Invoices {index_offset}... "
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Invoices {index_offset}... "
                     f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_invoices += len(list_invoices.invoices)
@@ -551,7 +553,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
                 logger.info(
-                    f"{lnd_client.icon} Finished reading {total_invoices} invoices..."
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_invoices} invoices..."
                 )
                 break
 
@@ -615,7 +618,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{lnd_client.icon} Payments {index_offset}... "
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Payments {index_offset}... "
                     f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_payments += len(list_payments.payments)
@@ -626,7 +630,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 logger.exception(str(e), extra={"error": e})
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
-                    f"{lnd_client.icon} Finished reading {total_payments} payments..."
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_payments} payments..."
                 )
                 break
 
