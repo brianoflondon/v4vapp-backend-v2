@@ -316,7 +316,7 @@ async def htlc_event_report(
     )
     is_complete = lnd_events_group.complete_group(htlc_event)
     is_complete_str = "💎" if is_complete else "🔨"
-    logger.debug(
+    logger.info(
         (
             f"{lnd_client.icon} {is_complete_str} htlc:    {htlc_id:>6} "
             f"{event_type} {preimage}"
@@ -352,7 +352,7 @@ async def invoices_loop(
             ):
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
-                    Events.LND_INVOICE,
+                    event_name=Events.LND_INVOICE,
                     htlc_event=lnrpc_invoice,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -386,7 +386,7 @@ async def payments_loop(
             ):
                 lnrpc_payment: lnrpc.Payment
                 async_publish(
-                    Events.LND_PAYMENT,
+                    event_name=Events.LND_PAYMENT,
                     htlc_event=lnrpc_payment,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -420,7 +420,7 @@ async def htlc_events_loop(
             ):
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
-                    Events.HTLC_EVENT,
+                    event_name=Events.HTLC_EVENT,
                     htlc_event=htlc_event,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -673,7 +673,11 @@ async def run(connection_name: str) -> None:
         # before the reporting functions The track_events function will
         # group events and report them when the group is complete
         async_subscribe(
-            [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
+            [
+                Events.LND_INVOICE_COMPLETED,
+                Events.LND_PAYMENT_COMPLETED,
+                Events.HTLC_EVENT,
+            ],
             track_events,
         )
         async_subscribe(Events.LND_INVOICE, db_store_invoice)
