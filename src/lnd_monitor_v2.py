@@ -74,11 +74,14 @@ async def track_events(
             try:
                 htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
                 if htlc_id:
+                    # logger.info(f"Waiting for incoming invoice... {htlc_id}")
+                    await asyncio.sleep(0.1)
                     incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
                         htlc_id
                     )
                 if incoming_invoice:
-                    amount = incoming_invoice.value if incoming_invoice else 0
+                    # logger.info(f"Found incoming invoice... {htlc_id}")
+                    amount = int(incoming_invoice.value_msat / 1000)
                     notification = False if amount < 10 else notification
             except Exception as e:
                 logger.exception(e)
@@ -87,10 +90,12 @@ async def track_events(
             htlc_event, dest_alias=dest_alias
         )
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
-            await asyncio.sleep(0.2)
             logger.info(
                 f"{lnd_client.icon} {message_str}",
-                extra={"notification": notification, **ans_dict},
+                extra={
+                    "notification": notification,
+                    type(htlc_event).__name__: ans_dict,
+                },
             )
         asyncio.create_task(
             remove_event_group(htlc_event, lnd_client, lnd_events_group)
@@ -316,7 +321,7 @@ async def htlc_event_report(
     )
     is_complete = lnd_events_group.complete_group(htlc_event)
     is_complete_str = "💎" if is_complete else "🔨"
-    logger.debug(
+    logger.info(
         (
             f"{lnd_client.icon} {is_complete_str} htlc:    {htlc_id:>6} "
             f"{event_type} {preimage}"
@@ -352,7 +357,7 @@ async def invoices_loop(
             ):
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
-                    Events.LND_INVOICE,
+                    event_name=Events.LND_INVOICE,
                     htlc_event=lnrpc_invoice,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -386,7 +391,7 @@ async def payments_loop(
             ):
                 lnrpc_payment: lnrpc.Payment
                 async_publish(
-                    Events.LND_PAYMENT,
+                    event_name=Events.LND_PAYMENT,
                     htlc_event=lnrpc_payment,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -420,7 +425,7 @@ async def htlc_events_loop(
             ):
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
-                    Events.HTLC_EVENT,
+                    event_name=Events.HTLC_EVENT,
                     htlc_event=htlc_event,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
@@ -538,7 +543,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{lnd_client.icon} Invoices {index_offset}... "
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Invoices {index_offset}... "
                     f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_invoices += len(list_invoices.invoices)
@@ -547,7 +553,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 pass
             if len(list_invoices.invoices) < num_max_invoices:
                 logger.info(
-                    f"{lnd_client.icon} Finished reading {total_invoices} invoices..."
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_invoices} invoices..."
                 )
                 break
 
@@ -611,7 +618,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 modified = [a.modified_count for a in ans]
                 inserted = [a.did_upsert for a in ans]
                 logger.info(
-                    f"{lnd_client.icon} Payments {index_offset}... "
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Payments {index_offset}... "
                     f"modified: {sum(modified)} inserted: {sum(inserted)}"
                 )
                 total_payments += len(list_payments.payments)
@@ -622,7 +630,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 logger.exception(str(e), extra={"error": e})
             if len(list_payments.payments) < num_max_payments:
                 logger.info(
-                    f"{lnd_client.icon} Finished reading {total_payments} payments..."
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_payments} payments..."
                 )
                 break
 
@@ -673,7 +682,11 @@ async def run(connection_name: str) -> None:
         # before the reporting functions The track_events function will
         # group events and report them when the group is complete
         async_subscribe(
-            [Events.LND_INVOICE, Events.LND_PAYMENT, Events.HTLC_EVENT],
+            [
+                Events.LND_INVOICE,
+                Events.LND_PAYMENT,
+                Events.HTLC_EVENT,
+            ],
             track_events,
         )
         async_subscribe(Events.LND_INVOICE, db_store_invoice)
