@@ -179,7 +179,7 @@ class LndEventsGroup:
             case "Invoice":
                 return (
                     f"🧾 Invoice: {event.value_msat//1000:,.0f} ({event.add_index})",
-                    {},
+                    MessageToDict(event, preserving_proto_field_name=True),
                 )
             case "Payment":
                 return self.message_payment_event(event, dest_alias)
@@ -506,7 +506,7 @@ class LndEventsGroup:
         if htlc_id:
             incoming_invoice = self.lookup_invoice_by_htlc_id(htlc_id=htlc_id)
             if incoming_invoice:
-                amount = incoming_invoice.value
+                amount = int(incoming_invoice.value_msat / 1000)
                 htlc_id_str = f" ({htlc_id})"
                 for_memo = (
                     f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
