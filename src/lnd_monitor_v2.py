@@ -74,11 +74,12 @@ async def track_events(
             try:
                 htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
                 if htlc_id:
+                    await asyncio.sleep(0.2)
                     incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
                         htlc_id
                     )
                 if incoming_invoice:
-                    amount = incoming_invoice.value if incoming_invoice else 0
+                    amount = int(incoming_invoice.value_msat / 1000)
                     notification = False if amount < 10 else notification
             except Exception as e:
                 logger.exception(e)
@@ -90,7 +91,10 @@ async def track_events(
             await asyncio.sleep(0.2)
             logger.info(
                 f"{lnd_client.icon} {message_str}",
-                extra={"notification": notification, **ans_dict},
+                extra={
+                    "notification": notification,
+                    type(htlc_event).__name__: ans_dict,
+                },
             )
         asyncio.create_task(
             remove_event_group(htlc_event, lnd_client, lnd_events_group)
@@ -674,8 +678,8 @@ async def run(connection_name: str) -> None:
         # group events and report them when the group is complete
         async_subscribe(
             [
-                Events.LND_INVOICE_COMPLETED,
-                Events.LND_PAYMENT_COMPLETED,
+                Events.LND_INVOICE,
+                Events.LND_PAYMENT,
                 Events.HTLC_EVENT,
             ],
             track_events,
