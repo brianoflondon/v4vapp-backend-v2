@@ -27,6 +27,8 @@ typer = "^0.15.1"
 motor = "^3.7.0"
 aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
+asgiref = "^3.8.1"
+beem = {git = "https://gitlab.syncad.com/hive/beem.git"}
 
 
 [tool.poetry.group.dev.dependencies]
