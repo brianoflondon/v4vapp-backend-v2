@@ -118,6 +118,34 @@
             "request": "launch",
             "program": "src/invoice_experiments.py",
             "console": "integratedTerminal"
-        }
+        },
+        {
+            "name": "Log viewer Voltage Docker",
+            "type": "debugpy",
+            "consoleName": "Voltage Log Viewer",
+            "request": "launch",
+            "program": "src/stream_logs.py",
+            "console": "integratedTerminal",
+            "args": [
+                "logs_docker/voltage/",
+                "-f",
+                "--tail",
+                "200"
+            ]
+        },
+        {
+            "name": "Log viewer Umbrel Docker",
+            "type": "debugpy",
+            "consoleName": "Umbrel Log Viewer",
+            "request": "launch",
+            "program": "src/stream_logs.py",
+            "console": "integratedTerminal",
+            "args": [
+                "logs_docker/umbrel/",
+                // "-f",
+                // "--tail",
+                // "200"
+            ]
+        },
     ]
 }
