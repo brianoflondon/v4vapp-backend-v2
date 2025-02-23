@@ -75,7 +75,7 @@ async def track_events(
                 htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
                 if htlc_id:
                     # logger.info(f"Waiting for incoming invoice... {htlc_id}")
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.2)
                     incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
                         htlc_id
                     )
@@ -89,6 +89,7 @@ async def track_events(
         message_str, ans_dict = lnd_events_group.message(
             htlc_event, dest_alias=dest_alias
         )
+        await asyncio.sleep(0.2)
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
             logger.info(
                 f"{lnd_client.icon} {message_str}",
