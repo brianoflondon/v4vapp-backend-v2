@@ -174,7 +174,9 @@ async def remove_event_group(
     lnd_events_group.remove_group(htlc_event)
 
 
-async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> None:
+async def db_store_invoice(
+    htlc_event: lnrpc.Invoice, lnd_client: LNDClient, *args: Any, **kwargs
+) -> None:
     """
     Asynchronously stores an invoice in the MongoDB database.
 
@@ -188,7 +190,7 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
         db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         logger.debug(
-            f"{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
+            f"{lnd_client.icon}{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
             f"{db_client.hex_id}"
         )
         try:
@@ -199,10 +201,10 @@ async def db_store_invoice(htlc_event: lnrpc.Invoice, *args: Any, **kwargs) -> N
         query = {"r_hash": invoice_pyd.r_hash}
         invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
-        logger.debug(
-            f"{DATABASE_ICON} "
+        logger.info(
+            f"{lnd_client.icon}{DATABASE_ICON} "
             f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
-            extra={"db_ans": ans.raw_result},
+            extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
         )
 
 
@@ -230,8 +232,8 @@ async def db_store_payment(
                 fill_cache=True,
                 col_pub_keys="pub_keys",
             )
-            logger.info(
-                f"{lnd_client.icon} "
+            logger.debug(
+                f"{lnd_client.icon}{DATABASE_ICON} "
                 f"Storing payment: {htlc_event.payment_index} "
                 f"{db_client.hex_id} {payment_pyd.route_str}"
             )
@@ -241,10 +243,10 @@ async def db_store_payment(
                 "payments", query, payment_dict, upsert=True
             )
             logger.info(
-                f"{lnd_client.icon} "
+                f"{lnd_client.icon}{DATABASE_ICON} "
                 f"New payment recorded: {payment_pyd.payment_index:>6} "
-                f"{payment_pyd.payment_hash}",
-                extra={"db_ans": ans.raw_result},
+                f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
+                extra={"db_ans": ans.raw_result, "payment": payment_dict},
             )
         except Exception as e:
             logger.info(e)

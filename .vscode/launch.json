@@ -130,7 +130,7 @@
                 "logs_docker/voltage/",
                 "-f",
                 "--tail",
-                "200"
+                "20000"
             ]
         },
         {
@@ -142,7 +142,7 @@
             "console": "integratedTerminal",
             "args": [
                 "logs_docker/umbrel/",
-                // "-f",
+                "-f",
                 // "--tail",
                 // "200"
             ]

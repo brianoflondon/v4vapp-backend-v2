@@ -24,7 +24,7 @@ async def process_log_lines(line: str, regex_filter: re.Pattern):
         if re.search(
             REGEX_FILTER,
             message,
-        ):
+        ) or (log_entry.get("payment") and log_entry.get("payment").get("route_str")):
             timestamp = datetime.fromisoformat(
                 log_entry.get("timestamp", "N/A")
             ).replace(tzinfo=timezone.utc)
