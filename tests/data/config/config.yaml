@@ -10,7 +10,7 @@ logging:
     asyncio: WARNING
     httpcore: WARNING
     httpx: WARNING
-
+    beem: ERROR
 
 ################# TEST CONFIG #################
 default_lnd_connection: example
