@@ -161,6 +161,8 @@ class CustomNotificationHandler(logging.Handler):
 
     @override
     def emit(self, record: logging.LogRecord):
+        if not hasattr(record, "levelno"):
+            record.levelno = logging.INFO
         log_message = record.getMessage()
         if self.error_codes:
             logger.debug(f"Error codes: {self.error_codes}")
@@ -217,6 +219,9 @@ class NotificationFilter(logging.Filter):
                                       'notification' attribute and it is True.
                                       Otherwise, returns False.
         """
+        if not hasattr(record, "levelno"):
+            record.levelno = logging.INFO
+
         # If the record.notification flag is set to False,
         # do not send the message to Notification
         if hasattr(record, "notification") and not record.notification:
@@ -244,6 +249,9 @@ class NonErrorFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        if not hasattr(record, "levelno"):
+            record.levelno = logging.INFO
+
         return record.levelno <= logging.INFO
 
 
@@ -261,4 +269,6 @@ class NotDebugFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        if not hasattr(record, "levelno"):
+            record.levelno = logging.INFO
         return record.levelno > logging.DEBUG
