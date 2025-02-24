@@ -10,8 +10,8 @@ logging:
     asyncio: WARNING
     httpcore: WARNING
     httpx: WARNING
-    beem: ERROR
-
+    lighthive: DEBUG
+    
 ################# TEST CONFIG #################
 default_lnd_connection: example
 

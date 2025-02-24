@@ -5,10 +5,14 @@ from pathlib import Path
 from timeit import default_timer as timeit
 
 import pytest
-from beem.nodelist import NodeList
+from lighthive.client import Client
+from lighthive.helpers.event_listener import EventListener
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
+from v4vapp_backend_v2.helpers.async_wrapper import (
+    sync_to_async,
+    sync_to_async_iterable,
+)
 from v4vapp_backend_v2.hive.hive_client import HiveClient
 
 
@@ -36,58 +40,68 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
-def test_hive_nodes():
-    nodelist = NodeList()
-    nodelist.update_nodes()
-    nodes = nodelist.get_hive_nodes()
-    print(nodes)
-    # print(hive.is_hive)
+def test_lighthive_client_not_async():
+    # Test the lighthive client
+    client = Client()
+    assert client is not None
+    logger.info(f"Client node_list: {client.node_list}")
+    props = client.get_dynamic_global_properties()
+    head_block_number = props.get("head_block_number")
+    # Test the lighthive event listener
+    client
+    events = EventListener(
+        client, start_block=head_block_number - 10, end_block=head_block_number
+    )
+    for custom_json in events.on(["custom_json", "transfer"]):
+        logger.info(f"custom_json: {custom_json}")
 
 
 @pytest.mark.asyncio
-async def test_hive_client():
-    hive_client = HiveClient()
-    assert hive_client.blockchain.get_current_block_num()
-    print("Current block number:", hive_client.blockchain.get_current_block_num())
-    assert hive_client.blockchain.get_current_block()
-    print("Hive RPC Url:", hive_client.hive.rpc.url)
+async def test_lighthive_client_async():
+    # Test the lighthive client
+    client = Client()
+    assert client is not None
+    logger.info(f"Client node_list: {client.node_list}")
+
+    # Define the custom condition function
+    def condition(operation_value):
+        if ("to" in operation_value and "v4vapp" in operation_value["to"]) or (
+            "from" in operation_value and "v4vapp" in operation_value["from"]
+        ):
+            return True
+        return False
+
+    count = 0
+    # Test the lighthive event listener
+    events = EventListener(client, start_block=93598595, end_block=93598599 + 10)
+    async_events = sync_to_async_iterable(events.on(["transfer"], condition=condition))
+    async for transfer in async_events:
+        count += 1
+        logger.info(f"transfer: {json.dumps(transfer, indent=2)}")
+    # Test the lighthive event listener
+    assert count == 2
 
 
 @pytest.mark.asyncio
-async def test_watch_hive_blockchain():
-    OP_NAMES = ["transfer"]
-    hive_client = HiveClient()
-    start_block = hive_client.blockchain.get_current_block_num() - 10
-    end_block = start_block + 5
+async def test_find_podpings():
+    def condition(operation_value):
+        if "id" in operation_value and operation_value["id"].startswith("pp"):
+            return True
 
-    max_retries = 5
-    retry_count = 0
+        return False
 
-    while retry_count < max_retries:
-        try:
-            stream = sync_to_async_iterable(
-                hive_client.blockchain.stream(start=start_block, opNames=OP_NAMES)
-            )
-            async for post in stream:
-                hive_client.hive.data  # Accessing data (assuming this is intentional)
-                print(
-                    "Block number:",
-                    post.get("block_num") - start_block,
-                    hive_client.hive.rpc.url,
-                )
-                if post.get("block_num") > end_block:
-                    break
-            # If we reach here without exceptions, the test passes
-            assert True
-            break  # Exit retry loop on success
+    client = Client()
+    events = EventListener(client)
+    count = 0
+    async_events = sync_to_async_iterable(
+        events.on(["custom_json"], condition=condition)
+    )
+    async for custom_json in async_events:
+        count += 1
+        print(f"custom_json: {json.dumps(custom_json, indent=2)}")
+        if count > 2:
+            break
+    await asyncio.sleep(1)
 
-        except Exception as e:
-            retry_count += 1
-            print(f"Caught RPCNodeException: {e}")
-            print(f"Retrying ({retry_count}/{max_retries})...")
-            if retry_count == max_retries:
-                print("Max retries reached. Failing the test.")
-                assert False, f"Failed after {max_retries} retries due to RPC errors"
-            # Optionally switch nodes or wait before retrying
-            hive_client.hive.rpc.next_node()  # Switch to the next node in the list
-            await asyncio.sleep(1)  # Small delay before retrying
+if __name__ == "__main__":
+    pytest.main([__file__])
