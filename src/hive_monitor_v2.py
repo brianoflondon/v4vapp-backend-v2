@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, List, Tuple
 
 import typer
+from colorama import Fore, Style
 from lighthive.client import Client  # type: ignore
 from lighthive.exceptions import RPCNodeException  # type: ignore
 from lighthive.helpers.amount import Amount  # type: ignore
@@ -155,7 +156,7 @@ async def run(watch_users: List[str]):
                     )
                     if notification:
                         logger.info(
-                            notification_str,
+                            Fore.WHITE + notification_str + Style.RESET_ALL,
                             extra={"notification": notification, "event": event},
                         )
                 last_good_block = event["block"]

@@ -29,6 +29,7 @@ aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
 asgiref = "^3.8.1"
 lighthive = "^0.4.3"
+colorama = "^0.4.6"
 
 
 [tool.poetry.group.dev.dependencies]

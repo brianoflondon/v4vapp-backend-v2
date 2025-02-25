@@ -1,17 +1,12 @@
-import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-import pytest
 
 from v4vapp_backend_v2.config.mylogger import (
     MyJSONFormatter,
     human_readable_datetime_str,
     timedelta_display,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 def test_format_basic_log_record():
