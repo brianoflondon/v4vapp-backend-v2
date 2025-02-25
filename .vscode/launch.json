@@ -13,6 +13,15 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Hive Monitor",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [],
+            "justMyCode": false,
+        },
+        {
             "name": "Umbrel destination lookup",
             "type": "debugpy",
             "consoleName": "Umbrel Destination",

@@ -79,6 +79,11 @@ class MyJSONFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "levelno"):
+            logger.warning(
+                f"No levelno: {record}", extra={"notification": False, "record": record}
+            )
+            record.levelno = logging.INFO
         message = self._prepare_log_dict(record)
         return json.dumps(message, default=str)
 
@@ -162,6 +167,9 @@ class CustomNotificationHandler(logging.Handler):
     @override
     def emit(self, record: logging.LogRecord):
         if not hasattr(record, "levelno"):
+            logger.warning(
+                f"No levelno: {record}", extra={"notification": False, "record": record}
+            )
             record.levelno = logging.INFO
         log_message = record.getMessage()
         if self.error_codes:
@@ -220,6 +228,9 @@ class NotificationFilter(logging.Filter):
                                       Otherwise, returns False.
         """
         if not hasattr(record, "levelno"):
+            logger.warning(
+                f"No levelno: {record}", extra={"notification": False, "record": record}
+            )
             record.levelno = logging.INFO
 
         # If the record.notification flag is set to False,
@@ -250,6 +261,9 @@ class NonErrorFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         if not hasattr(record, "levelno"):
+            logger.warning(
+                f"No levelno: {record}", extra={"notification": False, "record": record}
+            )
             record.levelno = logging.INFO
 
         return record.levelno <= logging.INFO
@@ -270,5 +284,8 @@ class NotDebugFilter(logging.Filter):
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         if not hasattr(record, "levelno"):
+            logger.warning(
+                f"No levelno: {record}", extra={"notification": False, "record": record}
+            )
             record.levelno = logging.INFO
         return record.levelno > logging.DEBUG

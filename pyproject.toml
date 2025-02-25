@@ -42,6 +42,7 @@ black = "^25.1.0"
 mongomock-motor = "^0.0.35"
 pytest-mock = "^3.14.0"
 types-aiofiles = "^24.1.0.20241221"
+types-requests = "^2.32.0.20241016"
 
 [build-system]
 requires = ["poetry-core"]

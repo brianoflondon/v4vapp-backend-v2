@@ -1,9 +1,11 @@
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-from typing import Any, AsyncIterable, Callable, Iterator, TypeVar, Union
+from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
+
+from v4vapp_backend_v2.config.setup import logger
 
 thread_pool = ThreadPoolExecutor()
 
@@ -46,8 +48,23 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
                 yield await next_async(sync_iterator)
             except StopAsyncIteration:
                 return
+            except AttributeError as log_error:
+                logger.error(
+                    f"Logging error: {log_error} - problem with str in log level",
+                    extra={"notification": False},
+                )
+                return
     except Exception as e:
-        print(e)
+        try:
+            logger.warning(
+                f"sync_to_async_iterable {e}", extra={"notification": False, "error": e}
+            )
+        except AttributeError as log_error:
+            logger.error(
+                f"Logging error: {log_error} - problem with str in log level",
+                extra={"notification": False},
+            )
+        raise e
 
 
 iter_async = sync_to_async(iter, thread_sensitive=False)
@@ -58,6 +75,21 @@ def _next(it: Iterator[T]) -> T:
         return next(it)
     except StopIteration:
         raise StopAsyncIteration
+    except AttributeError as log_error:
+        logger.error(
+            f"Logging error: {log_error} - problem with str in log level",
+            extra={"notification": False},
+        )
+        raise StopAsyncIteration
+    except Exception as e:
+        try:
+            logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+        except AttributeError as log_error:
+            logger.error(
+                f"Logging error: {log_error} - problem with str in log level",
+                extra={"notification": False},
+            )
+        raise e
 
 
 next_async = sync_to_async(_next, thread_sensitive=False)

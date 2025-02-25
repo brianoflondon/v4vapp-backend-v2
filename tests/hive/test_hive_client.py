@@ -4,16 +4,18 @@ import logging
 from pathlib import Path
 from timeit import default_timer as timeit
 
+import httpx
 import pytest
 from lighthive.client import Client
 from lighthive.helpers.event_listener import EventListener
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.async_wrapper import (
-    sync_to_async,
-    sync_to_async_iterable,
+from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
+from v4vapp_backend_v2.helpers.hive_extras import (
+    HiveExp,
+    get_good_nodes,
+    get_hive_block_explorer_link,
 )
-from v4vapp_backend_v2.hive.hive_client import HiveClient
 
 
 @pytest.fixture(autouse=True)
@@ -102,6 +104,26 @@ async def test_find_podpings():
         if count > 2:
             break
     await asyncio.sleep(1)
+
+
+def test_get_good_nodes():
+    good_nodes = get_good_nodes()
+    assert good_nodes is not None
+    assert len(good_nodes) > 0
+    logger.info(f"Good nodes: {good_nodes}")
+
+
+def test_get_hive_block_explorer_link():
+    trx_id = "fd321bb9a7ac53ec1a7a04fcca0d0913a089ac2b"
+    for block_explorer in HiveExp:
+        link = get_hive_block_explorer_link(trx_id, block_explorer)
+        try:
+            response = httpx.get(link)
+            assert response.status_code == 200
+        except httpx.HTTPStatusError as e:
+            logger.error(f"{block_explorer.name}: {link} - {e}")
+        logger.info(f"{block_explorer.name}: {link}")
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

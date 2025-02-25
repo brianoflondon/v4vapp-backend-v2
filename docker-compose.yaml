@@ -47,6 +47,17 @@ services:
     command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
     restart: unless-stopped
 
+  hive-monitor:
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/hive:/app/logs
+    command: ["poetry", "run", "python", "hive_monitor_v2.py"]
+    restart: unless-stopped
+
 volumes:
   mongo_data:
   mongo_config:

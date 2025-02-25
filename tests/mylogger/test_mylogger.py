@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.config.mylogger import MyJSONFormatter, human_readable_datetime_str, timedelta_display
+from v4vapp_backend_v2.config.mylogger import (
+    MyJSONFormatter,
+    human_readable_datetime_str,
+    timedelta_display,
+)
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
@@ -119,5 +123,3 @@ def test_human_readable_datetime_str():
     # Test with a datetime object
     dt_obj = datetime(2022, 1, 1, 12, 30, 45, 123456)
     assert human_readable_datetime_str(dt_obj) == "12:30:45.123 Sat 01 Jan"
-
-
