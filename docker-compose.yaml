@@ -55,7 +55,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/hive:/app/logs
-    command: ["poetry", "run", "python", "hive_monitor_v2.py"]
+    command: ["poetry", "run", "python", "hive_monitor_v2.py", "v4vapp", "v4vapp.tre", "v4vapp.dhf", "brianoflondon"]
     restart: unless-stopped
 
 volumes:

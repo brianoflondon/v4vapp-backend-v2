@@ -54,7 +54,7 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
         f"{ICON} {transfer['from']} "
         f"sent {transfer['amount']} "
         f"to {transfer['to']} "
-        f" - {transfer['memo']} "
+        f" - {transfer['memo'][:16]} "
         f"{link_url}"
     )
 
@@ -168,6 +168,12 @@ async def run(watch_users: List[str]):
                     "error": e,
                     "hive_client": hive_client.__dict__,
                 },
+            )
+            hive_client.circuit_breaker_cache[hive_client.current_node] = True
+            hive_client.next_node()
+            logger.warning(
+                f"Switching to node: {hive_client.current_node}",
+                extra={"hive_client": hive_client.__dict__},
             )
 
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
