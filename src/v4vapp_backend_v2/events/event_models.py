@@ -10,3 +10,6 @@ class Events(StrEnum):
 
     # HTLC events
     HTLC_EVENT = auto()
+
+    # Hive events
+    HIVE_TRANSFER = auto()

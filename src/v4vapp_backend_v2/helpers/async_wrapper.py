@@ -64,7 +64,7 @@ async def sync_to_async_iterable(sync_iterable: Iterator[T]) -> AsyncIterable[T]
                 f"Logging error: {log_error} - problem with str in log level",
                 extra={"notification": False},
             )
-        raise e
+        return
 
 
 iter_async = sync_to_async(iter, thread_sensitive=False)
@@ -75,9 +75,9 @@ def _next(it: Iterator[T]) -> T:
         return next(it)
     except StopIteration:
         raise StopAsyncIteration
-    except AttributeError as log_error:
+    except AttributeError as e:
         logger.error(
-            f"Logging error: {log_error} - problem with str in log level",
+            f"Logging error: {e} - problem with str in log level",
             extra={"notification": False},
         )
         raise StopAsyncIteration
@@ -89,7 +89,7 @@ def _next(it: Iterator[T]) -> T:
                 f"Logging error: {log_error} - problem with str in log level",
                 extra={"notification": False},
             )
-        raise e
+        raise StopAsyncIteration
 
 
 next_async = sync_to_async(_next, thread_sensitive=False)

@@ -7,6 +7,7 @@ from pydantic import AnyUrl
 from v4vapp_backend_v2.config.setup import logger
 
 DEFAULT_GOOD_NODES = [
+    "https://rpc.podping.org",
     "https://api.hive.blog",
     "https://api.deathwing.me",
     "https://hive-api.arcange.eu",
