@@ -5,11 +5,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, List, Tuple
 
 import typer
+from beem.amount import Amount
+from beem.blockchain import Blockchain
 from colorama import Fore, Style
-from lighthive.client import Client  # type: ignore
-from lighthive.exceptions import RPCNodeException  # type: ignore
-from lighthive.helpers.amount import Amount  # type: ignore
-from lighthive.helpers.event_listener import EventListener  # type: ignore
 from pymongo.errors import DuplicateKeyError
 from requests.exceptions import HTTPError
 
@@ -19,6 +17,7 @@ from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.hive_extras import (
+    MAX_HIVE_BATCH_SIZE,
     get_good_nodes,
     get_hive_block_explorer_link,
     get_hive_client,
@@ -26,6 +25,11 @@ from v4vapp_backend_v2.helpers.hive_extras import (
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
+HIVE_DATABASE_CONNECTION = "local_connection"
+HIVE_DATABASE = "lnd_monitor_v2_voltage"
+HIVE_DATABASE_USER = "lnd_monitor"
+HIVE_TRX_COLLECTION = "hive_trx_beem"
+
 app = typer.Typer()
 icon = "🐝"
 
@@ -36,12 +40,14 @@ def remove_ms(delta: timedelta) -> timedelta:
     return timedelta(days=delta.days, seconds=delta.seconds)
 
 
-def check_time_diff(timestamp: str) -> timedelta:
+def check_time_diff(timestamp: str | datetime) -> timedelta:
     """
-    Calculate the difference between the current time and a given timestamp.
+    Calculate the difference between the current time and a given timestamp
+    Removes the milliseconds from the timedelta.
 
     Args:
-        timestamp (str): The timestamp in ISO format to compare with the current time.
+        timestamp (str | datetime): The timestamp in ISO format or datetime object () to
+        compare with the current time. Forces UTC if not timezone aware.
 
     Returns:
         timedelta: The difference between the current time and the given timestamp.
@@ -49,19 +55,18 @@ def check_time_diff(timestamp: str) -> timedelta:
     Logs a warning if the time difference is greater than 1 minute.
     """
     try:
-        time_diff = remove_ms(
-            datetime.now(tz=timezone.utc)
-            - datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc)
-        )
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc)
+        else:
+            if not timestamp.tzinfo:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+        time_diff = remove_ms(datetime.now(tz=timezone.utc) - timestamp)
     except (ValueError, AttributeError, OverflowError, TypeError):
         time_diff = timedelta(seconds=0)
-
     return time_diff
 
 
-def log_time_difference_errors(
-    timestamp: str, error_code: str = "", error_code_clear: bool = False
-):
+def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
     """
     Logs time difference errors based on the provided timestamp.
 
@@ -75,8 +80,6 @@ def log_time_difference_errors(
         timestamp (str): The timestamp to compare against the current time.
         error_code (str, optional): The error code to log if the time difference is less
             than 1 minute. Defaults to an empty string.
-        error_code_clear (bool, optional): A flag indicating whether the error code should
-            be cleared. Defaults to False.
 
     Returns:
         Tuple[str, bool]: A tuple containing the error code and a flag indicating whether
@@ -93,17 +96,15 @@ def log_time_difference_errors(
             },
         )
     if error_code and time_diff <= timedelta(minutes=1):
-        error_code_clear = True
         logger.warning(
             f"{icon} Time diff: {time_diff} less than 1 minute",
             extra={
                 "notification": True,
-                "error_code": error_code,
-                "error_code_clear": error_code_clear,
+                "error_code_clear": error_code,
             },
         )
         error_code = ""
-    return error_code, error_code_clear
+    return error_code
 
 
 def format_hive_transaction(event: dict) -> Tuple[str, str]:
@@ -119,12 +120,12 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
     time_diff = check_time_diff(event["timestamp"])
 
     link_url = get_hive_block_explorer_link(event["trx_id"])
-    transfer = event["op"][1]
+    transfer = event
 
     amount = Amount(transfer["amount"])
     notification_str = (
         f"{icon} {transfer['from']} "
-        f"sent {transfer['amount']} "
+        f"sent {amount} "
         f"to {transfer['to']} "
         f" - {transfer['memo'][:16]} "
         f"{link_url}"
@@ -132,7 +133,7 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
 
     log_str = (
         f"{icon} {transfer['from']:<17} "
-        f"sent {amount.amount:12,.3f} {amount.symbol:>4} "
+        f"sent {amount.amount_decimal:12,.3f} {amount.symbol:>4} "
         f"to {transfer['to']:<17} "
         f" - {transfer['memo'][:30]:>30} "
         f"{time_diff} ago "
@@ -150,10 +151,9 @@ def watch_users_notification(event: dict, watch_user: List[str]) -> bool:
     Returns:
         bool: True if the user is in the watch list.
     """
-    transfer = event["op"][1]
-    if "to" in transfer and transfer["to"] in watch_user:
+    if event.get("to", "") in watch_user:
         return True
-    if "from" in transfer and transfer["from"] in watch_user:
+    if event.get("from", "") in watch_user:
         return True
     return False
 
@@ -200,11 +200,11 @@ async def db_store_transaction(hive_event: dict, *args: Any, **kwargs: Any) -> N
     """
     try:
         async with MongoDBClient(
-            db_conn="local_connection",
-            db_name="lnd_monitor_v2_voltage",
-            db_user="lnd_monitor",
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
         ) as db_client:
-            _ = await db_client.insert_one("hive_trx", hive_event)
+            ans = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
 
     except DuplicateKeyError:
         pass
@@ -225,18 +225,29 @@ async def get_last_good_block() -> int:
     """
     try:
         async with MongoDBClient(
-            db_conn="local_connection",
-            db_name="lnd_monitor_v2_voltage",
-            db_user="lnd_monitor",
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
         ) as db_client:
-            ans = await db_client.find_one("hive_trx", {}, sort=[("block", -1)])
-            time_diff = check_time_diff(ans["timestamp"])
-            logger.info(
-                f"{icon} Last good block: {ans['block']} "
-                f"{ans['timestamp']} {time_diff} ago",
-                extra={"db": ans},
+            ans = await db_client.find_one(
+                HIVE_TRX_COLLECTION, {}, sort=[("block_num", -1)]
             )
-            last_good_block = ans["block"]
+            if ans:
+                time_diff = check_time_diff(ans["timestamp"])
+                logger.info(
+                    f"{icon} Last good block: {ans['block_num']} "
+                    f"{ans['timestamp']} {time_diff} ago",
+                    extra={"db": ans},
+                )
+                last_good_block = int(ans["block_num"])
+            else:
+                try:
+                    last_good_block = get_hive_client().get_dynamic_global_properties()[
+                        "head_block_number"
+                    ]
+                except Exception as e:
+                    logger.error(e)
+                    last_good_block = 93692232
             return last_good_block
 
     except Exception as e:
@@ -253,69 +264,74 @@ async def transactions_loop(watch_users: List[str]):
     the transactions and logs them.
     """
 
-    def condition(operation_value: dict) -> bool:
-        """
-        Condition to check if a transaction is valid.
-        Args:
-            transaction (dict): The transaction to check.
-
-        Returns:
-            bool: True if the transaction is valid.
-        """
-        return True
-
-    error_code_clear = True
     logger.info(f"{icon} Watching users: {watch_users}")
-
+    op_names = ["transfer"]
     hive_client = get_hive_client()
-    # last_good_block = (
-    #     hive_client.get_dynamic_global_properties().get("head_block_number") - 30
-    # )
+    hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block()
     while True:
         logger.info(f"{icon} Last good block: {last_good_block}")
-        hive_events = EventListener(client=hive_client, start_block=last_good_block + 1)
-        async_events = sync_to_async_iterable(
-            hive_events.on(["transfer"], condition=condition)
+        async_stream = sync_to_async_iterable(
+            hive_blockchain.stream(
+                opNames=op_names,
+                start=last_good_block,
+                raw_ops=False,
+                max_batch_size=MAX_HIVE_BATCH_SIZE,
+            )
         )
         error_code = ""
-
         try:
-            async for hive_event in async_events:
-                if "op" in hive_event and hive_event["op"][0] == "transfer":
-                    last_good_block = hive_event["block"]
-                    notification = watch_users_notification(hive_event, watch_users)
-                    log_str, _ = format_hive_transaction(hive_event)
-                    error_code, error_code_clear = log_time_difference_errors(
-                        hive_event["timestamp"], error_code, error_code_clear
-                    )
-                    logger.info(
-                        log_str + f" {hive_client.current_node}",
-                        extra={
-                            "event": hive_event,
-                        },
-                    )
-                    async_publish(Events.HIVE_TRANSFER, hive_event)
-                    if notification:
-                        async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)
-            last_good_block = hive_event["block"]
-            # If no more events, raise an exception to switch to the next node
-            raise RPCNodeException("No more events")
-        except RPCNodeException as e:
-            logger.warning(
-                f"{icon} RPC Node: {hive_client.current_node} {e}",
-                extra={
-                    "notification": False,
-                    "error": e,
-                    "hive_client": hive_client.__dict__,
-                },
-            )
-            hive_client.circuit_breaker_cache[hive_client.current_node] = True
-            hive_client.next_node()
-            logger.warning(
-                f"{icon} Switching to node: {hive_client.current_node}",
-                extra={"hive_client": hive_client.__dict__},
-            )
+            async for hive_event in async_stream:
+                last_good_block = hive_event.get("block_num")
+                notification = watch_users_notification(hive_event, watch_users)
+                log_str, _ = format_hive_transaction(hive_event)
+                error_code = log_time_difference_errors(
+                    hive_event["timestamp"], error_code
+                )
+                logger.info(
+                    log_str + f" {hive_client.rpc.url}",
+                    extra={
+                        "event": hive_event,
+                    },
+                )
+                async_publish(Events.HIVE_TRANSFER, hive_event)
+                if notification:
+                    async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
+
+            #     if "op" in hive_event and hive_event["op"][0] == "transfer":
+            #         last_good_block = hive_event["block"]
+            #         notification = watch_users_notification(hive_event, watch_users)
+            #         log_str, _ = format_hive_transaction(hive_event)
+            #         error_code, error_code_clear = log_time_difference_errors(
+            #             hive_event["timestamp"], error_code, error_code_clear
+            #         )
+            #         logger.info(
+            #             log_str + f" {hive_client.current_node}",
+            #             extra={
+            #                 "event": hive_event,
+            #             },
+            #         )
+            #         async_publish(Events.HIVE_TRANSFER, hive_event)
+            #         if notification:
+            #             async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)
+            # last_good_block = hive_event["block"]
+            # # If no more events, raise an exception to switch to the next node
+            # raise RPCNodeException("No more events")
+        # except Exception as e:
+        #     logger.warning(
+        #         f"{icon} RPC Node: {hive_client.current_node} {e}",
+        #         extra={
+        #             "notification": False,
+        #             "error": e,
+        #             "hive_client": hive_client.__dict__,
+        #         },
+        #     )
+        #     hive_client.circuit_breaker_cache[hive_client.current_node] = True
+        #     hive_client.next_node()
+        #     logger.warning(
+        #         f"{icon} Switching to node: {hive_client.current_node}",
+        #         extra={"hive_client": hive_client.__dict__},
+        #     )
 
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info("{icon} Keyboard interrupt: Stopping event listener.")
@@ -364,6 +380,7 @@ def main(
     """
     logger.info(
         f"{icon} ✅ Hive Monitor v2: " f"{icon}. Version: {CONFIG.version}",
+        extra={"notification": True},
     )
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]

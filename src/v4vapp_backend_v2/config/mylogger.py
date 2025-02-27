@@ -177,24 +177,23 @@ class CustomNotificationHandler(logging.Handler):
         # Do something special here with error codes or details
         if (
             self.error_codes
-            and hasattr(record, "error_code")
             and hasattr(record, "error_code_clear")
         ):
-            error_code_obj = self.error_codes.get(record.error_code)
+            error_code_obj = self.error_codes.get(record.error_code_clear)
             elapsed_time = (
                 error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
             )
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message = (
-                f"✅ Error code {record.error_code} "
+                f"✅ Error code {record.error_code_clear} "
                 f"cleared after {elapsed_time_str} {log_message}"
             )
-            if record.error_code in self.error_codes:
-                self.error_codes.pop(record.error_code)
+            if record.error_code_clear in self.error_codes:
+                self.error_codes.pop(record.error_code_clear)
                 self.sender.send_notification(log_message, record, alert_level=5)
             else:
                 logger.warning(
-                    f"Error code not found in error_codes {record.error_code}",
+                    f"Error code not found in error_codes {record.error_code_clear}",
                     extra={"notification": False},
                 )
                 self.sender.send_notification(log_message, record, alert_level=5)

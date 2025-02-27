@@ -64,7 +64,10 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 try:
                     return await func(*args, **kwargs)
                 except DuplicateKeyError as e:
-                    extra = {"error": str(e), "error_code": e.code, "retries": retries}
+                    extra = {
+                        "error": str(e),
+                        "retries": retries,
+                    }
                     logger.info(
                         f"DuplicateKeyError: {e}. Not retrying.",
                         extra=extra,
@@ -397,8 +400,7 @@ class MongoDBClient:
                         extra={
                             "uri": self.uri,
                             "count": count,
-                            "error_code": error_code,
-                            "error_code_clear": True,
+                            "error_code_clear": error_code,
                         },
                     )
                 return

@@ -18,7 +18,12 @@
             "consoleName": "Hive Monitor",
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
-            "args": [],
+            "args": [
+                "v4vapp",
+                "brianoflondon",
+                "v4vapp.tre",
+                "v4vapp.dhf"
+            ],
             "justMyCode": false,
         },
         {

@@ -28,8 +28,8 @@ motor = "^3.7.0"
 aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
 asgiref = "^3.8.1"
-lighthive = "^0.4.3"
 colorama = "^0.4.6"
+beem = {git = "https://github.com/brianoflondon/beem.git", rev = "feature/add-op_in_trx-Operation-index-in-trx-to-stream-output"}
 
 
 [tool.poetry.group.dev.dependencies]
@@ -43,7 +43,6 @@ black = "^25.1.0"
 mongomock-motor = "^0.0.35"
 pytest-mock = "^3.14.0"
 types-aiofiles = "^24.1.0.20241221"
-types-requests = "^2.32.0.20241016"
 
 [build-system]
 requires = ["poetry-core"]
