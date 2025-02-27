@@ -32,7 +32,7 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
-def test_logger_output():
+def test_logger_output(set_base_config_path: None):
     INTERNAL_CONFIG = InternalConfig()
     logger.info("This is an info message")
     logger.warning("This is a warning message")
