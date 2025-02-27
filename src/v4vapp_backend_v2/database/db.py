@@ -68,7 +68,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         "error": str(e),
                         "retries": retries,
                     }
-                    logger.info(
+                    logger.debug(
                         f"DuplicateKeyError: {e}. Not retrying.",
                         extra=extra,
                     )

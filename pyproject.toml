@@ -29,7 +29,7 @@ aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
 asgiref = "^3.8.1"
 colorama = "^0.4.6"
-beem = {git = "https://github.com/brianoflondon/beem.git", rev = "feature/add-op_in_trx-Operation-index-in-trx-to-stream-output"}
+beem = {git = "https://gitlab.syncad.com/hive/beem"}
 
 
 [tool.poetry.group.dev.dependencies]

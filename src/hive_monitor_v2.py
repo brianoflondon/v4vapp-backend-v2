@@ -137,7 +137,7 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
         f"to {transfer['to']:<17} "
         f" - {transfer['memo'][:30]:>30} "
         f"{time_diff} ago "
-        f"{link_url}"
+        f"{link_url} {transfer['op_in_trx']:>3}"
     )
     return log_str, notification_str
 
@@ -201,13 +201,18 @@ async def db_store_transaction(
     database by logging the transaction event.
     """
     try:
+        amount = Amount(hive_event["amount"])
+        hive_event["amount_decimal"] = str(amount.amount_decimal)
+        hive_event["amount_value"] = amount.amount
+        hive_event["amount_symbol"] = amount.symbol
+        hive_event["amount_str"] = str(amount)
         ans = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
 
     except DuplicateKeyError:
         pass
 
     except Exception as e:
-        logger.error(e)
+        logger.error(e, extra={"error": e})
 
 
 async def get_last_good_block() -> int:
@@ -265,7 +270,7 @@ async def transactions_loop(watch_users: List[str]):
     op_names = ["transfer"]
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
-    last_good_block = await get_last_good_block()
+    last_good_block = await get_last_good_block() + 1
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -283,8 +288,19 @@ async def transactions_loop(watch_users: List[str]):
             )
             error_code = ""
             try:
+                last_trx_id = ""
+                op_in_trx = 0
                 async for hive_event in async_stream:
-                    last_good_block = hive_event.get("block_num")
+                    # For trx_id's with multiple transfers, record position in trx
+                    if hive_event.get("trx_id") == last_trx_id:
+                        op_in_trx += 1
+                    else:
+                        last_trx_id = hive_event.get("trx_id")
+                        op_in_trx = 0
+                        # Only advance block count on new trx_id
+                        if last_good_block < hive_event.get("block_num"):
+                            last_good_block = hive_event.get("block_num")
+                    hive_event["op_in_trx"] = op_in_trx
                     notification = watch_users_notification(hive_event, watch_users)
                     log_str, _ = format_hive_transaction(hive_event)
                     error_code = log_time_difference_errors(
@@ -301,7 +317,7 @@ async def transactions_loop(watch_users: List[str]):
                         async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
 
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
-                logger.info("{icon} Keyboard interrupt: Stopping event listener.")
+                logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
 
             except HTTPError as e:
@@ -352,6 +368,7 @@ def main(
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
     asyncio.run(run(watch_users))
+    logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
     print("👋 Goodbye!")
 
 
@@ -361,7 +378,6 @@ if __name__ == "__main__":
         logger.name = "hive_monitor_v2"
         app()
     except (KeyboardInterrupt, asyncio.CancelledError):
-        logger.info(f"{icon} 👋 Goodbye!")
         sys.exit(0)
 
     except Exception as e:
