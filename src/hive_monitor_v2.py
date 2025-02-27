@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, List, Tuple
+from typing import Annotated, Any, List, Tuple
 
 import typer
 from colorama import Fore, Style
@@ -10,15 +10,18 @@ from lighthive.client import Client  # type: ignore
 from lighthive.exceptions import RPCNodeException  # type: ignore
 from lighthive.helpers.amount import Amount  # type: ignore
 from lighthive.helpers.event_listener import EventListener  # type: ignore
+from pymongo.errors import DuplicateKeyError
 from requests.exceptions import HTTPError
 
 from lnd_monitor_v2 import InternalConfig, logger
+from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.hive_extras import (
     get_good_nodes,
     get_hive_block_explorer_link,
+    get_hive_client,
 )
 
 INTERNAL_CONFIG = InternalConfig()
@@ -171,7 +174,7 @@ async def review_good_nodes() -> List[str]:
     return good_nodes
 
 
-async def transactions_report(hive_event: dict) -> None:
+async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> None:
     """
     Asynchronously reports transactions.
 
@@ -183,9 +186,63 @@ async def transactions_report(hive_event: dict) -> None:
     _, notification_str = format_hive_transaction(hive_event)
     notification = True
     logger.info(
-        Fore.WHITE + notification_str + Style.RESET_ALL,
+        notification_str,
         extra={"notification": notification, "event": hive_event},
     )
+
+
+async def db_store_transaction(hive_event: dict, *args: Any, **kwargs: Any) -> None:
+    """
+    Asynchronously stores transactions in the database.
+
+    This function stores transactions in the
+    database by logging the transaction event.
+    """
+    try:
+        async with MongoDBClient(
+            db_conn="local_connection",
+            db_name="lnd_monitor_v2_voltage",
+            db_user="lnd_monitor",
+        ) as db_client:
+            _ = await db_client.insert_one("hive_trx", hive_event)
+
+    except DuplicateKeyError:
+        pass
+
+    except Exception as e:
+        logger.error(e)
+
+
+async def get_last_good_block() -> int:
+    """
+    Asynchronously retrieves the last good block.
+
+    This function retrieves the last good block by getting the dynamic global properties
+    from the Hive client and returning the head block number minus 30.
+
+    Returns:
+        int: The last good block.
+    """
+    try:
+        async with MongoDBClient(
+            db_conn="local_connection",
+            db_name="lnd_monitor_v2_voltage",
+            db_user="lnd_monitor",
+        ) as db_client:
+            ans = await db_client.find_one("hive_trx", {}, sort=[("block", -1)])
+            time_diff = check_time_diff(ans["timestamp"])
+            logger.info(
+                f"{icon} Last good block: {ans['block']} "
+                f"{ans['timestamp']} {time_diff} ago",
+                extra={"db": ans},
+            )
+            last_good_block = ans["block"]
+            return last_good_block
+
+    except Exception as e:
+        logger.error(e)
+        raise e
+    return 0
 
 
 async def transactions_loop(watch_users: List[str]):
@@ -209,13 +266,12 @@ async def transactions_loop(watch_users: List[str]):
 
     error_code_clear = True
     logger.info(f"{icon} Watching users: {watch_users}")
-    good_nodes = await review_good_nodes()
-    hive_client = Client(
-        load_balance_nodes=True, circuit_breaker=True, nodes=good_nodes
-    )
-    last_good_block = (
-        hive_client.get_dynamic_global_properties().get("head_block_number") - 30
-    )
+
+    hive_client = get_hive_client()
+    # last_good_block = (
+    #     hive_client.get_dynamic_global_properties().get("head_block_number") - 30
+    # )
+    last_good_block = await get_last_good_block()
     while True:
         logger.info(f"{icon} Last good block: {last_good_block}")
         hive_events = EventListener(client=hive_client, start_block=last_good_block + 1)
@@ -234,13 +290,14 @@ async def transactions_loop(watch_users: List[str]):
                         hive_event["timestamp"], error_code, error_code_clear
                     )
                     logger.info(
-                        f"{icon} " + log_str + f" {hive_client.current_node}",
+                        log_str + f" {hive_client.current_node}",
                         extra={
                             "event": hive_event,
                         },
                     )
+                    async_publish(Events.HIVE_TRANSFER, hive_event)
                     if notification:
-                        async_publish(Events.HIVE_TRANSFER, hive_event)
+                        async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)
             last_good_block = hive_event["block"]
             # If no more events, raise an exception to switch to the next node
             raise RPCNodeException("No more events")
@@ -281,7 +338,8 @@ async def run(watch_users: List[str]):
         None
     """
     try:
-        async_subscribe(Events.HIVE_TRANSFER, transactions_report)
+        async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
+        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction)
         await transactions_loop(watch_users)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")

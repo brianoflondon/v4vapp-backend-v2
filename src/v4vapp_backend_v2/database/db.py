@@ -476,7 +476,7 @@ class MongoDBClient:
         return result.inserted_ids
 
     @retry_on_failure()
-    async def find_one(self, collection_name: str, query: dict) -> Any | None:
+    async def find_one(self, collection_name: str, query: dict, **kwargs) -> Any | None:
         """
         Asynchronously find a single document in the specified collection that
         matches the given query.
@@ -489,7 +489,7 @@ class MongoDBClient:
             dict: The document that matches the query, or None if no document is found.
         """
         collection = await self.get_collection(collection_name)
-        document = await collection.find_one(query)
+        document = await collection.find_one(query, **kwargs)
         return document
 
     @retry_on_failure()

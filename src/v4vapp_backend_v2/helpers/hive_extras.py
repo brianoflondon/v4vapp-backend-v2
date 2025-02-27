@@ -2,12 +2,12 @@ from enum import StrEnum
 from typing import List
 
 import httpx
+from lighthive.client import Client as HiveClient  # type: ignore
 from pydantic import AnyUrl
 
 from v4vapp_backend_v2.config.setup import logger
 
 DEFAULT_GOOD_NODES = [
-    "https://rpc.podping.org",
     "https://api.hive.blog",
     "https://api.deathwing.me",
     "https://hive-api.arcange.eu",
@@ -19,6 +19,26 @@ DEFAULT_GOOD_NODES = [
     "https://rpc.mahdiyari.info",
     "https://api.syncad.com",
 ]
+
+
+def get_hive_client(
+    load_balance_nodes: bool = True, circuit_breaker: bool = True, *args, **kwargs
+) -> HiveClient:
+    """
+    Create a Hive client instance.
+
+    Returns:
+        HiveClient: A Hive client instance.
+    """
+    if "nodes" not in kwargs:
+        kwargs["nodes"] = get_good_nodes()
+
+    return HiveClient(
+        load_balance_nodes=load_balance_nodes,
+        circuit_breaker=circuit_breaker,
+        *args,
+        **kwargs,
+    )
 
 
 def get_good_nodes() -> List[str]:
