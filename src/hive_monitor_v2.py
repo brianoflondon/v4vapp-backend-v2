@@ -271,6 +271,7 @@ async def transactions_loop(watch_users: List[str]):
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
+    count = 0
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -313,6 +314,9 @@ async def transactions_loop(watch_users: List[str]):
                         },
                     )
                     async_publish(Events.HIVE_TRANSFER, hive_event, db_client=db_client)
+                    count += 1
+                    if count % 100 == 0:
+                        hive_client.rpc.next()
                     if notification:
                         async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
 
