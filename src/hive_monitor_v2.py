@@ -191,7 +191,9 @@ async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     )
 
 
-async def db_store_transaction(hive_event: dict, *args: Any, **kwargs: Any) -> None:
+async def db_store_transaction(
+    hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
+) -> None:
     """
     Asynchronously stores transactions in the database.
 
@@ -199,12 +201,7 @@ async def db_store_transaction(hive_event: dict, *args: Any, **kwargs: Any) -> N
     database by logging the transaction event.
     """
     try:
-        async with MongoDBClient(
-            db_conn=HIVE_DATABASE_CONNECTION,
-            db_name=HIVE_DATABASE,
-            db_user=HIVE_DATABASE_USER,
-        ) as db_client:
-            ans = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
+        ans = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
 
     except DuplicateKeyError:
         pass
@@ -269,79 +266,49 @@ async def transactions_loop(watch_users: List[str]):
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block()
-    while True:
-        logger.info(f"{icon} Last good block: {last_good_block}")
-        async_stream = sync_to_async_iterable(
-            hive_blockchain.stream(
-                opNames=op_names,
-                start=last_good_block,
-                raw_ops=False,
-                max_batch_size=MAX_HIVE_BATCH_SIZE,
+    async with MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    ) as db_client:
+        while True:
+            logger.info(f"{icon} Last good block: {last_good_block}")
+            async_stream = sync_to_async_iterable(
+                hive_blockchain.stream(
+                    opNames=op_names,
+                    start=last_good_block,
+                    raw_ops=False,
+                    max_batch_size=MAX_HIVE_BATCH_SIZE,
+                )
             )
-        )
-        error_code = ""
-        try:
-            async for hive_event in async_stream:
-                last_good_block = hive_event.get("block_num")
-                notification = watch_users_notification(hive_event, watch_users)
-                log_str, _ = format_hive_transaction(hive_event)
-                error_code = log_time_difference_errors(
-                    hive_event["timestamp"], error_code
-                )
-                logger.info(
-                    log_str + f" {hive_client.rpc.url}",
-                    extra={
-                        "event": hive_event,
-                    },
-                )
-                async_publish(Events.HIVE_TRANSFER, hive_event)
-                if notification:
-                    async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
+            error_code = ""
+            try:
+                async for hive_event in async_stream:
+                    last_good_block = hive_event.get("block_num")
+                    notification = watch_users_notification(hive_event, watch_users)
+                    log_str, _ = format_hive_transaction(hive_event)
+                    error_code = log_time_difference_errors(
+                        hive_event["timestamp"], error_code
+                    )
+                    logger.info(
+                        log_str + f" {hive_client.rpc.url}",
+                        extra={
+                            "event": hive_event,
+                        },
+                    )
+                    async_publish(Events.HIVE_TRANSFER, hive_event, db_client=db_client)
+                    if notification:
+                        async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
 
-            #     if "op" in hive_event and hive_event["op"][0] == "transfer":
-            #         last_good_block = hive_event["block"]
-            #         notification = watch_users_notification(hive_event, watch_users)
-            #         log_str, _ = format_hive_transaction(hive_event)
-            #         error_code, error_code_clear = log_time_difference_errors(
-            #             hive_event["timestamp"], error_code, error_code_clear
-            #         )
-            #         logger.info(
-            #             log_str + f" {hive_client.current_node}",
-            #             extra={
-            #                 "event": hive_event,
-            #             },
-            #         )
-            #         async_publish(Events.HIVE_TRANSFER, hive_event)
-            #         if notification:
-            #             async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)
-            # last_good_block = hive_event["block"]
-            # # If no more events, raise an exception to switch to the next node
-            # raise RPCNodeException("No more events")
-        # except Exception as e:
-        #     logger.warning(
-        #         f"{icon} RPC Node: {hive_client.current_node} {e}",
-        #         extra={
-        #             "notification": False,
-        #             "error": e,
-        #             "hive_client": hive_client.__dict__,
-        #         },
-        #     )
-        #     hive_client.circuit_breaker_cache[hive_client.current_node] = True
-        #     hive_client.next_node()
-        #     logger.warning(
-        #         f"{icon} Switching to node: {hive_client.current_node}",
-        #         extra={"hive_client": hive_client.__dict__},
-        #     )
+            except (KeyboardInterrupt, asyncio.CancelledError) as e:
+                logger.info("{icon} Keyboard interrupt: Stopping event listener.")
+                raise e
 
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            logger.info("{icon} Keyboard interrupt: Stopping event listener.")
-            raise e
+            except HTTPError as e:
+                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
 
-        except HTTPError as e:
-            logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
-
-        except Exception as e:
-            logger.warning(f"{icon} {e}", extra={"error": e})
+            except Exception as e:
+                logger.warning(f"{icon} {e}", extra={"error": e})
 
 
 async def run(watch_users: List[str]):
