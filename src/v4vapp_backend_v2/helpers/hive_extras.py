@@ -1,13 +1,12 @@
+import random
 from enum import StrEnum
 from typing import List
 
 import httpx
-from beem import Hive
-from beem.blockchain import Blockchain
-from pydantic import AnyUrl
+from beem import Hive  # type: ignore
+from beem.blockchain import Blockchain  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
-import random
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -32,7 +31,7 @@ def get_hive_client(*args, **kwargs) -> Hive:
         HiveClient: A Hive client instance.
     """
     if "node" not in kwargs:
-        #shuffle goog nodes
+        # shuffle goog nodes
         good_nodes = get_good_nodes()
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
@@ -111,7 +110,7 @@ class HiveExp(StrEnum):
 
 
 def get_hive_block_explorer_link(
-    trx_id: str, block_explorer: HiveExp = HiveExp.HiveHub
+    trx_id: str, block_explorer: HiveExp = HiveExp.HiveHub, markdown: bool = False
 ) -> str:
     """
     Generate a Hive blockchain explorer URL for a given transaction ID.
@@ -123,7 +122,11 @@ def get_hive_block_explorer_link(
     Returns:
         str: The complete URL with the transaction ID inserted
     """
-    return block_explorer.value.format(trx_id=trx_id)
+    link_html = block_explorer.value.format(trx_id=trx_id)
+    if not markdown:
+        return link_html
+    markdown_link = f"[{block_explorer.name}]({link_html})"
+    return markdown_link
 
 
 if __name__ == "__main__":

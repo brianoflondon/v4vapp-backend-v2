@@ -1,13 +1,13 @@
 import asyncio
-import os
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, List, Tuple
 
 import typer
-from beem.amount import Amount
-from beem.blockchain import Blockchain
-from colorama import Fore, Style
+from beem.amount import Amount  # type: ignore
+from beem.blockchain import Blockchain  # type: ignore
+
+# from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 from requests.exceptions import HTTPError
 
@@ -29,6 +29,7 @@ HIVE_DATABASE_CONNECTION = "local_connection"
 HIVE_DATABASE = "lnd_monitor_v2_voltage"
 HIVE_DATABASE_USER = "lnd_monitor"
 HIVE_TRX_COLLECTION = "hive_trx_beem"
+HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 
 app = typer.Typer()
 icon = "🐝"
@@ -82,8 +83,8 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
             than 1 minute. Defaults to an empty string.
 
     Returns:
-        Tuple[str, bool]: A tuple containing the error code and a flag indicating whether
-            the error code should be cleared
+        Tuple[str, bool]: A tuple containing the error code and a flag indicating
+        whether the error code should be cleared
     """
     time_diff = check_time_diff(timestamp)
     if not error_code and time_diff > timedelta(minutes=1):
@@ -119,16 +120,19 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
     """
     time_diff = check_time_diff(event["timestamp"])
 
-    link_url = get_hive_block_explorer_link(event["trx_id"])
+    log_link = get_hive_block_explorer_link(event["trx_id"], markdown=False)
+    markdown_link = (
+        get_hive_block_explorer_link(event["trx_id"], markdown=True) + " no_preview"
+    )
     transfer = event
 
     amount = Amount(transfer["amount"])
     notification_str = (
         f"{icon} {transfer['from']} "
         f"sent {amount} "
-        f"to {transfer['to']} "
-        f" - {transfer['memo'][:16]} "
-        f"{link_url}"
+        f"to {transfer['to']} - "
+        f"{transfer['memo'][:30]} - "
+        f"{markdown_link}"
     )
 
     log_str = (
@@ -137,7 +141,7 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
         f"to {transfer['to']:<17} "
         f" - {transfer['memo'][:30]:>30} "
         f"{time_diff} ago "
-        f"{link_url} {transfer['op_in_trx']:>3}"
+        f"{log_link} {transfer['op_in_trx']:>3}"
     )
     return log_str, notification_str
 
@@ -206,7 +210,7 @@ async def db_store_transaction(
         hive_event["amount_value"] = amount.amount
         hive_event["amount_symbol"] = amount.symbol
         hive_event["amount_str"] = str(amount)
-        ans = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
+        _ = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
 
     except DuplicateKeyError:
         pass
@@ -215,7 +219,7 @@ async def db_store_transaction(
         logger.error(e, extra={"error": e})
 
 
-async def get_last_good_block() -> int:
+async def get_last_good_block(collection: str = HIVE_TRX_COLLECTION) -> int:
     """
     Asynchronously retrieves the last good block.
 
@@ -232,7 +236,7 @@ async def get_last_good_block() -> int:
             db_user=HIVE_DATABASE_USER,
         ) as db_client:
             ans = await db_client.find_one(
-                HIVE_TRX_COLLECTION, {}, sort=[("block_num", -1)]
+                collection_name=collection, query={}, sort=[("block_num", -1)]
             )
             if ans:
                 time_diff = check_time_diff(ans["timestamp"])
@@ -258,6 +262,131 @@ async def get_last_good_block() -> int:
     return 0
 
 
+async def witness_first_run(watch_witness: str) -> dict:
+    """
+    Asynchronously retrieves the last good block produced by a specified witness
+    from the database. If no such block is found, it streams recent blocks from
+    the Hive blockchain to find and store the last block produced by the witness.
+
+    Args:
+        watch_witness (str): The name of the witness to monitor.
+
+    Returns:
+        dict: The last good block produced by the specified witness, or an empty
+        dictionary if no such block is found.
+    """
+    async with MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    ) as db_client:
+        last_good_event = await db_client.find_one(
+            HIVE_WITNESS_PRODUCER_COLLECTION,
+            {"producer": watch_witness},
+            sort=[("block_num", -1)],
+        )
+        if last_good_event:
+            time_diff = check_time_diff(last_good_event["timestamp"])
+            logger.info(
+                f"{icon} Last recorded witness producer block: "
+                f"{last_good_event["block_num"]:,.0f} "
+                f"for {watch_witness} "
+                f"{last_good_event['timestamp']} "
+                f"{time_diff}"
+            )
+            return last_good_event
+
+        hive_client = get_hive_client()
+        hive_blockchain = Blockchain(hive=hive_client)
+        end_block = hive_client.get_dynamic_global_properties().get("head_block_number")
+        async_stream = sync_to_async_iterable(
+            hive_blockchain.stream(
+                opNames=["producer_reward"],
+                start=end_block
+                - int(140 * 60 / 3),  # go back 140 minutes of 3 second blocks
+                stop=end_block,
+                only_virtual_ops=True,
+                max_batch_size=MAX_HIVE_BATCH_SIZE,
+            )
+        )
+        async for hive_event in async_stream:
+            if hive_event.get("producer") == watch_witness:
+                _ = await db_client.insert_one(
+                    HIVE_WITNESS_PRODUCER_COLLECTION, hive_event
+                )
+                last_good_event = hive_event
+                logger.info(
+                    f"{icon} {watch_witness} " f"block: {hive_event['block_num']:,.0f} "
+                )
+        if last_good_event:
+            return last_good_event
+    return {}
+
+
+async def witness_loop(watch_witness: str):
+    """
+    Asynchronously loops through witnesses.
+
+    This function creates an event listener for witnesses, then loops through the
+    witnesses and logs them.
+    """
+    logger.info(f"{icon} Watching witness: {watch_witness}")
+    last_good_event = await witness_first_run(watch_witness)
+    last_timestamp = last_good_event.get("timestamp", None)
+    hive_client = get_hive_client()
+    hive_blockchain = Blockchain(hive=hive_client)
+    last_good_block = last_good_event.get("block_num", 0) + 1
+    count = 0
+    async with MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    ) as db_client:
+        while True:
+            async_stream = sync_to_async_iterable(
+                hive_blockchain.stream(
+                    opNames=["producer_reward"],
+                    start=last_good_block,
+                    only_virtual_ops=True,
+                    max_batch_size=MAX_HIVE_BATCH_SIZE,
+                )
+            )
+            try:
+                async for hive_event in async_stream:
+                    if hive_event.get("producer") == watch_witness:
+                        time_diff = remove_ms(
+                            hive_event["timestamp"].replace(tzinfo=timezone.utc)
+                            - last_timestamp
+                        )
+                        logger.info(
+                            f"{icon} {watch_witness} "
+                            f"block: {hive_event['block_num']:,.0f} "
+                            f"Time diff {time_diff}",
+                            extra={"event": hive_event, "notification": True},
+                        )
+                        last_timestamp = hive_event["timestamp"].replace(
+                            tzinfo=timezone.utc
+                        )
+                        try:
+                            _ = await db_client.insert_one(
+                                HIVE_WITNESS_PRODUCER_COLLECTION, hive_event
+                            )
+                        except DuplicateKeyError:
+                            pass
+                    count += 1
+                    if count % 100 == 0:
+                        hive_client.rpc.next()
+            except (KeyboardInterrupt, asyncio.CancelledError) as e:
+                logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
+                raise e
+
+            except HTTPError as e:
+                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
+
+            except Exception as e:
+                logger.warning(f"{icon} {e}", extra={"error": e})
+
+
 async def transactions_loop(watch_users: List[str]):
     """
     Asynchronously loops through transactions.
@@ -278,7 +407,6 @@ async def transactions_loop(watch_users: List[str]):
         db_user=HIVE_DATABASE_USER,
     ) as db_client:
         while True:
-            logger.info(f"{icon} Last good block: {last_good_block}")
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
                     opNames=op_names,
@@ -343,7 +471,8 @@ async def run(watch_users: List[str]):
     try:
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
         async_subscribe(Events.HIVE_TRANSFER, db_store_transaction)
-        await transactions_loop(watch_users)
+        tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
+        await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
         INTERNAL_CONFIG.__exit__(None, None, None)
