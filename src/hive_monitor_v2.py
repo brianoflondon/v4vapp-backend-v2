@@ -191,7 +191,7 @@ async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     notification = True
     logger.info(
         notification_str,
-        extra={"notification": notification, "event": hive_event},
+        extra={"notification": notification, "hive_event": hive_event},
     )
 
 
@@ -365,7 +365,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     mean_time_diff_seconds = sum(time_differences) / len(time_differences)
 
     # Convert the mean time difference back to a timedelta object
-    mean_time_diff = timedelta(seconds=mean_time_diff_seconds)
+    mean_time_diff = remove_ms(timedelta(seconds=mean_time_diff_seconds))
 
     return mean_time_diff
 
@@ -423,7 +423,7 @@ async def witness_loop(watch_witness: str):
                             f"{hive_event['block_num']:,.0f} "
                             f"Delta {time_diff} | "
                             f"Mean: {mean_time_diff} | ",
-                            extra={"event": hive_event, "notification": True},
+                            extra={"hive_event": hive_event, "notification": True},
                         )
                         last_timestamp = hive_event["timestamp"].replace(
                             tzinfo=timezone.utc
@@ -487,27 +487,31 @@ async def transactions_loop(watch_users: List[str]):
                     else:
                         last_trx_id = hive_event.get("trx_id")
                         op_in_trx = 0
-                        # Only advance block count on new trx_id
-                        if last_good_block < hive_event.get("block_num"):
-                            last_good_block = hive_event.get("block_num")
+                    # Only advance block count on new trx_id
+                    if last_good_block < hive_event.get("block_num"):
+                        last_good_block = hive_event.get("block_num")
                     hive_event["op_in_trx"] = op_in_trx
                     notification = watch_users_notification(hive_event, watch_users)
-                    log_str, _ = format_hive_transaction(hive_event)
                     error_code = log_time_difference_errors(
                         hive_event["timestamp"], error_code
                     )
-                    logger.info(
-                        log_str + f" {hive_client.rpc.url}",
-                        extra={
-                            "event": hive_event,
-                        },
+                    async_publish(
+                        Events.HIVE_TRANSFER, hive_event=hive_event, db_client=db_client
                     )
-                    async_publish(Events.HIVE_TRANSFER, hive_event, db_client=db_client)
                     count += 1
                     if count % 100 == 0:
+                        old_node = hive_client.rpc.url
                         hive_client.rpc.next()
+                        logger.info(
+                            f"{icon} {count} transactions processed. "
+                            f"Node: {old_node} -> {hive_client.rpc.url}"
+                        )
                     if notification:
-                        async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_event)  # noqa
+                        async_publish(
+                            Events.HIVE_TRANSFER_NOTIFY,
+                            hive_event=hive_event,
+                            db_client=db_client,
+                        )  # noqa
 
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
@@ -517,7 +521,8 @@ async def transactions_loop(watch_users: List[str]):
                 logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
 
             except Exception as e:
-                logger.warning(f"{icon} {e}", extra={"error": e})
+                logger.error(f"{icon} {e}", extra={"error": e})
+                raise e
 
 
 async def run(watch_users: List[str]):
@@ -531,7 +536,7 @@ async def run(watch_users: List[str]):
     """
     try:
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
-        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction)
+        async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction)
         tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):

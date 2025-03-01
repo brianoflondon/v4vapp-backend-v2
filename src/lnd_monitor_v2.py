@@ -201,7 +201,7 @@ async def db_store_invoice(
         query = {"r_hash": invoice_pyd.r_hash}
         invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
-        logger.info(
+        logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} "
             f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
             extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
