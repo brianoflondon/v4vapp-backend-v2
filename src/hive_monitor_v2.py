@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timer
 from typing import Annotated, Any, List, Tuple
 
 import typer
@@ -88,7 +89,7 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
     """
     time_diff = check_time_diff(timestamp)
     if not error_code and time_diff > timedelta(minutes=1):
-        error_code = "time_diff_greater_than_1_minute"
+        error_code = "Hive Time diff greater than 1 min"
         logger.warning(
             f"{icon} Time diff: {time_diff} greater than 1 minute",
             extra={
@@ -195,6 +196,49 @@ async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     )
 
 
+async def db_store_block_marker(
+    hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
+) -> None:
+    """
+    Asynchronously stores block markers in the database.
+
+    This function stores block markers in the database by logging the block marker event.
+    """
+    try:
+        query = {"trx_id": "block_marker", "op_in_trx": 0}
+        block_marker = {
+            "block_num": hive_event["block_num"],
+            "timestamp": hive_event["timestamp"],
+            "trx_id": "block_marker",
+            "op_in_trx": 0,
+            "_id": "block_marker",
+        }
+        _ = await db_client.update_one(
+            HIVE_TRX_COLLECTION, query=query, update=block_marker, upsert=True
+        )
+    except DuplicateKeyError:
+        pass
+    except Exception as e:
+        logger.error(e, extra={"error": e})
+
+
+def get_event_id(hive_event: dict) -> str:
+    """
+    Get the event id from the Hive event.
+
+    Args:
+        hive_event (dict): The Hive event.
+
+    Returns:
+        str: The event id.
+    """
+    return (
+        f"{hive_event['trx_id']}_{hive_event['op_in_trx']}"
+        if not int(hive_event["op_in_trx"]) == 0
+        else hive_event["trx_id"]
+    )
+
+
 async def db_store_transaction(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
@@ -205,13 +249,17 @@ async def db_store_transaction(
     database by logging the transaction event.
     """
     try:
+        query = {"trx_id": hive_event["trx_id"], "op_in_trx": hive_event["op_in_trx"]}
         amount = Amount(hive_event["amount"])
         hive_event["amount_decimal"] = str(amount.amount_decimal)
         hive_event["amount_value"] = amount.amount
         hive_event["amount_symbol"] = amount.symbol
         hive_event["amount_str"] = str(amount)
-        _ = await db_client.insert_one(HIVE_TRX_COLLECTION, hive_event)
-
+        hive_event["_id"] = get_event_id(hive_event)
+        ans = await db_client.update_one(
+            HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
+        )
+        logger.info(f"{icon} database: {ans}")
     except DuplicateKeyError:
         pass
 
@@ -292,7 +340,8 @@ async def witness_first_run(watch_witness: str) -> dict:
                 f"{last_good_event["block_num"]:,.0f} "
                 f"for {watch_witness} "
                 f"{last_good_event['timestamp']} "
-                f"{time_diff}"
+                f"{time_diff}",
+                extra={"db": last_good_event, "notification": True},
             )
             return last_good_event
 
@@ -316,7 +365,9 @@ async def witness_first_run(watch_witness: str) -> dict:
                 )
                 last_good_event = hive_event
                 logger.info(
-                    f"{icon} {watch_witness} " f"block: {hive_event['block_num']:,.0f} "
+                    f"{icon} {watch_witness} "
+                    f"block: {hive_event['block_num']:,.0f} ",
+                    extra={"db": last_good_event, "notification": True},
                 )
         if last_good_event:
             return last_good_event
@@ -391,11 +442,14 @@ async def witness_loop(watch_witness: str):
 
     logger.info(f"{icon} Watching witness: {watch_witness}")
     last_good_event = await witness_first_run(watch_witness)
-    last_timestamp = last_good_event.get("timestamp", None)
+    last_good_timestamp = last_good_event.get("timestamp", "N/A")
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = last_good_event.get("block_num", 0) + 1
     count = 0
+    mean_time_diff = await witness_average_block_time(watch_witness)
+    start = timer()
+    send_once = False
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -412,22 +466,56 @@ async def witness_loop(watch_witness: str):
             )
             try:
                 async for hive_event in async_stream:
+                    hive_event_timestamp = hive_event.get("timestamp", "N/A")
+                    seconds_since_last_block = (
+                        hive_event_timestamp - last_good_timestamp
+                    ).seconds
+                    if (
+                        not send_once
+                        and seconds_since_last_block
+                        > mean_time_diff.total_seconds() * 1.2
+                    ):
+                        time_since_last_block = remove_ms(
+                            timedelta(seconds=seconds_since_last_block)
+                        )
+                        block_diff = (
+                            hive_event["block_num"] - last_good_event["block_num"]
+                        )
+                        logger.warning(
+                            f"{icon} 🚨 "
+                            f"Witness Time since last block: {time_since_last_block} "
+                            f"Mean: {mean_time_diff} "
+                            f"Block Now: {hive_event['block_num']:,.0f} "
+                            f"Last Good Block: {last_good_event['block_num']:,.0f} "
+                            f"Num blocks: {block_diff:,.0f}",
+                            extra={
+                                "notification": True,
+                                "error_code": "Hive Witness delay",
+                            },
+                        )
+                        send_once = True
                     if hive_event.get("producer") == watch_witness:
                         time_diff = remove_ms(
                             hive_event["timestamp"].replace(tzinfo=timezone.utc)
-                            - last_timestamp
+                            - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
                         logger.info(
-                            f"{icon}🧱 "
-                            f"{hive_event['block_num']:,.0f} "
+                            f"{icon} 🧱 "
                             f"Delta {time_diff} | "
-                            f"Mean: {mean_time_diff} | ",
-                            extra={"hive_event": hive_event, "notification": True},
+                            f"Mean {mean_time_diff} | "
+                            f"{hive_event['block_num']:,.0f}",
+                            extra={
+                                "hive_event": hive_event,
+                                "notification": True,
+                                "error_code_clear": "Hive Witness delay",
+                            },
                         )
-                        last_timestamp = hive_event["timestamp"].replace(
+                        send_once = False
+                        last_good_timestamp = hive_event["timestamp"].replace(
                             tzinfo=timezone.utc
                         )
+                        last_good_event = hive_event
                         try:
                             _ = await db_client.insert_one(
                                 HIVE_WITNESS_PRODUCER_COLLECTION, hive_event
@@ -436,6 +524,7 @@ async def witness_loop(watch_witness: str):
                             pass
                     count += 1
                     if count % 100 == 0:
+                        await db_store_block_marker(hive_event, db_client)
                         hive_client.rpc.next()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
