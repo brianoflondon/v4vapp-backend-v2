@@ -323,13 +323,72 @@ async def witness_first_run(watch_witness: str) -> dict:
     return {}
 
 
+async def witness_average_block_time(watch_witness: str) -> timedelta:
+    """
+    Asynchronously calculates the average block time for a specified witness.
+
+    This function calculates the average block time for a specified witness by
+    streaming recent blocks from the Hive blockchain and calculating the time
+    difference between each block produced by the witness.
+
+    Args:
+        watch_witness (str): The name of the witness to monitor.
+
+    Returns:
+        timedelta: The average block time for the specified witness.
+    """
+    async with MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    ) as db_client:
+        cursor = await db_client.find(
+            HIVE_WITNESS_PRODUCER_COLLECTION,
+            {"producer": watch_witness},
+            sort=[("block_num", -1)],
+        )
+        # loop through the blocks and calculate the average block time
+        block_timestamps = []
+        counter = 0
+        async for block in cursor:
+            block_timestamps.append((block["timestamp"]))
+            counter += 1
+            if counter > 10:
+                break
+
+    # Calculate the time differences between consecutive timestamps
+    time_differences = [
+        (block_timestamps[i - 1] - block_timestamps[i]).total_seconds()
+        for i in range(1, len(block_timestamps))
+    ]
+    # Calculate the mean time difference
+    mean_time_diff_seconds = sum(time_differences) / len(time_differences)
+
+    # Convert the mean time difference back to a timedelta object
+    mean_time_diff = timedelta(seconds=mean_time_diff_seconds)
+
+    return mean_time_diff
+
+
 async def witness_loop(watch_witness: str):
     """
     Asynchronously loops through witnesses.
 
     This function creates an event listener for witnesses, then loops through the
-    witnesses and logs them.
+    witnesses and logs them. It connects to a Hive blockchain client and listens for
+    producer reward operations. When a reward operation for the specified witness is
+    detected, it logs the event and inserts it into a MongoDB collection.
+
+    Args:
+        watch_witness (str): The name of the witness to watch.
+
+    Raises:
+        KeyboardInterrupt: If the loop is interrupted by a keyboard interrupt.
+        asyncio.CancelledError: If the loop is cancelled.
+        HTTPError: If there is an HTTP error while streaming events.
+        Exception: For any other exceptions that occur during the loop.
     """
+
     logger.info(f"{icon} Watching witness: {watch_witness}")
     last_good_event = await witness_first_run(watch_witness)
     last_timestamp = last_good_event.get("timestamp", None)
@@ -358,10 +417,12 @@ async def witness_loop(watch_witness: str):
                             hive_event["timestamp"].replace(tzinfo=timezone.utc)
                             - last_timestamp
                         )
+                        mean_time_diff = await witness_average_block_time(watch_witness)
                         logger.info(
-                            f"{icon} {watch_witness} "
-                            f"block: {hive_event['block_num']:,.0f} "
-                            f"Time diff {time_diff}",
+                            f"{icon}🧱 "
+                            f"{hive_event['block_num']:,.0f} "
+                            f"Delta {time_diff} | "
+                            f"Mean: {mean_time_diff} | ",
                             extra={"event": hive_event, "notification": True},
                         )
                         last_timestamp = hive_event["timestamp"].replace(
