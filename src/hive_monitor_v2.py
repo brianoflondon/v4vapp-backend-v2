@@ -259,7 +259,7 @@ async def db_store_transaction(
         ans = await db_client.update_one(
             HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
         )
-        logger.info(f"{icon} database: {ans}")
+        logger.debug(f"{icon} database: {ans}")
     except DuplicateKeyError:
         pass
 
