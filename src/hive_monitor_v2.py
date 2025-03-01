@@ -188,8 +188,9 @@ async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     Args:
         hive_event (dict): The Hive transaction event.
     """
-    _, notification_str = format_hive_transaction(hive_event)
+    log_str, notification_str = format_hive_transaction(hive_event)
     notification = True
+    logger.info(log_str, extra={"hive_event": hive_event, "notification": False})
     logger.info(
         notification_str,
         extra={"notification": notification, "hive_event": hive_event},
@@ -448,7 +449,6 @@ async def witness_loop(watch_witness: str):
     last_good_block = last_good_event.get("block_num", 0) + 1
     count = 0
     mean_time_diff = await witness_average_block_time(watch_witness)
-    start = timer()
     send_once = False
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
@@ -524,7 +524,6 @@ async def witness_loop(watch_witness: str):
                             pass
                     count += 1
                     if count % 100 == 0:
-                        await db_store_block_marker(hive_event, db_client)
                         hive_client.rpc.next()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
@@ -551,6 +550,7 @@ async def transactions_loop(watch_users: List[str]):
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
     count = 0
+    start = timer()
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -588,6 +588,7 @@ async def transactions_loop(watch_users: List[str]):
                         Events.HIVE_TRANSFER, hive_event=hive_event, db_client=db_client
                     )
                     count += 1
+
                     if count % 100 == 0:
                         old_node = hive_client.rpc.url
                         hive_client.rpc.next()
@@ -595,6 +596,9 @@ async def transactions_loop(watch_users: List[str]):
                             f"{icon} {count} transactions processed. "
                             f"Node: {old_node} -> {hive_client.rpc.url}"
                         )
+                    if timer() - start > 55:
+                        await db_store_block_marker(hive_event, db_client)
+                        start = timer()
                     if notification:
                         async_publish(
                             Events.HIVE_TRANSFER_NOTIFY,
