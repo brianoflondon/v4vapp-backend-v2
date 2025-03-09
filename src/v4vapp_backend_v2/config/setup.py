@@ -87,6 +87,13 @@ class DatabaseConnectionConfig(BaseModel):
     icon: str | None = None
 
 
+class RedisConnectionConfig(BaseModel):
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    kwargs: Dict[str, Any] = {}
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -128,6 +135,7 @@ class Config(BaseModel):
     lnd_connections: Dict[str, LndConnectionConfig]
     db_connections: Dict[str, DatabaseConnectionConfig]
     dbs: Dict[str, DatabaseDetailsConfig]
+    redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig
     telegram: TelegramConfig
@@ -180,37 +188,6 @@ class Config(BaseModel):
             str: A list containing the names of all databases separated by ,.
         """
         return ", ".join(self.dbs.keys())
-
-    # def lnd_connection(self, connection_name: str) -> LndConnectionConfig:
-    #     """
-    #     Retrieve the LndConnectionConfig for a given connection name.
-
-    #     Args:
-    #         connection_name (str): The name of the connection to retrieve.
-
-    #     Returns:
-    #         LndConnectionConfig: The configuration for the specified connection.
-
-    #     Raises:
-    #         ValueError: If the connection with the specified name is not found.
-    #     """
-    #     for connection in self.lnd_connections:
-    #         if connection.name == connection_name:
-    #             return connection
-    #     raise ValueError(f"Connection {connection_name} not found in config")
-
-    # def icon(self, connection_name: str) -> str:
-    #     """
-    #     Retrieves the icon associated with a given connection name.
-
-    #     Args:
-    #         connection_name (str): The name of the connection for which
-    #         to retrieve the icon.
-
-    #     Returns:
-    #         str: The icon associated with the specified connection name.
-    #     """
-    #     return self.lnd_connection(connection_name).icon
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -307,6 +284,10 @@ class InternalConfig:
             logger.error(f"Logging config file not found: {ex}")
             raise ex
 
+        for handler, level in self.config.logging.handlers.items():
+            logging.getLogger(handler).addHandler(handler)
+            logging.getLogger(handler).setLevel(level)
+
         # Configuration for the json log file is set in the external config.json file
         # The stdout log configuration is set in the code below
 
@@ -323,7 +304,10 @@ class InternalConfig:
                 logger.info("Found running loop for setup logging")
             except RuntimeError:  # No event loop in the current thread
                 self.notification_loop = asyncio.new_event_loop()
-                logger.info("Started new event loop for notification logging")
+                logger.info(
+                    "Started new event loop for notification logging",
+                    extra={"loop": self.notification_loop},
+                )
             atexit.register(self.notification_loop.close)
 
         try:
@@ -337,17 +321,6 @@ class InternalConfig:
 
         def custom_log_namer(name):
             return name
-
-            # full_base, ext = name.rsplit(".", 1)
-            # # check if ext is an integer
-            # try:
-            #     int(ext)
-            #     base, real_ext = full_base.rsplit(".", 1)
-            #     return f"{base}.{ext}.{real_ext}"
-            # except ValueError:
-            #     return name
-
-            # return name
 
         file_json_handler = logging.getHandlerByName("file_json")
         if file_json_handler is not None:
@@ -374,18 +347,6 @@ class InternalConfig:
         logger.setLevel(self.config.logging.default_log_level)
 
         handler.addFilter(ConsoleLogFilter())
-
-        # # Get the gRPC logger and add the same handler
-        # grpc_logger = logging.getLogger("grpc")
-        # grpc_logger.addHandler(handler)
-        # grpc_logger.setLevel(logging.WARNING)
-
-        # # set the level of the logger for asyncio to WARNING
-        # logging.getLogger("asyncio").setLevel(logging.WARNING)
-
-        for handler, level in self.config.logging.handlers.items():
-            logging.getLogger(handler).addHandler(handler)
-            logging.getLogger(handler).setLevel(level)
 
 
 """

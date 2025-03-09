@@ -64,8 +64,11 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 try:
                     return await func(*args, **kwargs)
                 except DuplicateKeyError as e:
-                    extra = {"error": str(e), "error_code": e.code, "retries": retries}
-                    logger.info(
+                    extra = {
+                        "error": str(e),
+                        "retries": retries,
+                    }
+                    logger.debug(
                         f"DuplicateKeyError: {e}. Not retrying.",
                         extra=extra,
                     )
@@ -397,8 +400,7 @@ class MongoDBClient:
                         extra={
                             "uri": self.uri,
                             "count": count,
-                            "error_code": error_code,
-                            "error_code_clear": True,
+                            "error_code_clear": error_code,
                         },
                     )
                 return
@@ -476,7 +478,7 @@ class MongoDBClient:
         return result.inserted_ids
 
     @retry_on_failure()
-    async def find_one(self, collection_name: str, query: dict) -> Any | None:
+    async def find_one(self, collection_name: str, query: dict, **kwargs) -> Any | None:
         """
         Asynchronously find a single document in the specified collection that
         matches the given query.
@@ -489,7 +491,7 @@ class MongoDBClient:
             dict: The document that matches the query, or None if no document is found.
         """
         collection = await self.get_collection(collection_name)
-        document = await collection.find_one(query)
+        document = await collection.find_one(query, **kwargs)
         return document
 
     @retry_on_failure()

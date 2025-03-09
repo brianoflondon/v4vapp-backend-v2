@@ -27,6 +27,10 @@ typer = "^0.15.1"
 motor = "^3.7.0"
 aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
+asgiref = "^3.8.1"
+colorama = "^0.4.6"
+beem = {git = "https://gitlab.syncad.com/hive/beem"}
+redis = "^5.2.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -39,6 +43,7 @@ mypy = "^1.15.0"
 black = "^25.1.0"
 mongomock-motor = "^0.0.35"
 pytest-mock = "^3.14.0"
+types-aiofiles = "^24.1.0.20241221"
 
 [build-system]
 requires = ["poetry-core"]

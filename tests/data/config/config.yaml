@@ -10,7 +10,7 @@ logging:
     asyncio: WARNING
     httpcore: WARNING
     httpx: WARNING
-
+    lighthive: DEBUG
 
 ################# TEST CONFIG #################
 default_lnd_connection: example
@@ -117,3 +117,8 @@ dbs:
       test2_collection:
       test2_collection2:
 ################# TEST CONFIG #################
+
+redis:
+  host: localhost
+  port: 6379
+  db: 0

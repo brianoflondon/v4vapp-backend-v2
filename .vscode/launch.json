@@ -13,6 +13,20 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Hive Monitor",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "v4vapp",
+                "brianoflondon",
+                "v4vapp.tre",
+                "v4vapp.dhf"
+            ],
+            "justMyCode": false,
+        },
+        {
             "name": "Umbrel destination lookup",
             "type": "debugpy",
             "consoleName": "Umbrel Destination",
@@ -130,7 +144,7 @@
                 "logs_docker/voltage/",
                 "-f",
                 "--tail",
-                "200"
+                "20000"
             ]
         },
         {
@@ -142,7 +156,7 @@
             "console": "integratedTerminal",
             "args": [
                 "logs_docker/umbrel/",
-                // "-f",
+                "-f",
                 // "--tail",
                 // "200"
             ]

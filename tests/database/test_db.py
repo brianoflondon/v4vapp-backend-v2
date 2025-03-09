@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, WriteConcernError
@@ -21,7 +22,11 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
-    yield
+    with patch(
+        "v4vapp_backend_v2.config.mylogger.NotificationProtocol.send_notification",
+        lambda self, message, record, alert_level=1: None,
+    ):
+        yield
     # Unpatch the monkeypatch
     monkeypatch.undo()
 
@@ -68,6 +73,7 @@ async def test_mongodb_client_bad_uri(set_base_config_path: None):
         async with MongoDBClient(
             "conn_bad", serverSelectionTimeoutMS=50, retry=False
         ) as _:
+            print("conn bad")
             pass
     assert e
 

@@ -1,9 +1,9 @@
 {
-    "workbench.colorCustomizations": {
-        "activityBar.background": "#4F134B",
-        "titleBar.activeBackground": "#6F1B69",
-        "titleBar.activeForeground": "#FDF8FD"
-    },
+    // "workbench.colorCustomizations": {
+    //     "activityBar.background": "#4F134B",
+    //     "titleBar.activeBackground": "#6F1B69",
+    //     "titleBar.activeForeground": "#FDF8FD"
+    // },
     "cmake.configureOnOpen": true,
     "cSpell.words": [
         "ACINQ",
@@ -36,5 +36,10 @@
     "python.analysis.extraPaths": [
         "./src/v4vapp_backend_v2/lnd_grpc",
         "./src/v4vapp_backend_v2/config"
-    ]
+    ],
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#4F134B",
+        "titleBar.activeBackground": "#6F1B69",
+        "titleBar.activeForeground": "#FDF8FD"
+    }
 }

@@ -30,6 +30,11 @@ jobs:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
 
+      redis:
+        image: redis:latest
+        ports:
+          - "6379:6379"
+
     steps:
       - uses: actions/checkout@v4
 
