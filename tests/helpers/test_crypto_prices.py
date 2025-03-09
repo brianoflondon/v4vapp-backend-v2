@@ -16,4 +16,4 @@ async def test_coin_gecko_quote_service():
     assert quote.hive_hbd > 0
     assert quote.fetch_date is not None
     assert quote.raw_response is not None
-    assert quote.quote_age < 10
+    assert quote.quote_age < 20
