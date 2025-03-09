@@ -86,10 +86,10 @@ async def track_events(
             except Exception as e:
                 logger.exception(e)
                 pass
+        await asyncio.sleep(0.2)
         message_str, ans_dict = lnd_events_group.message(
             htlc_event, dest_alias=dest_alias
         )
-        await asyncio.sleep(0.2)
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
             logger.info(
                 f"{lnd_client.icon} {message_str}",
