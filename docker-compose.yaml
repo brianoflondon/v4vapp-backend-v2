@@ -25,6 +25,16 @@ services:
     #   - mongo_data:/data/db
     #   - mongo_config:/data/configdb
 
+  redis-pytest-local:
+    image: redis:latest
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:  # Check if the container is healthy
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   voltage-node-monitor:
     depends_on:
       - node-monitor

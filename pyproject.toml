@@ -30,6 +30,7 @@ watchdog = "^6.0.0"
 asgiref = "^3.8.1"
 colorama = "^0.4.6"
 beem = {git = "https://gitlab.syncad.com/hive/beem"}
+redis = "^5.2.1"
 
 
 [tool.poetry.group.dev.dependencies]

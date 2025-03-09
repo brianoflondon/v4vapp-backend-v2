@@ -11,7 +11,7 @@ logging:
     httpcore: WARNING
     httpx: WARNING
     lighthive: DEBUG
-    
+
 ################# TEST CONFIG #################
 default_lnd_connection: example
 
@@ -117,3 +117,6 @@ dbs:
       test2_collection:
       test2_collection2:
 ################# TEST CONFIG #################
+
+redis:
+  connection_str: redis://localhost:6379/0
