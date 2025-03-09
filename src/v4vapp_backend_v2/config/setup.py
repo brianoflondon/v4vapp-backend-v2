@@ -87,6 +87,13 @@ class DatabaseConnectionConfig(BaseModel):
     icon: str | None = None
 
 
+class RedisConnectionConfig(BaseModel):
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    kwargs: Dict[str, Any] = {}
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -128,6 +135,7 @@ class Config(BaseModel):
     lnd_connections: Dict[str, LndConnectionConfig]
     db_connections: Dict[str, DatabaseConnectionConfig]
     dbs: Dict[str, DatabaseDetailsConfig]
+    redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig
     telegram: TelegramConfig
