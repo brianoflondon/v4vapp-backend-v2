@@ -26,6 +26,7 @@ Methods:
 """
 
 import asyncio
+import logging
 from logging import LogRecord
 from typing import Dict, Protocol
 
@@ -46,9 +47,20 @@ class NotificationProtocol(Protocol):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        loop.run_until_complete(
-            self._send_notification(_config, message, record, alert_level)
-        )
+        if "levelno" not in record.__dict__:
+            record.__dict__["levelno"] = logging.INFO
+        try:
+            loop.run_until_complete(
+                self._send_notification(_config, message, record, alert_level)
+            )
+        except Exception as ex:
+            logger.warning(
+                f"An error occurred while sending the message: {ex}",
+                extra={
+                    "notification": False,
+                    "failed_message": message,
+                },
+            )
 
     async def _send_notification(
         self,

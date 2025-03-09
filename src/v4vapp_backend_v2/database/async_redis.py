@@ -1,10 +1,36 @@
 from redis.asyncio import Redis, from_url
 from redis.exceptions import ConnectionError
 
-from v4vapp_backend_v2.config.setup import Config, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 class V4VAsyncRedis:
+    """
+    Asynchronous Redis client for V4V application.
+
+    Attributes:
+        host (str): Redis server hostname.
+        port (int): Redis server port.
+        db (int): Redis database number.
+        decode_responses (bool): Flag to decode responses.
+        kwargs (dict): Additional keyword arguments for Redis connection.
+        redis (Redis): Redis client instance.
+
+    Methods:
+        __init__(**kwargs):
+            Initializes the Redis client with provided or default configuration.
+
+        __aenter__() -> Redis:
+            Asynchronous context manager entry. Pings the Redis server to
+            ensure connection.
+
+        __aexit__(exc_type, exc, tb):
+            Asynchronous context manager exit. Closes the Redis connection.
+
+        __del__():
+            Destructor. Closes the Redis connection if it exists.
+    """
+
     host: str = "localhost"
     port: int = 6379
     db: int = 0

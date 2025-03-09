@@ -1,15 +1,10 @@
-import asyncio
-import json
-import logging
 from pathlib import Path
-from timeit import default_timer as timeit
 
 import httpx
 import pytest
-from beem.blockchain import Blockchain
+from beem.blockchain import Blockchain  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.hive_extras import (
     HiveExp,
     get_good_nodes,
