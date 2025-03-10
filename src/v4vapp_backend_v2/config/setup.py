@@ -143,9 +143,9 @@ class Config(BaseModel):
     dbs: Dict[str, DatabaseDetailsConfig]
     redis: RedisConnectionConfig = RedisConnectionConfig()
 
-    tailscale: TailscaleConfig
-    telegram: TelegramConfig
-    binance: BinanceConfig
+    tailscale: TailscaleConfig = TailscaleConfig()
+    telegram: TelegramConfig = TelegramConfig()
+    binance: BinanceConfig = BinanceConfig()
 
     @model_validator(mode="after")
     def check_all_defaults(cls, v: Any):
