@@ -4,6 +4,7 @@ import functools
 import json
 import logging.config
 import logging.handlers
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -59,6 +60,11 @@ class TailscaleConfig(BaseModel):
 
 class TelegramConfig(BaseModel):
     chat_id: int = 0
+
+
+class BinanceConfig(BaseModel):
+    api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
+    api_secret: str = os.getenv("BINANCE_TESTNET_api_secret", "")
 
 
 class IndexConfig(BaseModel):
@@ -139,6 +145,7 @@ class Config(BaseModel):
 
     tailscale: TailscaleConfig
     telegram: TelegramConfig
+    binance: BinanceConfig
 
     @model_validator(mode="after")
     def check_all_defaults(cls, v: Any):

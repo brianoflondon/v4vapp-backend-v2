@@ -1367,20 +1367,6 @@ pytest = ">=6.2.5"
 dev = ["pre-commit", "pytest-asyncio", "tox"]
 
 [[package]]
-name = "python-dotenv"
-version = "1.0.1"
-description = "Read key-value pairs from a .env file and set them as environment variables"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca"},
-    {file = "python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a"},
-]
-
-[package.extras]
-cli = ["click (>=5.0)"]
-
-[[package]]
 name = "pytz"
 version = "2021.1"
 description = "World timezone definitions, modern and historical"
@@ -1787,27 +1773,6 @@ socks = ["pysocks (>=1.5.6,!=1.5.7,<2.0)"]
 zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
-name = "v4vapp-binance"
-version = "1.5.0"
-description = "A tool for matched trading on Binance"
-optional = false
-python-versions = "^3.9"
-files = []
-develop = false
-
-[package.dependencies]
-binance-connector = "^3.5.1"
-mypy-extensions = "^1.0.0"
-pycryptodome = "^3.20.0"
-python-dotenv = "^1.0.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/brianoflondon/v4vapp-binance.git"
-reference = "HEAD"
-resolved_reference = "2d458d08299aa64d8872cd77225d1b12c179590e"
-
-[[package]]
 name = "watchdog"
 version = "6.0.0"
 description = "Filesystem events monitoring"
@@ -1879,4 +1844,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "a3070151afa6ac46318ddb272301aca5bc0eb774947b676d94b00470bd33cec7"
+content-hash = "36b534ee13f8563f5cab91a15951848c400921c8702cdbeb7fb67cfb8bb87eda"

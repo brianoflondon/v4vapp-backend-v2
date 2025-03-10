@@ -4,7 +4,10 @@ from enum import StrEnum
 from typing import Any, Dict
 
 import httpx
+from binance.spot import Spot
 from pydantic import BaseModel
+
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"
@@ -33,6 +36,27 @@ class CurrencyPair(StrEnum):
 
 
 class QuoteResponse(BaseModel):
+    """
+    QuoteResponse is a model that represents the response of cryptocurrency quotes.
+
+    Attributes:
+        hive_usd (float): The price of HIVE in USD. Default is 0.
+        hbd_usd (float): The price of HBD in USD. Default is 0.
+        btc_usd (float): The price of BTC in USD. Default is 0.
+        hive_hbd (float): The price of HIVE in HBD. Default is 0.
+        raw_response (Dict[str, Any]): The raw response data. Default is an
+            empty dictionary.
+        fetch_date (datetime): The date and time when the data was fetched. Default is
+            the current UTC time.
+        error (str): Error message, if any. Default is an empty string.
+
+    Methods:
+        __init__: Initializes a new instance of QuoteResponse.
+        sats_hive (float): Calculates Satoshis per HIVE based on btc_usd and hive_usd.
+        sats_hbd (float): Calculates Satoshis per HBD based on btc_usd and hbd_usd.
+        quote_age (int): Calculates the age of the quote in seconds.
+    """
+
     hive_usd: float = 0
     hbd_usd: float = 0
     btc_usd: float = 0
@@ -51,10 +75,11 @@ class QuoteResponse(BaseModel):
         error: str = "",
     ) -> None:
         super().__init__()
-        self.hive_usd = hive_usd
-        self.hbd_usd = hbd_usd
-        self.btc_usd = btc_usd
-        self.hive_hbd = hive_hbd
+        self.hive_usd = round(hive_usd, 4)
+        self.hbd_usd = round(hbd_usd, 4)
+        self.hive_usd = round(hive_usd, 4)
+        self.btc_usd = round(btc_usd, 1)
+        self.hive_hbd = round(hive_hbd, 4)
         self.raw_response = raw_response
         self.error = error
 
@@ -64,7 +89,7 @@ class QuoteResponse(BaseModel):
         if self.btc_usd == 0:
             raise ValueError("btc_usd cannot be zero")
         sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return sats_per_usd * self.hive_usd
+        return round(sats_per_usd * self.hive_usd, 4)
 
     @property
     def sats_hbd(self) -> float:
@@ -72,7 +97,7 @@ class QuoteResponse(BaseModel):
         if self.btc_usd == 0:
             raise ValueError("btc_usd cannot be zero")
         sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return sats_per_usd * self.hbd_usd
+        return round(sats_per_usd * self.hbd_usd, 4)
 
     @property
     def quote_age(self) -> int:
@@ -91,6 +116,10 @@ class QuoteServiceError(Exception):
 
 
 class CoinGeckoError(QuoteServiceError):
+    pass
+
+
+class BinanceError(QuoteServiceError):
     pass
 
 
@@ -114,13 +143,51 @@ class CoinGeckoQuoteService(QuoteService):
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
         except Exception as e:
-            print(e)
+            logger.error(e)
             raise CoinGeckoError(f"Failed to get quote: {e}")
 
 
 class BinanceQuoteService(QuoteService):
     async def get_quote(self) -> QuoteResponse:
-        pass
+        internal_config = InternalConfig()
+        binance_config = internal_config.config.binance
+        try:
+            client = Spot(
+                api_key=binance_config.api_key, api_secret=binance_config.api_secret
+            )
+            ticker_info = client.book_ticker(symbols=["HIVEUSDT", "HIVEBTC", "BTCUSDT"])
+            medians = {}
+            for ticker in ticker_info:
+                bid_price = float(ticker["bidPrice"])
+                ask_price = float(ticker["askPrice"])
+                median = (bid_price + ask_price) / 2
+                medians[ticker["symbol"]] = median
+
+            hive_usd = medians["HIVEUSDT"]
+            hbd_usd = 1
+            btc_usd = medians["BTCUSDT"]
+            hive_hbd = hive_usd / hbd_usd
+
+            # calc hive to btc price based on hiveusdt and btcusdt
+            hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
+            # check
+            logger.debug(f"Binance Hive to BTC price : {hive_sats:.1f}")
+            logger.info(f"Binance Hive to BTC direct: {medians['HIVEBTC']* 1e8:.1f}")
+
+            quote_response = QuoteResponse(
+                hive_usd=hive_usd,
+                hbd_usd=hbd_usd,
+                btc_usd=btc_usd,
+                hive_hbd=hive_hbd,
+                raw_response=ticker_info,
+            )
+
+            return quote_response
+
+        except Exception as ex:
+            message = f"Problem calling Binance API {ex}"
+            logger.error(message)
+            raise BinanceError(message)
 
 
 def per_diff(a: float, b: float) -> float:

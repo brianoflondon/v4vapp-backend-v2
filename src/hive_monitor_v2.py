@@ -531,6 +531,13 @@ async def witness_loop(watch_witness: str):
 
             except Exception as e:
                 logger.warning(f"{icon} {e}", extra={"error": e})
+                logger.warning(
+                    f"{icon} last_good_block: {last_good_block:,.0f} "
+                    f"rerun witness_first_run",
+                    extra={"error": e},
+                )
+                last_good_event = await witness_first_run(watch_witness)
+                last_good_block = last_good_event.get("block_num", 0) + 1
 
 
 async def transactions_loop(watch_users: List[str]):
