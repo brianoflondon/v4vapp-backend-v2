@@ -116,9 +116,15 @@ dbs:
     collections:
       test2_collection:
       test2_collection2:
+
 ################# TEST CONFIG #################
 
 redis:
   host: localhost
   port: 6379
   db: 0
+################# TEST CONFIG #################
+
+# binance:
+#   api_key: binance-api-key
+#   api_secret: binance-secret-key

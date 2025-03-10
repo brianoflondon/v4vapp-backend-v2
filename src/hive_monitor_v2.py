@@ -10,7 +10,6 @@ from beem.blockchain import Blockchain  # type: ignore
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
-from requests.exceptions import HTTPError
 
 from lnd_monitor_v2 import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -203,7 +202,8 @@ async def db_store_block_marker(
     """
     Asynchronously stores block markers in the database.
 
-    This function stores block markers in the database by logging the block marker event.
+    This function stores block markers in the database by logging the block
+    marker event.
     """
     try:
         query = {"trx_id": "block_marker", "op_in_trx": 0}
@@ -529,11 +529,15 @@ async def witness_loop(watch_witness: str):
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
 
-            except HTTPError as e:
-                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
-
             except Exception as e:
                 logger.warning(f"{icon} {e}", extra={"error": e})
+                logger.warning(
+                    f"{icon} last_good_block: {last_good_block:,.0f} "
+                    f"rerun witness_first_run",
+                    extra={"error": e},
+                )
+                last_good_event = await witness_first_run(watch_witness)
+                last_good_block = last_good_event.get("block_num", 0) + 1
 
 
 async def transactions_loop(watch_users: List[str]):
@@ -609,9 +613,6 @@ async def transactions_loop(watch_users: List[str]):
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
-
-            except HTTPError as e:
-                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
 
             except Exception as e:
                 logger.error(f"{icon} {e}", extra={"error": e})
