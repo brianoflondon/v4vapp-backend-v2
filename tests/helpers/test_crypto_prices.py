@@ -74,7 +74,7 @@ async def test_binance_quote_service(mocker):
     service = BinanceQuoteService()
 
     # Mock the Spot client
-    mock_spot_client = mocker.patch("binance.spot.Spot", autospec=True)
+    mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
 
     # Mock the book_ticker method to return the desired response
     mock_spot_client.return_value.book_ticker.return_value = [
@@ -105,6 +105,6 @@ async def test_binance_quote_service(mocker):
     assert quote is not None
     assert quote.hive_usd == 0.2326
     assert quote.hbd_usd == 1
-    assert quote.btc_usd == 81325.235
-    assert quote.sats_hive == 285.5003
+    assert quote.btc_usd == 81325.2
+    assert quote.sats_hive == 286.0122
     assert quote.raw_response is not None
