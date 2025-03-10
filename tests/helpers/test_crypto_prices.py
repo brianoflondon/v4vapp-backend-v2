@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,21 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     CoinGeckoError,
     CoinGeckoQuoteService,
 )
+
+
+@pytest.fixture
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    yield
+    # No need to restore the original value, monkeypatch will handle it
 
 
 @pytest.mark.asyncio
@@ -70,7 +86,7 @@ async def test_coin_gecko_quote_service_error(mocker):
 
 
 @pytest.mark.asyncio
-async def test_binance_quote_service(mocker):
+async def test_binance_quote_service(mocker, set_base_config_path):
     service = BinanceQuoteService()
 
     # Mock the Spot client
