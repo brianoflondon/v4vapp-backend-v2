@@ -561,7 +561,7 @@ async def transactions_loop(watch_users: List[str]):
     the transactions and logs them.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = TRANSFER_OP_TYPES
+    op_names = ["transfer"]
 
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
