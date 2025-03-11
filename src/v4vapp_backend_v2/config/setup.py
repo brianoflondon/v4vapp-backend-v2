@@ -38,7 +38,7 @@ class StartupFailure(Exception):
 class LoggingConfig(BaseModel):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
-    handlers: Any
+    log_levels: Any
     log_folder: Path = Path("logs/")
 
 
@@ -299,16 +299,12 @@ class InternalConfig:
         # Apply the logging configuration from the JSON file
         logging.config.dictConfig(config)
 
-        # Adjust handler levels dynamically if specified in self.config.logging.handlers
-        for handler_name, level in self.config.logging.handlers.items():
-            handler = logging.getHandlerByName(handler_name)
-            if handler is not None:
-                handler.setLevel(level)
-            else:
-                logger.debug(
-                    f"Handler '{handler_name}' not found in config",
-                    extra={"notification": False},
-                )
+        # Adjust logging levels dynamically if
+        # specified in self.config.logging.log_levels
+        for logger_name, level in self.config.logging.log_levels.items():
+            logger_object = logging.getLogger(logger_name)
+            if logger_object:
+                logger_object.setLevel(level)
 
         # Start the queue handler listener if it exists
         queue_handler = logging.getHandlerByName("queue_handler")

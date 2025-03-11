@@ -21,7 +21,8 @@
         "routerrpc",
         "routerstub",
         "setex",
-        "Unpatch"
+        "Unpatch",
+        "urllib"
     ],
     "python.testing.pytestArgs": [
         "tests",
