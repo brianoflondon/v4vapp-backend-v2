@@ -89,9 +89,10 @@ class V4VAsyncRedis:
 
 
 # Async caching decorator using V4VAsyncRedis
+# Not really working needs more testing
 def cache_with_redis_async(func):
     @wraps(func)
-    async def wrapper(*args, use_cache=True, **kwargs):
+    async def wrapper(*args, **kwargs):
         # Initialize the async Redis client
         async with V4VAsyncRedis(decode_responses=False) as redis_client:
 
@@ -100,7 +101,10 @@ def cache_with_redis_async(func):
 
             # Check if result is in cache
             cached_result = await redis_client.get(key)
-            if cached_result is not None and use_cache:
+            if cached_result is not None and (
+                use_cache := kwargs.get("use_cache", True)
+            ):
+                logger.info(f"Cache hit {key}")
                 # Since decode_responses=True, cached_result is a string; we need to deserialize
                 return pickle.loads(cached_result)  # Encode back to bytes for pickle
 
@@ -111,7 +115,7 @@ def cache_with_redis_async(func):
                 raise e
 
             # Store as bytes, since decode_responses=True expects strings
-            await redis_client.setex(key, 600, pickle.dumps(result))  # 1-hour TTL
+            await redis_client.setex(key, 60, pickle.dumps(result))  # 1-hour TTL
             return result
 
     return wrapper

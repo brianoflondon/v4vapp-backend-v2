@@ -9,13 +9,13 @@ from beem.market import Market  # type: ignore
 from httpx import Request, Response
 
 from v4vapp_backend_v2.helpers.crypto_prices import (
+    ALL_PRICES_COINGECKO,
+    ALL_PRICES_COINMARKETCAP,
     AllQuotes,
     Binance,
     CoinGecko,
     CoinMarketCap,
     HiveInternalMarket,
-    ALL_PRICES_COINGECKO,
-    ALL_PRICES_COINMARKETCAP
 )
 
 
@@ -40,9 +40,7 @@ def mock_coin_gecko(mocker):
 
     mock_response = Response(
         status_code=200,
-        request=Request(
-            method="GET", url=ALL_PRICES_COINGECKO
-        ),
+        request=Request(method="GET", url=ALL_PRICES_COINGECKO),
         json=coingecko_resp,
     )
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response))
@@ -58,6 +56,11 @@ async def test_coin_gecko_quote_service(mocker):
     assert quote.fetch_date is not None
     assert quote.raw_response == coingecko_resp
     assert quote.quote_age < 20
+    quote = await service.get_quote(use_cache=True)
+    assert quote is not None
+    assert quote.fetch_date is not None
+    assert quote.raw_response == coingecko_resp
+    assert quote.quote_age < 20
 
 
 @pytest.mark.asyncio
@@ -67,9 +70,7 @@ async def test_coin_gecko_quote_service_error(mocker):
     # Mock the client.get method to return a rate limit error response
     mock_response = Response(
         status_code=429,  # HTTP status code for Too Many Requests (rate limit)
-        request=Request(
-            method="GET", url=ALL_PRICES_COINGECKO
-        ),
+        request=Request(method="GET", url=ALL_PRICES_COINGECKO),
         json={"error": "Rate limit exceeded"},
     )
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response))
@@ -91,7 +92,10 @@ def mock_binance(mocker):
 async def test_binance_quote_service(mocker, set_base_config_path):
     service = Binance()
     binance_resp = mock_binance(mocker)
-    quote = await service.get_quote()
+    quote = await service.get_quote(use_cache=False)
+    assert quote is not None
+    assert quote.raw_response == binance_resp
+    quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.raw_response == binance_resp
 
@@ -134,7 +138,10 @@ async def test_coin_market_cap_quote_service(mocker, set_base_config_path):
 
     coinmarketcap_resp = mock_coin_market_cap(mocker)
 
-    quote = await service.get_quote()
+    quote = await service.get_quote(use_cache=False)
+    assert quote is not None
+    assert quote.raw_response == coinmarketcap_resp
+    quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.raw_response == coinmarketcap_resp
 
@@ -213,7 +220,7 @@ async def test_hive_internal_market_service_error(mocker):
     mock_market.ticker.side_effect = Exception("Test error")
 
     # Call the service method and assert that it raises the expected error
-    quote = await service.get_quote()
+    quote = await service.get_quote(use_cache=False)
 
     assert "Problem calling Hive Market API Test error" in quote.error
 
@@ -323,7 +330,7 @@ async def test_get_all_quotes_with_single_failure(
 
     # Execute the test
     all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes()
+    await all_quotes.get_all_quotes(use_cache=False)
 
     # Test the authoritative quote fetch
     quote = all_quotes.quote

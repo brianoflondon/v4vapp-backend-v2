@@ -1,4 +1,5 @@
 import asyncio
+import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -9,6 +10,7 @@ from binance.spot import Spot
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis, cache_with_redis_async
 from v4vapp_backend_v2.helpers.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -21,6 +23,13 @@ ALL_PRICES_COINMARKETCAP = (
 )
 
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
+
+CACHE_TIMES = {
+    "CoinGecko": 60,
+    "Binance": 60,
+    "CoinMarketCap": 180,
+    "HiveInternalMarket": 10,
+}
 
 
 class Currency(StrEnum):
@@ -291,9 +300,27 @@ class QuoteService(ABC):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         pass
 
+    async def check_cache(self, use_cache) -> QuoteResponse | None:
+        if use_cache:
+            key = f"{self.__class__.__name__}:get_quote"
+            async with V4VAsyncRedis(decode_responses=False) as redis_client:
+                cached_quote = await redis_client.get(key)
+                if cached_quote:
+                    return pickle.loads(cached_quote)
+        return None
+
+    async def set_cache(self, quote: QuoteResponse) -> None:
+        key = f"{self.__class__.__name__}:get_quote"
+        expiry = CACHE_TIMES[self.__class__.__name__]
+        async with V4VAsyncRedis(decode_responses=False) as redis_client:
+            await redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+
 
 class CoinGecko(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        cached_quote = await self.check_cache(use_cache=use_cache)
+        if cached_quote:
+            return cached_quote
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -308,6 +335,7 @@ class CoinGecko(QuoteService):
                         hive_hbd=pri["hive"]["usd"] / pri["hive_dollar"]["usd"],
                         raw_response=pri,
                     )
+                    await self.set_cache(quote_response)
                     return quote_response
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
@@ -318,6 +346,9 @@ class CoinGecko(QuoteService):
 
 class Binance(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        cached_quote = await self.check_cache(use_cache=use_cache)
+        if cached_quote:
+            return cached_quote
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
         try:
@@ -350,7 +381,7 @@ class Binance(QuoteService):
                 hive_hbd=hive_hbd,
                 raw_response=ticker_info,
             )
-
+            await self.set_cache(quote_response)
             return quote_response
 
         except Exception as ex:
@@ -360,6 +391,10 @@ class Binance(QuoteService):
 
 class CoinMarketCap(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        cached_quote = await self.check_cache(use_cache=use_cache)
+        if cached_quote:
+            return cached_quote
+
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
         url = ALL_PRICES_COINMARKETCAP
@@ -400,6 +435,7 @@ class CoinMarketCap(QuoteService):
                     hive_hbd=Hive_HBD,
                     raw_response=resp_json,
                 )
+                await self.set_cache(quote_response)
                 return quote_response
             else:
                 raise CoinMarketCapError(f"Failed to get quote: {response.text}")
@@ -410,6 +446,9 @@ class CoinMarketCap(QuoteService):
 
 class HiveInternalMarket(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        cached_quote = await self.check_cache(use_cache=use_cache)
+        if cached_quote:
+            return cached_quote
         try:
             hive_quote = await call_hive_internal_market()
             if hive_quote.error:
@@ -425,6 +464,8 @@ class HiveInternalMarket(QuoteService):
                 hive_hbd=hive_hbd,
                 raw_response=raw_response,
             )
+            await self.set_cache(quote_response)
+
             return quote_response
         except Exception as ex:
             message = f"Problem calling Hive Market API {ex}"
