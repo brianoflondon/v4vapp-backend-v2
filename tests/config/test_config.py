@@ -76,8 +76,6 @@ def test_internal_config(set_base_config_path: None):
 def test_singleton_config(set_base_config_path: None):
     internal_config = InternalConfig()
     internal_config2 = InternalConfig()
-    print(internal_config.config.version)
-    print(internal_config2.config.version)
     assert internal_config is internal_config2
 
 

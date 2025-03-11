@@ -97,7 +97,6 @@ async def test_mongodb_client_local(set_base_config_path: None):
     """
     async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         assert test_client is not None
-        print(test_client.collections)
         cursor = await test_client.db.list_collections()
         collections = []
         async for collection in cursor:

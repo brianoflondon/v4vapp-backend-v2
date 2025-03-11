@@ -146,7 +146,6 @@ async def test_update_payment_route_with_alias_fill_cache():
                     route_str = payment.route_str
                     # assert route_str
                     assert payment.destination
-                    print(payment.payment_index, route_str)
 
                     if first_call:
                         mock_get_all.assert_called_once_with(db_client, "pub_keys")
