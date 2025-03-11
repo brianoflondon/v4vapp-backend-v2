@@ -46,13 +46,21 @@ class NotificationProtocol(Protocol):
         if loop.is_closed():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            internal_config.notification_loop = loop  # Update the stored loop
 
         if "levelno" not in record.__dict__:
             record.__dict__["levelno"] = logging.INFO
+
         try:
-            loop.run_until_complete(
-                self._send_notification(_config, message, record, alert_level)
-            )
+            # If the loop is running, schedule the task; if not, run it
+            if loop.is_running():
+                asyncio.create_task(
+                    self._send_notification(_config, message, record, alert_level)
+                )
+            else:
+                loop.run_until_complete(
+                    self._send_notification(_config, message, record, alert_level)
+                )
         except Exception as ex:
             logger.warning(
                 f"An error occurred while sending the message: {ex}",

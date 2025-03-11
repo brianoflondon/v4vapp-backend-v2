@@ -292,18 +292,25 @@ class InternalConfig:
             logger.error(f"Logging config file not found: {ex}")
             raise ex
 
-        for handler, level in self.config.logging.handlers.items():
-            logging.getLogger(handler).addHandler(handler)
-            logging.getLogger(handler).setLevel(level)
-
-        # Configuration for the json log file is set in the external config.json file
-        # The stdout log configuration is set in the code below
-
-        # if folder for logs doesn't exist create it
+        # Ensure log folder exists
         log_folder = self.config.logging.log_folder
         log_folder.mkdir(exist_ok=True)
 
+        # Apply the logging configuration from the JSON file
         logging.config.dictConfig(config)
+
+        # Adjust handler levels dynamically if specified in self.config.logging.handlers
+        for handler_name, level in self.config.logging.handlers.items():
+            handler = logging.getHandlerByName(handler_name)
+            if handler is not None:
+                handler.setLevel(level)
+            else:
+                logger.debug(
+                    f"Handler '{handler_name}' not found in config",
+                    extra={"notification": False},
+                )
+
+        # Start the queue handler listener if it exists
         queue_handler = logging.getHandlerByName("queue_handler")
         if queue_handler is not None:
             queue_handler.listener.start()
@@ -318,15 +325,16 @@ class InternalConfig:
                 )
             atexit.register(self.notification_loop.close)
 
+        # Set up the simple format string
         try:
-            if config["formatters"]["simple"]["format"]:
-                format_str = config["formatters"]["simple"]["format"]
+            format_str = config["formatters"]["simple"]["format"]
         except KeyError:
             format_str = (
                 "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s "
                 "%(lineno)6d : %(message)s"
             )
 
+        # Custom namer for file_json handler
         def custom_log_namer(name):
             return name
 
@@ -334,7 +342,7 @@ class InternalConfig:
         if file_json_handler is not None:
             file_json_handler.namer = custom_log_namer
 
-        # Set up the colorlog handler
+        # Set up the colorlog handler for stdout
         handler = colorlog.StreamHandler()
         handler.setFormatter(
             colorlog.ColoredFormatter(
@@ -342,7 +350,7 @@ class InternalConfig:
                 datefmt="%Y-%m-%dT%H:%M:%S%z",
                 log_colors={
                     "DEBUG": "cyan",
-                    "INFO": "blue",  # change this to the color you want
+                    "INFO": "blue",
                     "WARNING": "yellow",
                     "ERROR": "red",
                     "CRITICAL": "red,bg_white",
@@ -350,10 +358,12 @@ class InternalConfig:
                 stream=sys.stdout,
             )
         )
-        # handler.addFilter(NonErrorFilter())
-        logger.addHandler(handler)
-        logger.setLevel(self.config.logging.default_log_level)
+        # Add the colorlog handler to the root logger
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
+        root_logger.setLevel(self.config.logging.default_log_level)
 
+        # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
 
 
