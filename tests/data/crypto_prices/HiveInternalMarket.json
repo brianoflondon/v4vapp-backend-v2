@@ -1,0 +1,101 @@
+{
+  "hive_usd": 0.0,
+  "hbd_usd": 0.0,
+  "btc_usd": 0.0,
+  "hive_hbd": 0.2309,
+  "raw_response": {
+    "highest_bid": {
+      "quote": {
+        "asset": {
+          "asset": "@@000000013",
+          "precision": 3,
+          "id": "HBD",
+          "symbol": "HBD"
+        },
+        "amount": "726",
+        "symbol": "HBD"
+      },
+      "base": {
+        "asset": {
+          "asset": "@@000000021",
+          "precision": 3,
+          "id": "HIVE",
+          "symbol": "HIVE"
+        },
+        "amount": "167",
+        "symbol": "HIVE"
+      },
+      "price": "0.2300275482093663911845730028"
+    },
+    "latest": {
+      "quote": {
+        "asset": {
+          "asset": "@@000000013",
+          "precision": 3,
+          "id": "HBD",
+          "symbol": "HBD"
+        },
+        "amount": "513",
+        "symbol": "HBD"
+      },
+      "base": {
+        "asset": {
+          "asset": "@@000000021",
+          "precision": 3,
+          "id": "HIVE",
+          "symbol": "HIVE"
+        },
+        "amount": "118",
+        "symbol": "HIVE"
+      },
+      "price": "0.2300194931773879142300194932"
+    },
+    "lowest_ask": {
+      "quote": {
+        "asset": {
+          "asset": "@@000000013",
+          "precision": 3,
+          "id": "HBD",
+          "symbol": "HBD"
+        },
+        "amount": "979",
+        "symbol": "HBD"
+      },
+      "base": {
+        "asset": {
+          "asset": "@@000000021",
+          "precision": 3,
+          "id": "HIVE",
+          "symbol": "HIVE"
+        },
+        "amount": "227",
+        "symbol": "HIVE"
+      },
+      "price": "0.2318692543411644535240040858"
+    },
+    "percent_change": -4.808209772976309,
+    "hbd_volume": {
+      "asset": {
+        "asset": "@@000000013",
+        "precision": 3,
+        "id": "@@000000013",
+        "symbol": "HBD"
+      },
+      "amount": "55964.779",
+      "symbol": "HBD"
+    },
+    "hive_volume": {
+      "asset": {
+        "asset": "@@000000021",
+        "precision": 3,
+        "id": "@@000000021",
+        "symbol": "HIVE"
+      },
+      "amount": "246513.838",
+      "symbol": "HIVE"
+    }
+  },
+  "fetch_date": "2025-03-11T12:17:43.837399Z",
+  "error": "",
+  "error_details": {}
+}

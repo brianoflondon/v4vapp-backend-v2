@@ -1,10 +1,13 @@
 import random
 from enum import StrEnum
-from typing import List
+from typing import Any, Dict, List
 
 import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
+from beem.market import Market  # type: ignore
+from beem.price import Price  # type: ignore
+from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -74,11 +77,11 @@ def get_good_nodes() -> List[str]:
     return good_nodes
 
 
-def get_hive_witness_details(hive_accname: str) -> dict:
+async def get_hive_witness_details(hive_accname: str) -> dict:
     """
     Fetches details about a Hive witness.
 
-    This function sends a GET request to "https://api.hive.blog/witnesses"
+    This function sends a GET request to "https://api.syncad.com/hafbe-api/witnesses"
     and retrieves the details of a Hive witness with the specified account name.
 
     Args:
@@ -88,10 +91,11 @@ def get_hive_witness_details(hive_accname: str) -> dict:
         dict: A dictionary containing the details of the Hive witness.
     """
     try:
-        response = httpx.get(
-            f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}",
-        )
-        answer = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}",
+            )
+            answer = response.json()
     except Exception as e:
         logger.warning(f"Failed to get_hive_witness_details: {e}")
         return {}
@@ -103,10 +107,62 @@ def get_hive_witness_details(hive_accname: str) -> dict:
     return {}
 
 
+class HiveInternalQuote(BaseModel):
+    hive_hbd: float | None = None
+    raw_response: Dict[str, Any] = {}
+    error: str = ""
+
+
+async def call_hive_internal_market() -> HiveInternalQuote:
+    """
+    Asynchronously calls the Hive internal market API to retrieve the highest bid and
+    lowest ask prices.
+
+        Dict[str, float]: A dictionary containing the calculated Hive to HBD price and
+        the market ticker data.
+        Dict[str, float]: A dictionary containing the calculated Hive to HBD price and
+        the market ticker data.
+        If an error occurs, returns a dictionary with an error message.
+
+    Raises:
+        Exception: If there is an issue calling the Hive Market API.
+        The function logs the last node used by the Hive blockchain instance and any
+        errors encountered.
+    Note:
+        The function logs the last node used by the Hive blockchain instance and any
+        errors encountered.
+    """
+    try:
+        hive = get_hive_client()
+        market = Market(hive=hive)
+        ticker = market.ticker()
+
+        # raise KeyError("'highest_bid'")
+        highest_bid: Price = ticker["highest_bid"]
+        highest_bid_value = float(highest_bid["price"])
+        lowest_ask: Price = ticker["lowest_ask"]
+        lowest_ask_value = float(lowest_ask["price"])
+        hive_hbd = float(
+            ((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value
+        )
+        answer = HiveInternalQuote(hive_hbd=hive_hbd, raw_response=ticker)
+        return answer
+    except Exception as ex:
+        # logging.exception(ex)
+        logger.info(
+            f"Calling Market API on Hive: "
+            f"{market['blockchain_instance'].data['last_node']}"
+        )
+        message = f"Problem calling Hive Market API {ex}"
+        logger.error(message)
+        return HiveInternalQuote(error=message)
+
+
 class HiveExp(StrEnum):
     HiveHub = "https://hivehub.dev/tx/{trx_id}"
     HiveBlockExplorer = "https://hiveblockexplorer.com/tx/{trx_id}"
     HiveExplorer = "https://hivexplorer.com/tx/{trx_id}"
+    HiveScanInfo = "https://hivescan.info/transaction/{trx_id}"
 
 
 def get_hive_block_explorer_link(
@@ -132,5 +188,5 @@ def get_hive_block_explorer_link(
 if __name__ == "__main__":
     nodes = get_good_nodes()
     print(nodes)
-    witness = get_hive_witness_details("brianoflondon")
-    print(witness)
+    # witness = get_hive_witness_details("brianoflondon")
+    # print(witness)

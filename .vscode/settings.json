@@ -20,6 +20,7 @@
         "Muun",
         "routerrpc",
         "routerstub",
+        "setex",
         "Unpatch"
     ],
     "python.testing.pytestArgs": [

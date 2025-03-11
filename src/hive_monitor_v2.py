@@ -10,7 +10,6 @@ from beem.blockchain import Blockchain  # type: ignore
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
-from requests.exceptions import HTTPError
 
 from lnd_monitor_v2 import InternalConfig, logger
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -22,6 +21,7 @@ from v4vapp_backend_v2.helpers.hive_extras import (
     get_good_nodes,
     get_hive_block_explorer_link,
     get_hive_client,
+    get_hive_witness_details,
 )
 
 INTERNAL_CONFIG = InternalConfig()
@@ -31,6 +31,11 @@ HIVE_DATABASE = "lnd_monitor_v2_voltage"
 HIVE_DATABASE_USER = "lnd_monitor"
 HIVE_TRX_COLLECTION = "hive_trx_beem"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
+HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
+
+
+TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
+OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
 
 app = typer.Typer()
 icon = "🐝"
@@ -203,7 +208,8 @@ async def db_store_block_marker(
     """
     Asynchronously stores block markers in the database.
 
-    This function stores block markers in the database by logging the block marker event.
+    This function stores block markers in the database by logging the block
+    marker event.
     """
     try:
         query = {"trx_id": "block_marker", "op_in_trx": 0}
@@ -473,8 +479,10 @@ async def witness_loop(watch_witness: str):
                     if (
                         not send_once
                         and seconds_since_last_block
-                        > mean_time_diff.total_seconds() * 1.2
+                        > mean_time_diff.total_seconds() * HIVE_WITNESS_DELAY_FACTOR
                     ):
+                        witness_details = await get_hive_witness_details(watch_witness)
+                        missed_blocks = witness_details.get("missed_blocks", 0)
                         time_since_last_block = remove_ms(
                             timedelta(seconds=seconds_since_last_block)
                         )
@@ -482,7 +490,7 @@ async def witness_loop(watch_witness: str):
                             hive_event["block_num"] - last_good_event["block_num"]
                         )
                         logger.warning(
-                            f"{icon} 🚨 "
+                            f"{icon} 🚨 Missed: {missed_blocks} "
                             f"Witness Time since last block: {time_since_last_block} "
                             f"Mean: {mean_time_diff} "
                             f"Block Now: {hive_event['block_num']:,.0f} "
@@ -495,16 +503,20 @@ async def witness_loop(watch_witness: str):
                         )
                         send_once = True
                     if hive_event.get("producer") == watch_witness:
+                        witness_details = await get_hive_witness_details(watch_witness)
+                        missed_blocks = witness_details.get("missed_blocks", 0)
                         time_diff = remove_ms(
                             hive_event["timestamp"].replace(tzinfo=timezone.utc)
                             - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
+                        hive_event["witness_details"] = witness_details
                         logger.info(
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
                             f"Mean {mean_time_diff} | "
-                            f"{hive_event['block_num']:,.0f}",
+                            f"{hive_event['block_num']:,.0f} | "
+                            f"Missed: {missed_blocks}",
                             extra={
                                 "hive_event": hive_event,
                                 "notification": True,
@@ -529,11 +541,16 @@ async def witness_loop(watch_witness: str):
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
 
-            except HTTPError as e:
-                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
-
             except Exception as e:
+                logger.exception(e)
                 logger.warning(f"{icon} {e}", extra={"error": e})
+                logger.warning(
+                    f"{icon} last_good_block: {last_good_block:,.0f} "
+                    f"rerun witness_first_run",
+                    extra={"error": e},
+                )
+                last_good_event = await witness_first_run(watch_witness)
+                last_good_block = last_good_event.get("block_num", 0) + 1
 
 
 async def transactions_loop(watch_users: List[str]):
@@ -543,9 +560,9 @@ async def transactions_loop(watch_users: List[str]):
     This function creates an event listener for transactions, then loops through
     the transactions and logs them.
     """
-
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = ["transfer"]
+    op_names = TRANSFER_OP_TYPES
+
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
@@ -609,9 +626,6 @@ async def transactions_loop(watch_users: List[str]):
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
-
-            except HTTPError as e:
-                logger.warning(f"{icon} HTTP Error {e}", extra={"error": e})
 
             except Exception as e:
                 logger.error(f"{icon} {e}", extra={"error": e})

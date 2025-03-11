@@ -84,6 +84,7 @@ def _next(it: Iterator[T]) -> T:
     except Exception as e:
         try:
             logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+            logger.exception(e, extra={"notification": False})
         except AttributeError as log_error:
             logger.error(
                 f"Logging error: {log_error} - problem with str in log level",

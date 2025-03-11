@@ -87,3 +87,12 @@ jobs:
       - name: Test with pytest
         run: |
           poetry run pytest
+
+      # Print service container logs only if tests fail
+      - name: Print service container logs
+        if: failure()
+        run: |
+          echo "MongoDB logs:"
+          docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
+          echo "Redis logs:"
+          docker logs $(docker ps -q --filter "ancestor=redis:latest")
