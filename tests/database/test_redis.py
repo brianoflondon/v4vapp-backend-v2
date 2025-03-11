@@ -40,6 +40,7 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_redis_client():
     redis_client = V4VAsyncRedis(decode_responses=True)
+    await redis_client.flush()
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
@@ -82,6 +83,7 @@ async def test_redis_client_context_manager():
         assert await redis_client.ping()
         await redis_client.set("test_key", "test_value")
         assert await redis_client.get("test_key") == "test_value"
+        await redis_client.flushdb()
 
     assert redis_client is not None
     await redis_client.aclose()
