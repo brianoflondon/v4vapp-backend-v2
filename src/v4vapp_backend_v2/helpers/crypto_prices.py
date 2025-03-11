@@ -111,6 +111,38 @@ class QuoteResponse(BaseModel):
 
 
 class AllQuotes(BaseModel):
+    """
+    AllQuotes class is responsible for fetching and aggregating cryptocurrency quotes
+    from various services.
+
+    Attributes:
+        quotes (Dict[str, QuoteResponse]): A dictionary to store quotes from different
+        services.
+
+    Methods:
+        get_all_quotes(use_cache: bool = True, timeout: float = 30.0):
+            Asynchronously fetches quotes from multiple services and stores them in
+            the quotes attribute. If the fetching exceeds the specified timeout, it
+            logs an error and sets the quotes with timeout errors.
+
+        quote() -> QuoteResponse:
+            Retrieves the authoritative quote based on predefined rules. If a valid
+            quote from Binance is available, it is returned. If HiveInternalMarket is
+            also available, its hive_hbd attribute is included in the response. If no
+            valid quote from Binance is found, an average quote is calculated and
+            returned.
+
+        calculate_average_quote() -> QuoteResponse:
+            Calculates the average values of various cryptocurrency quotes from the
+            valid quotes. Returns an object containing the average values for HIVE to
+            USD, HBD to USD, BTC to USD, and HIVE to HBD.
+
+        hive_hbd() -> float:
+            Calculates the average HIVE to HBD value from the available quotes. If
+            HiveInternalMarket is available, its hive_hbd value is returned. If no
+            valid Hive HBD price is found, raises a ValueError.
+    """
+
     quotes: Dict[str, QuoteResponse] = {}
 
     async def get_all_quotes(self, use_cache: bool = True, timeout: float = 30.0):
@@ -148,6 +180,86 @@ class AllQuotes(BaseModel):
             except Exception as e:
                 logger.error(f"Error fetching quote from {service_name}: {e}")
                 self.quotes[service_name] = QuoteResponse(error=str(e))
+
+    @property
+    def quote(self) -> QuoteResponse:
+        """
+        Get the authoritative quote based on rules.
+
+        This method retrieves the authoritative quote from available sources based on
+        predefined rules. If a valid quote from Binance is available, it is returned.
+        If HiveInternalMarket is also available, its hive_hbd attribute is included in
+        the response. If no valid quote from Binance is found, an average quote is
+        calculated and returned.
+
+        Returns:
+            QuoteResponse: The authoritative quote or an error message if no valid
+            quote is found.
+
+        """
+        if self.quotes:
+            if (
+                Binance.__name__ in self.quotes
+                and not self.quotes[Binance.__name__].error
+            ):
+                ans = self.quotes[Binance.__name__]
+                if HiveInternalMarket.__name__ in self.quotes:
+                    ans.hive_hbd = self.hive_hbd
+                return ans
+            else:
+                return self.calculate_average_quote()
+
+        return QuoteResponse(error="No valid quote found")
+
+    def calculate_average_quote(self):
+        """
+        Calculate the average values of various cryptocurrency quotes.
+
+        This method filters out quotes with errors and calculates the average
+        values for HIVE to USD, HBD to USD, BTC to USD, and HIVE to HBD from
+        the remaining valid quotes.
+
+        Returns:
+            QuoteResponse: An object containing the average values for the
+            following:
+            - hive_usd (float): The average HIVE to USD value.
+            - hbd_usd (float): The average HBD to USD value.
+            - btc_usd (float): The average BTC to USD value.
+            - hive_hbd (float): The average HIVE to HBD value.
+            - raw_response (dict): An empty dictionary (you can decide what to put here).
+
+            If there are no valid quotes, returns None.
+        """
+        good_quotes = [quote for quote in self.quotes.values() if not quote.error]
+        if not good_quotes:
+            return None
+
+        avg_hive_usd = sum(quote.hive_usd for quote in good_quotes) / len(good_quotes)
+        avg_hbd_usd = sum(quote.hbd_usd for quote in good_quotes) / len(good_quotes)
+        avg_btc_usd = sum(quote.btc_usd for quote in good_quotes) / len(good_quotes)
+        avg_hive_hbd = sum(quote.hive_hbd for quote in good_quotes) / len(good_quotes)
+
+        return QuoteResponse(
+            hive_usd=avg_hive_usd,
+            hbd_usd=avg_hbd_usd,
+            btc_usd=avg_btc_usd,
+            hive_hbd=avg_hive_hbd,
+            raw_response={},  # You can decide what to put here
+        )
+
+    @property
+    def hive_hbd(self) -> float:
+        if HiveInternalMarket.__name__ in self.quotes:
+            return self.quotes[HiveInternalMarket.__name__].hive_hbd
+        hive_hbd = 0.0
+        count = 0
+        for service_name, quote in self.quotes.items():
+            if quote.hive_hbd:
+                hive_hbd += quote.hive_hbd
+                count += 1
+        if count == 0:
+            raise ValueError("No valid Hive HBD price found")
+        return hive_hbd / count
 
 
 class QuoteServiceError(Exception):

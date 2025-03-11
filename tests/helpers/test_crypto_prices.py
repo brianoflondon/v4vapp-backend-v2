@@ -247,6 +247,11 @@ async def test_get_all_quotes(mocker, set_base_config_path):
     assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
     assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
 
+    # Test the authoritative quote fetch
+    quote = all_quotes.quote
+    assert quote is not None
+    assert quote.error == ""
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -318,31 +323,36 @@ async def test_get_all_quotes_with_single_failure(
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes()
 
-    # Assertions based on which service is failing
+    # Test the authoritative quote fetch
+    quote = all_quotes.quote
+    assert quote is not None
+    assert quote.error == ""
 
+    # Assertions based on which service is failing
     if failing_service == "CoinGecko":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
         assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
+        assert all_quotes.quote == all_quotes.quotes["Binance"]
     elif failing_service == "CoinMarketCap":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
         assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
+        assert all_quotes.quote == all_quotes.quotes["Binance"]
     elif failing_service == "Binance":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
         assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
         assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
+        assert all_quotes.quote == all_quotes.calculate_average_quote()
     elif failing_service == "HiveInternalMarket":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
         assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
-
-    # Verify that an exception was logged or handled (depends on your AllQuotes implementation)
-    # If AllQuotes logs errors, you might want to check logs here using caplog fixture
+        assert all_quotes.quote.hive_hbd == all_quotes.hive_hbd
 
 
 async def fetch_all_quote_json_files():
