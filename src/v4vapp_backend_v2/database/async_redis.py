@@ -80,12 +80,10 @@ class V4VAsyncRedis:
             raise e
 
     async def __aexit__(self, exc_type, exc, tb):
-        return self.redis.aclose()
+        await self.redis.aclose()
 
     def __del__(self):
-        if self.redis:
-            self.redis.aclose()
-            logger.debug(f"Redis connection closed {self.host}:{self.port}")
+        logger.debug(f"Redis connection closed {self.host}:{self.port}")
 
 
 # # Async caching decorator using V4VAsyncRedis
