@@ -28,7 +28,7 @@
         "-rs",
         "--capture=no",
         "--verbose",
-        "--disable-warnings",
+        // "--disable-warnings",
         "--log-level=DEBUG",
         "--log-cli-level=INFO"
     ],
