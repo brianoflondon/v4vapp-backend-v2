@@ -14,6 +14,8 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     CoinGecko,
     CoinMarketCap,
     HiveInternalMarket,
+    ALL_PRICES_COINGECKO,
+    ALL_PRICES_COINMARKETCAP
 )
 
 
@@ -39,7 +41,7 @@ def mock_coin_gecko(mocker):
     mock_response = Response(
         status_code=200,
         request=Request(
-            method="GET", url="https://api.coingecko.com/api/v3/simple/price"
+            method="GET", url=ALL_PRICES_COINGECKO
         ),
         json=coingecko_resp,
     )
@@ -66,7 +68,7 @@ async def test_coin_gecko_quote_service_error(mocker):
     mock_response = Response(
         status_code=429,  # HTTP status code for Too Many Requests (rate limit)
         request=Request(
-            method="GET", url="https://api.coingecko.com/api/v3/simple/price"
+            method="GET", url=ALL_PRICES_COINGECKO
         ),
         json={"error": "Rate limit exceeded"},
     )
@@ -118,7 +120,7 @@ def mock_coin_market_cap(mocker):
         status_code=200,
         request=Request(
             method="GET",
-            url="https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+            url=ALL_PRICES_COINMARKETCAP,
         ),
         json=coinmarketcap_resp,
     )
@@ -146,7 +148,7 @@ async def test_coin_market_cap_quote_service_error(mocker):
         status_code=429,  # HTTP status code for Too Many Requests (rate limit)
         request=Request(
             method="GET",
-            url="https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+            url=ALL_PRICES_COINMARKETCAP,
         ),
         json={"status": {"error_code": 429, "error_message": "Rate limit exceeded"}},
     )

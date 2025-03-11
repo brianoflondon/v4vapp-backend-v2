@@ -16,6 +16,10 @@ ALL_PRICES_COINGECKO = (
     "/price?ids=bitcoin,hive,"
     "hive_dollar&vs_currencies=btc,usd,eur,aud"
 )
+ALL_PRICES_COINMARKETCAP = (
+    "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+)
+
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 
 
@@ -358,7 +362,7 @@ class CoinMarketCap(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
-        url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+        url = ALL_PRICES_COINMARKETCAP
         cmc_ids = {
             "BTC_USD": "1",
             "Hive_USD": "5370",
