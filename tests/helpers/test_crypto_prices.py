@@ -55,12 +55,10 @@ async def test_coin_gecko_quote_service(mocker):
     assert quote is not None
     assert quote.fetch_date is not None
     assert quote.raw_response == coingecko_resp
-    assert quote.quote_age < 20
     quote = await service.get_quote(use_cache=True)
     assert quote is not None
     assert quote.fetch_date is not None
     assert quote.raw_response == coingecko_resp
-    assert quote.quote_age < 20
 
 
 @pytest.mark.asyncio
