@@ -20,7 +20,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
 
 
 @pytest.fixture
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch, autouse=True):
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
@@ -89,7 +89,7 @@ def mock_binance(mocker):
 
 
 @pytest.mark.asyncio
-async def test_binance_quote_service(mocker, set_base_config_path):
+async def test_binance_quote_service(mocker):
     service = Binance()
     binance_resp = mock_binance(mocker)
     quote = await service.get_quote(use_cache=False)
@@ -106,7 +106,7 @@ def mock_binance_error(mocker):
 
 
 @pytest.mark.asyncio
-async def test_binance_quote_service_error(mocker, set_base_config_path):
+async def test_binance_quote_service_error(mocker):
     service = Binance()
 
     mock_binance_error(mocker)
@@ -133,7 +133,7 @@ def mock_coin_market_cap(mocker):
 
 
 @pytest.mark.asyncio
-async def test_coin_market_cap_quote_service(mocker, set_base_config_path):
+async def test_coin_market_cap_quote_service(mocker):
     service = CoinMarketCap()
 
     coinmarketcap_resp = mock_coin_market_cap(mocker)
@@ -226,7 +226,7 @@ async def test_hive_internal_market_service_error(mocker):
 
 
 @pytest.mark.asyncio
-async def test_get_all_quotes(mocker, set_base_config_path):
+async def test_get_all_quotes(mocker):
     # Load all responses
     with open("tests/data/crypto_prices/CoinGecko.json") as f:
         coingecko_resp = json.load(f).get("raw_response")
@@ -268,7 +268,7 @@ async def test_get_all_quotes(mocker, set_base_config_path):
     ["CoinGecko", "CoinMarketCap", "Binance", "HiveInternalMarket"],
 )
 async def test_get_all_quotes_with_single_failure(
-    mocker, set_base_config_path, failing_service
+    mocker, failing_service
 ):
     """
     Test that AllQuotes handles a single service failure correctly while others succeed.

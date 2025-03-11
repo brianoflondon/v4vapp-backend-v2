@@ -34,6 +34,9 @@ HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
 
+TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
+OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
+
 app = typer.Typer()
 icon = "🐝"
 
@@ -558,7 +561,8 @@ async def transactions_loop(watch_users: List[str]):
     the transactions and logs them.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = ["transfer"]
+    op_names = TRANSFER_OP_TYPES
+
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
