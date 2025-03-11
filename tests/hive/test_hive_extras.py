@@ -17,7 +17,7 @@ async def test_get_hive_witness_details():
 @pytest.mark.asyncio
 async def test_get_hive_witness_details_error():
     witness_details = await get_hive_witness_details("non_existent_witness")
-    assert witness_details is None
+    assert witness_details == {}
 
 
 @pytest.mark.asyncio

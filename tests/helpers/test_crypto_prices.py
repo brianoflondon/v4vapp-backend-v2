@@ -11,13 +11,9 @@ from httpx import Request, Response
 from v4vapp_backend_v2.helpers.crypto_prices import (
     AllQuotes,
     Binance,
-    BinanceError,
     CoinGecko,
-    CoinGeckoError,
     CoinMarketCap,
-    CoinMarketCapError,
     HiveInternalMarket,
-    HiveInternalMarketError,
 )
 
 
