@@ -1,0 +1,340 @@
+{
+  "quotes": {
+    "CoinGecko": {
+      "hive_usd": 0.2267,
+      "hbd_usd": 1.0,
+      "btc_usd": 80342,
+      "hive_hbd": 0.2267,
+      "raw_response": {
+        "bitcoin": {
+          "btc": 1.0,
+          "usd": 80342,
+          "eur": 73908,
+          "aud": 127999
+        },
+        "hive": {
+          "btc": 2.82e-06,
+          "usd": 0.226677,
+          "eur": 0.208524,
+          "aud": 0.361136
+        },
+        "hive_dollar": {
+          "btc": 1.245e-05,
+          "usd": 1.0,
+          "eur": 0.920115,
+          "aud": 1.59
+        }
+      },
+      "fetch_date": "2025-03-11 07:20:57.224457+00:00",
+      "error": ""
+    },
+    "Binance": {
+      "hive_usd": 0.2282,
+      "hbd_usd": 1,
+      "btc_usd": 80508.5,
+      "hive_hbd": 0.2282,
+      "raw_response": [
+        {
+          "symbol": "BTCUSDT",
+          "bidPrice": "80508.48000000",
+          "bidQty": "3.32978000",
+          "askPrice": "80508.49000000",
+          "askQty": "1.63118000"
+        },
+        {
+          "symbol": "HIVEBTC",
+          "bidPrice": "0.00000283",
+          "bidQty": "3972.00000000",
+          "askPrice": "0.00000284",
+          "askQty": "8671.00000000"
+        },
+        {
+          "symbol": "HIVEUSDT",
+          "bidPrice": "0.22810000",
+          "bidQty": "8266.00000000",
+          "askPrice": "0.22830000",
+          "askQty": "4929.00000000"
+        }
+      ],
+      "fetch_date": "2025-03-11 07:20:57.224457+00:00",
+      "error": ""
+    },
+    "CoinMarketCap": {
+      "hive_usd": 0.2269,
+      "hbd_usd": 1.0258,
+      "btc_usd": 80326.9,
+      "hive_hbd": 0.2212,
+      "raw_response": {
+        "status": {
+          "timestamp": "2025-03-11T07:21:00.316Z",
+          "error_code": 0,
+          "error_message": null,
+          "elapsed": 29,
+          "credit_count": 1,
+          "notice": null
+        },
+        "data": {
+          "1": {
+            "id": 1,
+            "name": "Bitcoin",
+            "symbol": "BTC",
+            "slug": "bitcoin",
+            "num_market_pairs": 11974,
+            "date_added": "2010-07-13T00:00:00.000Z",
+            "tags": [
+              "mineable",
+              "pow",
+              "sha-256",
+              "store-of-value",
+              "state-channel",
+              "coinbase-ventures-portfolio",
+              "three-arrows-capital-portfolio",
+              "polychain-capital-portfolio",
+              "binance-labs-portfolio",
+              "blockchain-capital-portfolio",
+              "boostvc-portfolio",
+              "cms-holdings-portfolio",
+              "dcg-portfolio",
+              "dragonfly-capital-portfolio",
+              "electric-capital-portfolio",
+              "fabric-ventures-portfolio",
+              "framework-ventures-portfolio",
+              "galaxy-digital-portfolio",
+              "huobi-capital-portfolio",
+              "alameda-research-portfolio",
+              "a16z-portfolio",
+              "1confirmation-portfolio",
+              "winklevoss-capital-portfolio",
+              "usv-portfolio",
+              "placeholder-ventures-portfolio",
+              "pantera-capital-portfolio",
+              "multicoin-capital-portfolio",
+              "paradigm-portfolio",
+              "bitcoin-ecosystem",
+              "ftx-bankruptcy-estate",
+              "2017-2018-alt-season",
+              "us-strategic-crypto-reserve"
+            ],
+            "max_supply": 21000000,
+            "circulating_supply": 19835253,
+            "total_supply": 19835253,
+            "is_active": 1,
+            "infinite_supply": false,
+            "platform": null,
+            "cmc_rank": 1,
+            "is_fiat": 0,
+            "self_reported_circulating_supply": null,
+            "self_reported_market_cap": null,
+            "tvl_ratio": null,
+            "last_updated": "2025-03-11T07:19:00.000Z",
+            "quote": {
+              "USD": {
+                "price": 80326.92300680856,
+                "volume_24h": 58836587176.57117,
+                "volume_change_24h": 50.1767,
+                "percent_change_1h": -0.11305483,
+                "percent_change_24h": -2.56154381,
+                "percent_change_7d": -3.83189039,
+                "percent_change_30d": -17.25355625,
+                "percent_change_60d": -14.73613864,
+                "percent_change_90d": -17.66209707,
+                "market_cap": 1593304840551.5686,
+                "market_cap_dominance": 60.9243,
+                "fully_diluted_market_cap": 1686865383142.98,
+                "tvl": null,
+                "last_updated": "2025-03-11T07:19:00.000Z"
+              }
+            }
+          },
+          "5370": {
+            "id": 5370,
+            "name": "Hive",
+            "symbol": "HIVE",
+            "slug": "hive-blockchain",
+            "num_market_pairs": 88,
+            "date_added": "2020-03-26T00:00:00.000Z",
+            "tags": [
+              "dpos",
+              "media",
+              "content-creation",
+              "scaling",
+              "web3",
+              "layer-1"
+            ],
+            "max_supply": null,
+            "circulating_supply": 500749242.945,
+            "total_supply": 500749242.945,
+            "is_active": 1,
+            "infinite_supply": true,
+            "platform": null,
+            "cmc_rank": 280,
+            "is_fiat": 0,
+            "self_reported_circulating_supply": null,
+            "self_reported_market_cap": null,
+            "tvl_ratio": null,
+            "last_updated": "2025-03-11T07:20:00.000Z",
+            "quote": {
+              "USD": {
+                "price": 0.2269497389850689,
+                "volume_24h": 10275465.07914042,
+                "volume_change_24h": 42.0762,
+                "percent_change_1h": -0.40647835,
+                "percent_change_24h": -2.91176487,
+                "percent_change_7d": -11.78669116,
+                "percent_change_30d": -30.73824289,
+                "percent_change_60d": -54.07175642,
+                "percent_change_90d": -24.31355532,
+                "market_cap": 113644909.98333861,
+                "market_cap_dominance": 0.0043,
+                "fully_diluted_market_cap": 113644909.98,
+                "tvl": null,
+                "last_updated": "2025-03-11T07:20:00.000Z"
+              }
+            }
+          },
+          "5375": {
+            "id": 5375,
+            "name": "Hive Dollar",
+            "symbol": "HBD",
+            "slug": "hive-dollar",
+            "num_market_pairs": 2,
+            "date_added": "2020-03-26T00:00:00.000Z",
+            "tags": [],
+            "max_supply": null,
+            "circulating_supply": 0,
+            "total_supply": 0,
+            "is_active": 1,
+            "infinite_supply": false,
+            "platform": null,
+            "cmc_rank": 5446,
+            "is_fiat": 0,
+            "self_reported_circulating_supply": null,
+            "self_reported_market_cap": null,
+            "tvl_ratio": null,
+            "last_updated": "2025-03-11T07:20:00.000Z",
+            "quote": {
+              "USD": {
+                "price": 1.0257692568164045,
+                "volume_24h": 3334.15297716,
+                "volume_change_24h": 88.4652,
+                "percent_change_1h": 0.01019674,
+                "percent_change_24h": 4.49854293,
+                "percent_change_7d": 1.84134362,
+                "percent_change_30d": -1.97771092,
+                "percent_change_60d": -2.77999547,
+                "percent_change_90d": 5.99529936,
+                "market_cap": 0,
+                "market_cap_dominance": 0,
+                "fully_diluted_market_cap": 0,
+                "tvl": null,
+                "last_updated": "2025-03-11T07:20:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "fetch_date": "2025-03-11 07:20:57.224457+00:00",
+      "error": ""
+    },
+    "HiveInternalMarket": {
+      "hive_usd": 0,
+      "hbd_usd": 0,
+      "btc_usd": 0,
+      "hive_hbd": 0.229,
+      "raw_response": {
+        "highest_bid": {
+          "quote": {
+            "asset": {
+              "asset": "@@000000013",
+              "precision": 3,
+              "id": "HBD",
+              "symbol": "HBD"
+            },
+            "amount": "974",
+            "symbol": "HBD"
+          },
+          "base": {
+            "asset": {
+              "asset": "@@000000021",
+              "precision": 3,
+              "id": "HIVE",
+              "symbol": "HIVE"
+            },
+            "amount": "223",
+            "symbol": "HIVE"
+          },
+          "price": "0.2289527720739219712525667351"
+        },
+        "latest": {
+          "quote": {
+            "asset": {
+              "asset": "@@000000013",
+              "precision": 3,
+              "id": "HBD",
+              "symbol": "HBD"
+            },
+            "amount": "677",
+            "symbol": "HBD"
+          },
+          "base": {
+            "asset": {
+              "asset": "@@000000021",
+              "precision": 3,
+              "id": "HIVE",
+              "symbol": "HIVE"
+            },
+            "amount": "155",
+            "symbol": "HIVE"
+          },
+          "price": "0.2289512555391432791728212703"
+        },
+        "lowest_ask": {
+          "quote": {
+            "asset": {
+              "asset": "@@000000013",
+              "precision": 3,
+              "id": "HBD",
+              "symbol": "HBD"
+            },
+            "amount": "607",
+            "symbol": "HBD"
+          },
+          "base": {
+            "asset": {
+              "asset": "@@000000021",
+              "precision": 3,
+              "id": "HIVE",
+              "symbol": "HIVE"
+            },
+            "amount": "139",
+            "symbol": "HIVE"
+          },
+          "price": "0.2289950576606260296540362438"
+        },
+        "percent_change": -8.419324431459941,
+        "hbd_volume": {
+          "asset": {
+            "asset": "@@000000013",
+            "precision": 3,
+            "id": "@@000000013",
+            "symbol": "HBD"
+          },
+          "amount": "57093.994",
+          "symbol": "HBD"
+        },
+        "hive_volume": {
+          "asset": {
+            "asset": "@@000000021",
+            "precision": 3,
+            "id": "@@000000021",
+            "symbol": "HIVE"
+          },
+          "amount": "250594.56",
+          "symbol": "HIVE"
+        }
+      },
+      "fetch_date": "2025-03-11 07:20:57.224457+00:00",
+      "error": ""
+    }
+  }
+}

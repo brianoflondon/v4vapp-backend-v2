@@ -62,9 +62,10 @@ class TelegramConfig(BaseModel):
     chat_id: int = 0
 
 
-class BinanceConfig(BaseModel):
-    api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
-    api_secret: str = os.getenv("BINANCE_TESTNET_api_secret", "")
+class ApiKeys(BaseModel):
+    binance_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
+    binance_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
+    coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
 
 
 class IndexConfig(BaseModel):
@@ -145,7 +146,7 @@ class Config(BaseModel):
 
     tailscale: TailscaleConfig = TailscaleConfig()
     telegram: TelegramConfig = TelegramConfig()
-    binance: BinanceConfig = BinanceConfig()
+    api_keys: ApiKeys = ApiKeys()
 
     @model_validator(mode="after")
     def check_all_defaults(cls, v: Any):

@@ -1,3 +1,6 @@
+import pickle
+from functools import wraps
+
 from redis.asyncio import Redis, from_url
 from redis.exceptions import ConnectionError
 
@@ -83,3 +86,32 @@ class V4VAsyncRedis:
         if self.redis:
             self.redis.aclose()
             logger.debug(f"Redis connection closed {self.host}:{self.port}")
+
+
+# Async caching decorator using V4VAsyncRedis
+def cache_with_redis_async(func):
+    @wraps(func)
+    async def wrapper(*args, use_cache=True, **kwargs):
+        # Initialize the async Redis client
+        async with V4VAsyncRedis(decode_responses=False) as redis_client:
+
+            # Create a unique key based on function name and arguments
+            key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
+
+            # Check if result is in cache
+            cached_result = await redis_client.get(key)
+            if cached_result is not None and use_cache:
+                # Since decode_responses=True, cached_result is a string; we need to deserialize
+                return pickle.loads(cached_result)  # Encode back to bytes for pickle
+
+            # If not cached or use_cache is false, compute and store
+            try:
+                result = await func(*args, **kwargs)  # Await the async function
+            except Exception as e:
+                raise e
+
+            # Store as bytes, since decode_responses=True expects strings
+            await redis_client.setex(key, 600, pickle.dumps(result))  # 1-hour TTL
+            return result
+
+    return wrapper
