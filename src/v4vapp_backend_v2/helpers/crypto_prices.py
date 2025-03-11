@@ -28,7 +28,7 @@ CACHE_TIMES = {
     "CoinGecko": 60,
     "Binance": 60,
     "CoinMarketCap": 180,
-    "HiveInternalMarket": 10,
+    "HiveInternalMarket": 60,
 }
 
 
@@ -464,7 +464,7 @@ class HiveInternalMarket(QuoteService):
                 hive_hbd=hive_hbd,
                 raw_response=raw_response,
             )
-            await self.set_cache(quote_response)
+            # await self.set_cache(quote_response)
 
             return quote_response
         except Exception as ex:

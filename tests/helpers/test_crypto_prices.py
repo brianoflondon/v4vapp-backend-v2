@@ -375,7 +375,7 @@ async def fetch_all_quote_json_files():
         Any exceptions raised by the AllQuotes class methods or file operations.
     """
     all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes()
+    await all_quotes.get_all_quotes(timeout=1000)
     for service_name, quote in all_quotes.quotes.items():
         with open(f"tests/data/crypto_prices/{service_name}.json", "w") as f_out:
             # Write the JSON string directly
