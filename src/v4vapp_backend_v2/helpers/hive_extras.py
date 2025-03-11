@@ -1,12 +1,13 @@
 import random
 from enum import StrEnum
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
 from beem.market import Market  # type: ignore
-from beem.price import Price  # type: ignore
+from beem.price import Price
+from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -106,7 +107,13 @@ async def get_hive_witness_details(hive_accname: str) -> dict:
     return {}
 
 
-async def call_hive_internal_market() -> Dict[str, float | str]:
+class HiveInternalQuote(BaseModel):
+    hive_hbd: float | None = None
+    raw_response: Dict[str, Any] = {}
+    error: str = ""
+
+
+async def call_hive_internal_market() -> HiveInternalQuote:
     """
     Asynchronously calls the Hive internal market API to retrieve the highest bid and
     lowest ask prices.
@@ -130,11 +137,14 @@ async def call_hive_internal_market() -> Dict[str, float | str]:
 
         # raise KeyError("'highest_bid'")
         highest_bid: Price = ticker["highest_bid"]
+        highest_bid_value = float(highest_bid["price"])
         lowest_ask: Price = ticker["lowest_ask"]
+        lowest_ask_value = float(lowest_ask["price"])
         hive_hbd = float(
-            ((lowest_ask["price"] - highest_bid["price"]) / 2) + highest_bid["price"]
+            ((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value
         )
-        return {"hive_hbd": hive_hbd, "quote": ticker}
+        answer = HiveInternalQuote(hive_hbd=hive_hbd, raw_response=ticker)
+        return answer
     except Exception as ex:
         # logging.exception(ex)
         logger.info(
@@ -143,7 +153,7 @@ async def call_hive_internal_market() -> Dict[str, float | str]:
         )
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
-        return {"error": message}
+        return HiveInternalQuote(error=message)
 
 
 class HiveExp(StrEnum):

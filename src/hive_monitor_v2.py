@@ -512,7 +512,7 @@ async def witness_loop(watch_witness: str):
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
                             f"Mean {mean_time_diff} | "
-                            f"{hive_event['block_num']:,.0f} | ",
+                            f"{hive_event['block_num']:,.0f} | "
                             f"Missed: {missed_blocks}",
                             extra={
                                 "hive_event": hive_event,

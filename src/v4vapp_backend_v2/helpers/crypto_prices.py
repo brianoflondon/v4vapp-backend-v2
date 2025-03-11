@@ -1,5 +1,4 @@
 import asyncio
-import json
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -10,11 +9,7 @@ from binance.spot import Spot
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis, cache_with_redis_async
-from v4vapp_backend_v2.helpers.hive_extras import (
-    call_hive_internal_market,
-    get_hive_client,
-)
+from v4vapp_backend_v2.helpers.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"
@@ -71,6 +66,7 @@ class QuoteResponse(BaseModel):
     raw_response: Dict[str, Any] = {}
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     error: str = ""
+    error_details: Dict[str, Any] = {}
 
     def __init__(
         self,
@@ -80,6 +76,7 @@ class QuoteResponse(BaseModel):
         hive_hbd: float = 0,
         raw_response: Dict[str, Any] = {},
         error: str = "",
+        error_details: Dict[str, Any] = {},
     ) -> None:
         super().__init__()
         self.hive_usd = round(hive_usd, 4)
@@ -89,6 +86,7 @@ class QuoteResponse(BaseModel):
         self.hive_hbd = round(hive_hbd, 4)
         self.raw_response = raw_response
         self.error = error
+        self.error_details = error_details
 
     @property
     def sats_hive(self) -> float:
@@ -115,7 +113,7 @@ class QuoteResponse(BaseModel):
 class AllQuotes(BaseModel):
     quotes: Dict[str, QuoteResponse] = {}
 
-    async def get_all_quotes(self, use_cache: bool = True):
+    async def get_all_quotes(self, use_cache: bool = True, timeout: float = 30.0):
         all_services = [
             CoinGecko(),
             Binance(),
@@ -123,11 +121,25 @@ class AllQuotes(BaseModel):
             HiveInternalMarket(),
         ]
 
-        async with asyncio.TaskGroup() as tg:
-            tasks = {
-                service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
+        try:
+            async with asyncio.timeout(timeout):
+                async with asyncio.TaskGroup() as tg:
+                    tasks = {
+                        service.__class__.__name__: tg.create_task(
+                            service.get_quote(use_cache)
+                        )
+                        for service in all_services
+                    }
+
+        except asyncio.TimeoutError:
+            logger.error(f"Quote fetching exceeded timeout of {timeout} seconds")
+            self.quotes = {
+                service.__class__.__name__: QuoteResponse(
+                    error=f"Timeout after {timeout} seconds"
+                )
                 for service in all_services
             }
+            return
 
         self.quotes = {}
         for service_name, task in tasks.items():
@@ -183,9 +195,9 @@ class CoinGecko(QuoteService):
                     return quote_response
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
-        except Exception as e:
-            logger.error(e)
-            raise CoinGeckoError(f"Failed to get quote: {e}")
+        except Exception as ex:
+            message = f"Problem calling CoinGecko API {ex}"
+            return QuoteResponse(error=message, error_details={"exception": ex})
 
 
 class Binance(QuoteService):
@@ -214,7 +226,6 @@ class Binance(QuoteService):
             hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
             # check
             logger.debug(f"Binance Hive to BTC price : {hive_sats:.1f}")
-            logger.info(f"Binance Hive to BTC direct: {medians['HIVEBTC']* 1e8:.1f}")
 
             quote_response = QuoteResponse(
                 hive_usd=hive_usd,
@@ -228,8 +239,7 @@ class Binance(QuoteService):
 
         except Exception as ex:
             message = f"Problem calling Binance API {ex}"
-            logger.error(message)
-            raise BinanceError(message)
+            return QuoteResponse(error=message, error_details={"exception": ex})
 
 
 class CoinMarketCap(QuoteService):
@@ -277,30 +287,32 @@ class CoinMarketCap(QuoteService):
                 return quote_response
             else:
                 raise CoinMarketCapError(f"Failed to get quote: {response.text}")
-        except Exception as e:
-            logger.error(e)
-            raise CoinMarketCapError(f"Failed to get quote: {e}")
+        except Exception as ex:
+            message = f"Problem calling CoinMarketCap API {ex}"
+            return QuoteResponse(error=message, error_details={"exception": ex})
 
 
 class HiveInternalMarket(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         try:
             hive_quote = await call_hive_internal_market()
-            if "error" in hive_quote:
+            if hive_quote.error:
                 raise HiveInternalMarketError(
-                    f"Problem calling Hive Market API {hive_quote['error']}"
+                    f"Problem calling Hive Market API {hive_quote.error}"
                 )
+            hive_hbd = hive_quote.hive_hbd if hive_quote.hive_hbd else 0
+            raw_response = hive_quote.raw_response
             quote_response = QuoteResponse(
                 hive_usd=0,
                 hbd_usd=0,
                 btc_usd=0,
-                hive_hbd=hive_quote.get("hive_hbd", 0),
-                raw_response=hive_quote.get("quote", {}),
+                hive_hbd=hive_hbd,
+                raw_response=raw_response,
             )
             return quote_response
         except Exception as ex:
-            logger.error(f"Problem calling Hive Market API {ex}")
-            raise HiveInternalMarketError(f"Problem calling Hive Market API {ex}")
+            message = f"Problem calling Hive Market API {ex}"
+            return QuoteResponse(error=message, error_details={"exception": ex})
 
 
 class CryptoConversion:

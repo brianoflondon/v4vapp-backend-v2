@@ -1,0 +1,32 @@
+{
+  "hive_usd": 0.2318,
+  "hbd_usd": 1.0,
+  "btc_usd": 81786.0,
+  "hive_hbd": 0.2318,
+  "raw_response": [
+    {
+      "symbol": "BTCUSDT",
+      "bidPrice": "81785.96000000",
+      "bidQty": "3.45659000",
+      "askPrice": "81785.97000000",
+      "askQty": "5.03983000"
+    },
+    {
+      "symbol": "HIVEBTC",
+      "bidPrice": "0.00000283",
+      "bidQty": "49.00000000",
+      "askPrice": "0.00000284",
+      "askQty": "16423.00000000"
+    },
+    {
+      "symbol": "HIVEUSDT",
+      "bidPrice": "0.23170000",
+      "bidQty": "2126.00000000",
+      "askPrice": "0.23180000",
+      "askQty": "2025.00000000"
+    }
+  ],
+  "fetch_date": "2025-03-11T10:45:48.337645Z",
+  "error": "",
+  "error_details": {}
+}
