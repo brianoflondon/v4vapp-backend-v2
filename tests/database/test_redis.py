@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
@@ -44,7 +45,7 @@ async def test_redis_client():
     assert await redis_client.redis.ping()
     await redis_client.redis.set("test_key", "test_value")
     assert await redis_client.redis.get("test_key") == "test_value"
-    assert await redis_client.redis.close() is None
+    assert await redis_client.redis.delete("test_key")
 
 
 @pytest.mark.asyncio
@@ -63,9 +64,10 @@ async def test_redis_client_with_kwargs():
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
-    await redis_client.redis.set("test_key", "test_value")
+    await redis_client.redis.setex("test_key", 1, "test_value")
     assert await redis_client.redis.get("test_key") == b"test_value"
-    assert await redis_client.redis.close() is None
+    await asyncio.sleep(1.001)
+    assert await redis_client.redis.get("test_key") is None
 
 
 @pytest.mark.asyncio
@@ -82,7 +84,7 @@ async def test_redis_client_context_manager():
         assert await redis_client.get("test_key") == "test_value"
 
     assert redis_client is not None
-    redis_client.aclose()
+    await redis_client.aclose()
 
 
 @pytest.mark.asyncio
