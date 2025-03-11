@@ -19,8 +19,8 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
 )
 
 
-@pytest.fixture
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch, autouse=True):
+@pytest.fixture(autouse=True)
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
@@ -267,9 +267,7 @@ async def test_get_all_quotes(mocker):
     "failing_service",
     ["CoinGecko", "CoinMarketCap", "Binance", "HiveInternalMarket"],
 )
-async def test_get_all_quotes_with_single_failure(
-    mocker, failing_service
-):
+async def test_get_all_quotes_with_single_failure(mocker, failing_service):
     """
     Test that AllQuotes handles a single service failure correctly while others succeed.
     Parametrized to test each service failing independently.
@@ -321,7 +319,7 @@ async def test_get_all_quotes_with_single_failure(
         mock_spot_client.return_value.book_ticker.return_value = binance_resp
 
     # Mock Hive Internal Market
-    mock_hive = mocker.patch("v4vapp_backend_v2.helpers.hive_extras.get_hive_client")
+    _ = mocker.patch("v4vapp_backend_v2.helpers.hive_extras.get_hive_client")
     mock_market = mocker.patch("v4vapp_backend_v2.helpers.hive_extras.Market")
     if failing_service == "HiveInternalMarket":
         mock_market.return_value.ticker.side_effect = Exception("Hive market error")
