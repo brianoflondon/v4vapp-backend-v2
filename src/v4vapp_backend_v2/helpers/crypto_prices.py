@@ -6,11 +6,11 @@ from enum import StrEnum
 from typing import Any, Dict
 
 import httpx
-from binance.spot import Spot
+from binance.spot import Spot  # type: ignore
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis, cache_with_redis_async
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.helpers.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -239,7 +239,7 @@ class AllQuotes(BaseModel):
             - hbd_usd (float): The average HBD to USD value.
             - btc_usd (float): The average BTC to USD value.
             - hive_hbd (float): The average HIVE to HBD value.
-            - raw_response (dict): An empty dictionary (you can decide what to put here).
+            - raw_response (dict): An empty dictionary.
 
             If there are no valid quotes, returns None.
         """

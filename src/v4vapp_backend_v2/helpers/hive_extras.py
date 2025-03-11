@@ -6,7 +6,7 @@ import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
 from beem.market import Market  # type: ignore
-from beem.price import Price
+from beem.price import Price  # type: ignore
 from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
@@ -120,7 +120,8 @@ async def call_hive_internal_market() -> HiveInternalQuote:
 
         Dict[str, float]: A dictionary containing the calculated Hive to HBD price and
         the market ticker data.
-        Dict[str, float]: A dictionary containing the calculated Hive to HBD price and the market ticker data.
+        Dict[str, float]: A dictionary containing the calculated Hive to HBD price and
+        the market ticker data.
         If an error occurs, returns a dictionary with an error message.
 
     Raises:
@@ -128,7 +129,8 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         The function logs the last node used by the Hive blockchain instance and any
         errors encountered.
     Note:
-        The function logs the last node used by the Hive blockchain instance and any errors encountered.
+        The function logs the last node used by the Hive blockchain instance and any
+        errors encountered.
     """
     try:
         hive = get_hive_client()
