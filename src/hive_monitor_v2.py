@@ -605,8 +605,11 @@ async def witness_loop(watch_witness: str):
                     if count % 100 == 0:
                         hive_client.rpc.next()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
-                logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
-                raise e
+                logger.info(
+                    f"{icon} Keyboard interrupt or Cancelled: "
+                    f"Stopping event listener. {e}"
+                )
+                return
 
             except Exception as e:
                 logger.exception(e)
@@ -681,6 +684,8 @@ async def transactions_loop(watch_users: List[str]):
                             db_client=db_client,
                         )
                         count += 1
+                        # if count == 2:
+                        #     raise Exception("Test exception in hive monitor")
                         if count % 100 == 0:
                             old_node = hive_client.rpc.url
                             hive_client.rpc.next()
@@ -741,6 +746,7 @@ async def runner(watch_users: List[str]):
             f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e}
         )
         await asyncio.sleep(0.2)
+        raise e
 
 
 @app.command()
@@ -779,5 +785,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     except Exception as e:
-        logger.exception(e)
+        print(e)
         sys.exit(1)

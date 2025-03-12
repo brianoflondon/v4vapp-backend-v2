@@ -694,6 +694,7 @@ async def runner(connection_name: str) -> None:
                 ],
                 track_events,
             )
+            # raise Exception("Test error in lnd_monitor_v2.py")
             async_subscribe(Events.LND_INVOICE, db_store_invoice)
             async_subscribe(Events.LND_PAYMENT, db_store_payment)
             async_subscribe(Events.LND_INVOICE, invoice_report)
@@ -712,6 +713,8 @@ async def runner(connection_name: str) -> None:
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("👋 Received signal to stop. Exiting...")
+        if hasattr(lnd_client, "channel") and lnd_client.channel:
+            await lnd_client.channel.close()
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
@@ -719,16 +722,17 @@ async def runner(connection_name: str) -> None:
             f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
             extra={"error": e},
         )
-
-    if hasattr(lnd_client, "channel") and lnd_client.channel:
-        await lnd_client.channel.close()
+        if hasattr(lnd_client, "channel") and lnd_client.channel:
+            await lnd_client.channel.close()
+        await asyncio.sleep(0.2)
+        raise e
 
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
         f"Monitoring node: {connection_name}. Version: {CONFIG.version}",
         extra={"notification": True},
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.2)
 
 
 @app.command()
@@ -776,9 +780,9 @@ if __name__ == "__main__":
         logger.name = "lnd_monitor_v2"
         app()
     except KeyboardInterrupt:
-        logger.info("👋 Goodbye!")
+        print("👋 Goodbye!")
         sys.exit(0)
 
     except Exception as e:
-        logger.exception(e)
+        print(e)
         sys.exit(1)
