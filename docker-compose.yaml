@@ -29,11 +29,15 @@ services:
     image: redis:latest
     ports:
       - "127.0.0.1:6379:6379"
+      - "100.95.193.14:6379:6379"
     healthcheck:  # Check if the container is healthy
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - v4vapp-backend
+    restart: unless-stopped
 
   voltage-node-monitor:
     depends_on:
@@ -67,6 +71,8 @@ services:
       - ./logs_docker/hive:/app/logs
     command: ["poetry", "run", "python", "hive_monitor_v2.py", "v4vapp", "v4vapp.tre", "v4vapp.dhf", "brianoflondon"]
     restart: unless-stopped
+    networks:
+      - v4vapp-backend
 
 volumes:
   mongo_data:
@@ -75,3 +81,5 @@ volumes:
 networks:
   repl-mongo_repl-set:
     driver: external
+  v4vapp-backend:
+    driver: bridge
