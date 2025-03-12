@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
 from typing import Annotated, Any, List, Tuple
@@ -268,11 +269,7 @@ def get_event_id(hive_event: dict) -> str:
     """
     trx_id = hive_event.get("trx_id", "")
     op_in_trx = hive_event.get("op_in_trx", 0)
-    return (
-        f"{trx_id}_{op_in_trx}"
-        if not int(op_in_trx) == 0
-        else str(trx_id)
-    )
+    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
 
 
 async def db_store_transaction(
@@ -294,6 +291,10 @@ async def db_store_transaction(
             hive_event["amount_value"] = amount.amount
             hive_event["amount_symbol"] = amount.symbol
             hive_event["amount_str"] = str(amount)
+        if hive_event.get("type") == "account_witness_vote":
+            voter_power = VotingPower(hive_event["account"])
+            hive_event["vote_value"] = voter_power.vote_value
+            hive_event["voter_details"] = asdict(voter_power)
         hive_event["_id"] = get_event_id(hive_event)
         ans = await db_client.update_one(
             HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
