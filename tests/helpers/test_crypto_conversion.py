@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,16 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     )
     yield
     # No need to restore the original value, monkeypatch will handle it
+
+
+@pytest.mark.asyncio
+async def test_crypto_conversion():
+    amount = Amount("10.0 HBD")
+    conv = CryptoConversion(amount=amount)
+    await conv.get_quote()
+    assert conv.quote is not None
+    assert "sats" in conv.model_dump()
+    print(json.dumps(conv.c_dict, indent=2))
 
 
 @pytest.mark.parametrize(

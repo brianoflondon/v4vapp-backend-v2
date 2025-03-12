@@ -8,7 +8,6 @@ from typing import Annotated, Any, List, Tuple
 import typer
 from beem.amount import Amount  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
-
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 
@@ -17,13 +16,10 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_good_nodes,
-    get_hive_block_explorer_link,
-    get_hive_client,
-    get_hive_witness_details,
-)
+    MAX_HIVE_BATCH_SIZE, get_good_nodes, get_hive_block_explorer_link,
+    get_hive_client, get_hive_witness_details)
 from v4vapp_backend_v2.helpers.voting_power import VotingPower
 
 INTERNAL_CONFIG = InternalConfig()
@@ -291,6 +287,9 @@ async def db_store_transaction(
             hive_event["amount_value"] = amount.amount
             hive_event["amount_symbol"] = amount.symbol
             hive_event["amount_str"] = str(amount)
+            conv = CryptoConversion(amount)
+            await conv.get_quote()
+            hive_event["conv"] = conv.c_dict
         if hive_event.get("type") == "account_witness_vote":
             voter_power = VotingPower(hive_event["account"])
             hive_event["vote_value"] = voter_power.vote_value

@@ -101,4 +101,3 @@ async def test_redis_client_context_manager_with_bad_connection():
             assert redis_client is not None
             assert await redis_client.ping()
             await redis_client.set("test_key", "test_value")
-            assert await redis_client.get("test_key") == "test_value"

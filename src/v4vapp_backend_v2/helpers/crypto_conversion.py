@@ -71,7 +71,7 @@ class CryptoConversion(BaseModel):
             raise ValueError("Unsupported conversion currency")
 
         # Step 2: Derive sats from msats
-        self.sats = self.msats // 1000  # Integer division to match original int type
+        self.sats = round(self.msats / 1000, 0)
 
         # Step 3: Derive all other values from msats
         self.btc = self.msats / 100_000_000_000  # msats to BTC (1 BTC = 10^11 msats)
@@ -89,6 +89,8 @@ class CryptoConversion(BaseModel):
             Currency.SATS: self.sats,
             Currency.BTC: self.btc,
             Currency.MSATS: self.msats,
+            "sats_hive": self.quote.sats_hive,
+            "sats_hbd": self.quote.sats_hbd,
             "conv_from": self.conv_from,
             "value": self.value,
         }
