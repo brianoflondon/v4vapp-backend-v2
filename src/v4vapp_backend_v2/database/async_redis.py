@@ -1,7 +1,6 @@
 # import pickle
 # from functools import wraps
 
-import asyncio
 
 from redis.asyncio import Redis, from_url
 from redis.exceptions import ConnectionError

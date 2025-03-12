@@ -8,6 +8,7 @@ from typing import Annotated, Any, List, Tuple
 import typer
 from beem.amount import Amount  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
+
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 
@@ -18,8 +19,12 @@ from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.hive_extras import (
-    MAX_HIVE_BATCH_SIZE, get_good_nodes, get_hive_block_explorer_link,
-    get_hive_client, get_hive_witness_details)
+    MAX_HIVE_BATCH_SIZE,
+    get_good_nodes,
+    get_hive_block_explorer_link,
+    get_hive_client,
+    get_hive_witness_details,
+)
 from v4vapp_backend_v2.helpers.voting_power import VotingPower
 
 INTERNAL_CONFIG = InternalConfig()
@@ -230,10 +235,27 @@ async def db_store_block_marker(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
     """
-    Asynchronously stores block markers in the database.
+    Stores a block marker in the database.
 
-    This function stores block markers in the database by logging the block
-    marker event.
+    This function updates or inserts a block marker document in the specified MongoDB
+    collection.
+    The block marker is identified by a unique transaction ID and operation index.
+
+    Args:
+        hive_event (dict): A dictionary containing the block event data.
+        Expected keys are:
+            - "block_num": The block number.
+            - "timestamp": The timestamp of the block.
+        db_client (MongoDBClient): An instance of the MongoDB client to interact
+        with the database.
+        *args (Any): Additional positional arguments.
+        **kwargs (Any): Additional keyword arguments.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If an error occurs during the database operation, it is logged.
     """
     try:
         query = {"trx_id": "block_marker", "op_in_trx": 0}
@@ -272,10 +294,22 @@ async def db_store_transaction(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
     """
-    Asynchronously stores transactions in the database.
+    This function processes a hive event and stores the transaction details
+    in the database. It handles various types of events, including those
+    with amounts and account witness votes, and performs necessary
+    conversions and calculations before storing the data.
 
-    This function stores transactions in the
-    database by logging the transaction event.
+    Args:
+        hive_event (dict): The hive event containing transaction details.
+        db_client (MongoDBClient): The database client used to store the transaction.
+        *args (Any): Additional positional arguments.
+        **kwargs (Any): Additional keyword arguments.
+
+    Raises:
+        DuplicateKeyError: If a duplicate key error occurs during the database
+        operation.
+        Exception: For any other exceptions that occur during the process.
+
     """
     try:
         trx_id = hive_event.get("trx_id", "")
