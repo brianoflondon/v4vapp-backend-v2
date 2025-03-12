@@ -14,3 +14,4 @@ class Events(StrEnum):
     # Hive events
     HIVE_TRANSFER = auto()
     HIVE_TRANSFER_NOTIFY = auto()
+    HIVE_WITNESS_VOTE = auto()

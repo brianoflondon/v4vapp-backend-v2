@@ -83,8 +83,13 @@ def _next(it: Iterator[T]) -> T:
         raise StopAsyncIteration
     except Exception as e:
         try:
-            logger.warning(f"_next {e}", extra={"notification": False, "error": e})
-            logger.exception(e, extra={"notification": False})
+            if "last_irreversible_block_num is not in" in str(e):
+                logger.warning(
+                    "Recurrent Transfer list error", extra={"notification": False}
+                )
+            else:
+                logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+                logger.exception(e, extra={"notification": False})
         except AttributeError as log_error:
             logger.error(
                 f"Logging error: {log_error} - problem with str in log level",

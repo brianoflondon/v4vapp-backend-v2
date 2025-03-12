@@ -34,7 +34,7 @@ def get_hive_client(*args, **kwargs) -> Hive:
         HiveClient: A Hive client instance.
     """
     if "node" not in kwargs:
-        # shuffle goog nodes
+        # shuffle good nodes
         good_nodes = get_good_nodes()
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes

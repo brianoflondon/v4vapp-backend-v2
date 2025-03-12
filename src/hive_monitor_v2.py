@@ -23,6 +23,7 @@ from v4vapp_backend_v2.helpers.hive_extras import (
     get_hive_client,
     get_hive_witness_details,
 )
+from v4vapp_backend_v2.helpers.voting_power import VotingPower
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -202,6 +203,32 @@ async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     )
 
 
+async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> None:
+    """
+    Asynchronously reports witness votes.
+
+    This function reports witness votes by logging the witness vote event.
+
+    Args:
+        hive_event (dict): The Hive witness vote event.
+    """
+    notification = True if hive_event.get("witness") == "brianoflondon" else False
+    voted_for = "voted for" if hive_event.get("approve") else "unvoted"
+    voter_power = VotingPower(hive_event["account"])
+    message = (
+        f"{icon} {hive_event.get('account')} "
+        f"{voted_for} {hive_event.get('witness')} "
+        f"with {voter_power.vote_value:,.0f} HP"
+    )
+    logger.info(
+        message,
+        extra={
+            "notification": notification,
+            "witness_vote": hive_event,
+        },
+    )
+
+
 async def db_store_block_marker(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
@@ -239,10 +266,12 @@ def get_event_id(hive_event: dict) -> str:
     Returns:
         str: The event id.
     """
+    trx_id = hive_event.get("trx_id", "")
+    op_in_trx = hive_event.get("op_in_trx", 0)
     return (
-        f"{hive_event['trx_id']}_{hive_event['op_in_trx']}"
-        if not int(hive_event["op_in_trx"]) == 0
-        else hive_event["trx_id"]
+        f"{trx_id}_{op_in_trx}"
+        if not int(op_in_trx) == 0
+        else str(trx_id)
     )
 
 
@@ -256,12 +285,15 @@ async def db_store_transaction(
     database by logging the transaction event.
     """
     try:
-        query = {"trx_id": hive_event["trx_id"], "op_in_trx": hive_event["op_in_trx"]}
-        amount = Amount(hive_event["amount"])
-        hive_event["amount_decimal"] = str(amount.amount_decimal)
-        hive_event["amount_value"] = amount.amount
-        hive_event["amount_symbol"] = amount.symbol
-        hive_event["amount_str"] = str(amount)
+        trx_id = hive_event.get("trx_id", "")
+        op_in_trx = hive_event.get("op_in_trx", 0)
+        query = {"trx_id": trx_id, "op_in_trx": op_in_trx}
+        if hive_event.get("amount"):
+            amount = Amount(hive_event["amount"])
+            hive_event["amount_decimal"] = str(amount.amount_decimal)
+            hive_event["amount_value"] = amount.amount
+            hive_event["amount_symbol"] = amount.symbol
+            hive_event["amount_str"] = str(amount)
         hive_event["_id"] = get_event_id(hive_event)
         ans = await db_client.update_one(
             HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
@@ -561,7 +593,7 @@ async def transactions_loop(watch_users: List[str]):
     the transactions and logs them.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = ["transfer"]
+    op_names = ["transfer", "recurrent_transfer", "account_witness_vote"]
 
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
@@ -587,41 +619,50 @@ async def transactions_loop(watch_users: List[str]):
                 last_trx_id = ""
                 op_in_trx = 0
                 async for hive_event in async_stream:
-                    # For trx_id's with multiple transfers, record position in trx
-                    if hive_event.get("trx_id") == last_trx_id:
-                        op_in_trx += 1
-                    else:
-                        last_trx_id = hive_event.get("trx_id")
-                        op_in_trx = 0
-                    # Only advance block count on new trx_id
-                    if last_good_block < hive_event.get("block_num"):
-                        last_good_block = hive_event.get("block_num")
-                    hive_event["op_in_trx"] = op_in_trx
-                    notification = watch_users_notification(hive_event, watch_users)
-                    error_code = log_time_difference_errors(
-                        hive_event["timestamp"], error_code
-                    )
-                    async_publish(
-                        Events.HIVE_TRANSFER, hive_event=hive_event, db_client=db_client
-                    )
-                    count += 1
-
-                    if count % 100 == 0:
-                        old_node = hive_client.rpc.url
-                        hive_client.rpc.next()
-                        logger.info(
-                            f"{icon} {count} transactions processed. "
-                            f"Node: {old_node} -> {hive_client.rpc.url}"
-                        )
-                    if timer() - start > 55:
-                        await db_store_block_marker(hive_event, db_client)
-                        start = timer()
-                    if notification:
+                    if hive_event.get("type") == "account_witness_vote":
                         async_publish(
-                            Events.HIVE_TRANSFER_NOTIFY,
+                            Events.HIVE_WITNESS_VOTE,
                             hive_event=hive_event,
                             db_client=db_client,
-                        )  # noqa
+                        )
+                    if hive_event.get("type") in ["transfer", "recurrent_transfer"]:
+                        # For trx_id's with multiple transfers, record position in trx
+                        if hive_event.get("trx_id") == last_trx_id:
+                            op_in_trx += 1
+                        else:
+                            last_trx_id = hive_event.get("trx_id")
+                            op_in_trx = 0
+                        # Only advance block count on new trx_id
+                        if last_good_block < hive_event.get("block_num"):
+                            last_good_block = hive_event.get("block_num")
+                        hive_event["op_in_trx"] = op_in_trx
+                        notification = watch_users_notification(hive_event, watch_users)
+                        error_code = log_time_difference_errors(
+                            hive_event["timestamp"], error_code
+                        )
+                        async_publish(
+                            Events.HIVE_TRANSFER,
+                            hive_event=hive_event,
+                            db_client=db_client,
+                        )
+                        count += 1
+
+                        if count % 100 == 0:
+                            old_node = hive_client.rpc.url
+                            hive_client.rpc.next()
+                            logger.info(
+                                f"{icon} {count} transactions processed. "
+                                f"Node: {old_node} -> {hive_client.rpc.url}"
+                            )
+                        if timer() - start > 55:
+                            await db_store_block_marker(hive_event, db_client)
+                            start = timer()
+                        if notification:
+                            async_publish(
+                                Events.HIVE_TRANSFER_NOTIFY,
+                                hive_event=hive_event,
+                                db_client=db_client,
+                            )  # noqa
 
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
@@ -644,6 +685,8 @@ async def run(watch_users: List[str]):
     try:
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction)
+        async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
+        async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_transaction)
         tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):

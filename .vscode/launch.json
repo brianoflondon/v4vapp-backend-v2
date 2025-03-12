@@ -24,7 +24,7 @@
                 "v4vapp.tre",
                 "v4vapp.dhf"
             ],
-            "justMyCode": false,
+            "justMyCode": true,
         },
         {
             "name": "Umbrel destination lookup",
