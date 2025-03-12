@@ -213,7 +213,7 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     voted_for = "voted for" if hive_event.get("approve") else "unvoted"
     voter_power = VotingPower(hive_event["account"])
     message = (
-        f"{icon} {hive_event.get('account')} "
+        f"{icon}👁️ {hive_event.get('account')} "
         f"{voted_for} {hive_event.get('witness')} "
         f"with {voter_power.vote_value:,.0f} HP"
     )
