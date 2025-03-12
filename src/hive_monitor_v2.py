@@ -13,6 +13,7 @@ from beem.blockchain import Blockchain  # type: ignore
 from pymongo.errors import DuplicateKeyError
 
 from lnd_monitor_v2 import InternalConfig, logger
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -680,7 +681,6 @@ async def transactions_loop(watch_users: List[str]):
                             db_client=db_client,
                         )
                         count += 1
-
                         if count % 100 == 0:
                             old_node = hive_client.rpc.url
                             hive_client.rpc.next()
@@ -707,7 +707,7 @@ async def transactions_loop(watch_users: List[str]):
                 raise e
 
 
-async def run(watch_users: List[str]):
+async def runner(watch_users: List[str]):
     """
     Main function to run the Hive Watcher client.
     Args:
@@ -716,6 +716,12 @@ async def run(watch_users: List[str]):
     Returns:
         None
     """
+
+    async with V4VAsyncRedis(decode_responses=False) as redis_cllient:
+        await redis_cllient.ping()
+        await redis_cllient.setex("test", 60, "test")
+        logger.info(f"{icon} Redis connection established")
+
     try:
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction)
@@ -725,7 +731,16 @@ async def run(watch_users: List[str]):
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
-        INTERNAL_CONFIG.__exit__(None, None, None)
+        logger.info(
+            f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True}
+        )
+        await asyncio.sleep(0.2)
+    except Exception as e:
+        logger.exception(e, extra={"error": e, "notification": False})
+        logger.error(
+            f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e}
+        )
+        await asyncio.sleep(0.2)
 
 
 @app.command()
@@ -750,8 +765,8 @@ def main(
     )
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
-    asyncio.run(run(watch_users))
-    logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+    asyncio.run(runner(watch_users))
+    INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
 
 

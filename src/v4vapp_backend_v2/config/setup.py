@@ -262,7 +262,7 @@ class InternalConfig:
     def __exit__(self, exc_type, exc_value, traceback):
         if hasattr(self, "notification_loop"):
             if self.notification_loop is not None:
-                self.notification_loop.close()
+                self.shutdown()
 
     def setup_config(self) -> None:
         try:
@@ -317,9 +317,9 @@ class InternalConfig:
                 self.notification_loop = asyncio.new_event_loop()
                 logger.info(
                     "Started new event loop for notification logging",
-                    extra={"loop": self.notification_loop},
+                    extra={"loop": self.notification_loop.__dict__},
                 )
-            atexit.register(self.notification_loop.close)
+            atexit.register(self.shutdown)
 
         # Set up the simple format string
         try:
@@ -361,6 +361,17 @@ class InternalConfig:
 
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
+
+    def shutdown(self):
+        if hasattr(self, "notification_loop") and self.notification_loop is not None:
+            if self.notification_loop.is_running():
+                logger.info("Closing notification loop")
+                self.notification_loop.call_soon_threadsafe(self.notification_loop.stop)
+                self.notification_loop.run_until_complete(
+                    self.notification_loop.shutdown_asyncgens()
+                )
+                self.notification_loop.close()
+                logger.info("Notification loop closed")
 
 
 """

@@ -658,7 +658,7 @@ async def get_most_recent_invoice() -> Invoice:
         return invoice
 
 
-async def run(connection_name: str) -> None:
+async def runner(connection_name: str) -> None:
     """
     Main function to run the node monitor.
     Args:
@@ -667,50 +667,61 @@ async def run(connection_name: str) -> None:
     Returns:
         None
     """
-    global DATABASE_NAME
-    DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
-    lnd_events_group = LndEventsGroup()
-    async with LNDClient(connection_name) as lnd_client:
-        logger.info(
-            f"{lnd_client.icon} 🔍 Monitoring node... {connection_name} {DATABASE_NAME}",
-            extra={"notification": True},
-        )
-        if lnd_client.get_info:
+    try:
+        global DATABASE_NAME
+        DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
+        lnd_events_group = LndEventsGroup()
+        async with LNDClient(connection_name) as lnd_client:
             logger.info(
-                f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "
-                f"pub_key: {lnd_client.get_info.identity_pubkey}"
+                f"{lnd_client.icon} 🔍 Monitoring node... "
+                f"{connection_name} {DATABASE_NAME}",
+                extra={"notification": True},
             )
-        await fill_channel_names(lnd_client, lnd_events_group)
-        # It is important to subscribe to the track_events function
-        # before the reporting functions The track_events function will
-        # group events and report them when the group is complete
-        async_subscribe(
-            [
-                Events.LND_INVOICE,
-                Events.LND_PAYMENT,
-                Events.HTLC_EVENT,
-            ],
-            track_events,
-        )
-        async_subscribe(Events.LND_INVOICE, db_store_invoice)
-        async_subscribe(Events.LND_PAYMENT, db_store_payment)
-        async_subscribe(Events.LND_INVOICE, invoice_report)
-        async_subscribe(Events.LND_PAYMENT, payment_report)
-        async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-        tasks = [
-            read_all_invoices(lnd_client),
-            read_all_payments(lnd_client),
-            invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-            payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-            htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-        ]
-        await asyncio.gather(*tasks)
-        try:
+            if lnd_client.get_info:
+                logger.info(
+                    f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "
+                    f"pub_key: {lnd_client.get_info.identity_pubkey}"
+                )
+            await fill_channel_names(lnd_client, lnd_events_group)
+            # It is important to subscribe to the track_events function
+            # before the reporting functions The track_events function will
+            # group events and report them when the group is complete
+            async_subscribe(
+                [
+                    Events.LND_INVOICE,
+                    Events.LND_PAYMENT,
+                    Events.HTLC_EVENT,
+                ],
+                track_events,
+            )
+            async_subscribe(Events.LND_INVOICE, db_store_invoice)
+            async_subscribe(Events.LND_PAYMENT, db_store_payment)
+            async_subscribe(Events.LND_INVOICE, invoice_report)
+            async_subscribe(Events.LND_PAYMENT, payment_report)
+            async_subscribe(Events.HTLC_EVENT, htlc_event_report)
+            tasks = [
+                read_all_invoices(lnd_client),
+                read_all_payments(lnd_client),
+                invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                htlc_events_loop(
+                    lnd_client=lnd_client, lnd_events_group=lnd_events_group
+                ),
+            ]
             await asyncio.gather(*tasks)
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            logger.info("👋 Received signal to stop. Exiting...")
-            await lnd_client.channel.close()
-            INTERNAL_CONFIG.__exit__(None, None, None)
+
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("👋 Received signal to stop. Exiting...")
+
+    except Exception as e:
+        logger.exception(e, extra={"error": e, "notification": False})
+        logger.error(
+            f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
+            extra={"error": e},
+        )
+
+    if hasattr(lnd_client, "channel") and lnd_client.channel:
+        await lnd_client.channel.close()
 
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
@@ -754,8 +765,9 @@ def main(
         f"{icon} ✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {CONFIG.version}"
     )
-    asyncio.run(run(lnd_node))
+    asyncio.run(runner(lnd_node))
     logger.info("👋 Goodbye!")
+    INTERNAL_CONFIG.shutdown()
 
 
 if __name__ == "__main__":
