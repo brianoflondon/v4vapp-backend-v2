@@ -32,8 +32,8 @@ async def test_call_hive_internal_market():
     assert answer is not None
 
 
-HIVE_ACC_TEST = os.getenv("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.getenv("HIVE_MEMO_TEST_KEY", "TEST_KEY")
+HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
 
 TEST_MEMO_TRX_ID = [
     {

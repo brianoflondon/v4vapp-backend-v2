@@ -29,8 +29,6 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-          HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
-          HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
 
       redis:
         image: redis:latest
@@ -87,6 +85,9 @@ jobs:
 
       # Run tests
       - name: Test with pytest
+        env:
+          HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
+          HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
         run: |
           poetry run pytest
 
