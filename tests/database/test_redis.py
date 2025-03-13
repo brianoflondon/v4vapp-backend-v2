@@ -38,7 +38,32 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
-async def test_redis_client():
+async def test_redis_client_default():
+    """
+    Test the default behavior of the V4VAsyncRedis client.
+    Default is to decode responses and use the connection from the config.
+
+    This test performs the following actions:
+    1. Initializes a V4VAsyncRedis client.
+    2. Flushes the Redis database.
+    3. Asserts that the Redis client and its underlying Redis connection are not None.
+    4. Pings the Redis server to ensure it is responsive.
+    5. Sets a key-value pair in the Redis database.
+    6. Retrieves the value for the set key and asserts it matches the expected value.
+    7. Deletes the key from the Redis database and asserts the deletion was successful.
+    """
+    redis_client = V4VAsyncRedis()
+    await redis_client.flush()
+    assert redis_client is not None
+    assert redis_client.redis is not None
+    assert await redis_client.redis.ping()
+    await redis_client.redis.set("test_key", "test_value")
+    assert await redis_client.redis.get("test_key") == "test_value"
+    assert await redis_client.redis.delete("test_key")
+
+
+@pytest.mark.asyncio
+async def test_redis_client_decode_true():
     redis_client = V4VAsyncRedis(decode_responses=True)
     await redis_client.flush()
     assert redis_client is not None
@@ -46,6 +71,34 @@ async def test_redis_client():
     assert await redis_client.redis.ping()
     await redis_client.redis.set("test_key", "test_value")
     assert await redis_client.redis.get("test_key") == "test_value"
+    assert await redis_client.redis.delete("test_key")
+
+
+@pytest.mark.asyncio
+async def test_redis_client_no_config():
+    """
+    This uses no config (defaults, localhost:6379 db=0) and decode_responses=True.
+    This will work with the Redis server running from docker in the local environment.
+    """
+    redis_client = V4VAsyncRedis(no_config=True)
+    await redis_client.flush()
+    assert redis_client is not None
+    assert redis_client.redis is not None
+    assert await redis_client.redis.ping()
+    await redis_client.redis.set("test_key", "test_value")
+    assert await redis_client.redis.get("test_key") == "test_value"
+    assert await redis_client.redis.delete("test_key")
+
+
+@pytest.mark.asyncio
+async def test_redis_client_decode_false():
+    redis_client = V4VAsyncRedis(decode_responses=False)
+    await redis_client.flush()
+    assert redis_client is not None
+    assert redis_client.redis is not None
+    assert await redis_client.redis.ping()
+    await redis_client.redis.set("test_key", "test_value")
+    assert await redis_client.redis.get("test_key") == b"test_value"
     assert await redis_client.redis.delete("test_key")
 
 
