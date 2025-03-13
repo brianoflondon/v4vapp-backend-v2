@@ -1,4 +1,5 @@
 import random
+import struct
 from enum import StrEnum
 from typing import Any, Dict, List
 
@@ -6,6 +7,7 @@ import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
 from beem.market import Market  # type: ignore
+from beem.memo import Memo  # type: ignore
 from beem.price import Price  # type: ignore
 from pydantic import BaseModel  # type: ignore
 
@@ -46,9 +48,11 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
     Create a Blockchain instance.
     """
-
-    hive = get_hive_client(*args, **kwargs)
-    blockchain = Blockchain(hive_instance=hive, *args, **kwargs)
+    if "hive_instance" not in kwargs:
+        hive = get_hive_client(*args, **kwargs)
+        blockchain = Blockchain(hive_instance=hive, *args, **kwargs)
+    else:
+        blockchain = Blockchain(*args, **kwargs)
 
     return blockchain
 
@@ -183,6 +187,56 @@ def get_hive_block_explorer_link(
         return link_html
     markdown_link = f"[{block_explorer.name}]({link_html})"
     return markdown_link
+
+
+def decode_memo(
+    memo: str = "",
+    hive_inst: Hive | None = None,
+    memo_keys: List[str] = [],
+    trx_id: str = "",
+    op_in_trx: int = 0,
+) -> str:
+    """
+    Decode an encrypted memo.
+
+    Args:
+        memo (str): The encrypted memo to decode.
+        memo_keys (List[str]): A list of memo keys.
+        hive_inst (Hive): A Hive instance.
+
+    Returns:
+        str: The decrypted memo.
+    """
+    if not memo_keys and not hive_inst:
+        raise ValueError("No memo keys or Hive instance provided.")
+
+    if memo_keys and not hive_inst:
+        hive_inst = get_hive_client(keys=memo_keys)
+        blockchain = get_blockchain_instance(hive_instance=hive_inst)
+    else:
+        blockchain = get_blockchain_instance(hive_instance=hive_inst)
+
+    if not hive_inst:
+        raise ValueError("No Hive instance provided.")
+
+    if trx_id and not memo:
+        trx = blockchain.get_transaction(trx_id)
+        memo = trx.get("operations")[op_in_trx].get("value").get("memo")
+
+    try:
+        m = Memo(from_account=None, to_account=None, blockchain_instance=hive_inst)
+        d_memo = m.decrypt(memo)[1:]
+        return d_memo
+    except struct.error:
+        # arrises when an unencrypted memo is decrypted..
+        return memo
+    except Exception as e:
+        logger.error(
+            f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo}
+        )
+        logger.error(memo)
+        logger.exception(e)
+        return memo
 
 
 if __name__ == "__main__":
