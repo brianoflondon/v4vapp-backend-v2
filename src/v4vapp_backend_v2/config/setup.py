@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
@@ -101,6 +102,22 @@ class RedisConnectionConfig(BaseModel):
     kwargs: Dict[str, Any] = {}
 
 
+class HiveRoles(StrEnum):
+    server = "server"
+    treasury = "treasury"
+
+
+class HiveAccountConfig(BaseModel):
+    role: HiveRoles = HiveRoles.server
+    posting_key: str = ""
+    active_key: str = ""
+    memo_key: str = ""
+
+
+class HiveConfig(BaseModel):
+    hive_accs: Dict[str, HiveAccountConfig] = {}
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -147,6 +164,7 @@ class Config(BaseModel):
     tailscale: TailscaleConfig = TailscaleConfig()
     telegram: TelegramConfig = TelegramConfig()
     api_keys: ApiKeys = ApiKeys()
+    hive: HiveConfig = HiveConfig()
 
     @model_validator(mode="after")
     def check_all_defaults(cls, v: Any):
