@@ -51,6 +51,16 @@ TEST_MEMO_TRX_ID = [
         "memo": "#pp5zBwcNfWT7vNRNPjwQJBnSNJ8P8dHf3TDfgHAfP74tZCjDtwMcmiLgPFV1nsLwRLWipCCzmXMrKGf5zuSCqtmztkLZbYtQLGJd7Ws2ja8x8RYYXYTeqHsu58NiZYZ6NWCyeexn2u1DKAA6yT8Nsa4iByv8uRDYLx9HPD2kndLiKhMP36bC9xoPgPeDr6FNjeSJxcuhaMfYTaDn5oUA7DPi",
         "trx_id": "c50bbdb2eff812f6b992c6e489097af654cbf338",
     },
+    {
+        "plain_text": "Returning encrypted memo",
+        "memo": "#A3sob1bjm6pAQsfCbHTLuWkwuDiJyynh3NSzUFd3kDNe4cfRgbVLtuC2i6wYx9Gex3eK6CNGyKASv7dk5mwWNbqViBTFDMPyCNtrKFKKGBfGxwKRe2DoW4ygmvQAJ7zs395UARQQWy447Er5pTurREY",
+        "trx_id": "500df0a588053570dedcb5401f17962bf3cfb7ce",
+    },
+    {
+        "plain_text": "Returning plain text memo",
+        "memo": "Returning plain text memo",
+        "trx_id": "bfcd467390486388e61a7a958921b23150942907",
+    },
 ]
 
 
