@@ -81,20 +81,19 @@ def _next(it: Iterator[T]) -> T:
             extra={"notification": False},
         )
         raise StopAsyncIteration
-    except Exception as e:
-        try:
-            if "last_irreversible_block_num is not in" in str(e):
-                logger.warning(
-                    "Recurrent Transfer list error", extra={"notification": False}
-                )
-            else:
-                logger.warning(f"_next {e}", extra={"notification": False, "error": e})
-                logger.exception(e, extra={"notification": False})
-        except AttributeError as log_error:
-            logger.error(
-                f"Logging error: {log_error} - problem with str in log level",
-                extra={"notification": False},
+
+    except ValueError as e:
+        if "last_irreversible_block_num is not in" in str(e):
+            logger.warning(
+                "Recurrent Transfer list error", extra={"notification": False}
             )
+            raise StopAsyncIteration
+        else:
+            logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+            raise StopAsyncIteration
+    except Exception as e:
+        logger.warning(f"_next {e}", extra={"notification": False, "error": e})
+        logger.exception(e, extra={"notification": False})
         raise StopAsyncIteration
 
 

@@ -1,6 +1,7 @@
 # import pickle
 # from functools import wraps
 
+
 from redis.asyncio import Redis, from_url
 from redis.exceptions import ConnectionError
 
@@ -40,17 +41,23 @@ class V4VAsyncRedis:
     decode_responses: bool = True
     kwargs: dict = {}
     redis: Redis
+    no_config: bool = False  # If True will not use the config file
 
     def __init__(self, **kwargs):
         self.config = InternalConfig().config.redis
-        if not kwargs:
+        no_config = kwargs.get("no_config, False")
+        if not no_config and "host" not in kwargs and "port" not in kwargs:
             self.host = self.config.host
             self.port = self.config.port
             self.db = self.config.db
             self.kwargs = self.config.kwargs
-            self.decode_responses = True
+            self.decode_responses = kwargs.get("decode_responses", True)
             self.redis = Redis(
-                host=self.host, port=self.port, db=self.db, **self.kwargs
+                host=self.host,
+                port=self.port,
+                db=self.db,
+                decode_responses=self.decode_responses,
+                **self.kwargs,
             )
         else:
             if connection_str := kwargs.get("connection_str"):
@@ -69,6 +76,11 @@ class V4VAsyncRedis:
             self.port = self.redis.connection_pool.connection_kwargs["port"]
             self.db = self.redis.connection_pool.connection_kwargs["db"]
             self.kwargs = kwargs
+
+        logger.debug(
+            f"Redis connection established {self.host}:{self.port} - "
+            f"DB: {self.db} - Decode: {self.decode_responses}"
+        )
 
     async def flush(self):
         try:

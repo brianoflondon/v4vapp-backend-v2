@@ -13,10 +13,12 @@ from beem.blockchain import Blockchain  # type: ignore
 from pymongo.errors import DuplicateKeyError
 
 from lnd_monitor_v2 import InternalConfig, logger
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.hive_extras import (
     MAX_HIVE_BATCH_SIZE,
     get_good_nodes,
@@ -217,7 +219,7 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     voted_for = "voted for" if hive_event.get("approve") else "unvoted"
     voter_power = VotingPower(hive_event["account"])
     message = (
-        f"{icon} {hive_event.get('account')} "
+        f"{icon}👁️ {hive_event.get('account')} "
         f"{voted_for} {hive_event.get('witness')} "
         f"with {voter_power.vote_value:,.0f} HP"
     )
@@ -234,10 +236,27 @@ async def db_store_block_marker(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
     """
-    Asynchronously stores block markers in the database.
+    Stores a block marker in the database.
 
-    This function stores block markers in the database by logging the block
-    marker event.
+    This function updates or inserts a block marker document in the specified MongoDB
+    collection.
+    The block marker is identified by a unique transaction ID and operation index.
+
+    Args:
+        hive_event (dict): A dictionary containing the block event data.
+        Expected keys are:
+            - "block_num": The block number.
+            - "timestamp": The timestamp of the block.
+        db_client (MongoDBClient): An instance of the MongoDB client to interact
+        with the database.
+        *args (Any): Additional positional arguments.
+        **kwargs (Any): Additional keyword arguments.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If an error occurs during the database operation, it is logged.
     """
     try:
         query = {"trx_id": "block_marker", "op_in_trx": 0}
@@ -276,10 +295,22 @@ async def db_store_transaction(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
     """
-    Asynchronously stores transactions in the database.
+    This function processes a hive event and stores the transaction details
+    in the database. It handles various types of events, including those
+    with amounts and account witness votes, and performs necessary
+    conversions and calculations before storing the data.
 
-    This function stores transactions in the
-    database by logging the transaction event.
+    Args:
+        hive_event (dict): The hive event containing transaction details.
+        db_client (MongoDBClient): The database client used to store the transaction.
+        *args (Any): Additional positional arguments.
+        **kwargs (Any): Additional keyword arguments.
+
+    Raises:
+        DuplicateKeyError: If a duplicate key error occurs during the database
+        operation.
+        Exception: For any other exceptions that occur during the process.
+
     """
     try:
         trx_id = hive_event.get("trx_id", "")
@@ -291,6 +322,9 @@ async def db_store_transaction(
             hive_event["amount_value"] = amount.amount
             hive_event["amount_symbol"] = amount.symbol
             hive_event["amount_str"] = str(amount)
+            conv = CryptoConversion(amount)
+            await conv.get_quote()
+            hive_event["conv"] = conv.c_dict
         if hive_event.get("type") == "account_witness_vote":
             voter_power = VotingPower(hive_event["account"])
             hive_event["vote_value"] = voter_power.vote_value
@@ -571,8 +605,11 @@ async def witness_loop(watch_witness: str):
                     if count % 100 == 0:
                         hive_client.rpc.next()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
-                logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
-                raise e
+                logger.info(
+                    f"{icon} Keyboard interrupt or Cancelled: "
+                    f"Stopping event listener. {e}"
+                )
+                return
 
             except Exception as e:
                 logger.exception(e)
@@ -647,7 +684,8 @@ async def transactions_loop(watch_users: List[str]):
                             db_client=db_client,
                         )
                         count += 1
-
+                        # if count == 2:
+                        #     raise Exception("Test exception in hive monitor")
                         if count % 100 == 0:
                             old_node = hive_client.rpc.url
                             hive_client.rpc.next()
@@ -674,7 +712,7 @@ async def transactions_loop(watch_users: List[str]):
                 raise e
 
 
-async def run(watch_users: List[str]):
+async def runner(watch_users: List[str]):
     """
     Main function to run the Hive Watcher client.
     Args:
@@ -683,6 +721,12 @@ async def run(watch_users: List[str]):
     Returns:
         None
     """
+
+    async with V4VAsyncRedis(decode_responses=False) as redis_cllient:
+        await redis_cllient.ping()
+        await redis_cllient.setex("test", 60, "test")
+        logger.info(f"{icon} Redis connection established")
+
     try:
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction)
@@ -692,7 +736,17 @@ async def run(watch_users: List[str]):
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
-        INTERNAL_CONFIG.__exit__(None, None, None)
+        logger.info(
+            f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True}
+        )
+        await asyncio.sleep(0.2)
+    except Exception as e:
+        logger.exception(e, extra={"error": e, "notification": False})
+        logger.error(
+            f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e}
+        )
+        await asyncio.sleep(0.2)
+        raise e
 
 
 @app.command()
@@ -717,8 +771,8 @@ def main(
     )
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
-    asyncio.run(run(watch_users))
-    logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+    asyncio.run(runner(watch_users))
+    INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
 
 
@@ -731,5 +785,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     except Exception as e:
-        logger.exception(e)
+        print(e)
         sys.exit(1)

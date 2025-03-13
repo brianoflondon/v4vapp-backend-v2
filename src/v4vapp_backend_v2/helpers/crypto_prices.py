@@ -118,6 +118,13 @@ class QuoteResponse(BaseModel):
         return round(sats_per_usd * self.hbd_usd, 4)
 
     @property
+    def sats_usd(self) -> float:
+        """Calculate Satoshis per USD based on btc_usd."""
+        if self.btc_usd == 0:
+            raise ValueError("btc_usd cannot be zero")
+        return round(SATS_PER_BTC / self.btc_usd, 4)
+
+    @property
     def quote_age(self) -> int:
         """Calculate the age of the quote in seconds."""
         return int((datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds())
@@ -300,7 +307,7 @@ class QuoteService(ABC):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         pass
 
-    async def check_cache(self, use_cache) -> QuoteResponse | None:
+    async def check_cache(self, use_cache: bool = True) -> QuoteResponse | None:
         if use_cache:
             key = f"{self.__class__.__name__}:get_quote"
             async with V4VAsyncRedis(decode_responses=False) as redis_client:

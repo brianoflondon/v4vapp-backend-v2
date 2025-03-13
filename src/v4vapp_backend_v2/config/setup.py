@@ -262,7 +262,7 @@ class InternalConfig:
     def __exit__(self, exc_type, exc_value, traceback):
         if hasattr(self, "notification_loop"):
             if self.notification_loop is not None:
-                self.notification_loop.close()
+                self.shutdown()
 
     def setup_config(self) -> None:
         try:
@@ -317,9 +317,9 @@ class InternalConfig:
                 self.notification_loop = asyncio.new_event_loop()
                 logger.info(
                     "Started new event loop for notification logging",
-                    extra={"loop": self.notification_loop},
+                    extra={"loop": self.notification_loop.__dict__},
                 )
-            atexit.register(self.notification_loop.close)
+            atexit.register(self.shutdown)
 
         # Set up the simple format string
         try:
@@ -361,6 +361,26 @@ class InternalConfig:
 
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
+
+    def shutdown(self):
+        if hasattr(self, "notification_loop") and self.notification_loop is not None:
+            if self.notification_loop.is_running():
+                logger.info("Closing notification loop")
+                # Schedule the loop to stop from the current thread
+                self.notification_loop.call_soon_threadsafe(self.notification_loop.stop)
+                # Wait for the loop to stop by polling (non-blocking)
+                while self.notification_loop.is_running():
+                    time.sleep(0.1)  # Brief sleep to avoid tight loop
+                # Now that the loop is stopped, we can safely shut down async generators
+                self.notification_loop.run_until_complete(
+                    self.notification_loop.shutdown_asyncgens()
+                )
+                self.notification_loop.close()
+                print("Notification loop closed")
+            else:
+                # If the loop isn’t running, just close it
+                self.notification_loop.close()
+                print("Notification loop closed (was not running)")
 
 
 """
