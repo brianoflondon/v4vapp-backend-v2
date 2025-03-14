@@ -3,11 +3,12 @@ import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
+from pprint import pprint
 from typing import Any, Dict
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -106,7 +107,7 @@ class QuoteResponse(BaseModel):
         self.error = error
         self.error_details = error_details
 
-    @property
+    @computed_field
     def sats_hive(self) -> float:
         """Calculate Satoshis per HIVE based on btc_usd and hive_usd."""
         if self.btc_usd == 0:
@@ -114,7 +115,7 @@ class QuoteResponse(BaseModel):
         sats_per_usd = SATS_PER_BTC / self.btc_usd
         return round(sats_per_usd * self.hive_usd, 4)
 
-    @property
+    @computed_field
     def sats_hbd(self) -> float:
         """Calculate Satoshis per HBD based on btc_usd and hbd_usd."""
         if self.btc_usd == 0:
@@ -129,7 +130,7 @@ class QuoteResponse(BaseModel):
             raise ValueError("btc_usd cannot be zero")
         return round(SATS_PER_BTC / self.btc_usd, 4)
 
-    @property
+    @computed_field
     def quote_age(self) -> int:
         """Calculate the age of the quote in seconds."""
         return int((datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds())
@@ -345,6 +346,7 @@ class QuoteService(ABC):
 class CoinGecko(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
+        pprint('Calling CoinGecko --------------------------')
         if cached_quote:
             return cached_quote
         try:
@@ -354,6 +356,7 @@ class CoinGecko(QuoteService):
                 )
                 if response.status_code == 200:
                     pri = response.json()
+                    pprint(pri, indent=2)
                     quote_response = QuoteResponse(
                         hive_usd=pri["hive"]["usd"],
                         hbd_usd=pri["hive_dollar"]["usd"],
@@ -364,6 +367,7 @@ class CoinGecko(QuoteService):
                         fetch_date=datetime.now(tz=timezone.utc),
                     )
                     await self.set_cache(quote_response)
+                    pprint('Calling CoinGecko --------------------------')
                     return quote_response
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
