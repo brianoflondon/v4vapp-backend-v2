@@ -25,7 +25,8 @@
           "aud": 1.58
         }
       },
-      "fetch_date": "2025-03-11 19:00:49.801113+00:00",
+      "source": "CoinGecko",
+      "fetch_date": "2025-03-14 10:07:28.424422+00:00",
       "error": "",
       "error_details": {}
     },
@@ -33,7 +34,7 @@
       "hive_usd": 0.2376,
       "hbd_usd": 1,
       "btc_usd": 83178.9,
-      "hive_hbd": 0.2376,
+      "hive_hbd": 0.2431,
       "raw_response": [
         {
           "symbol": "BTCUSDT",
@@ -57,7 +58,8 @@
           "askQty": "6347.00000000"
         }
       ],
-      "fetch_date": "2025-03-11 19:00:49.801113+00:00",
+      "source": "Binance",
+      "fetch_date": "2025-03-14 10:07:28.425743+00:00",
       "error": "",
       "error_details": {}
     },
@@ -235,7 +237,8 @@
           }
         }
       },
-      "fetch_date": "2025-03-11 19:00:49.801113+00:00",
+      "source": "CoinMarketCap",
+      "fetch_date": "2025-03-14 10:07:28.440475+00:00",
       "error": "",
       "error_details": {}
     },
@@ -243,7 +246,7 @@
       "hive_usd": 0,
       "hbd_usd": 0,
       "btc_usd": 0,
-      "hive_hbd": 0.2388,
+      "hive_hbd": 0.2431,
       "raw_response": {
         "highest_bid": {
           "quote": {
@@ -253,7 +256,7 @@
               "id": "HBD",
               "symbol": "HBD"
             },
-            "amount": "825",
+            "amount": "252",
             "symbol": "HBD"
           },
           "base": {
@@ -263,10 +266,10 @@
               "id": "HIVE",
               "symbol": "HIVE"
             },
-            "amount": "197",
+            "amount": "61",
             "symbol": "HIVE"
           },
-          "price": "0.2387878787878787878787878788"
+          "price": "0.2420634920634920634920634921"
         },
         "latest": {
           "quote": {
@@ -276,7 +279,7 @@
               "id": "HBD",
               "symbol": "HBD"
             },
-            "amount": "758",
+            "amount": "533",
             "symbol": "HBD"
           },
           "base": {
@@ -286,10 +289,10 @@
               "id": "HIVE",
               "symbol": "HIVE"
             },
-            "amount": "181",
+            "amount": "129",
             "symbol": "HIVE"
           },
-          "price": "0.2387862796833773087071240106"
+          "price": "0.2420262664165103189493433396"
         },
         "lowest_ask": {
           "quote": {
@@ -299,7 +302,7 @@
               "id": "HBD",
               "symbol": "HBD"
             },
-            "amount": "959",
+            "amount": "168",
             "symbol": "HBD"
           },
           "base": {
@@ -309,12 +312,12 @@
               "id": "HIVE",
               "symbol": "HIVE"
             },
-            "amount": "229",
+            "amount": "41",
             "symbol": "HIVE"
           },
-          "price": "0.2387904066736183524504692388"
+          "price": "0.2440476190476190476190476190"
         },
-        "percent_change": 7.732034173391636,
+        "percent_change": -0.40082742058195914,
         "hbd_volume": {
           "asset": {
             "asset": "@@000000013",
@@ -322,7 +325,7 @@
             "id": "@@000000013",
             "symbol": "HBD"
           },
-          "amount": "46961.781",
+          "amount": "36126.483",
           "symbol": "HBD"
         },
         "hive_volume": {
@@ -332,13 +335,16 @@
             "id": "@@000000021",
             "symbol": "HIVE"
           },
-          "amount": "207157.962",
+          "amount": "152152.064",
           "symbol": "HIVE"
         }
       },
-      "fetch_date": "2025-03-11 19:02:05.845067+00:00",
+      "source": "HiveInternalMarket",
+      "fetch_date": "2025-03-14 10:07:48.054416+00:00",
       "error": "",
       "error_details": {}
     }
-  }
+  },
+  "fetch_date": "2025-03-14 10:07:28.425743+00:00",
+  "source": "Binance"
 }

@@ -2,7 +2,7 @@
   "hive_usd": 0.2376,
   "hbd_usd": 1.0,
   "btc_usd": 83178.9,
-  "hive_hbd": 0.2376,
+  "hive_hbd": 0.2431,
   "raw_response": [
     {
       "symbol": "BTCUSDT",
@@ -26,7 +26,8 @@
       "askQty": "6347.00000000"
     }
   ],
-  "fetch_date": "2025-03-11T19:00:49.801113Z",
+  "source": "Binance",
+  "fetch_date": "2025-03-14T10:07:28.425743Z",
   "error": "",
   "error_details": {}
 }
