@@ -3,7 +3,7 @@ import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Dict
+from typing import Annotated, Any, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
@@ -50,6 +50,10 @@ class CurrencyPair(StrEnum):
     SATS_HBD = "hbd_sats"
 
 
+# Define the annotated type
+RawResponseType = Annotated[Dict[str, Any] | List[Dict[str, Any]], "Raw response type"]
+
+
 class QuoteResponse(BaseModel):
     """
     QuoteResponse is a model that represents the response of cryptocurrency quotes.
@@ -69,14 +73,14 @@ class QuoteResponse(BaseModel):
         __init__: Initializes a new instance of QuoteResponse.
         sats_hive (float): Calculates Satoshis per HIVE based on btc_usd and hive_usd.
         sats_hbd (float): Calculates Satoshis per HBD based on btc_usd and hbd_usd.
-        quote_age (int): Calculates the age of the quote in seconds.
+        age (int): Calculates the age of the quote in seconds.
     """
 
     hive_usd: float = 0
     hbd_usd: float = 0
     btc_usd: float = 0
     hive_hbd: float = 0
-    raw_response: Any = None
+    raw_response: RawResponseType = {}
     source: str = ""
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     error: str = ""
@@ -88,7 +92,7 @@ class QuoteResponse(BaseModel):
         hbd_usd: float = 0,
         btc_usd: float = 0,
         hive_hbd: float = 0,
-        raw_response: Dict[str, Any] = {},
+        raw_response: RawResponseType = {},
         source: str = "",
         fetch_date: datetime = datetime.now(tz=timezone.utc),
         error: str = "",
@@ -130,13 +134,13 @@ class QuoteResponse(BaseModel):
         return round(SATS_PER_BTC / self.btc_usd, 4)
 
     @computed_field
-    def quote_age(self) -> int:
+    def age(self) -> int:
         """Calculate the age of the quote in seconds."""
         return int((datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds())
 
     @property
-    def log(self) -> Dict[str, Any]:
-        return self.model_dump(exclude={"raw_response"})
+    def log_data(self) -> Dict[str, Any]:
+        return self.model_dump(exclude={"raw_response"}, exclude_none=True)
 
 
 class AllQuotes(BaseModel):
@@ -382,7 +386,7 @@ class CoinGecko(QuoteService):
                         btc_usd=pri["bitcoin"]["usd"],
                         hive_hbd=pri["hive"]["usd"] / pri["hive_dollar"]["usd"],
                         raw_response=pri,
-                        source=__class__.__name__,
+                        source=self.__class__.__name__,
                         fetch_date=datetime.now(tz=timezone.utc),
                     )
                     await self.set_cache(quote_response)
@@ -390,9 +394,9 @@ class CoinGecko(QuoteService):
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
         except Exception as ex:
-            message = f"Problem calling {__class__.__name__} API {ex}"
+            message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
                 error_details={"exception": ex},
@@ -437,16 +441,16 @@ class Binance(QuoteService):
                 btc_usd=btc_usd,
                 hive_hbd=hive_hbd,
                 raw_response=ticker_info,
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
             await self.set_cache(quote_response)
             return quote_response
 
         except Exception as ex:
-            message = f"Problem calling {__class__.__name__} API {ex}"
+            message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
                 error_details={"exception": ex},
@@ -499,7 +503,7 @@ class CoinMarketCap(QuoteService):
                     btc_usd=BTC_USD,
                     hive_hbd=Hive_HBD,
                     raw_response=resp_json,
-                    source=__class__.__name__,
+                    source=self.__class__.__name__,
                     fetch_date=datetime.now(tz=timezone.utc),
                 )
                 await self.set_cache(quote_response)
@@ -507,9 +511,9 @@ class CoinMarketCap(QuoteService):
             else:
                 raise CoinMarketCapError(f"Failed to get quote: {response.text}")
         except Exception as ex:
-            message = f"Problem calling {__class__.__name__} API {ex}"
+            message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
                 error_details={"exception": ex},
@@ -536,16 +540,16 @@ class HiveInternalMarket(QuoteService):
                 btc_usd=0,
                 hive_hbd=hive_hbd,
                 raw_response=raw_response,
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
             # await self.set_cache(quote_response)
 
             return quote_response
         except Exception as ex:
-            message = f"Problem calling {__class__.__name__} API {ex}"
+            message = f"Problem calling {self.__class__.__name__} API {ex}"
             return QuoteResponse(
-                source=__class__.__name__,
+                source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
                 error=message,
                 error_details={"exception": ex},

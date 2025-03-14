@@ -34,7 +34,7 @@ async def test_crypto_conversion():
     print(json.dumps(conv.c_dict, indent=2))
     print(conv.conversion)
     print(conv.conversion.source)
-    print(conv.quote.log)
+    print(conv.quote.log_data)
 
 
 @pytest.mark.parametrize(

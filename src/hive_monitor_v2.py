@@ -310,7 +310,7 @@ async def db_store_transaction_v2(
             hive_trx = HiveTransaction(
                 **hive_event, hive_inst=hive_inst, conv=conv.conversion
             )
-            ans = await db_client.update_one(
+            _ = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
                 query={"_id": hive_trx.id},
                 update=hive_trx.model_dump(by_alias=True),
@@ -672,8 +672,8 @@ async def transactions_loop(watch_users: List[str]):
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes()
     logger.info(
-        f"{icon} Crypto: {all_quotes.fetch_date}",
-        extra={"quote": all_quotes.quote.log},
+        f"{icon} Quote Age: {all_quotes.quote.age} " f"Crypto: {all_quotes.fetch_date}",
+        extra={"quote": all_quotes.quote.log_data},
     )
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
@@ -715,12 +715,7 @@ async def transactions_loop(watch_users: List[str]):
                         error_code = log_time_difference_errors(
                             hive_event["timestamp"], error_code
                         )
-                        if notification:
-                            await all_quotes.get_all_quotes()
-                            logger.info(
-                                f"{icon} Crypto: {all_quotes.fetch_date}",
-                                extra={"quote": all_quotes.quote.log},
-                            )
+
                         async_publish(
                             Events.HIVE_TRANSFER,
                             hive_event=hive_event,
@@ -740,13 +735,18 @@ async def transactions_loop(watch_users: List[str]):
                             await all_quotes.get_all_quotes()
                             logger.info(
                                 f"{icon} Crypto: {all_quotes.fetch_date}",
-                                extra={"quote": all_quotes.quote.log},
+                                extra={"quote": all_quotes.quote.log_data},
                             )
 
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
                         if notification:
+                            await all_quotes.get_all_quotes()
+                            logger.info(
+                                f"{icon} Quote Age: {all_quotes.quote.age} " f"Crypto: {all_quotes.fetch_date}",
+                                extra={"quote": all_quotes.quote.log_data},
+                            )
                             async_publish(
                                 Events.HIVE_TRANSFER_NOTIFY,
                                 hive_event=hive_event,
