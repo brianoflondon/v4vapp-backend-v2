@@ -78,6 +78,8 @@ class CryptoConversion(BaseModel):
         """Fetch the quote and compute all conversions once."""
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
+        for source, quote in all_quotes.quotes.items():
+            print(f"{source} {quote.source} {quote.fetch_date} {quote.error}")
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
