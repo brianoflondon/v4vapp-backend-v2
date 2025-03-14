@@ -3,7 +3,6 @@ import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
-from pprint import pprint
 from typing import Any, Dict
 
 import httpx
@@ -368,7 +367,6 @@ class QuoteService(ABC):
 class CoinGecko(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
-        pprint("Calling CoinGecko --------------------------")
         if cached_quote:
             return cached_quote
         try:
@@ -378,7 +376,6 @@ class CoinGecko(QuoteService):
                 )
                 if response.status_code == 200:
                     pri = response.json()
-                    pprint(pri, indent=2)
                     quote_response = QuoteResponse(
                         hive_usd=pri["hive"]["usd"],
                         hbd_usd=pri["hive_dollar"]["usd"],
@@ -389,7 +386,6 @@ class CoinGecko(QuoteService):
                         fetch_date=datetime.now(tz=timezone.utc),
                     )
                     await self.set_cache(quote_response)
-                    pprint("Calling CoinGecko --------------------------")
                     return quote_response
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
