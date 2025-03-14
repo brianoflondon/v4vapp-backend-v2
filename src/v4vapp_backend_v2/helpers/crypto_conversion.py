@@ -80,9 +80,15 @@ class CryptoConversion(BaseModel):
         await all_quotes.get_all_quotes(use_cache=use_cache)
         for source, quote in all_quotes.quotes.items():
             print(f"{source} {quote.source} {quote.fetch_date} {quote.error}")
+
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
+        print("{-*80}")
+        print(self.fetch_date)
+        print("{-*80}")
+        print(self.quote)
+        print("{-*80}")
 
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
