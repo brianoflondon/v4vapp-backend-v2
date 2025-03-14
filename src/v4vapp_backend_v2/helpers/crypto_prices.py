@@ -76,7 +76,8 @@ class QuoteResponse(BaseModel):
     hbd_usd: float = 0
     btc_usd: float = 0
     hive_hbd: float = 0
-    raw_response: Dict[str, Any] = {}
+    raw_response: Any = None
+    source: str = ""
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     error: str = ""
     error_details: Dict[str, Any] = {}
@@ -88,6 +89,8 @@ class QuoteResponse(BaseModel):
         btc_usd: float = 0,
         hive_hbd: float = 0,
         raw_response: Dict[str, Any] = {},
+        source: str = "",
+        fetch_date: datetime = datetime.now(tz=timezone.utc),
         error: str = "",
         error_details: Dict[str, Any] = {},
     ) -> None:
@@ -98,6 +101,8 @@ class QuoteResponse(BaseModel):
         self.btc_usd = round(btc_usd, 1)
         self.hive_hbd = round(hive_hbd, 4)
         self.raw_response = raw_response
+        self.source = source
+        self.fetch_date = fetch_date
         self.error = error
         self.error_details = error_details
 
@@ -128,6 +133,10 @@ class QuoteResponse(BaseModel):
     def quote_age(self) -> int:
         """Calculate the age of the quote in seconds."""
         return int((datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds())
+
+    @property
+    def log(self) -> Dict[str, Any]:
+        return self.model_dump(exclude={"raw_response"})
 
 
 class AllQuotes(BaseModel):
@@ -164,6 +173,8 @@ class AllQuotes(BaseModel):
     """
 
     quotes: Dict[str, QuoteResponse] = {}
+    fetch_date: datetime = datetime.now(tz=timezone.utc)
+    source: str = ""
 
     async def get_all_quotes(self, use_cache: bool = True, timeout: float = 30.0):
         all_services = [
@@ -172,7 +183,7 @@ class AllQuotes(BaseModel):
             CoinMarketCap(),
             HiveInternalMarket(),
         ]
-
+        self.fetch_date = datetime.now(tz=timezone.utc)
         try:
             async with asyncio.timeout(timeout):
                 async with asyncio.TaskGroup() as tg:
@@ -184,13 +195,15 @@ class AllQuotes(BaseModel):
                     }
 
         except asyncio.TimeoutError:
-            logger.error(f"Quote fetching exceeded timeout of {timeout} seconds")
             self.quotes = {
                 service.__class__.__name__: QuoteResponse(
                     error=f"Timeout after {timeout} seconds"
                 )
                 for service in all_services
             }
+            logger.error(
+                f"Quote fetching exceeded timeout of {timeout} seconds {self.quotes}"
+            )
             return
 
         self.quotes = {}
@@ -200,6 +213,8 @@ class AllQuotes(BaseModel):
             except Exception as e:
                 logger.error(f"Error fetching quote from {service_name}: {e}")
                 self.quotes[service_name] = QuoteResponse(error=str(e))
+
+        self.fetch_date = self.quote.fetch_date
 
     @property
     def quote(self) -> QuoteResponse:
@@ -222,11 +237,13 @@ class AllQuotes(BaseModel):
                 Binance.__name__ in self.quotes
                 and not self.quotes[Binance.__name__].error
             ):
+                self.source = Binance.__name__
                 ans = self.quotes[Binance.__name__]
                 if HiveInternalMarket.__name__ in self.quotes:
                     ans.hive_hbd = self.hive_hbd
                 return ans
             else:
+                self.source = "average"
                 return self.calculate_average_quote()
 
         return QuoteResponse(error="No valid quote found")
@@ -252,7 +269,9 @@ class AllQuotes(BaseModel):
         """
         good_quotes = [quote for quote in self.quotes.values() if not quote.error]
         if not good_quotes:
+            self.source = "failure"
             return None
+        self.source = [quote.source for quote in good_quotes]
 
         avg_hive_usd = sum(quote.hive_usd for quote in good_quotes) / len(good_quotes)
         avg_hbd_usd = sum(quote.hbd_usd for quote in good_quotes) / len(good_quotes)
@@ -341,6 +360,8 @@ class CoinGecko(QuoteService):
                         btc_usd=pri["bitcoin"]["usd"],
                         hive_hbd=pri["hive"]["usd"] / pri["hive_dollar"]["usd"],
                         raw_response=pri,
+                        source=__class__.__name__,
+                        fetch_date=datetime.now(tz=timezone.utc),
                     )
                     await self.set_cache(quote_response)
                     return quote_response
@@ -387,6 +408,8 @@ class Binance(QuoteService):
                 btc_usd=btc_usd,
                 hive_hbd=hive_hbd,
                 raw_response=ticker_info,
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
             )
             await self.set_cache(quote_response)
             return quote_response
@@ -441,6 +464,8 @@ class CoinMarketCap(QuoteService):
                     btc_usd=BTC_USD,
                     hive_hbd=Hive_HBD,
                     raw_response=resp_json,
+                    source=__class__.__name__,
+                    fetch_date=datetime.now(tz=timezone.utc),
                 )
                 await self.set_cache(quote_response)
                 return quote_response
@@ -453,6 +478,7 @@ class CoinMarketCap(QuoteService):
 
 class HiveInternalMarket(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        self.source = "HiveInternalMarket"
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
             return cached_quote
@@ -470,6 +496,8 @@ class HiveInternalMarket(QuoteService):
                 btc_usd=0,
                 hive_hbd=hive_hbd,
                 raw_response=raw_response,
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
             )
             # await self.set_cache(quote_response)
 

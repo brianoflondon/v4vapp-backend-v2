@@ -359,6 +359,12 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
         assert all_quotes.quote.hive_hbd == all_quotes.hive_hbd
 
+    for service_name, quote in all_quotes.quotes.items():
+        print(service_name, quote.fetch_date, quote.error)
+        if service_name != failing_service:
+            assert quote is not None
+        assert quote.fetch_date is not None
+        assert quote.raw_response is not None
 
 async def fetch_all_quote_json_files():
     """

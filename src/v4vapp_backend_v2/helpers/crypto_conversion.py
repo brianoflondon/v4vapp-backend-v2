@@ -1,11 +1,35 @@
 import asyncio
 import json
+from datetime import datetime
 from typing import Any
 
 from beem.amount import Amount  # type: ignore
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+
+
+class CryptoConv(BaseModel):
+    """
+    Simple dictionary to store the conversion values.
+    """
+
+    hive: float = 0.0
+    hbd: float = 0.0
+    usd: float = 0.0
+    sats: int = 0
+    msats: int = 0
+    btc: float = 0.0
+    sats_hive: float = 0.0
+    sats_hbd: float = 0.0
+    conv_from: Currency = Currency.HIVE
+    value: float = 0.0
+    source: str = "CryptoConv"
+    fetch_date: datetime | None = None
+
+    model_config = ConfigDict(
+        use_enum_values=True,  # Serializes enum as its value (e.g., "hive" instead of Currency.HIVE)
+    )
 
 
 class CryptoConversion(BaseModel):
@@ -13,17 +37,19 @@ class CryptoConversion(BaseModel):
     value: float = 0.0
     original: Any = None
     quote: QuoteResponse = QuoteResponse()
+    fetch_date: datetime | None = None
 
     # Cached computed fields
     hive: float = 0.0
     hbd: float = 0.0
     usd: float = 0.0
-    sats: int = 0
+    sats: float = 0
     msats: int = 0
     btc: float = 0.0
 
-    class Config:
-        arbitrary_types_allowed = True  # Allow 'Amount' type from beem
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
+    )
 
     def __init__(
         self,
@@ -43,18 +69,18 @@ class CryptoConversion(BaseModel):
                 self.conv_from = Currency(conv_from.lower())
             self.conv_from = conv_from
             self.value = value
-        else:
-            raise ValueError("Either amount or conv_from must be provided")
+
         if quote:
             self.quote = quote
             self._compute_conversions()
 
-    async def get_quote(self):
+    async def get_quote(self, use_cache: bool = True):
         """Fetch the quote and compute all conversions once."""
         all_quotes = AllQuotes()
-        await all_quotes.get_all_quotes()
+        await all_quotes.get_all_quotes(use_cache=use_cache)
         self.quote = all_quotes.quote
         self._compute_conversions()
+        self.fetch_date = self.quote.fetch_date
 
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
@@ -80,6 +106,24 @@ class CryptoConversion(BaseModel):
         self.hive = round(self.msats / (self.quote.sats_hive * 1000), 5)
 
     @property
+    def conversion(self) -> CryptoConv:
+        """Return a CryptoConv model with all conversion values."""
+        return CryptoConv(
+            hive=self.hive,
+            hbd=self.hbd,
+            usd=self.usd,
+            sats=int(self.sats),  # Cast to int to match CryptoConv type
+            msats=self.msats,
+            btc=self.btc,
+            sats_hive=self.quote.sats_hive,
+            sats_hbd=self.quote.sats_hbd,
+            conv_from=self.conv_from,
+            value=self.value,
+            source=self.quote.source,
+            fetch_date=self.quote.fetch_date,
+        )
+
+    @property
     def c_dict(self) -> dict[str, Any]:
         """Return a dictionary of all conversions."""
         return {
@@ -100,9 +144,14 @@ if __name__ == "__main__":
     # Test CryptoConversion
     amount = Amount("10 HIVE")
     conv = CryptoConversion(amount=amount)
-    asyncio.run(conv.get_quote())
+    asyncio.run(conv.get_quote(use_cache=False))
+    print(f"Fetch date: {conv.fetch_date}")
     print(f"HIVE: {conv.hive}")
     print(f"HBD: {conv.hbd}")
     print(f"USD: {conv.usd}")
     print(f"SATS: {conv.sats}")
-    print(json.dumps(conv.c_dict, indent=2))
+    print(f"Source: {conv.quote.source}")
+    print(json.dumps(conv.c_dict, indent=2, default=str))
+    print(json.dumps(conv.conversion.model_dump(), indent=2, default=str))
+    asyncio.run(conv.get_quote(use_cache=False))
+    print(f"Fetch date: {conv.fetch_date}")

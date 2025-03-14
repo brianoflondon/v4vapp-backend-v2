@@ -19,6 +19,8 @@ from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
 from v4vapp_backend_v2.helpers.hive_extras import (
     MAX_HIVE_BATCH_SIZE,
     get_good_nodes,
@@ -27,6 +29,7 @@ from v4vapp_backend_v2.helpers.hive_extras import (
     get_hive_witness_details,
 )
 from v4vapp_backend_v2.helpers.voting_power import VotingPower
+from v4vapp_backend_v2.models.hive_models import HiveTransaction
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -34,6 +37,7 @@ HIVE_DATABASE_CONNECTION = "local_connection"
 HIVE_DATABASE = "lnd_monitor_v2_voltage"
 HIVE_DATABASE_USER = "lnd_monitor"
 HIVE_TRX_COLLECTION = "hive_trx_beem"
+HIVE_TRX_COLLECTION_V2 = "hive_trx"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
@@ -45,10 +49,6 @@ app = typer.Typer()
 icon = "🐝"
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
-
-
-def remove_ms(delta: timedelta) -> timedelta:
-    return timedelta(days=delta.days, seconds=delta.seconds)
 
 
 def check_time_diff(timestamp: str | datetime) -> timedelta:
@@ -71,7 +71,7 @@ def check_time_diff(timestamp: str | datetime) -> timedelta:
         else:
             if not timestamp.tzinfo:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
-        time_diff = remove_ms(datetime.now(tz=timezone.utc) - timestamp)
+        time_diff = seconds_only(datetime.now(tz=timezone.utc) - timestamp)
     except (ValueError, AttributeError, OverflowError, TypeError):
         time_diff = timedelta(seconds=0)
     return time_diff
@@ -291,6 +291,38 @@ def get_event_id(hive_event: dict) -> str:
     return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
 
 
+async def db_store_transaction_v2(
+    hive_event: dict,
+    db_client: MongoDBClient,
+    quote: AllQuotes = None,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    try:
+        if not quote:
+            all_quotes = AllQuotes()
+            await all_quotes.get_all_quotes()
+            quote = all_quotes.quote
+        if hive_event.get("type") in TRANSFER_OP_TYPES:
+            amount = Amount(hive_event["amount"])
+            conv = CryptoConversion(amount=amount, quote=quote)
+            hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
+            hive_trx = HiveTransaction(
+                **hive_event, hive_inst=hive_inst, conv=conv.conversion
+            )
+            ans = await db_client.update_one(
+                HIVE_TRX_COLLECTION_V2,
+                query={"_id": hive_trx.id},
+                update=hive_trx.model_dump(by_alias=True),
+                upsert=True,
+            )
+    except DuplicateKeyError:
+        pass
+
+    except Exception as e:
+        logger.exception(e, extra={"error": e, "notification": False})
+
+
 async def db_store_transaction(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
@@ -329,11 +361,10 @@ async def db_store_transaction(
             voter_power = VotingPower(hive_event["account"])
             hive_event["vote_value"] = voter_power.vote_value
             hive_event["voter_details"] = asdict(voter_power)
-        hive_event["_id"] = get_event_id(hive_event)
-        ans = await db_client.update_one(
+            hive_event["_id"] = get_event_id(hive_event)
+        _ = await db_client.update_one(
             HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
         )
-        logger.debug(f"{icon} database: {ans}")
     except DuplicateKeyError:
         pass
 
@@ -490,7 +521,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     mean_time_diff_seconds = sum(time_differences) / len(time_differences)
 
     # Convert the mean time difference back to a timedelta object
-    mean_time_diff = remove_ms(timedelta(seconds=mean_time_diff_seconds))
+    mean_time_diff = seconds_only(timedelta(seconds=mean_time_diff_seconds))
 
     return mean_time_diff
 
@@ -550,7 +581,7 @@ async def witness_loop(watch_witness: str):
                     ):
                         witness_details = await get_hive_witness_details(watch_witness)
                         missed_blocks = witness_details.get("missed_blocks", 0)
-                        time_since_last_block = remove_ms(
+                        time_since_last_block = seconds_only(
                             timedelta(seconds=seconds_since_last_block)
                         )
                         block_diff = (
@@ -572,7 +603,7 @@ async def witness_loop(watch_witness: str):
                     if hive_event.get("producer") == watch_witness:
                         witness_details = await get_hive_witness_details(watch_witness)
                         missed_blocks = witness_details.get("missed_blocks", 0)
-                        time_diff = remove_ms(
+                        time_diff = seconds_only(
                             hive_event["timestamp"].replace(tzinfo=timezone.utc)
                             - last_good_timestamp
                         )
@@ -638,6 +669,12 @@ async def transactions_loop(watch_users: List[str]):
     last_good_block = await get_last_good_block() + 1
     count = 0
     start = timer()
+    all_quotes = AllQuotes()
+    await all_quotes.get_all_quotes()
+    logger.info(
+        f"{icon} Crypto: {all_quotes.fetch_date}",
+        extra={"quote": all_quotes.quote.log},
+    )
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -678,10 +715,17 @@ async def transactions_loop(watch_users: List[str]):
                         error_code = log_time_difference_errors(
                             hive_event["timestamp"], error_code
                         )
+                        if notification:
+                            await all_quotes.get_all_quotes()
+                            logger.info(
+                                f"{icon} Crypto: {all_quotes.fetch_date}",
+                                extra={"quote": all_quotes.quote.log},
+                            )
                         async_publish(
                             Events.HIVE_TRANSFER,
                             hive_event=hive_event,
                             db_client=db_client,
+                            quote=all_quotes.quote,
                         )
                         count += 1
                         # if count == 2:
@@ -693,6 +737,12 @@ async def transactions_loop(watch_users: List[str]):
                                 f"{icon} {count} transactions processed. "
                                 f"Node: {old_node} -> {hive_client.rpc.url}"
                             )
+                            await all_quotes.get_all_quotes()
+                            logger.info(
+                                f"{icon} Crypto: {all_quotes.fetch_date}",
+                                extra={"quote": all_quotes.quote.log},
+                            )
+
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
@@ -732,6 +782,7 @@ async def runner(watch_users: List[str]):
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction)
         async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
         async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_transaction)
+        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction_v2)
         tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):

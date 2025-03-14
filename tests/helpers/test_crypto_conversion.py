@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -31,6 +32,9 @@ async def test_crypto_conversion():
     assert conv.quote is not None
     assert "sats" in conv.model_dump()
     print(json.dumps(conv.c_dict, indent=2))
+    print(conv.conversion)
+    print(conv.conversion.source)
+    print(conv.quote.log)
 
 
 @pytest.mark.parametrize(
@@ -66,3 +70,30 @@ async def test_crypto_conversion_parameterized(conv_from, value):
     assert abs(conv2.c_dict[Currency.USD] - conv.c_dict[Currency.USD]) < 0.01
     assert abs(conv2.c_dict[Currency.MSATS] - conv.c_dict[Currency.MSATS]) < 1000
     assert abs(conv2.c_dict[Currency.BTC] - conv.c_dict[Currency.BTC]) < 0.00001
+
+    assert abs(conv2.conversion.hbd - conv.conversion.hbd) < 0.01
+    assert abs(conv2.conversion.hive - conv.conversion.hive) < 0.01
+    assert abs(conv2.conversion.usd - conv.conversion.usd) < 0.01
+    assert abs(conv2.conversion.msats - conv.conversion.msats) < 1000
+    assert abs(conv2.conversion.btc - conv.conversion.btc) < 0.00001
+    assert conv2.conversion.source == conv.conversion.source
+    assert conv2.conversion.sats_hbd == conv.conversion.sats_hbd
+    assert conv2.conversion.sats_hive == conv.conversion.sats_hive
+    assert conv2.conversion.source == conv.conversion.source
+
+    assert conv.conversion.model_dump()
+    assert conv2.conversion.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_fetch_date():
+    conv = CryptoConversion(conv_from=Currency.HBD, value=1000.0)
+    await conv.get_quote(use_cache=False)
+    assert conv.quote is not None
+    fetch_date = conv.quote.fetch_date
+    assert fetch_date is not None
+    await asyncio.sleep(1)
+    await conv.get_quote(use_cache=False)
+    fetch_date2 = conv.quote.fetch_date
+    assert fetch_date2 is not None
+    assert fetch_date2 > fetch_date

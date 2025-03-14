@@ -117,6 +117,37 @@ class HiveAccountConfig(BaseModel):
 class HiveConfig(BaseModel):
     hive_accs: Dict[str, HiveAccountConfig] = {}
 
+    @property
+    def memo_keys(self) -> List[str]:
+        """
+        Retrieve the memo keys of all Hive accounts.
+
+        Returns:
+            List[str]: A list containing the memo keys of all Hive accounts.
+        """
+        return [acc.memo_key for acc in self.hive_accs.values() if acc.memo_key]
+
+    @property
+    def name_memo_keys(self) -> Dict[str, str]:
+        """
+        Retrieve a dictionary of Hive account names and memo keys.
+
+        Returns:
+            Dict[str, str]: A dictionary containing the Hive account names and memo
+            keys.
+        """
+        return [name for name, acc in self.hive_accs.items() if acc.memo_key]
+
+    @property
+    def hive_acc_names(self) -> List[str]:
+        """
+        Retrieve the names of all Hive accounts.
+
+        Returns:
+            List[str]: A list containing the names of all Hive accounts.
+        """
+        return list(self.hive_accs.keys())
+
 
 class Config(BaseModel):
     """
@@ -404,6 +435,8 @@ class InternalConfig:
 """
 General purpose functions
 """
+
+# todo: #27 move to helpers general_purpose_funcs
 
 
 def format_time_delta(delta: timedelta, fractions: bool = False) -> str:

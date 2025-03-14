@@ -6,9 +6,11 @@ from typing import Any, Dict, List
 import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
+from beem.exceptions import MissingKeyError
 from beem.market import Market  # type: ignore
 from beem.memo import Memo  # type: ignore
 from beem.price import Price  # type: ignore
+from ecdsa import MalformedPointError
 from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
@@ -189,6 +191,21 @@ def get_hive_block_explorer_link(
     return markdown_link
 
 
+def get_event_id(hive_event: dict) -> str:
+    """
+    Get the event id from the Hive event.
+
+    Args:
+        hive_event (dict): The Hive event.
+
+    Returns:
+        str: The event id.
+    """
+    trx_id = hive_event.get("trx_id", "")
+    op_in_trx = hive_event.get("op_in_trx", 0)
+    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
+
+
 def decode_memo(
     memo: str = "",
     hive_inst: Hive | None = None,
@@ -207,29 +224,44 @@ def decode_memo(
     Returns:
         str: The decrypted memo.
     """
+    if not memo and not trx_id:
+        return ""
+
     if not memo_keys and not hive_inst:
         raise ValueError("No memo keys or Hive instance provided.")
 
     if memo_keys and not hive_inst:
         hive_inst = get_hive_client(keys=memo_keys)
         blockchain = get_blockchain_instance(hive_instance=hive_inst)
-    else:
-        blockchain = get_blockchain_instance(hive_instance=hive_inst)
 
     if not hive_inst:
         raise ValueError("No Hive instance provided.")
 
     if trx_id and not memo:
+        blockchain = get_blockchain_instance(hive_instance=hive_inst)
         trx = blockchain.get_transaction(trx_id)
         memo = trx.get("operations")[op_in_trx].get("value").get("memo")
 
+    if not memo[0] == "#":
+        return memo
+
     try:
         m = Memo(from_account=None, to_account=None, blockchain_instance=hive_inst)
-        d_memo = m.decrypt(memo)[1:]
-        return d_memo
+        d_memo = m.decrypt(memo)
+        if d_memo == memo:
+            return memo
+        return d_memo[1:]
     except struct.error:
         # arrises when an unencrypted memo is decrypted..
         return memo
+    except ValueError as e:
+        # Memo is not encrypted
+        logger.info(f"Memo is not encrypted: {e}")
+        return memo
+    except (MissingKeyError, MalformedPointError) as e:
+        logger.info(f"MissingKeyError: {e}")
+        return memo
+
     except Exception as e:
         logger.error(
             f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo}
