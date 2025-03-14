@@ -411,7 +411,7 @@ class Binance(QuoteService):
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
         try:
-            raise Exception("debug")
+            # raise Exception("debug")
 
             client = Spot(
                 api_key=api_keys_config.binance_api_key,
@@ -479,7 +479,7 @@ class CoinMarketCap(QuoteService):
             "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
         }
         try:
-            raise Exception("debug")
+            # raise Exception("debug")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     url,
