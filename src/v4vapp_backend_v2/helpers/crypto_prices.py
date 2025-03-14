@@ -268,23 +268,45 @@ class AllQuotes(BaseModel):
 
             If there are no valid quotes, returns None.
         """
-        good_quotes = [quote for quote in self.quotes.values() if not quote.error]
+        # Must exclude HiveInternalMarket quote because it only quotes for HBD Hive
+        good_quotes = [
+            quote
+            for quote in self.quotes.values()
+            if not (quote.error or quote.source == "HiveInternalMarket")
+        ]
+        error_details = {
+            quote.source: quote.error_details
+            for quote in self.quotes.values()
+            if quote.error
+        }
+
         if not good_quotes:
             self.source = "failure"
             return None
-        self.source = [quote.source for quote in good_quotes]
+        self.source = ", ".join([quote.source for quote in good_quotes])
 
         avg_hive_usd = sum(quote.hive_usd for quote in good_quotes) / len(good_quotes)
         avg_hbd_usd = sum(quote.hbd_usd for quote in good_quotes) / len(good_quotes)
         avg_btc_usd = sum(quote.btc_usd for quote in good_quotes) / len(good_quotes)
         avg_hive_hbd = sum(quote.hive_hbd for quote in good_quotes) / len(good_quotes)
 
+        # get the latest fetch date of the quotes in good_quotes
+        fetch_dates = [quote.fetch_date for quote in good_quotes]
+        self.fetch_date = (
+            max(fetch for fetch in fetch_dates if fetch is not None)
+            if fetch_dates
+            else datetime.now(tz=timezone.utc)
+        )
+
         return QuoteResponse(
             hive_usd=avg_hive_usd,
             hbd_usd=avg_hbd_usd,
             btc_usd=avg_btc_usd,
             hive_hbd=avg_hive_hbd,
+            source=self.source,
+            fetch_date=self.fetch_date,
             raw_response={},  # You can decide what to put here
+            error_details=error_details,
         )
 
     @property
@@ -346,7 +368,7 @@ class QuoteService(ABC):
 class CoinGecko(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
-        pprint('Calling CoinGecko --------------------------')
+        pprint("Calling CoinGecko --------------------------")
         if cached_quote:
             return cached_quote
         try:
@@ -367,13 +389,18 @@ class CoinGecko(QuoteService):
                         fetch_date=datetime.now(tz=timezone.utc),
                     )
                     await self.set_cache(quote_response)
-                    pprint('Calling CoinGecko --------------------------')
+                    pprint("Calling CoinGecko --------------------------")
                     return quote_response
                 else:
                     raise CoinGeckoError(f"Failed to get quote: {response.text}")
         except Exception as ex:
-            message = f"Problem calling CoinGecko API {ex}"
-            return QuoteResponse(error=message, error_details={"exception": ex})
+            message = f"Problem calling {__class__.__name__} API {ex}"
+            return QuoteResponse(
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
+                error=message,
+                error_details={"exception": ex},
+            )
 
 
 class Binance(QuoteService):
@@ -384,6 +411,8 @@ class Binance(QuoteService):
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
         try:
+            raise Exception("debug")
+
             client = Spot(
                 api_key=api_keys_config.binance_api_key,
                 api_secret=api_keys_config.binance_api_secret,
@@ -419,8 +448,13 @@ class Binance(QuoteService):
             return quote_response
 
         except Exception as ex:
-            message = f"Problem calling Binance API {ex}"
-            return QuoteResponse(error=message, error_details={"exception": ex})
+            message = f"Problem calling {__class__.__name__} API {ex}"
+            return QuoteResponse(
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
+                error=message,
+                error_details={"exception": ex},
+            )
 
 
 class CoinMarketCap(QuoteService):
@@ -445,6 +479,7 @@ class CoinMarketCap(QuoteService):
             "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
         }
         try:
+            raise Exception("debug")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     url,
@@ -476,8 +511,13 @@ class CoinMarketCap(QuoteService):
             else:
                 raise CoinMarketCapError(f"Failed to get quote: {response.text}")
         except Exception as ex:
-            message = f"Problem calling CoinMarketCap API {ex}"
-            return QuoteResponse(error=message, error_details={"exception": ex})
+            message = f"Problem calling {__class__.__name__} API {ex}"
+            return QuoteResponse(
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
+                error=message,
+                error_details={"exception": ex},
+            )
 
 
 class HiveInternalMarket(QuoteService):
@@ -507,8 +547,13 @@ class HiveInternalMarket(QuoteService):
 
             return quote_response
         except Exception as ex:
-            message = f"Problem calling Hive Market API {ex}"
-            return QuoteResponse(error=message, error_details={"exception": ex})
+            message = f"Problem calling {__class__.__name__} API {ex}"
+            return QuoteResponse(
+                source=__class__.__name__,
+                fetch_date=datetime.now(tz=timezone.utc),
+                error=message,
+                error_details={"exception": ex},
+            )
 
 
 class CryptoConversion:
