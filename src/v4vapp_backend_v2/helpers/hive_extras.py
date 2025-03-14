@@ -27,6 +27,9 @@ DEFAULT_GOOD_NODES = [
     "https://rpc.mahdiyari.info",
     "https://api.syncad.com",
 ]
+
+LAST_GOOD_BEACON_NODES = []
+
 MAX_HIVE_BATCH_SIZE = 25
 
 
@@ -76,9 +79,13 @@ def get_good_nodes() -> List[str]:
         )
         nodes = response.json()
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
+        LAST_GOOD_BEACON_NODES = good_nodes
     except Exception as e:
         logger.warning(f"Failed to fetch good nodes: {e}")
-        good_nodes = DEFAULT_GOOD_NODES
+        if LAST_GOOD_BEACON_NODES:
+            good_nodes = LAST_GOOD_BEACON_NODES
+        else:
+            good_nodes = DEFAULT_GOOD_NODES
 
     return good_nodes
 
