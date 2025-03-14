@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
+from pprint import pprint
 from typing import Any
 
 from beem.amount import Amount  # type: ignore
@@ -84,11 +85,11 @@ class CryptoConversion(BaseModel):
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
-        print("{-*80}")
+        print("-" * 80)
         print(self.fetch_date)
-        print("{-*80}")
-        print(self.quote)
-        print("{-*80}")
+        print("-" * 80)
+        pprint(self.quote.model_dump())
+        print("-" * 80)
 
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
