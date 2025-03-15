@@ -1,3 +1,4 @@
+import json
 import random
 import struct
 from enum import StrEnum
@@ -14,6 +15,7 @@ from ecdsa import MalformedPointError
 from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -28,11 +30,11 @@ DEFAULT_GOOD_NODES = [
     "https://api.syncad.com",
 ]
 
-LAST_GOOD_BEACON_NODES = []
 
 MAX_HIVE_BATCH_SIZE = 25
 
 
+# TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
 def get_hive_client(*args, **kwargs) -> Hive:
     """
     Create a Hive client instance.
@@ -42,7 +44,18 @@ def get_hive_client(*args, **kwargs) -> Hive:
     """
     if "node" not in kwargs:
         # shuffle good nodes
-        good_nodes = get_good_nodes()
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            good_nodes_json = redis_sync_client.get("good_nodes")
+        if good_nodes_json and isinstance(good_nodes_json, str):
+            ttl = redis_sync_client.ttl("good_nodes")
+            if isinstance(ttl, int) and ttl < 3000:
+                good_nodes = get_good_nodes()
+            else:
+                good_nodes = json.loads(good_nodes_json)
+        else:
+            good_nodes = get_good_nodes()
+        redis_sync_client.close()
+        # good_nodes = DEFAULT_GOOD_NODES
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
     hive = Hive(*args, **kwargs)
@@ -78,13 +91,26 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes",
         )
         nodes = response.json()
+        logger.info(
+            "Fetched good nodes Last good nodes", extra={"beacon_response": nodes}
+        )
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
-        LAST_GOOD_BEACON_NODES = good_nodes
+        logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
     except Exception as e:
-        logger.warning(f"Failed to fetch good nodes: {e}")
-        if LAST_GOOD_BEACON_NODES:
-            good_nodes = LAST_GOOD_BEACON_NODES
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            good_nodes_json = redis_sync_client.get("good_nodes")
+        if good_nodes_json and isinstance(good_nodes_json, str):
+            good_nodes = json.loads(good_nodes_json)
+        if good_nodes:
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using last good nodes.", {"extra": e}
+            )
         else:
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e}
+            )
             good_nodes = DEFAULT_GOOD_NODES
 
     return good_nodes
