@@ -154,3 +154,41 @@ async def test_redis_client_context_manager_with_bad_connection():
             assert redis_client is not None
             assert await redis_client.ping()
             await redis_client.set("test_key", "test_value")
+
+
+################ Sync Redis Tests ################
+
+
+def test_sync_redis_client_default():
+    """
+    Test the default behavior of the V4VAsyncRedis client.
+    Default is to decode responses and use the connection from the config.
+
+    This test performs the following actions:
+    1. Initializes a V4VAsyncRedis client.
+    2. Flushes the Redis database.
+    3. Asserts that the Redis client and its underlying Redis connection are not None.
+    4. Pings the Redis server to ensure it is responsive.
+    5. Sets a key-value pair in the Redis database.
+    6. Retrieves the value for the set key and asserts it matches the expected value.
+    7. Deletes the key from the Redis database and asserts the deletion was successful.
+    """
+    redis_sync_client = V4VAsyncRedis().sync_redis
+    assert redis_sync_client is not None
+    assert redis_sync_client.ping()
+    redis_sync_client.set("test_key", "test_value")
+    assert redis_sync_client.get("test_key") == "test_value"
+    assert redis_sync_client.delete("test_key")
+    redis_sync_client.close()
+
+
+def test_sync_redis_client_context_manager():
+    with V4VAsyncRedis().sync_redis as redis_sync_client:
+        assert redis_sync_client is not None
+        assert redis_sync_client.ping()
+        redis_sync_client.set("test_key", "test_value")
+        assert redis_sync_client.get("test_key") == "test_value"
+        redis_sync_client.flushdb()
+    redis_sync_client.close()
+
+    
