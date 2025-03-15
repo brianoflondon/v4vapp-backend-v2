@@ -1,0 +1,35 @@
+{
+  "_id": "8f4764dce2f2c41709cf1431c0e3d27710a359b2",
+  "op_in_trx": 0,
+  "trx_id": "8f4764dce2f2c41709cf1431c0e3d27710a359b2",
+  "amount": {
+    "amount": "5000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "amount_decimal": "5",
+  "amount_str": "5.000 HIVE",
+  "amount_symbol": "HIVE",
+  "amount_value": 5,
+  "block_num": 94074760,
+  "conv": {
+    "hive": 5,
+    "hbd": 1.171999,
+    "usd": 1.171999,
+    "sats": 1434,
+    "btc": 0.0000143367,
+    "msats": 1433670,
+    "sats_hive": 286.7341,
+    "sats_hbd": 1223.2685,
+    "conv_from": "hive",
+    "value": 5
+  },
+  "from": "v4vapp.tre",
+  "memo": "",
+  "timestamp": {
+    "$date": "2025-03-12T15:55:30.000Z"
+  },
+  "to": "v4vapp",
+  "trx_num": 11,
+  "type": "transfer"
+}

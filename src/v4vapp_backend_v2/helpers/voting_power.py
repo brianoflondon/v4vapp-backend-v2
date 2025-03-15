@@ -7,6 +7,45 @@ from v4vapp_backend_v2.helpers.hive_extras import get_hive_client
 
 @dataclass
 class VotingPower:
+    """
+    A class to represent the voting power of a voter in a proposal.
+
+    Attributes:
+    ----------
+    voter : str
+        The name of the voter (default is "_total").
+    proposal : int
+        The ID of the proposal (default is 0).
+    proposal_total_votes : float
+        The total votes for the proposal (default is 0.0).
+    vesting_power : float
+        The vesting power of the voter (default is 0.0).
+    delegated_vesting_power : float
+        The delegated vesting power of the voter (default is 0.0).
+    received_vesting_power : float
+        The received vesting power of the voter (default is 0.0).
+    vote_value : float
+        The vote value of the voter (default is 0.0).
+    proxy_value : float
+        The proxy value of the voter (default is 0.0).
+    prop_percent : float
+        The percentage of the proposal votes (default is 0.0).
+    total_value : float
+        The total value of the voter (default is 0.0).
+    total_percent : float
+        The total percentage of the voter (default is 0.0).
+
+    Methods:
+    -------
+    set_up(voter: str = "", hive: Hive = None, proposal: int = 0) -> None:
+        Sets up the voting power for a given voter and proposal.
+
+    __iadd__(self, other):
+        Adds the voting power of another VotingPower instance to this instance.
+
+    __str__() -> str:
+        Returns a string representation of the voting power.
+    """
     voter: str = "_total"
     proposal: int = 0
     proposal_total_votes: float = 0.0
