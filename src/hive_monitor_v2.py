@@ -217,11 +217,11 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     """
     notification = True if hive_event.get("witness") == "brianoflondon" else False
     voted_for = "voted for" if hive_event.get("approve") else "unvoted"
-    voter_power = VotingPower(hive_event["account"])
+    voter_power = VotingPower(hive_event.get("account"))
     message = (
         f"{icon}👁️ {hive_event.get('account')} "
         f"{voted_for} {hive_event.get('witness')} "
-        f"with {voter_power.vote_value:,.0f} HP"
+        f"with {voter_power.total_value:,.0f} HP"
     )
     logger.info(
         message,
@@ -744,7 +744,8 @@ async def transactions_loop(watch_users: List[str]):
                         if notification:
                             await all_quotes.get_all_quotes()
                             logger.info(
-                                f"{icon} Quote Age: {all_quotes.quote.age} " f"Crypto: {all_quotes.fetch_date}",
+                                f"{icon} Quote Age: {all_quotes.quote.age} "
+                                f"Crypto: {all_quotes.fetch_date}",
                                 extra={"quote": all_quotes.quote.log_data},
                             )
                             async_publish(
