@@ -161,3 +161,5 @@ async def test_many_hive_transactions(sample_quote, set_base_config_path):
         if hive_trx.hive_from == HIVE_ACC_TEST or hive_trx.hive_to == HIVE_ACC_TEST:
             if hive_trx.memo.startswith("#"):
                 assert hive_trx.d_memo != hive_trx.memo
+            assert hive_trx.log_str is not None
+            assert hive_trx.notification_str is not None

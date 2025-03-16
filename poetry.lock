@@ -1712,6 +1712,17 @@ files = [
 ]
 
 [[package]]
+name = "types-colorama"
+version = "0.4.15.20240311"
+description = "Typing stubs for colorama"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types-colorama-0.4.15.20240311.tar.gz", hash = "sha256:a28e7f98d17d2b14fb9565d32388e419f4108f557a7d939a66319969b2b99c7a"},
+    {file = "types_colorama-0.4.15.20240311-py3-none-any.whl", hash = "sha256:6391de60ddc0db3f147e31ecb230006a6823e81e380862ffca1e4695c13a0b8e"},
+]
+
+[[package]]
 name = "types-protobuf"
 version = "5.29.1.20250208"
 description = "Typing stubs for protobuf"
@@ -1844,4 +1855,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "36b534ee13f8563f5cab91a15951848c400921c8702cdbeb7fb67cfb8bb87eda"
+content-hash = "73d1fffcdb50dae32538c9f9ecb0a8022c3d1c681f45727ba1bd628f2b3ddc65"

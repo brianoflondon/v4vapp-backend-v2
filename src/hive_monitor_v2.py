@@ -41,6 +41,8 @@ HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
 
+COMMAND_LINE_WATCH_USERS = []
+
 TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
 OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
 
@@ -155,7 +157,7 @@ def format_hive_transaction(event: dict) -> Tuple[str, str]:
     return log_str, notification_str
 
 
-def watch_users_notification(event: dict, watch_user: List[str]) -> bool:
+def watch_users_notification(hive_event: dict, watch_user: List[str]) -> bool:
     """
     Send notification if the user is in the watch list.
     Args:
@@ -164,47 +166,27 @@ def watch_users_notification(event: dict, watch_user: List[str]) -> bool:
     Returns:
         bool: True if the user is in the watch list.
     """
-    if event.get("to", "") in watch_user:
-        return True
-    if event.get("from", "") in watch_user:
+    global COMMAND_LINE_WATCH_USERS
+    if not watch_user:
+        watch_user = COMMAND_LINE_WATCH_USERS
+    if hive_event.get("from") in watch_user or hive_event.get("to") in watch_user:
         return True
     return False
 
 
-async def transactions_report(hive_event: dict, *args: Any, **kwargs: Any) -> None:
-    """
-    Asynchronously reports transactions.
-
-    This function reports transactions by logging the transaction event.
-
-    Args:
-        hive_event (dict): The Hive transaction event.
-    """
-    log_str, notification_str = format_hive_transaction(hive_event)
-    notification = True
-    logger.info(log_str, extra={"hive_event": hive_event, "notification": False})
+async def hive_transaction_report(
+    hive_trx: HiveTransaction, *args: Any, **kwargs: Any
+) -> None:
+    log_str = hive_trx.log_str
+    notification_str = hive_trx.notification_str
+    logger.info(
+        log_str,
+        extra={"notification": False},
+    )
     logger.info(
         notification_str,
-        extra={"notification": notification, "hive_event": hive_event},
+        extra={"hive_trx": hive_trx.model_dump(), "notification": True},
     )
-
-
-# async def report_transaction_v2(hive_trx: HiveTransaction, *args: Any, **kwargs: Any) -> None:
-#     """
-#     Asynchronously reports transactions.
-
-#     This function reports transactions by logging the transaction event.
-
-#     Args:
-#         hive_event (dict): The Hive transaction event.
-#     """
-#     log_str, notification_str = format_hive_transaction(hive_event)
-#     notification = True
-#     logger.info(log_str, extra={"hive_event": hive_event, "notification": False})
-#     logger.info(
-#         notification_str,
-#         extra={"notification": notification, "hive_event": hive_event},
-#     )
 
 
 async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> None:
@@ -294,7 +276,6 @@ def get_event_id(hive_event: dict) -> str:
 async def db_store_transaction_v2(
     hive_event: dict,
     db_client: MongoDBClient,
-    quote: AllQuotes = None,
     *args: Any,
     **kwargs: Any,
 ) -> None:
@@ -322,18 +303,15 @@ async def db_store_transaction_v2(
         DuplicateKeyError: If a duplicate key error occurs during the database update.
         Exception: For any other exceptions, logs the error with additional context.
     """
+    global COMMAND_LINE_WATCH_USERS
     try:
-        if not quote:
-            all_quotes = AllQuotes()
-            await all_quotes.get_all_quotes()
-            quote = all_quotes.quote
-        if hive_event.get("type") in TRANSFER_OP_TYPES:
-            amount = Amount(hive_event["amount"])
-            conv = CryptoConversion(amount=amount, quote=quote)
+        if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
+            if HiveTransaction.last_quote.age > 60:
+                await HiveTransaction.update_quote()
+
             hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
-            hive_trx = HiveTransaction(
-                **hive_event, hive_inst=hive_inst, conv=conv.conversion
-            )
+            hive_trx = HiveTransaction(**hive_event, hive_inst=hive_inst)
+            async_publish(Events.HIVE_TRANSFER_NOTIFY, hive_trx=hive_trx)
             _ = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
                 query={"_id": hive_trx.id},
@@ -387,55 +365,6 @@ async def db_store_witness_vote(
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
-
-
-async def db_store_transaction(
-    hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
-) -> None:
-    """
-    This function processes a hive event and stores the transaction details
-    in the database. It handles various types of events, including those
-    with amounts and account witness votes, and performs necessary
-    conversions and calculations before storing the data.
-
-    Args:
-        hive_event (dict): The hive event containing transaction details.
-        db_client (MongoDBClient): The database client used to store the transaction.
-        *args (Any): Additional positional arguments.
-        **kwargs (Any): Additional keyword arguments.
-
-    Raises:
-        DuplicateKeyError: If a duplicate key error occurs during the database
-        operation.
-        Exception: For any other exceptions that occur during the process.
-
-    """
-    try:
-        trx_id = hive_event.get("trx_id", "")
-        op_in_trx = hive_event.get("op_in_trx", 0)
-        query = {"trx_id": trx_id, "op_in_trx": op_in_trx}
-        if hive_event.get("amount"):
-            amount = Amount(hive_event["amount"])
-            hive_event["amount_decimal"] = str(amount.amount_decimal)
-            hive_event["amount_value"] = amount.amount
-            hive_event["amount_symbol"] = amount.symbol
-            hive_event["amount_str"] = str(amount)
-            conv = CryptoConversion(amount)
-            await conv.get_quote()
-            hive_event["conv"] = conv.c_dict
-        if hive_event.get("type") == "account_witness_vote":
-            voter_power = VotingPower(hive_event["account"])
-            hive_event["total_value"] = voter_power.vote_value
-            hive_event["voter_details"] = asdict(voter_power)
-            hive_event["_id"] = get_event_id(hive_event)
-        _ = await db_client.update_one(
-            HIVE_TRX_COLLECTION, query=query, update=hive_event, upsert=True
-        )
-    except DuplicateKeyError:
-        pass
-
-    except Exception as e:
-        logger.error(e, extra={"error": e})
 
 
 async def get_last_good_block(collection: str = HIVE_TRX_COLLECTION_V2) -> int:
@@ -755,12 +684,6 @@ async def transactions_loop(watch_users: List[str]):
     last_good_block = await get_last_good_block() + 1
     count = 0
     start = timer()
-    all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes()
-    logger.info(
-        f"{icon} Quote Age: {all_quotes.quote.age} " f"Crypto: {all_quotes.fetch_date}",
-        extra={"quote": all_quotes.quote.log_data},
-    )
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -801,16 +724,13 @@ async def transactions_loop(watch_users: List[str]):
                         if last_good_block < hive_event.get("block_num"):
                             last_good_block = hive_event.get("block_num")
                         hive_event["op_in_trx"] = op_in_trx
-                        notification = watch_users_notification(hive_event, watch_users)
                         error_code = log_time_difference_errors(
                             hive_event["timestamp"], error_code
                         )
-
                         async_publish(
                             Events.HIVE_TRANSFER,
                             hive_event=hive_event,
                             db_client=db_client,
-                            quote=all_quotes.quote,
                         )
                         count += 1
                         # if count == 2:
@@ -822,27 +742,9 @@ async def transactions_loop(watch_users: List[str]):
                                 f"{icon} {count} transactions processed. "
                                 f"Node: {old_node} -> {hive_client.rpc.url}"
                             )
-                            await all_quotes.get_all_quotes()
-                            logger.info(
-                                f"{icon} Crypto: {all_quotes.fetch_date}",
-                                extra={"quote": all_quotes.quote.log_data},
-                            )
-
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
-                        if notification:
-                            await all_quotes.get_all_quotes()
-                            logger.info(
-                                f"{icon} Quote Age: {all_quotes.quote.age} "
-                                f"Crypto: {all_quotes.fetch_date}",
-                                extra={"quote": all_quotes.quote.log_data},
-                            )
-                            async_publish(
-                                Events.HIVE_TRANSFER_NOTIFY,
-                                hive_event=hive_event,
-                                db_client=db_client,
-                            )  # noqa
 
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
@@ -872,10 +774,14 @@ async def runner(watch_users: List[str]):
         logger.info(f"{icon} Redis connection established")
 
     try:
-        # async_subscribe(Events.HIVE_TRANSFER_NOTIFY, transactions_report)
+        # Events.HIVE_TRANSFER - takes HiveEvent and stores only the required ones
+        # re-pbulishes the event as Events.HIVE_TRANSFER_NOTIFY as a
+        # HiveTransfer object
+        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction_v2)
+        async_subscribe(Events.HIVE_TRANSFER_NOTIFY, hive_transaction_report)
+
         async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
         async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_witness_vote)
-        async_subscribe(Events.HIVE_TRANSFER_NOTIFY, db_store_transaction_v2)
         tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -909,12 +815,15 @@ def main(
     Returns:
         None
     """
+    global COMMAND_LINE_WATCH_USERS
+
     logger.info(
         f"{icon} ✅ Hive Monitor v2: " f"{icon}. Version: {CONFIG.version}",
         extra={"notification": True},
     )
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
+    COMMAND_LINE_WATCH_USERS = watch_users
     asyncio.run(runner(watch_users))
     INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")

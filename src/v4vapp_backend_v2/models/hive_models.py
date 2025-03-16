@@ -18,12 +18,13 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConver
 #     detect_paywithsats,
 # )
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
 from v4vapp_backend_v2.helpers.hive_extras import (
-    TRANSFER_OP_TYPES,
     HiveTransactionTypes,
     decode_memo,
     get_blockchain_instance,
     get_event_id,
+    get_hive_block_explorer_link,
     get_hive_client,
 )
 
@@ -98,6 +99,32 @@ class HiveTransaction(BaseModel):
     def encrypted(self) -> bool:
         return self.d_memo != self.memo
 
+    @property
+    def notification_str(self) -> str:
+        markdown_link = (
+            get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
+        )
+        ans = (
+            f"{self.hive_from} sent {self.amount_str} to {self.hive_to} "
+            f"(${self.conv.usd:>.2f}) {self.d_memo} {markdown_link}"
+        )
+        return ans
+
+    @property
+    def log_str(self) -> str:
+
+        log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        time_diff = seconds_only(datetime.now(tz=timezone.utc) - self.timestamp)
+        log_str = (
+            f"{self.hive_from:<17} "
+            f"sent {float(self.amount_decimal):12,.3f} {self.amount_symbol:>4} "
+            f"to {self.hive_to:<17} "
+            f" - {self.d_memo[:30]:>30} "
+            f"{time_diff} ago "
+            f"{log_link} {self.op_in_trx:>3}"
+        )
+        return log_str
+
     @classmethod
     async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
         """
@@ -108,7 +135,8 @@ class HiveTransaction(BaseModel):
         to the fetched quote.
 
         Args:
-            quote (QuoteResponse | None): The quote to update. If None, fetches all quotes.
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
 
         Returns:
             None
@@ -139,7 +167,6 @@ if __name__ == "__main__":
     internal_config = InternalConfig()
     hive_config = internal_config.config.hive
     memo_keys = hive_config.memo_keys
-    name_memo_keys = hive_config.name_memo_keys
     hive = get_hive_client(keys=memo_keys)
     # get_current_block_num = hive.get_dynamic_global_properties().get(
     #     "head_block_number"

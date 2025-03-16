@@ -3,13 +3,15 @@ from datetime import timedelta
 
 def seconds_only(delta: timedelta) -> timedelta:
     """
-    Returns a new timedelta object with only the days and seconds components of the input timedelta.
+    Returns a new timedelta object with only the days and seconds
+    components of the input timedelta.
 
     Args:
         delta (timedelta): The input timedelta object.
 
     Returns:
-        timedelta: A new timedelta object with only the days and seconds components of the input timedelta.
+        timedelta: A new timedelta object with only the days and seconds
+        components of the input timedelta.
     """
     return timedelta(days=delta.days, seconds=delta.seconds)
 

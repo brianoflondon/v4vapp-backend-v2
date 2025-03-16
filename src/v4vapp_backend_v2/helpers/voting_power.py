@@ -1,8 +1,8 @@
 import logging
 from dataclasses import dataclass
 
-from beem import Hive
-from beem.account import Account
+from beem import Hive  # type: ignore
+from beem.account import Account  # type: ignore
 
 from v4vapp_backend_v2.helpers.hive_extras import get_hive_client
 

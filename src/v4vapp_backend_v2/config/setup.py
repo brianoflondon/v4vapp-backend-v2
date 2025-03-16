@@ -128,17 +128,6 @@ class HiveConfig(BaseModel):
         return [acc.memo_key for acc in self.hive_accs.values() if acc.memo_key]
 
     @property
-    def name_memo_keys(self) -> Dict[str, str]:
-        """
-        Retrieve a dictionary of Hive account names and memo keys.
-
-        Returns:
-            Dict[str, str]: A dictionary containing the Hive account names and memo
-            keys.
-        """
-        return [name for name, acc in self.hive_accs.items() if acc.memo_key]
-
-    @property
     def hive_acc_names(self) -> List[str]:
         """
         Retrieve the names of all Hive accounts.

@@ -7,11 +7,11 @@ from typing import Any, Dict, List
 import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
-from beem.exceptions import MissingKeyError
+from beem.exceptions import MissingKeyError  # type: ignore
 from beem.market import Market  # type: ignore
 from beem.memo import Memo  # type: ignore
 from beem.price import Price  # type: ignore
-from ecdsa import MalformedPointError
+from ecdsa import MalformedPointError  # type: ignore
 from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger

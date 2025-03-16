@@ -28,7 +28,7 @@ class CryptoConv(BaseModel):
     fetch_date: datetime | None = None
 
     model_config = ConfigDict(
-        use_enum_values=True,  # Serializes enum as its value (e.g., "hive" instead of Currency.HIVE)
+        use_enum_values=True,  # Serializes enum as its value
     )
 
 
