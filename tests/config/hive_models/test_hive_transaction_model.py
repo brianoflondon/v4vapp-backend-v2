@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 import pickle
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
@@ -126,12 +127,27 @@ def test_instantiation_mock_all_quote_calls(sample_post):
                 assert hive_trx.conv.sats_hive == 288.5293
 
 
+@pytest.fixture
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    yield
+    # No need to restore the original value, monkeypatch will handle it
+
+
 @pytest.mark.skipif(
     HIVE_MEMO_TEST_KEY == "TEST_KEY",
     reason="No test key provided.",
 )
 @pytest.mark.asyncio
-async def test_many_hive_transactions(sample_quote):
+async def test_many_hive_transactions(sample_quote, set_base_config_path):
     with open("tests/data/hive/sample_hive_transactions.pkl", "rb") as f:
         all_posts = pickle.load(f)
 
@@ -145,4 +161,3 @@ async def test_many_hive_transactions(sample_quote):
         if hive_trx.hive_from == HIVE_ACC_TEST or hive_trx.hive_to == HIVE_ACC_TEST:
             if hive_trx.memo.startswith("#"):
                 assert hive_trx.d_memo != hive_trx.memo
-                
