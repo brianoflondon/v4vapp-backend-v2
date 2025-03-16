@@ -190,5 +190,3 @@ def test_sync_redis_client_context_manager():
         assert redis_sync_client.get("test_key") == "test_value"
         redis_sync_client.flushdb()
     redis_sync_client.close()
-
-    

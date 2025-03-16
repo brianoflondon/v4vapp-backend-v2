@@ -53,6 +53,7 @@ class V4VAsyncRedis:
     def __init__(self, **kwargs):
         self.config = InternalConfig().config.redis
         no_config = kwargs.get("no_config", False)
+        kwargs.pop("no_config", None)
         if not no_config and "host" not in kwargs and "port" not in kwargs:
             self.host = self.config.host
             self.port = self.config.port
@@ -85,13 +86,18 @@ class V4VAsyncRedis:
                     self.sync_redis = SyncRedis(**kwargs)
                 else:
                     self.redis = Redis(
-                        host=self.host, port=self.port, db=self.db, **kwargs
+                        host=self.host,
+                        port=self.port,
+                        db=self.db,
+                        decode_responses=self.decode_responses,
+                        **kwargs,
                     )
                     self.sync_redis = SyncRedis(
                         host=self.host,
                         port=self.port,
                         db=self.db,
-                        **self.kwargs,
+                        decode_responses=self.decode_responses,
+                        **kwargs,
                     )
             self.host = self.redis.connection_pool.connection_kwargs["host"]
             self.port = self.redis.connection_pool.connection_kwargs["port"]
