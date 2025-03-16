@@ -3,7 +3,9 @@ from dataclasses import dataclass
 
 from beem import Hive
 from beem.account import Account
+
 from v4vapp_backend_v2.helpers.hive_extras import get_hive_client
+
 
 @dataclass
 class VotingPower:
@@ -46,6 +48,7 @@ class VotingPower:
     __str__() -> str:
         Returns a string representation of the voting power.
     """
+
     voter: str = "_total"
     proposal: int = 0
     proposal_total_votes: float = 0.0
@@ -57,6 +60,12 @@ class VotingPower:
     prop_percent: float = 0.0
     total_value: float = 0.0
     total_percent: float = 0.0
+
+    def __init__(self, voter: str = "", hive: Hive = None, proposal: int = 0):
+        super().__init__()
+        if voter:
+            self.set_up(voter, hive, proposal)
+        pass
 
     def set_up(
         self,

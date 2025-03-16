@@ -8,7 +8,6 @@ from typing import Annotated, Any, List, Tuple
 import typer
 from beem.amount import Amount  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
-
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 
@@ -22,12 +21,8 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
 from v4vapp_backend_v2.helpers.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_good_nodes,
-    get_hive_block_explorer_link,
-    get_hive_client,
-    get_hive_witness_details,
-)
+    MAX_HIVE_BATCH_SIZE, get_good_nodes, get_hive_block_explorer_link,
+    get_hive_client, get_hive_witness_details)
 from v4vapp_backend_v2.helpers.voting_power import VotingPower
 from v4vapp_backend_v2.models.hive_models import HiveTransaction
 
@@ -217,7 +212,7 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     """
     notification = True if hive_event.get("witness") == "brianoflondon" else False
     voted_for = "voted for" if hive_event.get("approve") else "unvoted"
-    voter_power = VotingPower(hive_event.get("account"))
+    voter_power = VotingPower(voter=hive_event.get("account"), proposal=303)
     message = (
         f"{icon}👁️ {hive_event.get('account')} "
         f"{voted_for} {hive_event.get('witness')} "
