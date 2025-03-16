@@ -34,6 +34,17 @@ DEFAULT_GOOD_NODES = [
 MAX_HIVE_BATCH_SIZE = 25
 
 
+class HiveTransactionTypes(StrEnum):
+    transfer = "transfer"
+    recurrent_transfer = "recurrent_transfer"
+
+
+TRANSFER_OP_TYPES = [
+    HiveTransactionTypes.transfer,
+    HiveTransactionTypes.recurrent_transfer,
+]
+
+
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
 def get_hive_client(*args, **kwargs) -> Hive:
     """
