@@ -82,7 +82,7 @@ class QuoteResponse(BaseModel):
     hive_hbd: float = 0
     raw_response: RawResponseType = {}
     source: str = ""
-    fetch_date: datetime = datetime.now(tz=timezone.utc)
+    fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc)
     error: str = ""
     error_details: Dict[str, Any] = {}
 
@@ -94,7 +94,7 @@ class QuoteResponse(BaseModel):
         hive_hbd: float = 0,
         raw_response: RawResponseType = {},
         source: str = "",
-        fetch_date: datetime = datetime.now(tz=timezone.utc),
+        fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
         error: str = "",
         error_details: Dict[str, Any] = {},
     ) -> None:
@@ -114,7 +114,8 @@ class QuoteResponse(BaseModel):
     def sats_hive(self) -> float:
         """Calculate Satoshis per HIVE based on btc_usd and hive_usd."""
         if self.btc_usd == 0:
-            raise ValueError("btc_usd cannot be zero")
+            # raise ValueError("btc_usd cannot be zero")
+            return 0.0
         sats_per_usd = SATS_PER_BTC / self.btc_usd
         return round(sats_per_usd * self.hive_usd, 4)
 
@@ -122,7 +123,8 @@ class QuoteResponse(BaseModel):
     def sats_hbd(self) -> float:
         """Calculate Satoshis per HBD based on btc_usd and hbd_usd."""
         if self.btc_usd == 0:
-            raise ValueError("btc_usd cannot be zero")
+            # raise ValueError("btc_usd cannot be zero")
+            return 0.0
         sats_per_usd = SATS_PER_BTC / self.btc_usd
         return round(sats_per_usd * self.hbd_usd, 4)
 
@@ -130,13 +132,14 @@ class QuoteResponse(BaseModel):
     def sats_usd(self) -> float:
         """Calculate Satoshis per USD based on btc_usd."""
         if self.btc_usd == 0:
-            raise ValueError("btc_usd cannot be zero")
+            # raise ValueError("btc_usd cannot be zero")
+            return 0.0
         return round(SATS_PER_BTC / self.btc_usd, 4)
 
     @computed_field
-    def age(self) -> int:
+    def age(self) -> float:
         """Calculate the age of the quote in seconds."""
-        return int((datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds())
+        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
 
     @property
     def log_data(self) -> Dict[str, Any]:
