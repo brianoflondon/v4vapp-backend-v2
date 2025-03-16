@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -16,6 +17,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
     CoinGecko,
     CoinMarketCap,
     HiveInternalMarket,
+    QuoteResponse,
 )
 
 
@@ -260,16 +262,7 @@ async def test_get_all_quotes(mocker):
     assert quote.error == ""
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "failing_service",
-    ["CoinGecko", "CoinMarketCap", "Binance", "HiveInternalMarket"],
-)
-async def test_get_all_quotes_with_single_failure(mocker, failing_service):
-    """
-    Test that AllQuotes handles a single service failure correctly while others succeed.
-    Parametrized to test each service failing independently.
-    """
+def load_and_mock_responses(mocker, failing_service):
     # Load all successful responses
     with open("tests/data/crypto_prices/CoinGecko.json") as f:
         coingecko_resp = json.load(f).get("raw_response")
@@ -323,6 +316,24 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
         mock_market.return_value.ticker.side_effect = Exception("Hive market error")
     else:
         mock_market.return_value.ticker.return_value = hive_resp
+    return coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failing_service",
+    ["CoinGecko", "CoinMarketCap", "Binance", "HiveInternalMarket"],
+)
+async def test_get_all_quotes_with_single_failure(mocker, failing_service):
+    """
+    Test that AllQuotes handles a single service failure correctly while others succeed.
+    Parametrized to test each service failing independently.
+    """
+    
+    # Extracted the setup into this function to avoid code duplication
+    coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp = (
+        load_and_mock_responses(mocker, failing_service)
+    )
 
     # Execute the test
     all_quotes = AllQuotes()
@@ -330,6 +341,10 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
 
     # Test the authoritative quote fetch
     quote = all_quotes.quote
+    quote_ages = [quote.age for quote in all_quotes.quotes.values()]
+    for age in quote_ages:
+        assert age > 0
+        assert age < 1000
     assert quote is not None
     assert quote.error == ""
 
@@ -365,6 +380,13 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
             assert quote is not None
         assert quote.fetch_date is not None
         assert quote.raw_response is not None
+
+
+def test_quote_response_fetch_date():
+    quote = QuoteResponse()
+    assert quote.fetch_date == datetime(1970, 1, 1, tzinfo=timezone.utc)
+    assert quote.age > 1742126888  # 55 years in seconds back to Jan 1 1970
+
 
 async def fetch_all_quote_json_files():
     """
