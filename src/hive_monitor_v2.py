@@ -180,11 +180,11 @@ async def hive_transaction_report(
     log_str = hive_trx.log_str
     notification_str = hive_trx.notification_str
     logger.info(
-        log_str,
+        f"{icon} {log_str}",
         extra={"notification": False},
     )
     logger.info(
-        notification_str,
+        f"{icon} {notification_str}",
         extra={"hive_trx": hive_trx.model_dump(), "notification": True},
     )
 
@@ -307,7 +307,17 @@ async def db_store_transaction_v2(
     try:
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
             if HiveTransaction.last_quote.age > 60:
+                quote = HiveTransaction.last_quote
                 await HiveTransaction.update_quote()
+                logger.info(
+                    f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
+                    extra={
+                        "notification": False,
+                        "quote": HiveTransaction.last_quote.model_dump(
+                            exclude={"raw_response"}
+                        ),
+                    },
+                )
 
             hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
             hive_trx = HiveTransaction(**hive_event, hive_inst=hive_inst)
@@ -764,7 +774,6 @@ async def runner(watch_users: List[str]):
     Returns:
         None
     """
-
     async with V4VAsyncRedis(decode_responses=False) as redis_cllient:
         try:
             await redis_cllient.ping()
@@ -773,6 +782,15 @@ async def runner(watch_users: List[str]):
             raise e
         logger.info(f"{icon} Redis connection established")
 
+    await HiveTransaction.update_quote()
+    quote = HiveTransaction.last_quote
+    logger.info(
+        f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
+        extra={
+            "notification": False,
+            "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
+        },
+    )
     try:
         # Events.HIVE_TRANSFER - takes HiveEvent and stores only the required ones
         # re-pbulishes the event as Events.HIVE_TRANSFER_NOTIFY as a

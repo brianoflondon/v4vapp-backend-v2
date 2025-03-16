@@ -102,11 +102,11 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes",
         )
         nodes = response.json()
-        logger.info(
+        logger.debug(
             "Fetched good nodes Last good nodes", extra={"beacon_response": nodes}
         )
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
-        logger.info(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+        logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         with V4VAsyncRedis().sync_redis as redis_sync_client:
             redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
     except Exception as e:
