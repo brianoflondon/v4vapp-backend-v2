@@ -1,4 +1,6 @@
 import json
+import os
+import pickle
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -7,8 +9,15 @@ from beem.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.hive_extras import HiveTransactionTypes, get_event_id
+from v4vapp_backend_v2.helpers.hive_extras import (
+    HiveTransactionTypes,
+    get_event_id,
+    get_hive_client,
+)
 from v4vapp_backend_v2.models.hive_models import HiveTransaction, HiveTransactionFlags
+
+HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
 
 
 @pytest.fixture
@@ -70,45 +79,70 @@ async def test_hive_transaction_initialization(sample_post, sample_quote):
     assert hive_trx.conv.sats_hive == 288.5293
 
 
-def test_instantiation_mock_all_quote_calls(sample_post):
-    with open("tests/data/crypto_prices/all_quotes.json", "r") as f:
-        all_quotes = json.load(f)
-        # mock the AllQuotes object in the hive_models file
-
+def mock_all_quotes_fixture(all_quotes):
     for quote in all_quotes["quotes"].values():
         quote["fetch_date"] = datetime.now(tz=timezone.utc)
     all_quotes["fetch_date"] = datetime.now(tz=timezone.utc)
 
     mock_all_quotes = AllQuotes(**all_quotes)
 
-    with patch(
-        "v4vapp_backend_v2.models.hive_models.AllQuotes", return_value=mock_all_quotes
-    ):
+    return mock_all_quotes
+
+
+def test_instantiation_mock_all_quote_calls(sample_post):
+    with open("tests/data/crypto_prices/all_quotes.json", "r") as f:
+        all_quotes = json.load(f)
+        mock_all_quotes = mock_all_quotes_fixture(all_quotes)
+
         with patch(
-            "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes.get_all_quotes",
-            new=AsyncMock(return_value=None),
+            "v4vapp_backend_v2.models.hive_models.AllQuotes",
+            return_value=mock_all_quotes,
         ):
-            hive_trx = HiveTransaction(**sample_post)
+            with patch(
+                "v4vapp_backend_v2.helpers.crypto_prices.AllQuotes.get_all_quotes",
+                new=AsyncMock(return_value=None),
+            ):
+                hive_trx = HiveTransaction(**sample_post)
 
-        assert hive_trx.id == get_event_id(sample_post)
-        assert hive_trx.trx_id == sample_post["trx_id"]
-        assert hive_trx.timestamp == sample_post["timestamp"]
-        assert hive_trx.type == sample_post["type"]
-        assert hive_trx.op_in_trx == sample_post["op_in_trx"]
-        assert hive_trx.hive_from == sample_post["from"]
-        assert hive_trx.hive_to == sample_post["to"]
-        assert hive_trx.amount == sample_post["amount"]
-        assert hive_trx.memo == sample_post["memo"]
-        assert hive_trx.block_num == sample_post["block_num"]
-        assert hive_trx.amount_str == str(Amount(sample_post["amount"]))
-        assert hive_trx.amount_decimal == str(
-            Amount(sample_post["amount"]).amount_decimal
-        )
-        assert hive_trx.amount_symbol == Amount(sample_post["amount"]).symbol
-        assert hive_trx.amount_value == Amount(sample_post["amount"]).amount
-        assert hive_trx.conv.hive == 87.122
-        assert hive_trx.conv.usd == 20.857004
-        assert hive_trx.conv.sats == 25137
-        assert hive_trx.conv.sats_hive == 288.5293
+                assert hive_trx.id == get_event_id(sample_post)
+                assert hive_trx.trx_id == sample_post["trx_id"]
+                assert hive_trx.timestamp == sample_post["timestamp"]
+                assert hive_trx.type == sample_post["type"]
+                assert hive_trx.op_in_trx == sample_post["op_in_trx"]
+                assert hive_trx.hive_from == sample_post["from"]
+                assert hive_trx.hive_to == sample_post["to"]
+                assert hive_trx.amount == sample_post["amount"]
+                assert hive_trx.memo == sample_post["memo"]
+                assert hive_trx.block_num == sample_post["block_num"]
+                assert hive_trx.amount_str == str(Amount(sample_post["amount"]))
+                assert hive_trx.amount_decimal == str(
+                    Amount(sample_post["amount"]).amount_decimal
+                )
+                assert hive_trx.amount_symbol == Amount(sample_post["amount"]).symbol
+                assert hive_trx.amount_value == Amount(sample_post["amount"]).amount
+                assert hive_trx.conv.hive == 87.122
+                assert hive_trx.conv.usd == 20.857004
+                assert hive_trx.conv.sats == 25137
+                assert hive_trx.conv.sats_hive == 288.5293
 
 
+@pytest.mark.skipif(
+    HIVE_MEMO_TEST_KEY == "TEST_KEY",
+    reason="No test key provided.",
+)
+@pytest.mark.asyncio
+async def test_many_hive_transactions(sample_quote):
+    with open("tests/data/hive/sample_hive_transactions.pkl", "rb") as f:
+        all_posts = pickle.load(f)
+
+    # Set up with the sample_quote
+    HiveTransaction.last_quote = sample_quote
+    hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
+    for post in all_posts:
+        hive_trx = HiveTransaction(**post, hive_inst=hive_inst)
+        assert hive_trx.id == get_event_id(post)
+        assert hive_trx.conv.msats > 0
+        if hive_trx.hive_from == HIVE_ACC_TEST or hive_trx.hive_to == HIVE_ACC_TEST:
+            if hive_trx.memo.startswith("#"):
+                assert hive_trx.d_memo != hive_trx.memo
+                
