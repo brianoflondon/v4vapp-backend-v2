@@ -1,30 +1,33 @@
 {
-  "hive_usd": 0.2379,
-  "hbd_usd": 0.9989,
-  "btc_usd": 83284.0,
-  "hive_hbd": 0.2382,
+  "hive_usd": 0.2398,
+  "hbd_usd": 0.9954,
+  "btc_usd": 83005.0,
+  "hive_hbd": 0.2409,
   "raw_response": {
     "bitcoin": {
       "btc": 1.0,
-      "usd": 83284,
-      "eur": 76220,
-      "aud": 132084
+      "usd": 83005,
+      "eur": 76271,
+      "aud": 131130
     },
     "hive": {
-      "btc": 2.86e-6,
-      "usd": 0.237907,
-      "eur": 0.217728,
-      "aud": 0.377308
+      "btc": 2.89e-6,
+      "usd": 0.239808,
+      "eur": 0.220351,
+      "aud": 0.378844
     },
     "hive_dollar": {
-      "btc": 0.000012,
-      "usd": 0.998877,
-      "eur": 0.914154,
-      "aud": 1.58
+      "btc": 0.00001199,
+      "usd": 0.995371,
+      "eur": 0.914611,
+      "aud": 1.57
     }
   },
   "source": "CoinGecko",
-  "fetch_date": "2025-03-14T10:07:28.424422Z",
+  "fetch_date": "2025-03-16T13:15:15.673438Z",
   "error": "",
-  "error_details": {}
+  "error_details": {},
+  "sats_hive": 288.8983,
+  "sats_hbd": 1199.2049,
+  "age": 0.312247
 }

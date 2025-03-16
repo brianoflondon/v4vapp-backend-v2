@@ -2,7 +2,7 @@
   "hive_usd": 0.0,
   "hbd_usd": 0.0,
   "btc_usd": 0.0,
-  "hive_hbd": 0.2431,
+  "hive_hbd": 0.2411,
   "raw_response": {
     "highest_bid": {
       "quote": {
@@ -12,7 +12,7 @@
           "id": "HBD",
           "symbol": "HBD"
         },
-        "amount": "252",
+        "amount": "1000",
         "symbol": "HBD"
       },
       "base": {
@@ -22,10 +22,10 @@
           "id": "HIVE",
           "symbol": "HIVE"
         },
-        "amount": "61",
+        "amount": "241",
         "symbol": "HIVE"
       },
-      "price": "0.2420634920634920634920634921"
+      "price": "0.241"
     },
     "latest": {
       "quote": {
@@ -35,7 +35,7 @@
           "id": "HBD",
           "symbol": "HBD"
         },
-        "amount": "533",
+        "amount": "659",
         "symbol": "HBD"
       },
       "base": {
@@ -45,10 +45,10 @@
           "id": "HIVE",
           "symbol": "HIVE"
         },
-        "amount": "129",
+        "amount": "159",
         "symbol": "HIVE"
       },
-      "price": "0.2420262664165103189493433396"
+      "price": "0.2412746585735963581183611533"
     },
     "lowest_ask": {
       "quote": {
@@ -58,7 +58,7 @@
           "id": "HBD",
           "symbol": "HBD"
         },
-        "amount": "168",
+        "amount": "887",
         "symbol": "HBD"
       },
       "base": {
@@ -68,12 +68,12 @@
           "id": "HIVE",
           "symbol": "HIVE"
         },
-        "amount": "41",
+        "amount": "214",
         "symbol": "HIVE"
       },
-      "price": "0.2440476190476190476190476190"
+      "price": "0.2412626832018038331454340474"
     },
-    "percent_change": -0.40082742058195914,
+    "percent_change": -2.564620383997086,
     "hbd_volume": {
       "asset": {
         "asset": "@@000000013",
@@ -81,7 +81,7 @@
         "id": "@@000000013",
         "symbol": "HBD"
       },
-      "amount": "36126.483",
+      "amount": "21658.827",
       "symbol": "HBD"
     },
     "hive_volume": {
@@ -91,12 +91,15 @@
         "id": "@@000000021",
         "symbol": "HIVE"
       },
-      "amount": "152152.064",
+      "amount": "87154.544",
       "symbol": "HIVE"
     }
   },
   "source": "HiveInternalMarket",
-  "fetch_date": "2025-03-14T10:07:48.054416Z",
+  "fetch_date": "2025-03-16T13:15:15.306246Z",
   "error": "",
-  "error_details": {}
+  "error_details": {},
+  "sats_hive": 0.0,
+  "sats_hbd": 0.0,
+  "age": 0.685827
 }

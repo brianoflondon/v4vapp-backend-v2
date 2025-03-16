@@ -35,13 +35,13 @@ MAX_HIVE_BATCH_SIZE = 25
 
 
 class HiveTransactionTypes(StrEnum):
-    transfer = "transfer"
-    recurrent_transfer = "recurrent_transfer"
+    TRANSFER = "transfer"
+    RECURRENT_TRANSFER = "recurrent_transfer"
 
 
 TRANSFER_OP_TYPES = [
-    HiveTransactionTypes.transfer,
-    HiveTransactionTypes.recurrent_transfer,
+    HiveTransactionTypes.TRANSFER,
+    HiveTransactionTypes.RECURRENT_TRANSFER,
 ]
 
 

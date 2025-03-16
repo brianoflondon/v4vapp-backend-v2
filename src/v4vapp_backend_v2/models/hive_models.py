@@ -71,7 +71,6 @@ class HiveTransaction(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **post: Any) -> None:
-
         post["_id"] = get_event_id(post)
         super().__init__(**post)
         amount = Amount(self.amount)
@@ -191,6 +190,7 @@ if __name__ == "__main__":
                 f"{hive_trx.id}  {hive_trx.conv.hive:>7.2f} "
                 f"{hive_trx.conv.usd:>7.2f} {hive_trx.d_memo}"
             )
+        print(hive_trx)
 
     end = timer()
     logger.info(f"Time taken: {end - start}")

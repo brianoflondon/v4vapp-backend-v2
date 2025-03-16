@@ -329,7 +329,7 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
     Test that AllQuotes handles a single service failure correctly while others succeed.
     Parametrized to test each service failing independently.
     """
-    
+
     # Extracted the setup into this function to avoid code duplication
     coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp = (
         load_and_mock_responses(mocker, failing_service)

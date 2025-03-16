@@ -97,6 +97,7 @@ class QuoteResponse(BaseModel):
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
         error: str = "",
         error_details: Dict[str, Any] = {},
+        **kwargs,
     ) -> None:
         super().__init__()
         self.hive_usd = round(hive_usd, 4)
