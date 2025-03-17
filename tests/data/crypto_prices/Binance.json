@@ -1,32 +1,36 @@
 {
-  "hive_usd": 0.2376,
+  "hive_usd": 0.2394,
   "hbd_usd": 1.0,
-  "btc_usd": 83178.9,
-  "hive_hbd": 0.2376,
+  "btc_usd": 82972.5,
+  "hive_hbd": 0.2411,
   "raw_response": [
     {
       "symbol": "BTCUSDT",
-      "bidPrice": "83178.90000000",
-      "bidQty": "2.04653000",
-      "askPrice": "83178.91000000",
-      "askQty": "0.48540000"
+      "bidPrice": "82972.46000000",
+      "bidQty": "1.63343000",
+      "askPrice": "82972.47000000",
+      "askQty": "2.27351000"
     },
     {
       "symbol": "HIVEBTC",
-      "bidPrice": "0.00000285",
-      "bidQty": "15452.00000000",
-      "askPrice": "0.00000286",
-      "askQty": "6490.00000000"
+      "bidPrice": "0.00000288",
+      "bidQty": "25556.00000000",
+      "askPrice": "0.00000289",
+      "askQty": "2991.00000000"
     },
     {
       "symbol": "HIVEUSDT",
-      "bidPrice": "0.23750000",
-      "bidQty": "2025.00000000",
-      "askPrice": "0.23770000",
-      "askQty": "6347.00000000"
+      "bidPrice": "0.23940000",
+      "bidQty": "32.00000000",
+      "askPrice": "0.23950000",
+      "askQty": "4189.00000000"
     }
   ],
-  "fetch_date": "2025-03-11T19:00:49.801113Z",
+  "source": "Binance",
+  "fetch_date": "2025-03-16T13:15:14.131781Z",
   "error": "",
-  "error_details": {}
+  "error_details": {},
+  "sats_hive": 288.5293,
+  "sats_hbd": 1205.2186,
+  "age": 1.859698
 }

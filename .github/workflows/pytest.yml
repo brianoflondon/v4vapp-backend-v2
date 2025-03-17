@@ -85,6 +85,9 @@ jobs:
 
       # Run tests
       - name: Test with pytest
+        env:
+          HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
+          HIVE_MEMO_TEST_KEY: ${{ secrets.HIVE_MEMO_TEST_KEY }}
         run: |
           poetry run pytest
 

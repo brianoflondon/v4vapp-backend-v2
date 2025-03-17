@@ -1,4 +1,4 @@
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 version: "0.1.0-test"
 
 logging:
@@ -12,7 +12,7 @@ logging:
     httpx: WARNING
     lighthive: DEBUG
 
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 default_lnd_connection: example
 
 lnd_connections:
@@ -35,7 +35,7 @@ lnd_connections:
     cert_filename: tls-fake.safe-cert
     use_proxy: http://proxy.example.com:8888
 
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 
 tailscale:
   tailnet_name: anything.ts.net
@@ -45,7 +45,7 @@ tailscale:
 telegram:
   chat_id: -1000
 
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 
 default_db_connection: conn_1
 default_dbb: test_db
@@ -117,14 +117,24 @@ dbs:
       test2_collection:
       test2_collection2:
 
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 
 redis:
   host: localhost
   port: 6379
   db: 0
-################# TEST CONFIG #################
+########### TEST CONFIG NO SECRETS #################
 
-# binance:
-#   api_key: binance-api-key
-#   api_secret: binance-secret-key
+binance:
+  api_key: binance-api-key
+  api_secret: binance-secret-key
+########### TEST CONFIG NO SECRETS #################
+
+hive:
+  someaccount:
+    role: server
+    posting_key: somepostingkey
+    active_key: someactive
+    memo_key: somememo
+
+########### TEST CONFIG NO SECRETS #################

@@ -1,15 +1,21 @@
+import json
 import random
+import struct
 from enum import StrEnum
 from typing import Any, Dict, List
 
 import httpx
 from beem import Hive  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
+from beem.exceptions import MissingKeyError  # type: ignore
 from beem.market import Market  # type: ignore
+from beem.memo import Memo  # type: ignore
 from beem.price import Price  # type: ignore
+from ecdsa import MalformedPointError  # type: ignore
 from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -23,9 +29,23 @@ DEFAULT_GOOD_NODES = [
     "https://rpc.mahdiyari.info",
     "https://api.syncad.com",
 ]
+
+
 MAX_HIVE_BATCH_SIZE = 25
 
 
+class HiveTransactionTypes(StrEnum):
+    TRANSFER = "transfer"
+    RECURRENT_TRANSFER = "recurrent_transfer"
+
+
+TRANSFER_OP_TYPES = [
+    HiveTransactionTypes.TRANSFER,
+    HiveTransactionTypes.RECURRENT_TRANSFER,
+]
+
+
+# TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
 def get_hive_client(*args, **kwargs) -> Hive:
     """
     Create a Hive client instance.
@@ -35,7 +55,18 @@ def get_hive_client(*args, **kwargs) -> Hive:
     """
     if "node" not in kwargs:
         # shuffle good nodes
-        good_nodes = get_good_nodes()
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            good_nodes_json = redis_sync_client.get("good_nodes")
+        if good_nodes_json and isinstance(good_nodes_json, str):
+            ttl = redis_sync_client.ttl("good_nodes")
+            if isinstance(ttl, int) and ttl < 3000:
+                good_nodes = get_good_nodes()
+            else:
+                good_nodes = json.loads(good_nodes_json)
+        else:
+            good_nodes = get_good_nodes()
+        redis_sync_client.close()
+        # good_nodes = DEFAULT_GOOD_NODES
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
     hive = Hive(*args, **kwargs)
@@ -46,9 +77,11 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
     Create a Blockchain instance.
     """
-
-    hive = get_hive_client(*args, **kwargs)
-    blockchain = Blockchain(hive_instance=hive, *args, **kwargs)
+    if "hive_instance" not in kwargs:
+        hive = get_hive_client(*args, **kwargs)
+        blockchain = Blockchain(hive_instance=hive, *args, **kwargs)
+    else:
+        blockchain = Blockchain(*args, **kwargs)
 
     return blockchain
 
@@ -69,10 +102,27 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes",
         )
         nodes = response.json()
+        logger.debug(
+            "Fetched good nodes Last good nodes", extra={"beacon_response": nodes}
+        )
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
+        logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
     except Exception as e:
-        logger.warning(f"Failed to fetch good nodes: {e}")
-        good_nodes = DEFAULT_GOOD_NODES
+        with V4VAsyncRedis().sync_redis as redis_sync_client:
+            good_nodes_json = redis_sync_client.get("good_nodes")
+        if good_nodes_json and isinstance(good_nodes_json, str):
+            good_nodes = json.loads(good_nodes_json)
+        if good_nodes:
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using last good nodes.", {"extra": e}
+            )
+        else:
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e}
+            )
+            good_nodes = DEFAULT_GOOD_NODES
 
     return good_nodes
 
@@ -183,6 +233,86 @@ def get_hive_block_explorer_link(
         return link_html
     markdown_link = f"[{block_explorer.name}]({link_html})"
     return markdown_link
+
+
+def get_event_id(hive_event: dict) -> str:
+    """
+    Get the event id from the Hive event.
+
+    Args:
+        hive_event (dict): The Hive event.
+
+    Returns:
+        str: The event id.
+    """
+    trx_id = hive_event.get("trx_id", "")
+    op_in_trx = hive_event.get("op_in_trx", 0)
+    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
+
+
+def decode_memo(
+    memo: str = "",
+    hive_inst: Hive | None = None,
+    memo_keys: List[str] = [],
+    trx_id: str = "",
+    op_in_trx: int = 0,
+) -> str:
+    """
+    Decode an encrypted memo.
+
+    Args:
+        memo (str): The encrypted memo to decode.
+        memo_keys (List[str]): A list of memo keys.
+        hive_inst (Hive): A Hive instance.
+
+    Returns:
+        str: The decrypted memo.
+    """
+    if not memo and not trx_id:
+        return ""
+
+    if not memo_keys and not hive_inst:
+        raise ValueError("No memo keys or Hive instance provided.")
+
+    if memo_keys and not hive_inst:
+        hive_inst = get_hive_client(keys=memo_keys)
+        blockchain = get_blockchain_instance(hive_instance=hive_inst)
+
+    if not hive_inst:
+        raise ValueError("No Hive instance provided.")
+
+    if trx_id and not memo:
+        blockchain = get_blockchain_instance(hive_instance=hive_inst)
+        trx = blockchain.get_transaction(trx_id)
+        memo = trx.get("operations")[op_in_trx].get("value").get("memo")
+
+    if not memo[0] == "#":
+        return memo
+
+    try:
+        m = Memo(from_account=None, to_account=None, blockchain_instance=hive_inst)
+        d_memo = m.decrypt(memo)
+        if d_memo == memo:
+            return memo
+        return d_memo[1:]
+    except struct.error:
+        # arrises when an unencrypted memo is decrypted..
+        return memo
+    except ValueError as e:
+        # Memo is not encrypted
+        logger.info(f"Memo is not encrypted: {e}")
+        return memo
+    except (MissingKeyError, MalformedPointError) as e:
+        logger.info(f"MissingKeyError: {e}")
+        return memo
+
+    except Exception as e:
+        logger.error(
+            f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo}
+        )
+        logger.error(memo)
+        logger.exception(e)
+        return memo
 
 
 if __name__ == "__main__":

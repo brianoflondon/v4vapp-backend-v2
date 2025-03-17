@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
@@ -101,6 +102,42 @@ class RedisConnectionConfig(BaseModel):
     kwargs: Dict[str, Any] = {}
 
 
+class HiveRoles(StrEnum):
+    server = "server"
+    treasury = "treasury"
+
+
+class HiveAccountConfig(BaseModel):
+    role: HiveRoles = HiveRoles.server
+    posting_key: str = ""
+    active_key: str = ""
+    memo_key: str = ""
+
+
+class HiveConfig(BaseModel):
+    hive_accs: Dict[str, HiveAccountConfig] = {}
+
+    @property
+    def memo_keys(self) -> List[str]:
+        """
+        Retrieve the memo keys of all Hive accounts.
+
+        Returns:
+            List[str]: A list containing the memo keys of all Hive accounts.
+        """
+        return [acc.memo_key for acc in self.hive_accs.values() if acc.memo_key]
+
+    @property
+    def hive_acc_names(self) -> List[str]:
+        """
+        Retrieve the names of all Hive accounts.
+
+        Returns:
+            List[str]: A list containing the names of all Hive accounts.
+        """
+        return list(self.hive_accs.keys())
+
+
 class Config(BaseModel):
     """
     Config class for application configuration.
@@ -147,6 +184,7 @@ class Config(BaseModel):
     tailscale: TailscaleConfig = TailscaleConfig()
     telegram: TelegramConfig = TelegramConfig()
     api_keys: ApiKeys = ApiKeys()
+    hive: HiveConfig = HiveConfig()
 
     @model_validator(mode="after")
     def check_all_defaults(cls, v: Any):
@@ -386,6 +424,8 @@ class InternalConfig:
 """
 General purpose functions
 """
+
+# todo: #27 move to helpers general_purpose_funcs
 
 
 def format_time_delta(delta: timedelta, fractions: bool = False) -> str:

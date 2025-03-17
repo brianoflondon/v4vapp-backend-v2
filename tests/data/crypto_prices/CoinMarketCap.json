@@ -1,14 +1,14 @@
 {
-  "hive_usd": 0.2377,
-  "hbd_usd": 1.0211,
-  "btc_usd": 83156.7,
-  "hive_hbd": 0.2328,
+  "hive_usd": 0.24,
+  "hbd_usd": 1.01,
+  "btc_usd": 83004.3,
+  "hive_hbd": 0.2377,
   "raw_response": {
     "status": {
-      "timestamp": "2025-03-11T18:59:06.307Z",
+      "timestamp": "2025-03-16T13:15:16.048Z",
       "error_code": 0,
       "error_message": null,
-      "elapsed": 21,
+      "elapsed": 50,
       "credit_count": 1,
       "notice": null
     },
@@ -18,7 +18,7 @@
         "name": "Bitcoin",
         "symbol": "BTC",
         "slug": "bitcoin",
-        "num_market_pairs": 11974,
+        "num_market_pairs": 11976,
         "date_added": "2010-07-13T00:00:00.000Z",
         "tags": [
           "mineable",
@@ -55,8 +55,8 @@
           "us-strategic-crypto-reserve"
         ],
         "max_supply": 21000000,
-        "circulating_supply": 19835443,
-        "total_supply": 19835443,
+        "circulating_supply": 19837653,
+        "total_supply": 19837653,
         "is_active": 1,
         "infinite_supply": false,
         "platform": null,
@@ -65,23 +65,23 @@
         "self_reported_circulating_supply": null,
         "self_reported_market_cap": null,
         "tvl_ratio": null,
-        "last_updated": "2025-03-11T18:57:00.000Z",
+        "last_updated": "2025-03-16T13:14:00.000Z",
         "quote": {
           "USD": {
-            "price": 83156.73227785816,
-            "volume_24h": 58020574576.07204,
-            "volume_change_24h": 9.7886,
-            "percent_change_1h": 2.30542568,
-            "percent_change_24h": 6.97143644,
-            "percent_change_7d": -4.27061344,
-            "percent_change_30d": -13.57912011,
-            "percent_change_60d": -12.4128826,
-            "percent_change_90d": -17.21442096,
-            "market_cap": 1649450623163.7156,
-            "market_cap_dominance": 61.1802,
-            "fully_diluted_market_cap": 1746291377835.02,
+            "price": 83004.32493263556,
+            "volume_24h": 13667198255.14296,
+            "volume_change_24h": -49.3308,
+            "percent_change_1h": 0.48604404,
+            "percent_change_24h": -1.52434007,
+            "percent_change_7d": -1.66914178,
+            "percent_change_30d": -14.08223319,
+            "percent_change_60d": -14.34641917,
+            "percent_change_90d": -20.173366,
+            "market_cap": 1646610995512.8726,
+            "market_cap_dominance": 60.8248,
+            "fully_diluted_market_cap": 1743090823585.35,
             "tvl": null,
-            "last_updated": "2025-03-11T18:57:00.000Z"
+            "last_updated": "2025-03-16T13:14:00.000Z"
           }
         }
       },
@@ -106,28 +106,28 @@
         "is_active": 1,
         "infinite_supply": true,
         "platform": null,
-        "cmc_rank": 281,
+        "cmc_rank": 292,
         "is_fiat": 0,
         "self_reported_circulating_supply": null,
         "self_reported_market_cap": null,
         "tvl_ratio": null,
-        "last_updated": "2025-03-11T18:57:00.000Z",
+        "last_updated": "2025-03-16T13:14:00.000Z",
         "quote": {
           "USD": {
-            "price": 0.2376906341341652,
-            "volume_24h": 10293177.96958218,
-            "volume_change_24h": 31.5796,
-            "percent_change_1h": 3.18211879,
-            "percent_change_24h": 9.17295135,
-            "percent_change_7d": -7.03677725,
-            "percent_change_30d": -26.54207475,
-            "percent_change_60d": -50.29913365,
-            "percent_change_90d": -27.76425884,
-            "market_cap": 119023405.0978002,
+            "price": 0.24004784329592643,
+            "volume_24h": 4180012.31793166,
+            "volume_change_24h": -10.0123,
+            "percent_change_1h": -0.05990511,
+            "percent_change_24h": -3.00550238,
+            "percent_change_7d": -4.25067877,
+            "percent_change_30d": -24.92926483,
+            "percent_change_60d": -50.87370618,
+            "percent_change_90d": -19.45445319,
+            "market_cap": 120203775.80101515,
             "market_cap_dominance": 0.0044,
-            "fully_diluted_market_cap": 119023405.1,
+            "fully_diluted_market_cap": 120203775.8,
             "tvl": null,
-            "last_updated": "2025-03-11T18:57:00.000Z"
+            "last_updated": "2025-03-16T13:14:00.000Z"
           }
         }
       },
@@ -145,34 +145,38 @@
         "is_active": 1,
         "infinite_supply": false,
         "platform": null,
-        "cmc_rank": 5377,
+        "cmc_rank": 6778,
         "is_fiat": 0,
         "self_reported_circulating_supply": null,
         "self_reported_market_cap": null,
         "tvl_ratio": null,
-        "last_updated": "2025-03-11T18:57:00.000Z",
+        "last_updated": "2025-03-16T13:14:00.000Z",
         "quote": {
           "USD": {
-            "price": 1.0210657250164121,
-            "volume_24h": 4563.309754,
-            "volume_change_24h": 50.1999,
-            "percent_change_1h": 2.48440157,
-            "percent_change_24h": 3.12126392,
-            "percent_change_7d": -2.15906415,
-            "percent_change_30d": -2.69543046,
-            "percent_change_60d": -0.17519889,
-            "percent_change_90d": 4.00388707,
+            "price": 1.0100489834530562,
+            "volume_24h": 4.40327434,
+            "volume_change_24h": -99.5533,
+            "percent_change_1h": 0.32465676,
+            "percent_change_24h": -1.53550958,
+            "percent_change_7d": -0.36823476,
+            "percent_change_30d": -3.20586328,
+            "percent_change_60d": -1.26347647,
+            "percent_change_90d": 0.76826597,
             "market_cap": 0,
             "market_cap_dominance": 0,
             "fully_diluted_market_cap": 0,
             "tvl": null,
-            "last_updated": "2025-03-11T18:57:00.000Z"
+            "last_updated": "2025-03-16T13:14:00.000Z"
           }
         }
       }
     }
   },
-  "fetch_date": "2025-03-11T19:00:49.801113Z",
+  "source": "CoinMarketCap",
+  "fetch_date": "2025-03-16T13:15:15.978587Z",
   "error": "",
-  "error_details": {}
+  "error_details": {},
+  "sats_hive": 289.1416,
+  "sats_hbd": 1216.8044,
+  "age": 0.013208
 }
