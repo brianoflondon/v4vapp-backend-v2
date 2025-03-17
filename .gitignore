@@ -171,3 +171,4 @@ cython_debug/
 config/config.yaml
 logs/*
 logs_docker/*
+config/telegram_bot.json
