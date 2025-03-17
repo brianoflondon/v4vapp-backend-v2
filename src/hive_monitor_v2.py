@@ -575,7 +575,9 @@ async def witness_loop(watch_witness: str):
             )
             try:
                 async for hive_event in async_stream:
-                    hive_event_timestamp = hive_event.get("timestamp", "N/A")
+                    hive_event_timestamp = hive_event.get(
+                        "timestamp", "1970-01-01T00:00:00+00:00"
+                    )
                     seconds_since_last_block = (
                         hive_event_timestamp - last_good_timestamp
                     ).seconds
