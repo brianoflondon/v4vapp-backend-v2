@@ -161,5 +161,16 @@
                 // "200"
             ]
         },
+        {
+            "name": "Template App Help",
+            "type": "debugpy",
+            "consoleName": "Template App Help",
+            "request": "launch",
+            "program": "src/template_app.py",
+            "args": [
+                "--help"
+            ],
+            "console": "integratedTerminal"
+        },
     ]
 }
