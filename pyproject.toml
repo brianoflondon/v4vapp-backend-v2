@@ -29,7 +29,7 @@ aiofiles = "^24.1.0"
 watchdog = "^6.0.0"
 asgiref = "^3.8.1"
 colorama = "^0.4.6"
-beem = {git = "https://gitlab.syncad.com/hive/beem", rev="c47de5801b898042a91bb5568e77eef43e278baa"}
+beem = {git = "https://gitlab.syncad.com/hive/beem"}
 redis = "^5.2.1"
 binance-connector = "^3.12.0"
 python-telegram-bot = "^22.0"
