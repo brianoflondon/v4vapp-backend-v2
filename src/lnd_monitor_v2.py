@@ -9,12 +9,7 @@ from pymongo.errors import BulkWriteError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import (
-    InternalConfig,
-    format_time_delta,
-    get_in_flight_time,
-    logger,
-)
+from v4vapp_backend_v2.config.setup import InternalConfig, get_in_flight_time, logger
 from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -23,6 +18,7 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndChannelName,
     LndEventsGroup,
 )
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (

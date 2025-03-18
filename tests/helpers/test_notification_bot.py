@@ -107,7 +107,7 @@ async def test_send_message_markdown(notification_bot):
     ):
         await notification_bot.send_message("**bold text**")
         notification_bot.bot.send_message.assert_called_once_with(
-            chat_id=12345, text="**bold text**", parse_mode="Markdown"
+            chat_id=12345, text="\\*\\*bold text\\*\\*", parse_mode="Markdown"
         )
 
 
