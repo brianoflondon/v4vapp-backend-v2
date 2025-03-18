@@ -19,6 +19,8 @@ from pydantic import BaseModel, model_validator
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_dump, safe_load
 
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_in_flight_time
+
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
 
@@ -486,45 +488,45 @@ General purpose functions
 # todo: #27 move to helpers general_purpose_funcs
 
 
-def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
-    """
-    Formats a timedelta object as a string.
-    If Days are present, the format is "X days, Y hours".
-    Otherwise, the format is "HH:MM:SS".
-    Args:
-        delta (timedelta): The timedelta object to format.
+# def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
+#     """
+#     Formats a timedelta object as a string.
+#     If Days are present, the format is "X days, Y hours".
+#     Otherwise, the format is "HH:MM:SS".
+#     Args:
+#         delta (timedelta): The timedelta object to format.
 
-    Returns:
-        str: The formatted string.
-    """
-    if delta.days:
-        return f"{delta.days} days, {delta.seconds // 3600} hours"
-    hours, remainder = divmod(delta.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if fractions:
-        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
+#     Returns:
+#         str: The formatted string.
+#     """
+#     if delta.days:
+#         return f"{delta.days} days, {delta.seconds // 3600} hours"
+#     hours, remainder = divmod(delta.seconds, 3600)
+#     minutes, seconds = divmod(remainder, 60)
+#     if fractions:
+#         return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
+#     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-def get_in_flight_time(creation_date: datetime) -> str:
-    """
-    Calculate the time in flight for a given datetime object.
-    Args:
-        creation_date (datetime): The datetime object to calculate
-        the time in flight for.
+# def get_in_flight_time(creation_date: datetime) -> str:
+#     """
+#     Calculate the time in flight for a given datetime object.
+#     Args:
+#         creation_date (datetime): The datetime object to calculate
+#         the time in flight for.
 
-    Returns:
-        str: The formatted string representing the timedelta.
-    """
+#     Returns:
+#         str: The formatted string representing the timedelta.
+#     """
 
-    current_time = datetime.now(tz=timezone.utc)
+#     current_time = datetime.now(tz=timezone.utc)
 
-    if current_time < creation_date:
-        in_flight_time = format_time_delta(timedelta(seconds=0.1))
-    else:
-        in_flight_time = format_time_delta(current_time - creation_date)
+#     if current_time < creation_date:
+#         in_flight_time = format_time_delta(timedelta(seconds=0.1))
+#     else:
+#         in_flight_time = format_time_delta(current_time - creation_date)
 
-    return in_flight_time
+#     return in_flight_time
 
 
 def async_time_decorator(func):

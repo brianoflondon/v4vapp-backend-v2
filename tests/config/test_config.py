@@ -8,8 +8,6 @@ from v4vapp_backend_v2.config.setup import (
     Config,
     InternalConfig,
     StartupFailure,
-    format_time_delta,
-    get_in_flight_time,
 )
 
 
@@ -115,53 +113,5 @@ def test_update_config(set_base_config_path: None):
     internal_config.update_config(insert)
 
 
-def test_format_time_delta():
-    # Test cases without fractions
-    test_cases = [
-        (timedelta(days=1, hours=2), "1 days, 2 hours"),
-        (timedelta(hours=5, minutes=6, seconds=7), "05:06:07"),
-        (timedelta(minutes=8, seconds=9), "00:08:09"),
-        (timedelta(seconds=10), "00:00:10"),
-        (timedelta(days=0, hours=0, minutes=0, seconds=0), "00:00:00"),
-        (timedelta(days=2, hours=0, minutes=0, seconds=0), "2 days, 0 hours"),
-        (timedelta(days=0, hours=3, minutes=0, seconds=0), "03:00:00"),
-        (timedelta(days=0, hours=0, minutes=4, seconds=0), "00:04:00"),
-    ]
-
-    for delta, expected in test_cases:
-        assert format_time_delta(delta) == expected
-
-    # Test cases with fractions
-    test_cases_with_fractions = [
-        (timedelta(hours=1, minutes=2, seconds=3, microseconds=456000), "01:02:03.456"),
-        (timedelta(minutes=8, seconds=9, microseconds=123000), "00:08:09.123"),
-        (timedelta(seconds=10, microseconds=789000), "00:00:10.789"),
-        (
-            timedelta(days=0, hours=0, minutes=0, seconds=0, microseconds=0),
-            "00:00:00.000",
-        ),
-    ]
-
-    for delta, expected in test_cases_with_fractions:
-        assert format_time_delta(delta, fractions=True) == expected
 
 
-def test_get_in_flight_time_future_date():
-    # Test case where the current time is before the creation date
-    future_date = datetime.now(tz=timezone.utc) + timedelta(days=1)
-    result = get_in_flight_time(future_date)
-    assert result == "00:00:00", f"Expected '00:00:00', but got {result}"
-
-
-def test_get_in_flight_time_past_date():
-    # Test case where the current time is after the creation date
-    past_date = datetime.now(tz=timezone.utc) - timedelta(days=1, hours=5, minutes=30)
-    result = get_in_flight_time(past_date)
-    assert result == "1 days, 5 hours", f"Expected '1 days, 5 hours', but got {result}"
-
-
-def test_get_in_flight_time_exact_date():
-    # Test case where the current time is exactly the creation date
-    exact_date = datetime.now(tz=timezone.utc)
-    result = get_in_flight_time(exact_date)
-    assert result == "00:00:00", f"Expected '00:00:00', but got {result}"

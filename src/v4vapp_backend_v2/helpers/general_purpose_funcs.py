@@ -1,5 +1,5 @@
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def seconds_only(delta: timedelta) -> timedelta:
@@ -15,6 +15,47 @@ def seconds_only(delta: timedelta) -> timedelta:
         components of the input timedelta.
     """
     return timedelta(days=delta.days, seconds=delta.seconds)
+
+
+def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
+    """
+    Formats a timedelta object as a string.
+    If Days are present, the format is "X days, Y hours".
+    Otherwise, the format is "HH:MM:SS".
+    Args:
+        delta (timedelta): The timedelta object to format.
+
+    Returns:
+        str: The formatted string.
+    """
+    if delta.days:
+        return f"{delta.days} days, {delta.seconds // 3600} hours"
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if fractions:
+        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+
+def get_in_flight_time(creation_date: datetime) -> str:
+    """
+    Calculate the time in flight for a given datetime object.
+    Args:
+        creation_date (datetime): The datetime object to calculate
+        the time in flight for.
+
+    Returns:
+        str: The formatted string representing the timedelta.
+    """
+
+    current_time = datetime.now(tz=timezone.utc)
+
+    if current_time < creation_date:
+        in_flight_time = format_time_delta(timedelta(seconds=0.1))
+    else:
+        in_flight_time = format_time_delta(current_time - creation_date)
+
+    return in_flight_time
 
 
 def detect_keepsats(memo: str) -> bool:
@@ -85,11 +126,36 @@ def detect_convert_keepsats(memo: str) -> bool:
     return False
 
 
+# MARK: Markdown Functions
+
+# MARKDOWN FUNCTIONS
+# -----------------
+# The following functions are used to detect and sanitize Markdown-like
+# formatting in messages. They are used to determine if a message should
+# be sent with Markdown parse mode, and to sanitize the message text to
+# avoid formatting issues in Telegram.
+
+
 def is_markdown(message: str) -> bool:
     """
     Check if a message contains common Markdown formatting patterns.
     Returns True if Markdown-like syntax is detected, False otherwise.
+    Args:
+        message (str): The message to be checked for Markdown syntax.
+    Returns:
+        bool: True if Markdown-like syntax is detected, False otherwise.
+    The function checks for the following Markdown patterns:
+        - [text](link): Markdown hyperlinks
+        - **bold**: Bold text
+        - *italic*: Italic text
+        - _italic_: Italic text
+        - `code`: Inline code
+        - ```code blocks```: Code blocks
+        - # Heading: Headings (1-6 #'s followed by space)
+        - - Lists: Unordered lists
+        - 1. Lists: Ordered lists
     """
+
     # Common Markdown patterns
     patterns = [
         r"\[.+?\]\(.+?\)",  # [text](link) - Markdown hyperlinks
