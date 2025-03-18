@@ -10,13 +10,14 @@ import time
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
+from pprint import pprint
 from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
 
 import colorlog
 from pydantic import BaseModel, model_validator
 from pymongo.operations import _IndexKeyHint
-from yaml import safe_load
+from yaml import safe_dump, safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
@@ -60,6 +61,12 @@ class TailscaleConfig(BaseModel):
 
 
 class TelegramConfig(BaseModel):
+    chat_id: int = 0
+
+
+class NotificationBotConfig(BaseModel):
+    name: str = ""
+    token: str = ""
     chat_id: int = 0
 
 
@@ -182,7 +189,10 @@ class Config(BaseModel):
     redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig = TailscaleConfig()
+
     telegram: TelegramConfig = TelegramConfig()
+    notification_bots: Dict[str, NotificationBotConfig] = {}
+
     api_keys: ApiKeys = ApiKeys()
     hive: HiveConfig = HiveConfig()
 
@@ -203,6 +213,12 @@ class Config(BaseModel):
             raise ValueError("Default database connection not found in database")
         if v.default_db_name and v.default_db_name not in v.dbs.keys():
             raise ValueError("Default database name not found in databases")
+
+        # check if two notification bots have the same token
+        tokens = [bot.token for bot in v.notification_bots.values()]
+        if len(tokens) != len(set(tokens)):
+            raise ValueError("Two notification bots have the same token")
+
         return v
 
     @property
@@ -234,6 +250,20 @@ class Config(BaseModel):
             str: A list containing the names of all databases separated by ,.
         """
         return ", ".join(self.dbs.keys())
+
+    def find_notification_bot_name(self, token: str) -> str:
+        """
+        Retrieve a list of bot tokens from the telegram_bots attribute.
+
+        Returns:
+            str: A list containing the bot tokens separated by ,.
+        """
+        [bot_name] = [
+            name for name, bot in self.notification_bots.items() if bot.token == token
+        ]
+        if not bot_name:
+            raise ValueError("Bot name not found in the configuration")
+        return bot_name
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -284,6 +314,8 @@ class InternalConfig:
     _instance = None
     config: Config
     notification_loop: asyncio.AbstractEventLoop
+    base_config_path: Path = BASE_CONFIG_PATH
+    base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -399,6 +431,32 @@ class InternalConfig:
 
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
+
+    def update_config(self, insert: dict) -> None:
+        """
+        Update the configuration with a new value.
+
+        Args:
+            insert (dict): The dictionary containing the new values to update.
+
+        Raises:
+            ValueError: If the key is not found in the configuration.
+        """
+        if insert:
+            new_config = self.config.model_copy(update=insert, deep=True)
+            validated_config = Config.model_validate(new_config, strict=True)
+            pprint(validated_config, indent=2)
+            # self.save_config()
+        else:
+            raise ValueError("No values provided to update the configuration")
+
+    # def save_config(self) -> None:
+    #     """
+    #     Save the current configuration back to the YAML file.
+    #     """
+    #     config_file = Path(BASE_CONFIG_PATH, "config.yaml")
+    #     with open(config_file, "w") as f_out:
+    #         dump(self.config.model_dump(), f_out)
 
     def shutdown(self):
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
