@@ -1,4 +1,5 @@
 from datetime import timedelta
+import re
 
 
 def seconds_only(delta: timedelta) -> timedelta:
@@ -81,4 +82,29 @@ def detect_convert_keepsats(memo: str) -> bool:
         return False
     if "#convertkeepsats" in memo.lower():
         return True
+    return False
+
+
+def is_markdown(message: str) -> bool:
+    """
+    Check if a message contains common Markdown formatting patterns.
+    Returns True if Markdown-like syntax is detected, False otherwise.
+    """
+    # Common Markdown patterns
+    patterns = [
+        r"\[.+?\]\(.+?\)",  # [text](link) - Markdown hyperlinks
+        r"\*\*.+?\*\*",  # **bold**
+        r"\*.+?\*",  # *italic*
+        # r"_.+?_",  # _italic_
+        r"`.+?`",  # `code`
+        r"```[\s\S]*?```",  # ```code blocks```
+        r"^#{1,6}\s",  # # Heading (1-6 #'s followed by space)
+        r"^\s*[-+*]\s",  # - Lists (unordered)
+        r"^\s*\d+\.\s",  # 1. Lists (ordered)
+    ]
+
+    # Check if any pattern matches in the message
+    for pattern in patterns:
+        if re.search(pattern, message, re.MULTILINE):
+            return True
     return False
