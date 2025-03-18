@@ -138,3 +138,12 @@ hive:
     memo_key: somememo
 
 ########### TEST CONFIG NO SECRETS #################
+
+notification_bots:
+  first-bot:
+    token: 0987654321:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    chat_id: 777777777
+
+  second-bot:
+    token: 1234567890:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    chat_id: 122222222

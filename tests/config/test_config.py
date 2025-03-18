@@ -90,6 +90,31 @@ def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
         InternalConfig()
 
 
+def test_notification_bot_config(set_base_config_path: None):
+    internal_config = InternalConfig()
+    assert internal_config.config is not None
+    assert internal_config.config.notification_bots is not None
+    for bot in internal_config.config.notification_bots:
+        assert internal_config.config.notification_bots[bot].chat_id is not None
+        print(internal_config.config.notification_bots[bot].token)
+
+
+def test_notification_bot_find_bot_name(set_base_config_path: None):
+    internal_config = InternalConfig()
+    bot_name = internal_config.config.find_notification_bot_name(
+        "1234567890:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    )
+    assert bot_name == "second-bot"
+
+
+@pytest.mark.skip(reason="Not implemented yet")
+def test_update_config(set_base_config_path: None):
+    internal_config = InternalConfig()
+    assert internal_config.config is not None
+    insert = {"telgram_bot": "new_value"}
+    internal_config.update_config(insert)
+
+
 def test_format_time_delta():
     # Test cases without fractions
     test_cases = [
