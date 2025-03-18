@@ -13,6 +13,24 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Notification Bot",
+            "type": "debugpy",
+            "consoleName": "Template App Help",
+            "request": "launch",
+            "program": "src/notification_bot_setup.py",
+            "args": [
+                // "run",
+                // "@brianoflondon_bot",
+
+                // "setup",
+                // "bad token"
+                "notify",
+                "@brianoflondon_bot",
+                "your message goes here [link](https://www.google.com)",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Hive Monitor",
             "type": "debugpy",
             "consoleName": "Hive Monitor",
