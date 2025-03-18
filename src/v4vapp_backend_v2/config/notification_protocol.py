@@ -33,6 +33,7 @@ from typing import Dict, Protocol
 import httpx
 
 from v4vapp_backend_v2.config.setup import Config, InternalConfig, logger
+from v4vapp_backend_v2.helpers.notification_bot import NotificationBot
 
 
 class NotificationProtocol(Protocol):
@@ -78,6 +79,18 @@ class NotificationProtocol(Protocol):
         alert_level: int = 1,
     ) -> None:
         raise NotImplementedError("Subclasses must implement this method")
+
+
+class BotNotification(NotificationProtocol):
+    async def _send_notification(
+        self,
+        _config: Config,
+        message: str,
+        record: LogRecord,
+        alert_level: int = 1,
+    ) -> None:
+        bot = NotificationBot()
+        await bot.send_message(message)
 
 
 class TelegramNotification(NotificationProtocol):

@@ -4,8 +4,11 @@ from pathlib import Path
 from telegram import Bot
 from telegram.error import InvalidToken
 
-from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown
+from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    is_markdown,
+    sanitize_markdown_v1,
+)
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
@@ -42,6 +45,7 @@ class NotificationBot:
             self.name = self.names_list()[0]
             self.load_config()
             self.bot = Bot(token=self.config.token)
+            return
         raise NotificationNotSetupError("No token or name set for bot.")
 
     @property
@@ -164,12 +168,27 @@ class NotificationBot:
         """
         if self.bot and self.config.chat_id:
             if is_markdown(text):
-                kwargs["parse_mode"] = "Markdown"
+                kwargs["parse_mode"] = "Markdown"  # Use V1
+                if text.endswith("no_preview"):
+                    kwargs["disable_web_page_preview"] = (
+                        True  # Optional: disable link previews
+                    )
+                    text = text.rstrip("no_preview").strip()
+                sanitized_text = sanitize_markdown_v1(text)
+                try:
+                    await self.bot.send_message(
+                        chat_id=self.config.chat_id, text=sanitized_text, **kwargs
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
+                        extra={"notification": False},
+                    )
+                    await self.bot.send_message(chat_id=self.config.chat_id, text=text)
+            else:
                 await self.bot.send_message(
                     chat_id=self.config.chat_id, text=text, **kwargs
                 )
-            else:
-                await self.bot.send_message(chat_id=self.config.chat_id, text=text)
         else:
             raise NotificationNotSetupError(
                 "No chat ID set. Please start the bot first by sending /start"

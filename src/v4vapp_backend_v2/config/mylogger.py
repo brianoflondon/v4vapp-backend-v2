@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, OrderedDict, override
 
 from v4vapp_backend_v2.config.notification_protocol import (
+    BotNotification,
     NotificationProtocol,
     TelegramNotification,
 )
@@ -162,7 +163,7 @@ class CustomNotificationHandler(logging.Handler):
     """
 
     error_codes: dict[Any, ErrorCode] = {}
-    sender: NotificationProtocol = TelegramNotification()
+    sender: NotificationProtocol = BotNotification()
 
     @override
     def emit(self, record: logging.LogRecord):
