@@ -1,5 +1,5 @@
-from datetime import timedelta
 import re
+from datetime import timedelta
 
 
 def seconds_only(delta: timedelta) -> timedelta:
@@ -108,3 +108,61 @@ def is_markdown(message: str) -> bool:
         if re.search(pattern, message, re.MULTILINE):
             return True
     return False
+
+
+def re_escape(text: str, reserved_chars: str) -> str:
+    """
+    Escape reserved characters in the text, but only for specified chars.
+
+    Args:
+        text (str): The text to escape.
+        reserved_chars (str): Characters to escape.
+
+    Returns:
+        str: The escaped text.
+    """
+    return "".join(f"\\{c}" if c in reserved_chars else c for c in text)
+
+
+def sanitize_markdown_v1(text: str) -> str:
+    """
+    Sanitize text for Telegram's Markdown (V1) parse mode.
+    Escapes '*' and '_' only when necessary, preserves links.
+
+    Args:
+        text (str): The input text to sanitize.
+
+    Returns:
+        str: The sanitized text compatible with Markdown V1.
+    """
+    # Reserved characters in Markdown V1 that might need escaping
+    reserved_chars = "*_"  # Only escape * and _, not [ or ]
+
+    # Pattern to match Markdown V1 link syntax: [text](url)
+    link_pattern = r"\[([^\[\]]*?)\]\((https?://[^\s()]+?)\)"
+
+    # Split text into parts: links and non-link segments
+    parts = []
+    last_pos = 0
+    for match in re.finditer(link_pattern, text):
+        start, end = match.span()
+        # Add text before the link (sanitize it if needed)
+        if last_pos < start:
+            segment = text[last_pos:start]
+            # Only escape if '*' or '_' could be misinterpreted as formatting
+            if re.search(r"\*[^\*]+\*|_[^_]+_", segment):  # Check for paired * or _
+                parts.append(re_escape(segment, reserved_chars))
+            else:
+                parts.append(segment)  # No escaping needed
+        # Add the link as-is
+        parts.append(text[start:end])
+        last_pos = end
+    # Add any remaining text after the last link
+    if last_pos < len(text):
+        segment = text[last_pos:]
+        if re.search(r"\*[^\*]+\*|_[^_]+_", segment):  # Check for paired * or _
+            parts.append(re_escape(segment, reserved_chars))
+        else:
+            parts.append(segment)  # No escaping needed
+
+    return "".join(parts)
