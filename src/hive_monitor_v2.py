@@ -119,44 +119,6 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
     return error_code
 
 
-def format_hive_transaction(event: dict) -> Tuple[str, str]:
-    """
-    Format the Hive transaction event. Return two strings
-    first one for a log message and the second one for a notification.
-    Args:
-        event (dict): The Hive transaction event.
-
-    Returns:
-        str: The formatted Hive transaction event.
-    """
-    time_diff = check_time_diff(event["timestamp"])
-
-    log_link = get_hive_block_explorer_link(event["trx_id"], markdown=False)
-    markdown_link = (
-        get_hive_block_explorer_link(event["trx_id"], markdown=True) + " no_preview"
-    )
-    transfer = event
-
-    amount = Amount(transfer["amount"])
-    notification_str = (
-        f"{icon} {transfer['from']} "
-        f"sent {amount} "
-        f"to {transfer['to']} - "
-        f"{transfer['memo'][:30]} - "
-        f"{markdown_link}"
-    )
-
-    log_str = (
-        f"{icon} {transfer['from']:<17} "
-        f"sent {amount.amount_decimal:12,.3f} {amount.symbol:>4} "
-        f"to {transfer['to']:<17} "
-        f" - {transfer['memo'][:30]:>30} "
-        f"{time_diff} ago "
-        f"{log_link} {transfer['op_in_trx']:>3}"
-    )
-    return log_str, notification_str
-
-
 def watch_users_notification(hive_event: dict, watch_user: List[str]) -> bool:
     """
     Send notification if the user is in the watch list.
