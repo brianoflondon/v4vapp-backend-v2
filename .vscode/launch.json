@@ -25,8 +25,8 @@
                 // "setup",
                 // "bad token"
                 "notify",
-                "@brianoflondon_bot",
                 "your message goes here [link](https://www.google.com)",
+                "@brianoflondon_bot",
             ],
             "console": "integratedTerminal"
         },

@@ -7,7 +7,6 @@ from telegram.error import InvalidToken
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown
 
-NOTIFICATION_CONFIG_PATH = Path(InternalConfig.base_config_path, "_bot_config.json")
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
 
@@ -39,6 +38,10 @@ class NotificationBot:
             self.load_config()
             self.bot = Bot(token=self.config.token)
             return
+        if self.names_list():
+            self.name = self.names_list()[0]
+            self.load_config()
+            self.bot = Bot(token=self.config.token)
         raise NotificationNotSetupError("No token or name set for bot.")
 
     @property
@@ -209,8 +212,9 @@ class NotificationBot:
             raise NotificationNotSetupError(e)
 
     def load_config(self) -> None:
-        if self.n_bot_config_file.exists():
-            with open(self.n_bot_config_file, "r") as f:
+        config_file = self.n_bot_config_file
+        if config_file.exists():
+            with open(config_file, "r") as f:
                 self.config = NotificationBotConfig.model_validate(json.load(f))
         else:
             raise NotificationNotSetupError("No configuration file found.")
