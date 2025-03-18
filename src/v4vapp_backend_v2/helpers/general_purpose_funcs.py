@@ -95,7 +95,7 @@ def is_markdown(message: str) -> bool:
         r"\[.+?\]\(.+?\)",  # [text](link) - Markdown hyperlinks
         r"\*\*.+?\*\*",  # **bold**
         r"\*.+?\*",  # *italic*
-        # r"_.+?_",  # _italic_
+        r"_.+?_",  # _italic_
         r"`.+?`",  # `code`
         r"```[\s\S]*?```",  # ```code blocks```
         r"^#{1,6}\s",  # # Heading (1-6 #'s followed by space)

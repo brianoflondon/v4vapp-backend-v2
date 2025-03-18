@@ -88,6 +88,7 @@ def test_is_markdown():
         "# Heading 1",
         "- List item",
         "1. Numbered list",
+        "_italic_",
     ]
     assert is_markdown("plain text message") is False
 
