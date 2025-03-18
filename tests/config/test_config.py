@@ -7,6 +7,7 @@ from yaml import safe_load
 from v4vapp_backend_v2.config.setup import (
     Config,
     InternalConfig,
+    NotificationBotConfig,
     StartupFailure,
 )
 
@@ -109,9 +110,31 @@ def test_notification_bot_find_bot_name(set_base_config_path: None):
 def test_update_config(set_base_config_path: None):
     internal_config = InternalConfig()
     assert internal_config.config is not None
-    insert = {"telgram_bot": "new_value"}
-    internal_config.update_config(insert)
+    sample_telegram_bot = NotificationBotConfig(
+        name="@update_bot",
+        token="555555555:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+        chat_id=1234567890,
+    )
+    insert = {sample_telegram_bot.name: sample_telegram_bot}
+    internal_config.update_config(setting="notification_bots", insert=insert)
+    assert (
+        internal_config.config.notification_bots[sample_telegram_bot.name]
+        == sample_telegram_bot
+    )
 
 
-
-
+@pytest.mark.skip(reason="Not implemented yet")
+def test_update_config_fail(set_base_config_path: None):
+    """
+    Fails because of a duplication in bot token
+    """
+    internal_config = InternalConfig()
+    assert internal_config.config is not None
+    sample_telegram_bot = NotificationBotConfig(
+        name="@update_bot",
+        token="1234567890:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+        chat_id=1234567890,
+    )
+    insert = {sample_telegram_bot.name: sample_telegram_bot}
+    with pytest.raises(ValueError):
+        internal_config.update_config(setting="notification_bots", insert=insert)
