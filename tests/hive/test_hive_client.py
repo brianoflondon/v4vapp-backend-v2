@@ -5,7 +5,7 @@ import pytest
 from beem.blockchain import Blockchain  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (
     HiveExp,
     get_good_nodes,
     get_hive_block_explorer_link,

@@ -21,13 +21,13 @@ from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
-from v4vapp_backend_v2.helpers.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (
     MAX_HIVE_BATCH_SIZE,
     get_hive_block_explorer_link,
     get_hive_client,
     get_hive_witness_details,
 )
-from v4vapp_backend_v2.helpers.voting_power import VotingPower
+from v4vapp_backend_v2.hive.voting_power import VotingPower
 from v4vapp_backend_v2.models.hive_models import HiveTransaction
 
 INTERNAL_CONFIG = InternalConfig()

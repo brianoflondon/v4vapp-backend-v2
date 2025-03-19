@@ -3,7 +3,7 @@ import os
 import pytest
 from beem.blockchain import Blockchain  # type: ignore
 
-from v4vapp_backend_v2.helpers.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (
     call_hive_internal_market,
     decode_memo,
     get_blockchain_instance,

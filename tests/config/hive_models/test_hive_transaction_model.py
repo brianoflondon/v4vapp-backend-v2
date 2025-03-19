@@ -10,7 +10,7 @@ from beem.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (
     HiveTransactionTypes,
     get_event_id,
     get_hive_client,
