@@ -184,7 +184,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
     """
     try:
         hive = get_hive_client()
-        market = Market(hive=hive)
+        market = Market("HBD:HIVE", hive=hive)
         ticker = market.ticker()
 
         # raise KeyError("'highest_bid'")

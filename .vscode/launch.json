@@ -10,7 +10,8 @@
             "consoleName": "${file}",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false,
         },
         {
             "name": "Notification Bot",
@@ -21,7 +22,6 @@
             "args": [
                 // "run",
                 // "@brianoflondon_bot",
-
                 // "setup",
                 // "bad token"
                 "notify",

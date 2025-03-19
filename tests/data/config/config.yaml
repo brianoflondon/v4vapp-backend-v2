@@ -131,11 +131,12 @@ binance:
 ########### TEST CONFIG NO SECRETS #################
 
 hive:
-  someaccount:
-    role: server
-    posting_key: somepostingkey
-    active_key: someactive
-    memo_key: somememo
+  hive_accs:
+    someaccount:
+      role: server
+      posting_key: somepostingkey
+      active_key: someactive
+      memo_key: somememo
 
 ########### TEST CONFIG NO SECRETS #################
 

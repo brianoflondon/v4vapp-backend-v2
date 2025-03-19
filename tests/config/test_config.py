@@ -106,6 +106,14 @@ def test_notification_bot_find_bot_name(set_base_config_path: None):
     assert bot_name == "second-bot"
 
 
+def test_hive_acc_name(set_base_config_path: None):
+    internal_config = InternalConfig()
+    hive_accs = internal_config.config.hive.hive_accs
+    assert hive_accs is not None
+    hive_acc = hive_accs["someaccount"] 
+    assert hive_acc.name == "someaccount"
+
+
 @pytest.mark.skip(reason="Not implemented yet")
 def test_update_config(set_base_config_path: None):
     internal_config = InternalConfig()
