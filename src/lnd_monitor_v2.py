@@ -89,17 +89,42 @@ async def track_events(
         message_str, ans_dict = lnd_events_group.message(
             htlc_event, dest_alias=dest_alias
         )
+        silent = (
+            True
+            if check_for_attempted_forwards(
+                htlc_event=htlc_event, message_str=message_str
+            )
+            else False
+        )
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={
                     "notification": notification,
+                    "silent": silent,
                     type(htlc_event).__name__: ans_dict,
                 },
             )
         asyncio.create_task(
             remove_event_group(htlc_event, lnd_client, lnd_events_group)
         )
+
+
+def check_for_attempted_forwards(htlc_event: EventItem, message_str: str) -> bool:
+    """
+    Checks if the provided event is an attempted forward.
+
+    Args:
+        event (EventItem): The event to check.
+        message_str (str): The computed message.
+
+    Returns:
+        bool: True if the event is an attempted forward, otherwise False.
+    """
+    if isinstance(htlc_event, routerrpc.HtlcEvent):
+        if "Attempted" in message_str:
+            return True
+    return False
 
 
 async def check_dest_alias(

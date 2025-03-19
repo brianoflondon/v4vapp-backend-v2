@@ -1,13 +1,10 @@
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from telegram.error import InvalidToken
 
-from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown
+from v4vapp_backend_v2.config.setup import NotificationBotConfig
 from v4vapp_backend_v2.helpers.notification_bot import (
     BOT_CONFIG_EXTENSION,
     NotificationBadTokenError,

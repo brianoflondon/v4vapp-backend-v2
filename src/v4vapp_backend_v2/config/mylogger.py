@@ -8,7 +8,6 @@ from typing import Any, OrderedDict, override
 from v4vapp_backend_v2.config.notification_protocol import (
     BotNotification,
     NotificationProtocol,
-    TelegramNotification,
 )
 from v4vapp_backend_v2.config.setup import logger
 
