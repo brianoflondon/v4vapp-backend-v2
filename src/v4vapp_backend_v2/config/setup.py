@@ -7,16 +7,16 @@ import logging.handlers
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
+from pprint import pprint
 from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
 
 import colorlog
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ValidationError, model_validator
 from pymongo.operations import _IndexKeyHint
-from yaml import safe_load
+from yaml import safe_dump, safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
@@ -36,14 +36,18 @@ class StartupFailure(Exception):
     pass
 
 
-class LoggingConfig(BaseModel):
+class BaseConfig(BaseModel):
+    pass
+
+
+class LoggingConfig(BaseConfig):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
     log_levels: Any
     log_folder: Path = Path("logs/")
 
 
-class LndConnectionConfig(BaseModel):
+class LndConnectionConfig(BaseConfig):
     icon: str = ""
     address: str = ""
     options: list = []
@@ -53,49 +57,55 @@ class LndConnectionConfig(BaseModel):
     use_proxy: str = ""
 
 
-class TailscaleConfig(BaseModel):
+class TailscaleConfig(BaseConfig):
     tailnet_name: str = ""
     notification_server: str = ""
     notification_server_port: int = 0
 
 
-class TelegramConfig(BaseModel):
+class TelegramConfig(BaseConfig):
     chat_id: int = 0
 
 
-class ApiKeys(BaseModel):
+class NotificationBotConfig(BaseConfig):
+    name: str = ""
+    token: str = ""
+    chat_id: int = 0
+
+
+class ApiKeys(BaseConfig):
     binance_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
     binance_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
     coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
 
 
-class IndexConfig(BaseModel):
+class IndexConfig(BaseConfig):
     index_key: _IndexKeyHint | None = None
     unique: Optional[bool] = None
 
 
-class CollectionConfig(BaseModel):
+class CollectionConfig(BaseConfig):
     indexes: Dict[str, IndexConfig] | None = None
 
 
-class DatabaseUserConfig(BaseModel):
+class DatabaseUserConfig(BaseConfig):
     password: str
     roles: List[str]
 
 
-class DatabaseDetailsConfig(BaseModel):
+class DatabaseDetailsConfig(BaseConfig):
     db_users: Dict[str, DatabaseUserConfig]
     collections: Optional[Dict[str, CollectionConfig | None]] = None
 
 
-class DatabaseConnectionConfig(BaseModel):
+class DatabaseConnectionConfig(BaseConfig):
     hosts: List[str]
     replica_set: str | None = None
     admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
     icon: str | None = None
 
 
-class RedisConnectionConfig(BaseModel):
+class RedisConnectionConfig(BaseConfig):
     host: str = "localhost"
     port: int = 6379
     db: int = 0
@@ -107,14 +117,14 @@ class HiveRoles(StrEnum):
     treasury = "treasury"
 
 
-class HiveAccountConfig(BaseModel):
+class HiveAccountConfig(BaseConfig):
     role: HiveRoles = HiveRoles.server
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
 
 
-class HiveConfig(BaseModel):
+class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {}
 
     @property
@@ -182,7 +192,10 @@ class Config(BaseModel):
     redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig = TailscaleConfig()
+
     telegram: TelegramConfig = TelegramConfig()
+    notification_bots: Dict[str, NotificationBotConfig] = {}
+
     api_keys: ApiKeys = ApiKeys()
     hive: HiveConfig = HiveConfig()
 
@@ -203,6 +216,12 @@ class Config(BaseModel):
             raise ValueError("Default database connection not found in database")
         if v.default_db_name and v.default_db_name not in v.dbs.keys():
             raise ValueError("Default database name not found in databases")
+
+        # check if two notification bots have the same token
+        tokens = [bot.token for bot in v.notification_bots.values()]
+        if len(tokens) != len(set(tokens)):
+            raise ValueError("Two notification bots have the same token")
+
         return v
 
     @property
@@ -234,6 +253,20 @@ class Config(BaseModel):
             str: A list containing the names of all databases separated by ,.
         """
         return ", ".join(self.dbs.keys())
+
+    def find_notification_bot_name(self, token: str) -> str:
+        """
+        Retrieve a list of bot tokens from the telegram_bots attribute.
+
+        Returns:
+            str: A list containing the bot tokens separated by ,.
+        """
+        [bot_name] = [
+            name for name, bot in self.notification_bots.items() if bot.token == token
+        ]
+        if not bot_name:
+            raise ValueError("Bot name not found in the configuration")
+        return bot_name
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -284,6 +317,8 @@ class InternalConfig:
     _instance = None
     config: Config
     notification_loop: asyncio.AbstractEventLoop
+    base_config_path: Path = BASE_CONFIG_PATH
+    base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -400,6 +435,49 @@ class InternalConfig:
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
 
+    # def update_config(self, setting: str, insert: dict) -> None:
+    #     """
+    #     Update the configuration with a new value.
+
+    #     Args:
+    #         setting (str): The name of the setting to update.
+    #         insert (dict): The dictionary containing the new values to update.
+
+    #     Raises:
+    #         ValueError: If the key is not found in the configuration.
+    #     """
+    #     if insert:
+    #         try:
+    #             # Get the current value of the setting
+    #             current_value = getattr(self.config, setting, None)
+    #             if current_value is None:
+    #                 raise ValueError(
+    #                     f"Setting '{setting}' not found in the configuration"
+    #                 )
+
+    #             # Update the current value with the new values
+    #             current_value.update(insert)
+
+    #             # Validate the updated configuration
+    #             new_config = self.config.model_copy(
+    #                 update={setting: current_value}, deep=True
+    #             )
+    #             self.config = Config.model_validate(new_config.model_dump())
+    #             self.save_config()
+    #         except ValidationError as e:
+    #             raise ValueError(f"Invalid configuration: {e}")
+    #     else:
+    #         raise ValueError("No values provided to update the configuration")
+
+    # def save_config(self) -> None:
+    #     """
+    #     Save the current configuration back to the YAML file.
+    #     """
+    #     config_file = Path(BASE_CONFIG_PATH, "config-test.yaml")
+    #     with open(config_file, "w") as f_out:
+    #         config_json = self.config.model_dump_json(default=str)
+    #         safe_dump(self.config.model_dump(), f_out)
+
     def shutdown(self):
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
@@ -424,49 +502,6 @@ class InternalConfig:
 """
 General purpose functions
 """
-
-# todo: #27 move to helpers general_purpose_funcs
-
-
-def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
-    """
-    Formats a timedelta object as a string.
-    If Days are present, the format is "X days, Y hours".
-    Otherwise, the format is "HH:MM:SS".
-    Args:
-        delta (timedelta): The timedelta object to format.
-
-    Returns:
-        str: The formatted string.
-    """
-    if delta.days:
-        return f"{delta.days} days, {delta.seconds // 3600} hours"
-    hours, remainder = divmod(delta.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    if fractions:
-        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
-
-
-def get_in_flight_time(creation_date: datetime) -> str:
-    """
-    Calculate the time in flight for a given datetime object.
-    Args:
-        creation_date (datetime): The datetime object to calculate
-        the time in flight for.
-
-    Returns:
-        str: The formatted string representing the timedelta.
-    """
-
-    current_time = datetime.now(tz=timezone.utc)
-
-    if current_time < creation_date:
-        in_flight_time = format_time_delta(timedelta(seconds=0.1))
-    else:
-        in_flight_time = format_time_delta(current_time - creation_date)
-
-    return in_flight_time
 
 
 def async_time_decorator(func):

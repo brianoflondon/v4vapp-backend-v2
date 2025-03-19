@@ -47,7 +47,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/voltage:/app/logs
-    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "voltage"]
+    command: ["python", "lnd_monitor_v2.py", "voltage"]
     restart: unless-stopped
 
   umbrel-node-monitor:
@@ -58,7 +58,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/umbrel:/app/logs
-    command: ["poetry", "run", "python", "lnd_monitor_v2.py", "umbrel"]
+    command: ["python", "lnd_monitor_v2.py", "umbrel"]
     restart: unless-stopped
 
   hive-monitor:
@@ -69,7 +69,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/hive:/app/logs
-    command: ["poetry", "run", "python", "hive_monitor_v2.py", "v4vapp", "v4vapp.tre", "v4vapp.dhf", "brianoflondon"]
+    command: ["python", "hive_monitor_v2.py", "v4vapp", "v4vapp.tre", "v4vapp.dhf", "brianoflondon"]
     restart: unless-stopped
     networks:
       - v4vapp-backend

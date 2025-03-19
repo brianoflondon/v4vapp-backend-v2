@@ -1,21 +1,25 @@
-FROM python:3.12
+# Build stage
+FROM python:3.12 AS builder
 
 COPY ./pyproject.toml ./poetry.lock* /app/
 
 WORKDIR /app/
 
-RUN pip install poetry && poetry install --only main --no-root --no-directory
+RUN pip install poetry
+RUN poetry config virtualenvs.in-project true  # Ensure venv is created in project dir
+RUN poetry install --only main --no-root --no-directory
 
 COPY ./src /app
 
 RUN poetry install --only main
 
-# COPY .certs /app/.certs
-# COPY logging_configs/ /app/logging_configs
+# Production stage
+FROM python:3.12-slim
 
-# # CMD [ "bash" ]
+WORKDIR /app/
 
-# CMD ["poetry", "run", "python", "main.py"]
+# Copy the entire app directory including the .venv folder
+COPY --from=builder /app /app
 
-# src/v4vapp_backend_v2/lnd_grpc/main.py
-#python /Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/src/v4vapp_backend_v2/lnd_grpc/main.py
+# Ensure Python uses the virtual environment
+ENV PATH="/app/.venv/bin:$PATH"

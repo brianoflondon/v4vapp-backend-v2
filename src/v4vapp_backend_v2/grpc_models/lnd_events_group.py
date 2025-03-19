@@ -5,7 +5,7 @@ from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.config.setup import format_time_delta, get_in_flight_time
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, get_in_flight_time
 
 
 def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
