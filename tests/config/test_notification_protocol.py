@@ -35,19 +35,27 @@ TEST_JSON = {
 }
 
 
-# Fixture for a mock Config object (minimal, since not used in _send_notification)
-@pytest.fixture
-def mock_config():
-    return MagicMock(spec=Config)
+# # Fixture for a mock Config object (minimal, since not used in _send_notification)
+# @pytest.fixture
+# def mock_config():
+#     return MagicMock(spec=Config)
 
 
 # Fixture for a mock InternalConfig object
+# @pytest.fixture
+# def mock_internal_config():
+#     internal_config = MagicMock(spec=InternalConfig)
+#     internal_config.notification_loop = asyncio.new_event_loop()
+#     return internal_config
+
+
 @pytest.fixture
-def mock_internal_config(mock_config):
-    internal_config = MagicMock(spec=InternalConfig)
-    internal_config.config = mock_config
-    internal_config.notification_loop = asyncio.new_event_loop()
-    return internal_config
+def mock_internal_config():
+    with patch("v4vapp_backend_v2.config.notification_protocol.InternalConfig") as mock:
+        internal_config = MagicMock(spec=InternalConfig)
+        internal_config.notification_loop = asyncio.new_event_loop()
+        mock.return_value = internal_config
+        yield internal_config
 
 
 # Fixture for a LogRecord based on JSON test data

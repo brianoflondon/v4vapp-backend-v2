@@ -31,7 +31,6 @@ class NotificationProtocol(Protocol):
         self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
         internal_config = InternalConfig()
-        _config: Config = internal_config.config
 
         loop = internal_config.notification_loop
         if loop.is_closed():
