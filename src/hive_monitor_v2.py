@@ -787,8 +787,11 @@ def format_market_event(hive_event: dict) -> str:
             return (
                 f"{hive_event.get('owner')} created order "
                 f"{sell} for {receive} {rate_str} "
-                f"{hive_event.get('order_id')}"
+                f"{hive_event.get('orderid')}"
             )
+        if hive_event.get('type') == 'limit_order_cancel':
+            return f"{hive_event.get('owner')} cancelled order {hive_event.get('orderid')}"
+        return f"Market event: {hive_event.get('type')}"
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         return "Problem formatting market event {e}"
