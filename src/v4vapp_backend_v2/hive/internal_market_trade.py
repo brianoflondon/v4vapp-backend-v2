@@ -1,261 +1,179 @@
-from datetime import datetime, timedelta, timezone
-from pprint import pprint
-from typing import Any, Dict, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict
 
-from beem.amount import Amount  # Type: ignore
-from beem.market import Market  # Type: ignore
+
+from beem import Hive  # type: ignore
+from beem.amount import Amount  # type: ignore
+from beem.market import Market  # type: ignore
 from beem.price import Price  # type: ignore
-from beem.transactionbuilder import TransactionBuilder  # type: ignore
-from beembase.operations import Limit_order_create, Limit_order_create2
+from beemapi.exceptions import UnhandledRPCError  # type: ignore
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
+ORDER_BOOK_CACHE: Dict[str, Any] = {}
 
-def internal_market_sell(
-    hive_acc: HiveAccountConfig, amount: Amount, price: Price | None = None
-) -> Any:
 
+@dataclass
+class HiveQuote:
+    trade: Amount
+    price: Price
+    minimum_amount: Amount
+
+
+def market_trade(
+    hive_acc: HiveAccountConfig,
+    amount: Amount,
+    price: Price | None = None,
+    use_cache: bool = False,
+    killfill: bool = False,
+    nobroadcast: bool = False,
+    expiration: int = 3600,
+) -> dict:
     hive_configs = InternalConfig().config.hive
     if hive_acc.name in hive_configs.hive_accs:
         hive_acc = hive_configs.hive_accs[hive_acc.name]
-    hive = get_hive_client(keys=hive_acc.keys, nobroadcast=False)
+    hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
+    quote = check_order_book(amount, hive, use_cache=use_cache)
 
-    def working():
-        market = Market("HIVE:HBD", blockchain_instance=hive)
-        try:
-            trx = market.sell(
-                price=0.2,
-                amount="1 HIVE",
-                account=hive_acc.name,
-            )
-        except Exception as e:
-            logger.warning(str(e), extra={"notification": False})
-            return
-
-        logger.info(f"trx: {trx}")
-
-        market = Market("HBD:HIVE", blockchain_instance=hive)
-        try:
-            trx = market.sell(
-                price=(0.24),
-                amount="1 HBD",
-                account=hive_acc.name,
-            )
-        except Exception as e:
-            logger.warning(str(e), extra={"notification": False})
-            return
-
-        logger.info(f"trx: {trx}")
-
-        return trx
-
-    if not price:
-        try:
-            min_to_receive, price = check_order_book_to_sell(amount, hive_client=hive)
-        except ValueError as e:
-            logger.warning(
-                f"Failed to check order book: {e}", extra={"notification": False}
-            )
-            raise e
-    logger.info(f"Converting {amount} to {min_to_receive} at {price}")
-    sell_asset = amount.symbol
-    receive_asset = "HBD" if sell_asset == "HIVE" else "HIVE"
-    market = Market(f"{sell_asset}:{receive_asset}", blockchain_instance=hive)
+    base_asset = amount.symbol
+    quote_asset = "HBD" if base_asset == "HIVE" else "HIVE"
+    market_symbol = f"{base_asset}:{quote_asset}"
+    market = Market(market_symbol, blockchain_instance=hive)
+    amount_str = str(amount)
+    price_float = float(quote.price["price"])
     try:
         trx = market.sell(
-            price=float(price),
-            amount=amount,
+            price=price_float,
+            amount=amount_str,
             account=hive_acc.name,
-            # killfill=True,
-            # returnOrderId="head",
+            killfill=killfill,
+            expiration=expiration,
         )
-        logger.info(
-            f"Transaction broadcasted: {trx}", extra={"notification": False, "trx": trx}
-        )
+        return trx
+    except UnhandledRPCError as e:
+        logger.warning(str(e), extra={"notification": False})
+        raise e
     except Exception as e:
         logger.warning(str(e), extra={"notification": False})
-        return
+        raise e
 
 
-CACHE_ORDER_BOOK = []
-
-
-def check_order_book_to_sell(
+def check_order_book(
     amount: Amount,
-    hive_client=None,
-    use_cache: bool = True,
-    simulate_order_book_depletion: bool = False,
-) -> Tuple[Amount, Price]:
-    global CACHE_ORDER_BOOK
-    if amount.amount <= 0:
-        logger.info(f"Amount to sell is 0, skipping.")
-        raise ValueError("Amount to sell is 0, skipping.")
+    hive: Hive = None,
+    use_cache: bool = False,
+    order_book_limit: int = 500,
+) -> HiveQuote:
+    """
+    Check the order book for the given amount and return the best price.
 
-    sell_asset = amount.symbol
-    target_amount = float(amount.amount)
+    Args:
+        amount (Amount): The amount of the asset to check in the order book.
+        hive (Hive, optional): The Hive client instance to use.
+            If not provided, a new client will be created.
+        use_cache (bool, optional): Whether to use the cached order book data. Defaults to False.
 
-    logger.info(f"Starting to check order book for selling {amount}")
+    Returns:
+        HiveQuote: An object containing the amount, the best price, and the minimum amount.
 
-    if hive_client is None:
-        hive_client = get_hive_client()
+    Raises:
+        ValueError: If the amount is negative or if there is not enough volume in the order book.
 
-    if not use_cache:
-        CACHE_ORDER_BOOK = []
+    Note:
+        The function assumes that the order book always uses HIVE as the base asset.
+    """
 
-    if not CACHE_ORDER_BOOK:
-        market = Market(blockchain_instance=hive_client)
-        ticker = market.ticker()
-        logger.info(
-            f"Current spread - Highest bid: {ticker['highest_bid']} | Lowest ask: {ticker['lowest_ask']}"
-        )
-        order_book = market.orderbook(limit=500)  # Use get_order_book() for consistency
-        CACHE_ORDER_BOOK = order_book
+    global ORDER_BOOK_CACHE
+
+    if amount.amount < 0:
+        raise ValueError("Amount must be positive")
+
+    if not hive:
+        hive = get_hive_client()
+
+    base_asset = amount.symbol  # The Asset I'm selling
+    quote_asset = "HBD" if base_asset == "HIVE" else "HIVE"
+
+    if use_cache and ORDER_BOOK_CACHE:
+        order_book = ORDER_BOOK_CACHE
     else:
-        order_book = CACHE_ORDER_BOOK
+        # Note: The order book is the same and always uses HIVE as the base asset
+        market = Market(base=base_asset, quote=quote_asset, blockchain_instance=hive)
+        order_book = market.orderbook(limit=50)
+        ORDER_BOOK_CACHE = order_book
 
-    orders_bids = order_book["bids"]
-    orders_asks = order_book["asks"]
-
-    if sell_asset == "HBD":
-        orders = orders_bids
-        price_label = "HBD/HIVE"
-        order_type = "bids"
-        orders.sort(
-            key=lambda x: x["price"], reverse=True
-        )  # Highest HBD/HIVE (best for seller)
-    else:  # HIVE
-        orders = orders_asks
-        price_label = "HBD/HIVE"
-        order_type = "asks"
-        orders.sort(
-            key=lambda x: x["price"], reverse=False
-        )  # Lowest HBD/HIVE (best for seller)
+    # Selling HIVE, so we want the highest bid
+    if base_asset == "HIVE":
+        orders_bids = order_book["bids"]
+        orders_bids.sort(key=lambda x: x["price"], reverse=True)
+    else:  # Selling HBD so we want the lowest ask
+        orders_bids = order_book["asks"]
+        orders_bids.sort(key=lambda x: x["price"], reverse=False)
 
     cumulative_volume = 0.0
     total_received = 0.0
-    final_price = None
+    final_price: Price = None
 
-    for order in orders:
-        price = float(order["price"])  # HBD/HIVE
-        quote = order["quote"]  # HIVE
-        base = order["base"]  # HBD
+    # This naieve calculation doesn't take into account the slightly lower
+    # price of the next order in the order book, it quotes the price of the
+    # last order that was needed to reach the desired amount
+    for order in orders_bids:
+        price = float(order["price"])
+        quote = order["quote"]
+        base = order["base"]
 
-        if sell_asset == "HBD":
-            volume = float(base.amount)  # HBD from bids
-            received_per_unit = 1 / price  # HIVE/HBD
-            received_asset = "HIVE"
-        else:  # HIVE
-            volume = float(quote.amount)  # HIVE from asks
-            received_per_unit = price  # HBD/HIVE
-            received_asset = "HBD"
+        if base_asset == "HIVE":
+            volume = float(quote)
+            price = Price(price, base_asset, quote_asset)
+            total_received += volume
+        else:  # Selling HBD
+            volume = float(base)
+            price = Price(price, quote_asset, base_asset)
+            total_received += volume
 
-        remaining_to_sell = target_amount - cumulative_volume
-        volume_used = min(volume, remaining_to_sell)
-        received_from_order = volume_used * received_per_unit
-
-        cumulative_volume += volume_used
-        total_received += received_from_order
-
-        logger.info(
-            f"Price: {price:.4f} {price_label}, Quote: {quote.amount:.3f} HIVE, "
-            f"Base: {base.amount:.3f} HBD, Used: {volume_used:.3f} {sell_asset}, "
-            f"Cumulative: {cumulative_volume:.3f}"
-        )
-
-        if cumulative_volume >= target_amount:
+        cumulative_volume += volume
+        if cumulative_volume >= amount.amount:
             final_price = price
             break
 
-    # After simulating the trade, remove the consumed orders from the order book
-    if simulate_order_book_depletion:
-        updated_order_book = order_book.copy()
-        if sell_asset == "HBD":
-            # Remove or adjust consumed bids
-            for i, order in enumerate(updated_order_book["bids"]):
-                if i >= len(orders):  # Only process the orders we used
-                    break
-                if order["base"].amount <= cumulative_volume:
-                    # This order was completely consumed
-                    updated_order_book["bids"].pop(i)
-                else:
-                    # This order was partially consumed
-                    updated_order_book["bids"][i]["base"] = Amount(
-                        f"{order['base'].amount - volume_used} HBD"
-                    )
-        else:
-            for i, order in enumerate(updated_order_book["asks"]):
-                if i >= len(orders):
-                    break
-                if order["quote"].amount <= cumulative_volume:  # Completely consumed
-                    updated_order_book["asks"].pop(i)
-                else:  # Partially consumed
-                    updated_order_book["asks"][i]["quote"] = Amount(
-                        f"{order['quote'].amount - volume_used} HIVE"
-                    )
-        CACHE_ORDER_BOOK = updated_order_book
+    if final_price is None:
+        raise ValueError("Not enough volume in the order book")
 
-    if final_price is not None:
-        logger.info(
-            f"To sell {target_amount:.3f} {sell_asset}, set price at or "
-            f"{'below' if sell_asset == 'HBD' else 'above'} {final_price:.4f} {price_label}"
-        )
-        logger.info(
-            f"You'll receive approximately {total_received:.3f} {received_asset}"
-        )
-        ans_price = Price(f"{final_price:.6f} {price_label}")
-        ans_amount = Amount(f"{total_received:.6f} {received_asset}")
-        return ans_amount, ans_price
+    logger.info(f"Best price for {amount} is {final_price}")
+    # if final_price.market["base"]["symbol"] != amount.symbol:
+    #     final_price.invert()
+
+    if base_asset == "HIVE":
+        min_amt = amount.amount * float(final_price["price"])
     else:
-        logger.info(
-            f"Not enough liquidity to sell {target_amount:.3f} {sell_asset} with current {order_type}."
-        )
-        raise ValueError(
-            f"Not enough liquidity to sell {target_amount:.3f} {sell_asset} with current {order_type}."
-        )
+        min_amt = amount.amount / float(final_price["price"])
+
+    minimum_amount = Amount(min_amt, quote_asset)
+
+    logger.info(f"Minimum amount: {minimum_amount}")
+
+    hive_quote = HiveQuote(amount, final_price, minimum_amount)
+    return hive_quote
 
 
 if __name__ == "__main__":
-    # Single client instance
-    hive_acc = HiveAccountConfig(name="v4vapp-test")
-    amount = Amount("5 HIVE")
-    trx = internal_market_sell(hive_acc, amount)
-    amount = Amount("0.25 HBD")
-    trx = internal_market_sell(hive_acc, amount)
+    # trade = Amount("1_000 HBD")
+    # sell_HBD_quote = check_order_book(trade, use_cache=True)
 
-    # for asset in ["HBD", "HIVE"]:
-    #     for value in range(200, 400, 200):
+    # trade = Amount(sell_HBD_quote.minimum_amount)
+    # sell_HIVE_quote = check_order_book(trade, use_cache=True)
+    # assert sell_HBD_quote.price > sell_HIVE_quote.price
+    try:
+        trade = Amount("0.1 HBD")
+        trx = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
+        logger.info(f"trx: {trx}")
+    except Exception as e:
+        logger.info(e)
 
-    hive_client = get_hive_client()  # Replace with get_hive_client()
-    value = 10
-    asset = "HBD"
-
-    base_amount = Amount(f"{value} {asset}")
-    first_result = check_order_book_to_sell(base_amount, hive_client)
-    if first_result:
-        second_result = check_order_book_to_sell(first_result, hive_client)
-        if second_result:
-            delta = second_result.amount - base_amount.amount
-            logger.info(
-                f"{base_amount} -> {first_result} -> {second_result} delta: "
-                f"{delta:.3f} {asset} "
-                f"percentage: {delta / base_amount.amount * 100:.2f}%"
-            )
-            logger.info(
-                f"{base_amount.amount/first_result.amount:.3f} "
-                f"{second_result.amount/first_result.amount}"
-            )
-        else:
-            logger.info(f"Second check failed for {base_amount}")
-    else:
-        logger.info(f"First check failed for {base_amount}")
-
-    # market = Market("HBD:HIVE", blockchain_instance=hive_client)
-    # # order_book = market.orderbook(limit=25)
-    # pprint(order_book, indent=2)
-
-    # hive_acc = HiveAccountConfig(name="v4vapp.dev")
-    # amount = Amount("10 HBD")
-    # internal_market_hive_hbd_trade(hive_acc, amount)
-    # amount = Amount("10 HBD")
-    # internal_market_hive_hbd_trade(hive_acc, amount)
+    try:
+        trade = Amount("0.1 HIVE")
+        trx2 = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
+        logger.info(f"trx2: {trx2}")
+    except Exception as e:
+        logger.info(e)

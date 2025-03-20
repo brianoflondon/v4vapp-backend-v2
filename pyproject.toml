@@ -47,6 +47,7 @@ mongomock-motor = "^0.0.35"
 pytest-mock = "^3.14.0"
 types-aiofiles = "^24.1.0.20241221"
 types-colorama = "^0.4.15.20240311"
+dill = "^0.3.9"
 
 [build-system]
 requires = ["poetry-core"]

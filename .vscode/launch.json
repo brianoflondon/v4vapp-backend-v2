@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": false,
+            "justMyCode": true,
         },
         {
             "name": "Notification Bot",
@@ -25,7 +25,7 @@
                 // "setup",
                 // "bad token"
                 "notify",
-                "🐝 flemingfarm sent 13.000 HIVE to v4vapp ($3.17) flemingfarm Deposit to #SATS [HiveHub](https://hivehub.dev/tx/8eb1e0dd4259bfce72d5cbe3a6ce347fba777d8e) no_preview"
+                "🐝 flemingfarm sent 13.000 HIVE to v4vapp ($3.17) flemingfarm Deposit to #SATS [HiveHub](https://hivehub.dev/tx/8eb1e0dd4259bfce72d5cbe3a6ce347fba777d8e) no_preview",
                 // "your message goes here [link](https://www.google.com)",
                 "@brianoflondon_bot",
             ],

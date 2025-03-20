@@ -30,6 +30,7 @@ from v4vapp_backend_v2.models.hive_transaction_types import (
     MarketOpTypes,
     TransactionLoopOpTypes,
     TransferOpTypes,
+    VirtualOpTypes,
     WitnessOpTypes,
 )
 from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
@@ -498,6 +499,8 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
     """
     Asynchronously loops through witnesses.
 
+    This is looking at VIRTUAL OPS.
+
     This function creates an event listener for witnesses, then loops through the
     witnesses and logs them. It connects to a Hive blockchain client and listens for
     producer reward operations. When a reward operation for the specified witness is
@@ -530,7 +533,7 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
         while True:
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
-                    opNames=["producer_reward"],
+                    opNames=VirtualOpTypes.all_values(),
                     start=last_good_block,
                     only_virtual_ops=True,
                     max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -764,33 +767,44 @@ def format_market_event(hive_event: dict) -> str:
     """
     try:
         if hive_event.get("type") == "fill_order":
-            current_pays = str(Amount(hive_event.get("current_pays")))
-            open_pays = str(Amount(hive_event.get("open_pays")))
+            current_pays = Amount(hive_event.get("current_pays"))
+            open_pays = Amount(hive_event.get("open_pays"))
+            current_pays_str = str(current_pays)
+            open_pays_str = str(open_pays)
             if current_pays.symbol == "HIVE":
                 rate = open_pays.amount / current_pays.amount
             else:
                 rate = current_pays.amount / open_pays.amount
             rate_str = f"{rate:.3f} HIVE/HBD"
             return (
-                f"{current_pays:>15} -> {open_pays:>15} {rate_str} "
-                f"{hive_event.get('current_owner')} filled order "
+                f"{rate_str:>14}  - "
+                f"{current_pays_str:>15} -> {open_pays_str:>15} "
+                f"{hive_event.get('open_owner')} filled order "
                 f"for {hive_event.get('current_owner')} with "
                 f"{hive_event.get('open_orderid')}"
             )
         if hive_event.get("type") == "limit_order_create":
             amount_to_sell = Amount(hive_event.get("amount_to_sell"))
             min_to_receive = Amount(hive_event.get("min_to_receive"))
-            rate = amount_to_sell.amount / min_to_receive.amount
-            sell = f"{amount_to_sell.amount:>6.3f}"
-            receive = f"{min_to_receive.amount:>6.3f}"
+            sell_str = str(amount_to_sell)
+            receive_str = str(min_to_receive)
+            if amount_to_sell.symbol == "HIVE":
+                rate = min_to_receive.amount / amount_to_sell.amount
+            else:
+                rate = amount_to_sell.amount / min_to_receive.amount
+            sell = f"{sell_str:>15}"
+            receive = f"{receive_str:>15}"
             rate_str = f"{rate:.3f} HIVE/HBD"
             return (
+                f"{rate_str:>14}  - "
                 f"{hive_event.get('owner')} created order "
-                f"{sell} for {receive} {rate_str} "
+                f"{sell} for {receive} "
                 f"{hive_event.get('orderid')}"
             )
-        if hive_event.get('type') == 'limit_order_cancel':
-            return f"{hive_event.get('owner')} cancelled order {hive_event.get('orderid')}"
+        if hive_event.get("type") == "limit_order_cancel":
+            return (
+                f"{hive_event.get('owner')} cancelled order {hive_event.get('orderid')}"
+            )
         return f"Market event: {hive_event.get('type')}"
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
