@@ -140,6 +140,8 @@ class HiveAccountConfig(BaseConfig):
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
+    hbd_balance: str = ""  # HBD balance of the account
+    hive_balance: str = ""  # HIVE balance of the account
 
     @property
     def keys(self) -> List[str]:
@@ -155,7 +157,7 @@ class HiveAccountConfig(BaseConfig):
 
 
 class HiveConfig(BaseConfig):
-    hive_accs: Dict[str, HiveAccountConfig] = {}
+    hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -181,6 +183,48 @@ class HiveConfig(BaseConfig):
             List[str]: A list containing the names of all Hive accounts.
         """
         return list(self.hive_accs.keys())
+
+    @property
+    def server_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the server accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.server.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.server]
+
+    @property
+    def server_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the server accounts.
+
+        Returns:
+            List[str]: A list containing the names of all server accounts.
+        """
+        return [acc.name for acc in self.server_accounts]
+
+    @property
+    def treasury_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the treasury accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
+        """
+        return [
+            acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury
+        ]
+
+    @property
+    def treasury_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the Treasury accounts.
+
+        Returns:
+            List[str]: A list containing the names of all treasury accounts.
+        """
+        return [acc.name for acc in self.treasury_accounts]
 
 
 class Config(BaseModel):
