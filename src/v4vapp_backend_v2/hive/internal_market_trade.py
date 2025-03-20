@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
-
 from beem import Hive  # type: ignore
 from beem.amount import Amount  # type: ignore
 from beem.market import Market  # type: ignore
@@ -9,7 +8,10 @@ from beem.price import Price  # type: ignore
 from beemapi.exceptions import UnhandledRPCError  # type: ignore
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_hive_block_explorer_link,
+    get_hive_client,
+)
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
 
@@ -42,6 +44,10 @@ def market_trade(
     market = Market(market_symbol, blockchain_instance=hive)
     amount_str = str(amount)
     price_float = float(quote.price["price"])
+    logger.info(
+        f"Converting {amount} to {quote.minimum_amount} at {quote.price}",
+        extra={"notification": True, "quote": quote},
+    )
     try:
         trx = market.sell(
             price=price_float,
@@ -50,12 +56,23 @@ def market_trade(
             killfill=killfill,
             expiration=expiration,
         )
+        link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
+        logger.info(
+            f"Transaction {amount} {trx.get("trx_id")} completed {link}",
+            extra={"notification": True, "extra": trx},
+        )
         return trx
     except UnhandledRPCError as e:
-        logger.warning(str(e), extra={"notification": False})
+        logger.warning(
+            f"Market Trade error: {e}",
+            extra={"notification": True, "quote": quote, "error": e},
+        )
         raise e
     except Exception as e:
-        logger.warning(str(e), extra={"notification": False})
+        logger.warning(
+            f"Market Trade error: {e}",
+            extra={"notification": False, "quote": quote, "error": e},
+        )
         raise e
 
 
@@ -100,7 +117,7 @@ def check_order_book(
     else:
         # Note: The order book is the same and always uses HIVE as the base asset
         market = Market(base=base_asset, quote=quote_asset, blockchain_instance=hive)
-        order_book = market.orderbook(limit=50)
+        order_book = market.orderbook(limit=order_book_limit)
         ORDER_BOOK_CACHE = order_book
 
     # Selling HIVE, so we want the highest bid
@@ -140,7 +157,7 @@ def check_order_book(
     if final_price is None:
         raise ValueError("Not enough volume in the order book")
 
-    logger.info(f"Best price for {amount} is {final_price}")
+    logger.debug(f"Best price for {amount} is {final_price}")
     # if final_price.market["base"]["symbol"] != amount.symbol:
     #     final_price.invert()
 
@@ -151,7 +168,7 @@ def check_order_book(
 
     minimum_amount = Amount(min_amt, quote_asset)
 
-    logger.info(f"Minimum amount: {minimum_amount}")
+    logger.debug(f"Minimum amount: {minimum_amount}")
 
     hive_quote = HiveQuote(amount, final_price, minimum_amount)
     return hive_quote

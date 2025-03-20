@@ -1,5 +1,3 @@
-import json
-import pickle
 from unittest.mock import patch
 
 import pytest  # type: ignore
@@ -7,10 +5,7 @@ from beem.amount import Amount
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
-from v4vapp_backend_v2.hive.internal_market_trade import (
-    ORDER_BOOK_CACHE,
-    check_order_book,
-)
+from v4vapp_backend_v2.hive.internal_market_trade import check_order_book
 
 
 def test_check_order_book():
