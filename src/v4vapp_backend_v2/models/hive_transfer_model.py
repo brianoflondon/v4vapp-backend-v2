@@ -20,13 +20,13 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConver
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
 from v4vapp_backend_v2.hive.hive_extras import (
-    HiveTransactionTypes,
     decode_memo,
     get_blockchain_instance,
     get_event_id,
     get_hive_block_explorer_link,
     get_hive_client,
 )
+from v4vapp_backend_v2.models.hive_transaction_types import TransferOpTypes
 
 
 class HiveTransactionFlags(BaseModel):
@@ -48,9 +48,9 @@ class HiveTransactionFlags(BaseModel):
 
 class HiveTransaction(BaseModel):
     id: str = Field(..., alias="_id")
+    type: TransferOpTypes
     trx_id: str
     timestamp: datetime
-    type: HiveTransactionTypes
     found: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
     op_in_trx: int
     hive_from: str = Field(..., alias="from")

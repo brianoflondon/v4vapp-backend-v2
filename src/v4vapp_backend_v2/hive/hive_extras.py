@@ -16,6 +16,7 @@ from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.models.hive_transaction_types import TransferOpTypes
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -32,17 +33,6 @@ DEFAULT_GOOD_NODES = [
 
 
 MAX_HIVE_BATCH_SIZE = 25
-
-
-class HiveTransactionTypes(StrEnum):
-    TRANSFER = "transfer"
-    RECURRENT_TRANSFER = "recurrent_transfer"
-
-
-TRANSFER_OP_TYPES = [
-    HiveTransactionTypes.TRANSFER,
-    HiveTransactionTypes.RECURRENT_TRANSFER,
-]
 
 
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market

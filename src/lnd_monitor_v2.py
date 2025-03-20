@@ -89,13 +89,11 @@ async def track_events(
         message_str, ans_dict = lnd_events_group.message(
             htlc_event, dest_alias=dest_alias
         )
-        silent = (
-            True
-            if check_for_attempted_forwards(
-                htlc_event=htlc_event, message_str=message_str
-            )
-            else False
-        )
+        if check_for_attempted_forwards(htlc_event, message_str):
+            silent = True
+            notification = False
+        else:
+            silent = False
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
             logger.info(
                 f"{lnd_client.icon} {message_str}",
