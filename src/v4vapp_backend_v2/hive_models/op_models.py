@@ -64,6 +64,7 @@ class VirtualOpTypes(StrEnum):
     during block processing. They are not initiated directly by users. These operations may appear
     on other lists.
     """
+
     PRODUCER_REWARD = auto()
     FILL_ORDER = auto()
     FILL_RECURRENT_TRANSFER = auto()
@@ -85,7 +86,7 @@ HiveOpTypes = create_master_enum(TransferOpTypes, MarketOpTypes)
 # Used in real_ops_loop in hive_monitor_v2.py
 RealOpsLoopTypes = create_master_enum(TransferOpTypes, MarketOpTypes, WitnessOpTypes)
 
-AllOpTypes = create_master_enum(
+OpTypes = create_master_enum(
     TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes
 )
 
