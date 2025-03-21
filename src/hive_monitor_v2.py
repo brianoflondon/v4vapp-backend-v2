@@ -29,7 +29,7 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.voting_power import VotingPower
 from v4vapp_backend_v2.models.hive_transaction_types import (
     MarketOpTypes,
-    TransactionLoopOpTypes,
+    RealOpsLoopTypes,
     TransferOpTypes,
     VirtualOpTypes,
     WitnessOpTypes,
@@ -530,7 +530,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     return mean_time_diff
 
 
-async def witness_loop(watch_witness: str, watch_users: List[str] = []):
+async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
     """
     Asynchronously loops through witnesses.
 
@@ -550,7 +550,7 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
         HTTPError: If there is an HTTP error while streaming events.
         Exception: For any other exceptions that occur during the loop.
     """
-
+    op_names = VirtualOpTypes
     logger.info(f"{icon} Watching witness: {watch_witness}")
     last_good_event = await witness_first_run(watch_witness)
     last_good_timestamp = last_good_event.get("timestamp", "N/A")
@@ -568,7 +568,7 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
         while True:
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
-                    opNames=VirtualOpTypes.all_values(),
+                    opNames=op_names,
                     start=last_good_block,
                     only_virtual_ops=True,
                     max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -668,7 +668,7 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
                 last_good_block = last_good_event.get("block_num", 0) + 1
 
 
-async def transactions_loop(watch_users: List[str]):
+async def real_ops_loop(watch_users: List[str]):
     """
     Asynchronously loops through transactions and processes them.
 
@@ -676,6 +676,8 @@ async def transactions_loop(watch_users: List[str]):
     blockchain, processes each transaction, logs relevant information, and publishes
     events for further handling. It also periodically updates cryptocurrency quotes and
     stores block markers in a database.
+
+    Uses Ops from:
 
     Args:
         watch_users (List[str]): A list of user accounts to monitor for transactions.
@@ -697,7 +699,7 @@ async def transactions_loop(watch_users: List[str]):
         involving a watched user is detected.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = TransactionLoopOpTypes
+    op_names = RealOpsLoopTypes
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
@@ -871,8 +873,8 @@ async def runner(watch_users: List[str]):
 
         async_subscribe(Events.HIVE_MARKET, market_report)
         tasks = [
-            transactions_loop(watch_users),
-            witness_loop("brianoflondon", watch_users),
+            real_ops_loop(watch_users),
+            virtual_ops_loop("brianoflondon", watch_users),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
