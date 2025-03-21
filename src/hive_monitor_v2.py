@@ -27,7 +27,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.voting_power import VotingPower
-from v4vapp_backend_v2.models.hive_transaction_types import (
+from v4vapp_backend_v2.hive_models.op_models import (
     MarketOpTypes,
     RealOpsLoopTypes,
     TransferOpTypes,
