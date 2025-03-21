@@ -2,7 +2,7 @@ import json
 from pprint import pprint
 
 from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
-from v4vapp_backend_v2.hive_models.transfer_op_types import Amount, Transfer
+from v4vapp_backend_v2.hive_models.transfer_op_types import AmountPyd, Transfer
 
 if __name__ == "__main__":
     with open("logs/v4vapp-backend-v2.log.jsonl", "r") as infile:

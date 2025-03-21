@@ -142,6 +142,10 @@ class QuoteResponse(BaseModel):
         """Calculate the age of the quote in seconds."""
         return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
 
+    def get_age(self) -> float:
+        """Calculate the age of the quote in seconds. Function version."""
+        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
+
     @property
     def log_data(self) -> Dict[str, Any]:
         return self.model_dump(exclude={"raw_response"}, exclude_none=True)

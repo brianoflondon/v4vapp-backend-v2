@@ -7,7 +7,7 @@ from beem.amount import Amount  # type: ignore
 from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
-
+#TODO #35 conver the name of the Amount in this to AmountBeem
 
 class CryptoConv(BaseModel):
     """
