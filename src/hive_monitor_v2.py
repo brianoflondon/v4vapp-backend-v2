@@ -25,6 +25,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_client,
     get_hive_witness_details,
 )
+from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.voting_power import VotingPower
 from v4vapp_backend_v2.models.hive_transaction_types import (
     MarketOpTypes,
@@ -45,23 +46,10 @@ HIVE_TRX_COLLECTION_V2 = "hive_trx"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
+AUTO_BALANCE_SERVER = True
 
 COMMAND_LINE_WATCH_USERS = []
 
-# TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
-# WITNESS_OP_TYPES = ["account_witness_vote"]
-
-# MARKET_OP_TYPES = [
-#     "fill_order",
-#     "limit_order_create",
-#     "limit_order_cancel",
-# ]
-
-# TRANSACTIONS_LOOP_OP_TYPES = TRANSFER_OP_TYPES + WITNESS_OP_TYPES + MARKET_OP_TYPES
-# VIRTUAL_OP_TYPES = ["producer_reward", "fill_order"]
-
-
-# OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
 
 app = typer.Typer()
 icon = "🐝"
@@ -193,6 +181,29 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     )
 
 
+async def market_report(
+    hive_event: dict, watch_users: List[str], *args: Any, **kwargs: Any
+) -> None:
+    """
+    Asynchronously reports market events.
+
+    This function reports market events by logging the market event.
+
+    Args:
+        hive_event (dict): The Hive market event.
+    """
+    if (
+        hive_event.get("current_owner", "") in watch_users
+        or hive_event.get("open_owner", "") in watch_users
+        or hive_event.get("owner", "") in watch_users
+    ):
+        message = format_market_event(hive_event)
+        logger.info(
+            f"{icon} {message}",
+            extra={"notification": True, "hive_event": hive_event},
+        )
+
+
 async def db_store_block_marker(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
@@ -237,7 +248,7 @@ async def db_store_block_marker(
         logger.exception(e, extra={"error": e})
 
 
-async def db_store_transaction_v2(
+async def db_store_transfer(
     hive_event: dict,
     db_client: MongoDBClient,
     *args: Any,
@@ -270,6 +281,7 @@ async def db_store_transaction_v2(
     global COMMAND_LINE_WATCH_USERS
     try:
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
+            # TODO #32 Rename HiveTransaction to HiveTransfer
             if HiveTransaction.last_quote.age > 60:
                 quote = HiveTransaction.last_quote
                 await HiveTransaction.update_quote()
@@ -292,6 +304,29 @@ async def db_store_transaction_v2(
                 update=hive_trx.model_dump(by_alias=True),
                 upsert=True,
             )
+
+            if (
+                AUTO_BALANCE_SERVER
+                and hive_trx.hive_to in CONFIG.hive.server_account_names
+                and hive_trx.hive_from not in CONFIG.hive.treasury_account_names
+            ):
+                hive_acc = CONFIG.hive.hive_accs.get(hive_trx.hive_to)
+                if hive_acc.active_key:
+                    set_amount_to = Amount(hive_acc.hbd_balance)
+                    try:
+                        trx = account_trade(
+                            hive_acc=hive_acc, set_amount_to=set_amount_to
+                        )
+                        logger.info(
+                            f"{icon} Successful conversion {trx.get("trx_id", "")}",
+                            extra={"notification": False},
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"{icon} Conversion error: {e}",
+                            extra={"notification": False, "error": e},
+                        )
+
     except DuplicateKeyError:
         pass
 
@@ -606,18 +641,11 @@ async def witness_loop(watch_witness: str, watch_users: List[str] = []):
                         except DuplicateKeyError:
                             pass
                     if hive_event.get("type") in MarketOpTypes:
-                        logger.info(
-                            f"{icon} {format_market_event(hive_event)}",
-                            extra={"notification": False, "hive_event": hive_event},
+                        async_publish(
+                            Events.HIVE_MARKET,
+                            hive_event=hive_event,
+                            watch_users=watch_users,
                         )
-                        if (
-                            hive_event.get("open_owner", "") in watch_users
-                            or hive_event.get("current_owner", "") in watch_users
-                        ):
-                            logger.info(
-                                f"{icon} {format_market_event(hive_event)}",
-                                extra={"notification": True, "hive_event": hive_event},
-                            )
                     count += 1
                     if count % 100 == 0:
                         hive_client.rpc.next()
@@ -737,18 +765,11 @@ async def transactions_loop(watch_users: List[str]):
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
                     if hive_event.get("type") in MarketOpTypes:
-                        logger.info(
-                            f"{icon} {format_market_event(hive_event)}",
-                            extra={"notification": False, "hive_event": hive_event},
+                        async_publish(
+                            Events.HIVE_MARKET,
+                            hive_event=hive_event,
+                            watch_users=watch_users,
                         )
-                        if (
-                            hive_event.get("owner", "") in watch_users
-                            or hive_event.get("current_owner", "") in watch_users
-                        ):
-                            logger.info(
-                                f"{icon} {format_market_event(hive_event)}",
-                                extra={"notification": True, "hive_event": hive_event},
-                            )
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
@@ -841,11 +862,14 @@ async def runner(watch_users: List[str]):
         # Events.HIVE_TRANSFER - takes HiveEvent and stores only the required ones
         # re-pbulishes the event as Events.HIVE_TRANSFER_NOTIFY as a
         # HiveTransfer object
-        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction_v2)
+        # async_subscribe(Events.HIVE_TRANSFER, hive_transfer_automatic_sell)
+        async_subscribe(Events.HIVE_TRANSFER, db_store_transfer)
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, hive_transaction_report)
 
         async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
         async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_witness_vote)
+
+        async_subscribe(Events.HIVE_MARKET, market_report)
         tasks = [
             transactions_loop(watch_users),
             witness_loop("brianoflondon", watch_users),

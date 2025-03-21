@@ -19,6 +19,4 @@ class Events(StrEnum):
     HIVE_WITNESS_VOTE = auto()
 
     # Hive Market events
-    HIVE_MARKET_FILL_ORDER = auto()
-    HIVE_MARKET_LIMIT_ORDER_CREATE = auto()
-    HIVE_MARKET_LIMIT_ORDER_CANCEL = auto()
+    HIVE_MARKET = auto()
