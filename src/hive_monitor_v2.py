@@ -3,7 +3,7 @@ import sys
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, List, Tuple
+from typing import Annotated, Any, List
 
 import typer
 from beem.amount import Amount  # type: ignore
@@ -18,17 +18,23 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
-from v4vapp_backend_v2.helpers.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (
     MAX_HIVE_BATCH_SIZE,
-    get_hive_block_explorer_link,
+    get_event_id,
     get_hive_client,
     get_hive_witness_details,
 )
-from v4vapp_backend_v2.helpers.voting_power import VotingPower
-from v4vapp_backend_v2.models.hive_models import HiveTransaction
+from v4vapp_backend_v2.hive.internal_market_trade import account_trade
+from v4vapp_backend_v2.hive.voting_power import VotingPower
+from v4vapp_backend_v2.models.hive_transaction_types import (
+    MarketOpTypes,
+    RealOpsLoopTypes,
+    TransferOpTypes,
+    VirtualOpTypes,
+    WitnessOpTypes,
+)
+from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -40,11 +46,10 @@ HIVE_TRX_COLLECTION_V2 = "hive_trx"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
+AUTO_BALANCE_SERVER = True
 
 COMMAND_LINE_WATCH_USERS = []
 
-TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
-OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
 
 app = typer.Typer()
 icon = "🐝"
@@ -176,6 +181,29 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     )
 
 
+async def market_report(
+    hive_event: dict, watch_users: List[str], *args: Any, **kwargs: Any
+) -> None:
+    """
+    Asynchronously reports market events.
+
+    This function reports market events by logging the market event.
+
+    Args:
+        hive_event (dict): The Hive market event.
+    """
+    if (
+        hive_event.get("current_owner", "") in watch_users
+        or hive_event.get("open_owner", "") in watch_users
+        or hive_event.get("owner", "") in watch_users
+    ):
+        message = format_market_event(hive_event)
+        logger.info(
+            f"{icon} {message}",
+            extra={"notification": True, "hive_event": hive_event},
+        )
+
+
 async def db_store_block_marker(
     hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
@@ -220,22 +248,7 @@ async def db_store_block_marker(
         logger.exception(e, extra={"error": e})
 
 
-def get_event_id(hive_event: dict) -> str:
-    """
-    Get the event id from the Hive event.
-
-    Args:
-        hive_event (dict): The Hive event.
-
-    Returns:
-        str: The event id.
-    """
-    trx_id = hive_event.get("trx_id", "")
-    op_in_trx = hive_event.get("op_in_trx", 0)
-    return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
-
-
-async def db_store_transaction_v2(
+async def db_store_transfer(
     hive_event: dict,
     db_client: MongoDBClient,
     *args: Any,
@@ -268,6 +281,7 @@ async def db_store_transaction_v2(
     global COMMAND_LINE_WATCH_USERS
     try:
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
+            # TODO #32 Rename HiveTransaction to HiveTransfer
             if HiveTransaction.last_quote.age > 60:
                 quote = HiveTransaction.last_quote
                 await HiveTransaction.update_quote()
@@ -290,6 +304,29 @@ async def db_store_transaction_v2(
                 update=hive_trx.model_dump(by_alias=True),
                 upsert=True,
             )
+
+            if (
+                AUTO_BALANCE_SERVER
+                and hive_trx.hive_to in CONFIG.hive.server_account_names
+                and hive_trx.hive_from not in CONFIG.hive.treasury_account_names
+            ):
+                hive_acc = CONFIG.hive.hive_accs.get(hive_trx.hive_to)
+                if hive_acc.active_key:
+                    set_amount_to = Amount(hive_acc.hbd_balance)
+                    try:
+                        trx = account_trade(
+                            hive_acc=hive_acc, set_amount_to=set_amount_to
+                        )
+                        logger.info(
+                            f"{icon} Successful conversion {trx.get("trx_id", "")}",
+                            extra={"notification": False},
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"{icon} Conversion error: {e}",
+                            extra={"notification": False, "error": e},
+                        )
+
     except DuplicateKeyError:
         pass
 
@@ -493,9 +530,11 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     return mean_time_diff
 
 
-async def witness_loop(watch_witness: str):
+async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
     """
     Asynchronously loops through witnesses.
+
+    This is looking at VIRTUAL OPS.
 
     This function creates an event listener for witnesses, then loops through the
     witnesses and logs them. It connects to a Hive blockchain client and listens for
@@ -511,7 +550,7 @@ async def witness_loop(watch_witness: str):
         HTTPError: If there is an HTTP error while streaming events.
         Exception: For any other exceptions that occur during the loop.
     """
-
+    op_names = VirtualOpTypes
     logger.info(f"{icon} Watching witness: {watch_witness}")
     last_good_event = await witness_first_run(watch_witness)
     last_good_timestamp = last_good_event.get("timestamp", "N/A")
@@ -529,7 +568,7 @@ async def witness_loop(watch_witness: str):
         while True:
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
-                    opNames=["producer_reward"],
+                    opNames=op_names,
                     start=last_good_block,
                     only_virtual_ops=True,
                     max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -601,6 +640,12 @@ async def witness_loop(watch_witness: str):
                             )
                         except DuplicateKeyError:
                             pass
+                    if hive_event.get("type") in MarketOpTypes:
+                        async_publish(
+                            Events.HIVE_MARKET,
+                            hive_event=hive_event,
+                            watch_users=watch_users,
+                        )
                     count += 1
                     if count % 100 == 0:
                         hive_client.rpc.next()
@@ -623,7 +668,7 @@ async def witness_loop(watch_witness: str):
                 last_good_block = last_good_event.get("block_num", 0) + 1
 
 
-async def transactions_loop(watch_users: List[str]):
+async def real_ops_loop(watch_users: List[str]):
     """
     Asynchronously loops through transactions and processes them.
 
@@ -631,6 +676,8 @@ async def transactions_loop(watch_users: List[str]):
     blockchain, processes each transaction, logs relevant information, and publishes
     events for further handling. It also periodically updates cryptocurrency quotes and
     stores block markers in a database.
+
+    Uses Ops from:
 
     Args:
         watch_users (List[str]): A list of user accounts to monitor for transactions.
@@ -652,7 +699,7 @@ async def transactions_loop(watch_users: List[str]):
         involving a watched user is detected.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
-    op_names = ["transfer", "recurrent_transfer", "account_witness_vote"]
+    op_names = RealOpsLoopTypes
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
@@ -677,7 +724,7 @@ async def transactions_loop(watch_users: List[str]):
                 last_trx_id = ""
                 op_in_trx = 0
                 async for hive_event in async_stream:
-                    if hive_event.get("type") == "account_witness_vote":
+                    if hive_event.get("type") in WitnessOpTypes:
                         voter_power = VotingPower(hive_event["account"])
                         hive_event["total_value"] = voter_power.total_value
                         hive_event["voter_details"] = asdict(voter_power)
@@ -687,7 +734,7 @@ async def transactions_loop(watch_users: List[str]):
                             hive_event=hive_event,
                             db_client=db_client,
                         )
-                    if hive_event.get("type") in ["transfer", "recurrent_transfer"]:
+                    if hive_event.get("type") in TransferOpTypes:
                         # For trx_id's with multiple transfers, record position in trx
                         if hive_event.get("trx_id") == last_trx_id:
                             op_in_trx += 1
@@ -719,7 +766,12 @@ async def transactions_loop(watch_users: List[str]):
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
-
+                    if hive_event.get("type") in MarketOpTypes:
+                        async_publish(
+                            Events.HIVE_MARKET,
+                            hive_event=hive_event,
+                            watch_users=watch_users,
+                        )
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
@@ -727,6 +779,59 @@ async def transactions_loop(watch_users: List[str]):
             except Exception as e:
                 logger.error(f"{icon} {e}", extra={"error": e})
                 raise e
+
+
+def format_market_event(hive_event: dict) -> str:
+    """
+    Formats a market event for logging.
+
+    This function formats a market event for logging by extracting the relevant
+    information from the event and returning a formatted string.
+    """
+    try:
+        if hive_event.get("type") == "fill_order":
+            current_pays = Amount(hive_event.get("current_pays"))
+            open_pays = Amount(hive_event.get("open_pays"))
+            current_pays_str = str(current_pays)
+            open_pays_str = str(open_pays)
+            if current_pays.symbol == "HIVE":
+                rate = open_pays.amount / current_pays.amount
+            else:
+                rate = current_pays.amount / open_pays.amount
+            rate_str = f"{rate:.3f} HIVE/HBD"
+            return (
+                f"{rate_str:>14}  - "
+                f"{current_pays_str:>15} -> {open_pays_str:>15} "
+                f"{hive_event.get('open_owner')} filled order "
+                f"for {hive_event.get('current_owner')} with "
+                f"{hive_event.get('open_orderid')}"
+            )
+        if hive_event.get("type") == "limit_order_create":
+            amount_to_sell = Amount(hive_event.get("amount_to_sell"))
+            min_to_receive = Amount(hive_event.get("min_to_receive"))
+            sell_str = str(amount_to_sell)
+            receive_str = str(min_to_receive)
+            if amount_to_sell.symbol == "HIVE":
+                rate = min_to_receive.amount / amount_to_sell.amount
+            else:
+                rate = amount_to_sell.amount / min_to_receive.amount
+            sell = f"{sell_str:>15}"
+            receive = f"{receive_str:>15}"
+            rate_str = f"{rate:.3f} HIVE/HBD"
+            return (
+                f"{rate_str:>14}  - "
+                f"{hive_event.get('owner')} created order "
+                f"{sell} for {receive} "
+                f"{hive_event.get('orderid')}"
+            )
+        if hive_event.get("type") == "limit_order_cancel":
+            return (
+                f"{hive_event.get('owner')} cancelled order {hive_event.get('orderid')}"
+            )
+        return f"Market event: {hive_event.get('type')}"
+    except Exception as e:
+        logger.exception(e, extra={"error": e, "notification": False})
+        return "Problem formatting market event {e}"
 
 
 async def runner(watch_users: List[str]):
@@ -759,12 +864,18 @@ async def runner(watch_users: List[str]):
         # Events.HIVE_TRANSFER - takes HiveEvent and stores only the required ones
         # re-pbulishes the event as Events.HIVE_TRANSFER_NOTIFY as a
         # HiveTransfer object
-        async_subscribe(Events.HIVE_TRANSFER, db_store_transaction_v2)
+        # async_subscribe(Events.HIVE_TRANSFER, hive_transfer_automatic_sell)
+        async_subscribe(Events.HIVE_TRANSFER, db_store_transfer)
         async_subscribe(Events.HIVE_TRANSFER_NOTIFY, hive_transaction_report)
 
         async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
         async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_witness_vote)
-        tasks = [transactions_loop(watch_users), witness_loop("brianoflondon")]
+
+        async_subscribe(Events.HIVE_MARKET, market_report)
+        tasks = [
+            real_ops_loop(watch_users),
+            virtual_ops_loop("brianoflondon", watch_users),
+        ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")

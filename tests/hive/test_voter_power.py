@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from v4vapp_backend_v2.helpers.voting_power import VotingPower
+from v4vapp_backend_v2.hive.voting_power import VotingPower
 
 
 def test_voting_power():

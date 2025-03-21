@@ -9,14 +9,13 @@ import sys
 import time
 from enum import StrEnum
 from pathlib import Path
-from pprint import pprint
 from statistics import mean, stdev
 from typing import Any, Dict, List, Optional, Protocol, override
 
 import colorlog
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, model_validator
 from pymongo.operations import _IndexKeyHint
-from yaml import safe_dump, safe_load
+from yaml import safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
 
@@ -113,19 +112,57 @@ class RedisConnectionConfig(BaseConfig):
 
 
 class HiveRoles(StrEnum):
+    """
+    HiveRoles is an enumeration that defines different roles within the Hive system.
+
+    Attributes:
+        server (str): Represents the server role.
+        treasury (str): Represents the treasury role.
+    """
+
     server = "server"
     treasury = "treasury"
 
 
 class HiveAccountConfig(BaseConfig):
+    """
+    HiveAccountConfig is a configuration class for Hive account settings.
+
+    Attributes:
+        role (HiveRoles): The role assigned to the Hive account. Default is HiveRoles.server.
+        posting_key (str): The posting key for the Hive account. Default is an empty string.
+        active_key (str): The active key for the Hive account. Default is an empty string.
+        memo_key (str): The memo key for the Hive account. Default is an empty string.
+    """
+
+    name: str = ""
     role: HiveRoles = HiveRoles.server
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
+    hbd_balance: str = ""  # HBD balance of the account
+    hive_balance: str = ""  # HIVE balance of the account
+
+    @property
+    def keys(self) -> List[str]:
+        """
+        Retrieve the keys of the Hive account.
+
+        Returns:
+            List[str]]: A list of the private keys for the account.
+        """
+        return [
+            key for key in [self.posting_key, self.active_key, self.memo_key] if key
+        ]
 
 
 class HiveConfig(BaseConfig):
-    hive_accs: Dict[str, HiveAccountConfig] = {}
+    hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, acc in self.hive_accs.items():
+            acc.name = name
 
     @property
     def memo_keys(self) -> List[str]:
@@ -146,6 +183,48 @@ class HiveConfig(BaseConfig):
             List[str]: A list containing the names of all Hive accounts.
         """
         return list(self.hive_accs.keys())
+
+    @property
+    def server_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the server accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.server.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.server]
+
+    @property
+    def server_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the server accounts.
+
+        Returns:
+            List[str]: A list containing the names of all server accounts.
+        """
+        return [acc.name for acc in self.server_accounts]
+
+    @property
+    def treasury_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the treasury accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
+        """
+        return [
+            acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury
+        ]
+
+    @property
+    def treasury_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the Treasury accounts.
+
+        Returns:
+            List[str]: A list containing the names of all treasury accounts.
+        """
+        return [acc.name for acc in self.treasury_accounts]
 
 
 class Config(BaseModel):

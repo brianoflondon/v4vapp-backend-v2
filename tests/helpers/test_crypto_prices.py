@@ -174,14 +174,12 @@ def mock_hive_internal_market(mocker):
     # Mock the get_hive_client function to return a mock Hive instance
     mock_hive = mocker.MagicMock(spec=Hive)
     mocker.patch(
-        "v4vapp_backend_v2.helpers.hive_extras.get_hive_client", return_value=mock_hive
+        "v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive
     )
 
     # Mock the Market class
     mock_market = mocker.MagicMock(spec=Market)
-    mocker.patch(
-        "v4vapp_backend_v2.helpers.hive_extras.Market", return_value=mock_market
-    )
+    mocker.patch("v4vapp_backend_v2.hive.hive_extras.Market", return_value=mock_market)
 
     # Configure the mock market's ticker method to return our test data
     mock_market.ticker.return_value = hive_internal_market_resp
@@ -207,14 +205,12 @@ async def test_hive_internal_market_service_error(mocker):
     # Mock the get_hive_client function to return a mock Hive instance
     mock_hive = mocker.MagicMock(spec=Hive)
     mocker.patch(
-        "v4vapp_backend_v2.helpers.hive_extras.get_hive_client", return_value=mock_hive
+        "v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive
     )
 
     # Mock the Market class
     mock_market = mocker.MagicMock(spec=Market)
-    mocker.patch(
-        "v4vapp_backend_v2.helpers.hive_extras.Market", return_value=mock_market
-    )
+    mocker.patch("v4vapp_backend_v2.hive.hive_extras.Market", return_value=mock_market)
 
     # Configure the mock market's ticker method to raise an exception
     mock_market.ticker.side_effect = Exception("Test error")
@@ -310,8 +306,8 @@ def load_and_mock_responses(mocker, failing_service):
         mock_spot_client.return_value.book_ticker.return_value = binance_resp
 
     # Mock Hive Internal Market
-    _ = mocker.patch("v4vapp_backend_v2.helpers.hive_extras.get_hive_client")
-    mock_market = mocker.patch("v4vapp_backend_v2.helpers.hive_extras.Market")
+    _ = mocker.patch("v4vapp_backend_v2.hive.hive_extras.get_hive_client")
+    mock_market = mocker.patch("v4vapp_backend_v2.hive.hive_extras.Market")
     if failing_service == "HiveInternalMarket":
         mock_market.return_value.ticker.side_effect = Exception("Hive market error")
     else:

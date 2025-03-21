@@ -1,21 +1,17 @@
 import json
 import os
-from pathlib import Path
 import pickle
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from beem.amount import Amount
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.hive_extras import (
-    HiveTransactionTypes,
-    get_event_id,
-    get_hive_client,
-)
-from v4vapp_backend_v2.models.hive_models import HiveTransaction, HiveTransactionFlags
+from v4vapp_backend_v2.hive.hive_extras import get_event_id, get_hive_client
+from v4vapp_backend_v2.models.hive_transaction_types import TransferOpTypes
+from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
 HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
@@ -96,7 +92,7 @@ def test_instantiation_mock_all_quote_calls(sample_post):
         mock_all_quotes = mock_all_quotes_fixture(all_quotes)
 
         with patch(
-            "v4vapp_backend_v2.models.hive_models.AllQuotes",
+            "v4vapp_backend_v2.models.hive_transfer_model.AllQuotes",
             return_value=mock_all_quotes,
         ):
             with patch(

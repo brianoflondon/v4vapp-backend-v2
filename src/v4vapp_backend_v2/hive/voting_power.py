@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from beem import Hive  # type: ignore
 from beem.account import Account  # type: ignore
 
-from v4vapp_backend_v2.helpers.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 
 @dataclass

@@ -11,7 +11,7 @@ from pydantic import BaseModel, computed_field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.helpers.hive_extras import call_hive_internal_market
+from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
     "https://api.coingecko.com/api/v3/simple"

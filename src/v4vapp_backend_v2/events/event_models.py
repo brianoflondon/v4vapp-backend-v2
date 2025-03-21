@@ -11,7 +11,12 @@ class Events(StrEnum):
     # HTLC events
     HTLC_EVENT = auto()
 
-    # Hive events
+    # Hive Transfer events
     HIVE_TRANSFER = auto()
     HIVE_TRANSFER_NOTIFY = auto()
+
+    # Hive Witness Vote events
     HIVE_WITNESS_VOTE = auto()
+
+    # Hive Market events
+    HIVE_MARKET = auto()
