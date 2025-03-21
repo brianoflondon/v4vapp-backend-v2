@@ -16,3 +16,16 @@ def test_create_master_enum():
     assert "fill_order" not in TransferOpTypes
     assert list(HiveOpTypes) == list(TransferOpTypes) + list(MarketOpTypes)
     assert VirtualOpTypes.PRODUCER_REWARD in VirtualOpTypes
+
+def test_other_ops():
+    assert "limit_order_create" in MarketOpTypes
+    assert "limit_order_cancel" in MarketOpTypes
+    assert "transfer" in TransferOpTypes
+    assert "recurrent_transfer" in RealOpsLoopTypes
+    assert "producer_reward" in WitnessOpTypes
+
+
+def test_list_all_real_ops():
+    for item in RealOpsLoopTypes:
+        print(item)
+        assert isinstance(item, str)
