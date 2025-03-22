@@ -280,10 +280,10 @@ async def db_store_transfer(
     """
     global COMMAND_LINE_WATCH_USERS
     try:
-        logger.info(
-            f"Storing raw hive_event {hive_event.get('from', '')} ",
-            extra={"notification": False, "hive_event": hive_event},
-        )
+        # logger.info(
+        #     f"Storing raw hive_event {hive_event.get('from', '')} ",
+        #     extra={"notification": False, "hive_event": hive_event},
+        # )
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
             # TODO #32 Rename HiveTransaction to HiveTransfer
 
