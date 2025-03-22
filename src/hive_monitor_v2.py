@@ -280,10 +280,10 @@ async def db_store_transfer(
     """
     global COMMAND_LINE_WATCH_USERS
     try:
-        logger.info(
-            f"Storing raw hive_event {hive_event.get('from', '')} ",
-            extra={"notification": False, "hive_event": hive_event},
-        )
+        # logger.info(
+        #     f"Storing raw hive_event {hive_event.get('from', '')} ",
+        #     extra={"notification": False, "hive_event": hive_event},
+        # )
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
             # TODO #32 Rename HiveTransaction to HiveTransfer
 
@@ -312,31 +312,52 @@ async def db_store_transfer(
 
             if (
                 AUTO_BALANCE_SERVER
-                and hive_trx.hive_to in CONFIG.hive.server_account_names
-                and hive_trx.hive_from not in CONFIG.hive.treasury_account_names
+                and hive_trx.hive_from in CONFIG.hive.server_account_names
+                and hive_trx.hive_to not in CONFIG.hive.treasury_account_names
             ):
-                hive_acc = CONFIG.hive.hive_accs.get(hive_trx.hive_to)
-                if hive_acc.active_key:
-                    set_amount_to = Amount(hive_acc.hbd_balance)
-                    try:
-                        trx = account_trade(
-                            hive_acc=hive_acc, set_amount_to=set_amount_to
-                        )
-                        logger.info(
-                            f"{icon} Successful conversion {trx.get("trx_id", "")}",
-                            extra={"notification": False},
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"{icon} Conversion error: {e}",
-                            extra={"notification": False, "error": e},
-                        )
+                asyncio.create_task(balance_server_hbd_level(hive_trx))
 
     except DuplicateKeyError:
         pass
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
+
+
+async def balance_server_hbd_level(hive_trx: HiveTransaction):
+    """
+    Balances the HBD level of a Hive account by performing a conversion transaction.
+    Only perform this AFTER the response transaction has been sent back for paying an
+    invoice.
+
+    This asynchronous function retrieves the Hive account associated with the given
+    Hive transaction, checks if the account has an active key, and then attempts to
+    perform a conversion transaction to balance the HBD level. If the transaction
+    is successful, it logs the transaction ID. If an error occurs during the
+    transaction, it logs the error.
+
+    Args:
+        hive_trx (HiveTransaction): The Hive transaction containing the account
+        information to be balanced.
+
+    Raises:
+        Exception: If an error occurs during the conversion transaction.
+    """
+    await asyncio.sleep(1)
+    hive_acc = CONFIG.hive.hive_accs.get(hive_trx.hive_from)
+    if hive_acc.active_key:
+        set_amount_to = Amount(hive_acc.hbd_balance)
+        try:
+            trx = account_trade(hive_acc=hive_acc, set_amount_to=set_amount_to)
+            logger.info(
+                f"{icon} Successful conversion {trx.get("trx_id", "")}",
+                extra={"notification": False},
+            )
+        except Exception as e:
+            logger.error(
+                f"{icon} Conversion error: {e}",
+                extra={"notification": False, "error": e},
+            )
 
 
 async def db_store_witness_vote(
