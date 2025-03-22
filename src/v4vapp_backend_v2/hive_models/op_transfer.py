@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 from beem import Hive  # type: ignore
@@ -7,7 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_event_id
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
+from v4vapp_backend_v2.hive.hive_extras import (
+    decode_memo,
+    get_event_id,
+    get_hive_block_explorer_link,
+)
 
 from .amount_pyd import AmountPyd
 
@@ -60,6 +65,8 @@ class TransferEnhanced(Transfer):
     def post_process(self, hive_inst: Hive | None = None) -> None:
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
+        else:
+            self.d_memo = self.memo
 
     @classmethod
     async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
@@ -98,3 +105,38 @@ class TransferEnhanced(Transfer):
         self.conv = CryptoConversion(
             amount=self.amount.beam, quote=self.last_quote
         ).conversion
+
+    @property
+    def amount_decimal(self) -> float:
+        """Convert string amount to decimal with proper precision"""
+        return self.amount.amount_decimal
+
+    @property
+    def amount_str(self) -> str:
+        return self.amount.__str__()
+
+    @property
+    def log_str(self) -> str:
+
+        log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        time_diff = seconds_only(datetime.now(tz=timezone.utc) - self.timestamp)
+        log_str = (
+            f"{self.from_account:<17} "
+            f"sent {self.amount.fixed_width_str(14)} "
+            f"to {self.to_account:<17} "
+            f" - {self.d_memo[:30]:>30} "
+            f"{time_diff} ago "
+            f"{log_link} {self.op_in_trx:>3}"
+        )
+        return log_str
+
+    @property
+    def notification_str(self) -> str:
+        markdown_link = (
+            get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
+        )
+        ans = (
+            f"{self.from_account} sent {self.amount_str} to {self.to_account} "
+            f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {markdown_link}"
+        )
+        return ans

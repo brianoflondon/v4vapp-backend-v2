@@ -21,11 +21,26 @@ class AmountPyd(BaseModel):
     nai: str
     precision: int
 
-    # @property
-    # def decimal_amount(self) -> float:
-    #     """Convert string amount to decimal with proper precision"""
-    #     return float(self.amount) / (10**self.precision)
+    def __init__(self, **data) -> None:
+        super().__init__(**data)
 
     @property
     def beam(self) -> Amount:
         return Amount(self.amount, self.nai)
+
+    def __str__(self) -> str:
+        return self.beam.__str__()
+
+    def fixed_width_str(self, width: int) -> str:
+        number_str = f"{self.amount_decimal:,.3f}".rjust(width)
+        currency_str = f"{self.symbol:>4}"
+        return f"{number_str} {currency_str}"
+
+    @property
+    def amount_decimal(self) -> float:
+        """Convert string amount to decimal with proper precision"""
+        return float(self.amount) / (10**self.precision)
+
+    @property
+    def symbol(self) -> str:
+        return self.beam.symbol

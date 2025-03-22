@@ -48,6 +48,7 @@ def test_model_validate_transfer_enhanced():
             if transfer.trx_id == "e936d9d3ec5b9c6971c4fe83d65d3fdce7768353":
                 assert transfer.d_memo != hive_event["memo"]
                 assert transfer.d_memo == "This is an encrypted test message"
+            print(transfer.notification_str)
 
 
 @pytest.mark.asyncio
@@ -62,3 +63,5 @@ async def test_model_dump_transfer_enhanced():
             assert hive_event_model["from"] == transfer.from_account
             assert hive_event_model["to"] == transfer.to_account
             assert hive_event_model["memo"] == transfer.memo
+            assert transfer.log_str
+            assert transfer.notification_str
