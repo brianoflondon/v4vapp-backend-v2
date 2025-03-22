@@ -1,17 +1,22 @@
 # Build stage
 FROM python:3.12 AS builder
 
-COPY ./pyproject.toml ./poetry.lock* /app/
+# Install UV
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv
+
+# Copy pyproject.toml and README.md together
+COPY ./pyproject.toml ./README.md /app/
 
 WORKDIR /app/
 
-RUN pip install poetry
-RUN poetry config virtualenvs.in-project true  # Ensure venv is created in project dir
-RUN poetry install --only main --no-root --no-directory
+# Create virtual environment in project directory and sync dependencies
+RUN uv venv --python 3.12 && \
+    uv sync --no-dev  # Install only main dependencies, no dev group
 
-COPY ./src /app
+COPY ./src /app/src
 
-RUN poetry install --only main
+# No need to re-sync unless src includes additional dependencies
 
 # Production stage
 FROM python:3.12-slim
@@ -23,3 +28,4 @@ COPY --from=builder /app /app
 
 # Ensure Python uses the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
+
