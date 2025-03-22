@@ -10,7 +10,7 @@ from beem.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.hive.hive_extras import get_event_id, get_hive_client
-from v4vapp_backend_v2.models.hive_transaction_types import TransferOpTypes
+from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
 from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")

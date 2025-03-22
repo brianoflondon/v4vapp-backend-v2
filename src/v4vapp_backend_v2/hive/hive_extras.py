@@ -16,7 +16,7 @@ from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.models.hive_transaction_types import TransferOpTypes
+from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",

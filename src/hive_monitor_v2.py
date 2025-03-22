@@ -27,7 +27,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.voting_power import VotingPower
-from v4vapp_backend_v2.models.hive_transaction_types import (
+from v4vapp_backend_v2.hive_models.op_models import (
     MarketOpTypes,
     RealOpsLoopTypes,
     TransferOpTypes,
@@ -280,8 +280,13 @@ async def db_store_transfer(
     """
     global COMMAND_LINE_WATCH_USERS
     try:
+        logger.info(
+            f"Storing raw hive_event {hive_event.get('from', '')} ",
+            extra={"notification": False, "hive_event": hive_event},
+        )
         if watch_users_notification(hive_event, COMMAND_LINE_WATCH_USERS):
             # TODO #32 Rename HiveTransaction to HiveTransfer
+
             if HiveTransaction.last_quote.age > 60:
                 quote = HiveTransaction.last_quote
                 await HiveTransaction.update_quote()
@@ -745,27 +750,31 @@ async def real_ops_loop(watch_users: List[str]):
                 last_trx_id = ""
                 op_in_trx = 0
                 async for hive_event in async_stream:
+                    # For trx_id's with multiple transfers, record position in trx
+                    # Moved outside the specific blocks for different op codes
+                    if hive_event.get("trx_id") == last_trx_id:
+                        op_in_trx += 1
+                    else:
+                        last_trx_id = hive_event.get("trx_id")
+                        op_in_trx = 0
+
+                    hive_event["op_in_trx"] = op_in_trx
+                    hive_event["_id"] = get_event_id(hive_event)
+                    #                   # Tracking op_in_trx ID for each transaction manually.
+
                     if hive_event.get("type") in WitnessOpTypes:
                         voter_power = VotingPower(hive_event["account"])
                         hive_event["total_value"] = voter_power.total_value
                         hive_event["voter_details"] = asdict(voter_power)
-                        hive_event["_id"] = get_event_id(hive_event)
                         async_publish(
                             Events.HIVE_WITNESS_VOTE,
                             hive_event=hive_event,
                             db_client=db_client,
                         )
                     if hive_event.get("type") in TransferOpTypes:
-                        # For trx_id's with multiple transfers, record position in trx
-                        if hive_event.get("trx_id") == last_trx_id:
-                            op_in_trx += 1
-                        else:
-                            last_trx_id = hive_event.get("trx_id")
-                            op_in_trx = 0
                         # Only advance block count on new trx_id
                         if last_good_block < hive_event.get("block_num"):
                             last_good_block = hive_event.get("block_num")
-                        hive_event["op_in_trx"] = op_in_trx
                         error_code = log_time_difference_errors(
                             hive_event["timestamp"], error_code
                         )

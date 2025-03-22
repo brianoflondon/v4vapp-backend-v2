@@ -58,14 +58,21 @@ class WitnessOpTypes(StrEnum):
 
 
 class VirtualOpTypes(StrEnum):
+    """
+    All OpTypes that are virtual operations.
+    Virtual operations are ones which the Hive Blockchain core software carries out on its own
+    during block processing. They are not initiated directly by users. These operations may appear
+    on other lists.
+    """
+
     PRODUCER_REWARD = auto()
     FILL_ORDER = auto()
     FILL_RECURRENT_TRANSFER = auto()
 
-    @classmethod
-    def all_values(cls):
-        """Return a list of all member values."""
-        return [member.value for member in cls]
+    # @classmethod
+    # def all_values(cls):
+    #     """Return a list of all member values."""
+    #     return [member.value for member in cls]
 
 
 def create_master_enum(*enums):
@@ -76,21 +83,12 @@ def create_master_enum(*enums):
 
 
 HiveOpTypes = create_master_enum(TransferOpTypes, MarketOpTypes)
-
 # Used in real_ops_loop in hive_monitor_v2.py
 RealOpsLoopTypes = create_master_enum(TransferOpTypes, MarketOpTypes, WitnessOpTypes)
 
-
-# HIVE_TRANSFER_OP_TYPES = [
-#     TransferOpTypes.TRANSFER,
-#     TransferOpTypes.RECURRENT_TRANSFER,
-# ]
-
-# HIVE_MARKET_OP_TYPES = [
-#     MarketOpTypes.FILL_ORDER,
-#     MarketOpTypes.LIMIT_ORDER_CREATE,
-#     MarketOpTypes.LIMIT_ORDER_CANCEL,
-# ]
+OpTypes = create_master_enum(
+    TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes
+)
 
 
 if __name__ == "__main__":
@@ -99,18 +97,3 @@ if __name__ == "__main__":
     print("fill_order" in TransferOpTypes)
     print(HiveOpTypes)
     print(list(HiveOpTypes))
-
-# TRANSFER_OP_TYPES = ["transfer", "recurrent_transfer"]
-# WITNESS_OP_TYPES = ["account_witness_vote"]
-
-# MARKET_OP_TYPES = [
-#     "fill_order",
-#     "limit_order_create",
-#     "limit_order_cancel",
-# ]
-
-# TRANSACTIONS_LOOP_OP_TYPES = TRANSFER_OP_TYPES + WITNESS_OP_TYPES + MARKET_OP_TYPES
-# VIRTUAL_OP_TYPES = ["producer_reward", "fill_order"]
-
-
-# OP_NAMES = TRANSFER_OP_TYPES + ["update_proposal_votes", "account_witness_vote"]
