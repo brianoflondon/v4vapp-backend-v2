@@ -15,8 +15,8 @@ files_names: Dict[OpTypes, str] = {
 
 def load_hive_events(op_type: OpTypes) -> Generator[Dict, None, None]:
     file_name = files_names[op_type]
-    with open(file_name, "r") as infile:
-        for line in infile:
+    with open(file_name, "r") as f:
+        for line in f:
             hive_event = None
             if "hive_event" in line:
                 hive_event = json.loads(line)["hive_event"]
@@ -32,10 +32,12 @@ def test_model_validate_transfer():
 
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 
 
 def test_model_validate_transfer_enhanced():
+    if not HIVE_MEMO_TEST_KEY:
+        return
     hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
     for hive_event in load_hive_events(op_type=OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":

@@ -1,29 +1,15 @@
 import asyncio
 from datetime import datetime
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar
 
 from beem import Hive  # type: ignore
-from beem.amount import Amount  # type: ignore
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_event_id
 
-
-class AmountPyd(BaseModel):
-    amount: str
-    nai: str
-    precision: int
-
-    @property
-    def decimal_amount(self) -> float:
-        """Convert string amount to decimal with proper precision"""
-        return float(self.amount) / (10**self.precision)
-
-    @property
-    def beam(self) -> Amount:
-        return Amount(self.amount, self.nai)
+from .amount_pyd import AmountPyd
 
 
 class Transfer(BaseModel):
@@ -45,12 +31,7 @@ class Transfer(BaseModel):
 
     def __init__(self, **hive_event: Any) -> None:
         if "id" not in hive_event and "_id" in hive_event:
-            trx_id = hive_event.get("trx_id", "")
-            op_in_trx = hive_event.get("op_in_trx", 0)
-            if op_in_trx == 0:
-                hive_event["id"] = str(trx_id)
-            else:
-                hive_event["id"] = str(f"{trx_id}_{op_in_trx}")
+            hive_event["id"] = get_event_id(hive_event)
 
         super().__init__(**hive_event)
 
@@ -60,7 +41,7 @@ class TransferEnhanced(Transfer):
     conv: CryptoConv = CryptoConv()
 
     model_config = ConfigDict(populate_by_name=True)
-    # Definied as a CLASS VARIABLE outside the
+    # Defined as a CLASS VARIABLE outside the
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **hive_event: Any) -> None:
@@ -114,4 +95,6 @@ class TransferEnhanced(Transfer):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        self.conv = CryptoConversion(amount=self.amount.beam, quote=self.last_quote).conversion
+        self.conv = CryptoConversion(
+            amount=self.amount.beam, quote=self.last_quote
+        ).conversion
