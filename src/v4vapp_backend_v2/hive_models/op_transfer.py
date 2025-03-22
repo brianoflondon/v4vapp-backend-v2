@@ -13,6 +13,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_event_id,
     get_hive_block_explorer_link,
 )
+from v4vapp_backend_v2.hive_models.op_types_enums import OpTypeMixin
 
 from .amount_pyd import AmountPyd
 
@@ -41,7 +42,7 @@ class Transfer(BaseModel):
         super().__init__(**hive_event)
 
 
-class TransferEnhanced(Transfer):
+class TransferEnhanced(Transfer, OpTypeMixin):
     d_memo: str = ""
     conv: CryptoConv = CryptoConv()
 
@@ -117,7 +118,6 @@ class TransferEnhanced(Transfer):
 
     @property
     def log_str(self) -> str:
-
         log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
         time_diff = seconds_only(datetime.now(tz=timezone.utc) - self.timestamp)
         log_str = (

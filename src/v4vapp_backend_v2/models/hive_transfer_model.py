@@ -26,7 +26,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_block_explorer_link,
     get_hive_client,
 )
-from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
+from v4vapp_backend_v2.hive_models.op_types_enums import TransferOpTypes
 
 
 class HiveTransactionFlags(BaseModel):

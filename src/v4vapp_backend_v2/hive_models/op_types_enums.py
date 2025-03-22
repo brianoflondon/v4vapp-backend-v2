@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+from typing import Protocol
 
 """
 This module defines various operation types for Hive transactions using enumerations.
@@ -89,6 +90,16 @@ RealOpsLoopTypes = create_master_enum(TransferOpTypes, MarketOpTypes, WitnessOpT
 OpTypes = create_master_enum(
     TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes
 )
+
+
+class OpTypeMixin:
+    @property
+    def log_str(self) -> str:
+        raise NotImplementedError("Subclasses must implement this method")
+
+    @property
+    def notification_str(self) -> str:
+        raise NotImplementedError("Subclasses must implement this method")
 
 
 if __name__ == "__main__":

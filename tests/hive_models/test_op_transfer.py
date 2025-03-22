@@ -5,7 +5,7 @@ from typing import Dict, Generator
 import pytest
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
-from v4vapp_backend_v2.hive_models.op_models import OpTypes
+from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferEnhanced
 
 files_names: Dict[OpTypes, str] = {

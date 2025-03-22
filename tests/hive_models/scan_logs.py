@@ -1,7 +1,7 @@
 import json
 from pprint import pprint
 
-from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
+from v4vapp_backend_v2.hive_models.op_types_enums import TransferOpTypes
 from v4vapp_backend_v2.hive_models.op_transfer import AmountPyd, Transfer
 
 if __name__ == "__main__":
