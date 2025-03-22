@@ -6,7 +6,7 @@ import pytest
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.op_models import OpTypes
-from v4vapp_backend_v2.hive_models.transfer_op_types import Transfer, TransferEnhanced
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferEnhanced
 
 files_names: Dict[OpTypes, str] = {
     OpTypes.TRANSFER: "tests/data/hive_models/logs_with_transfer_hive_events.jsonl",
