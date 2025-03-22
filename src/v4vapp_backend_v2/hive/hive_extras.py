@@ -16,7 +16,6 @@ from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -225,7 +224,7 @@ def get_hive_block_explorer_link(
     return markdown_link
 
 
-def get_event_id(hive_event: dict) -> str:
+def get_event_id(hive_event: Any) -> str:
     """
     Get the event id from the Hive event.
 
@@ -235,6 +234,12 @@ def get_event_id(hive_event: dict) -> str:
     Returns:
         str: The event id.
     """
+    if not hive_event:
+        return ""
+    if not isinstance(hive_event, dict):
+        return ""
+    if not hive_event.get("trx_id"):
+        return ""
     trx_id = hive_event.get("trx_id", "")
     op_in_trx = hive_event.get("op_in_trx", 0)
     return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
@@ -286,7 +291,7 @@ def decode_memo(
             return memo
         return d_memo[1:]
     except struct.error:
-        # arrises when an unencrypted memo is decrypted..
+        # arises when an unencrypted memo is decrypted..
         return memo
     except ValueError as e:
         # Memo is not encrypted
