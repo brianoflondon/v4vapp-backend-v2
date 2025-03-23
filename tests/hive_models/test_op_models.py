@@ -17,6 +17,7 @@ def test_create_master_enum():
     assert list(HiveOpTypes) == list(TransferOpTypes) + list(MarketOpTypes)
     assert VirtualOpTypes.PRODUCER_REWARD in VirtualOpTypes
 
+
 def test_other_ops():
     assert "limit_order_create" in MarketOpTypes
     assert "limit_order_cancel" in MarketOpTypes
