@@ -2,6 +2,17 @@ import re
 from datetime import datetime, timedelta, timezone
 
 
+def snake_case(name: str) -> str:
+    """
+    Convert a string to snake_case.
+    Args:
+        name (str): The string to convert.
+    Returns:
+        str: The string converted to snake_case.
+    """
+    return "".join(["_" + i.lower() if i.isupper() else i for i in name]).lstrip("_")
+
+
 def seconds_only(delta: timedelta) -> timedelta:
     """
     Returns a new timedelta object with only the days and seconds

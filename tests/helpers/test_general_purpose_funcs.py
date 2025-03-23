@@ -11,7 +11,17 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     get_in_flight_time,
     is_markdown,
     seconds_only,
+    snake_case,
 )
+
+
+def test_snake_case():
+    assert snake_case("OpBase") == "op_base"
+    assert snake_case("ProducerReward") == "producer_reward"
+    assert snake_case("ProducerRewardRaw") == "producer_reward_raw"
+    assert snake_case("VestingShares") == "vesting_shares"
+    assert snake_case("AccountWitnessVote") == "account_witness_vote"
+    assert snake_case("VoterDetails") == "voter_details"
 
 
 def test_seconds_only():
