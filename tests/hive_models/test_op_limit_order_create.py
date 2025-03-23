@@ -23,6 +23,7 @@ def test_model_validate_limit_order_create():
                 Amount(hive_event["amount_to_sell"])
             )
             print(limit_order.log_str)
+            print(limit_order.log_extra)
 
     len(limit_order.open_orderids) == 28
     limit_order.expire_orders()

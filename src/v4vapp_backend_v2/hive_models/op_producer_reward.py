@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.witness_details import Witness
 
 
@@ -11,7 +12,7 @@ class VestingShares(AmountPyd):
     pass
 
 
-class ProducerRewardRaw(BaseModel):
+class ProducerRewardRaw(OpBase):
     type: str = Field(description="Type of the event")
     producer: str = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")

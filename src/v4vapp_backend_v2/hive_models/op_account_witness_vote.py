@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.hive.voting_power import VotingPower
 
+from .op_base import OpBase
+
 
 class VoterDetails(BaseModel):
     voter: str
@@ -20,7 +22,7 @@ class VoterDetails(BaseModel):
     total_percent: float
 
 
-class AccountWitnessVote(BaseModel):
+class AccountWitnessVote(OpBase):
     op_in_trx: int
     trx_id: str
     account: str

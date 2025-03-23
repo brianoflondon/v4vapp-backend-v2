@@ -4,10 +4,13 @@ from typing import Any, ClassVar, Dict, List
 from beem.amount import Amount  # type: ignore
 from pydantic import BaseModel, ConfigDict, Field
 
+from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+
 from .amount_pyd import AmountPyd
+from .op_base import OpBase
 
 
-class LimitOrderCreate(BaseModel):
+class LimitOrderCreate(OpBase):
     _id: str
     amount_to_sell: AmountPyd
     block_num: int
@@ -36,6 +39,14 @@ class LimitOrderCreate(BaseModel):
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
         LimitOrderCreate.open_orderids[self.orderid] = self.model_copy()
+
+    @classmethod
+    def name(cls) -> str:
+        return snake_case(cls.__name__)
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        return {self.name(): self.model_dump()}
 
     @classmethod
     def expire_orders(self) -> None:
@@ -69,8 +80,9 @@ class LimitOrderCreate(BaseModel):
         sell = self.amount_to_sell.fixed_width_str(15)
         receive = self.min_to_receive.fixed_width_str(15)
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
+        icon = "📈"
         return (
-            f"💵{rate_str:>8}  - "
+            f"{icon}{rate_str:>8}  - "
             f"{sell} for {receive} "
             f"{self.owner} created order "
             f"{self.orderid}"
