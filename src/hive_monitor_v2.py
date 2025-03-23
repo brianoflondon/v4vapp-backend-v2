@@ -27,6 +27,8 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
@@ -171,7 +173,7 @@ async def witness_vote_report(
     notification = True if vote.witness == watch_witness else False
     logger.info(
         f"{icon} {vote.log_str}",
-        extra={"notification": notification, "account_witness_vote": vote.model_dump()},
+        extra={"notification": notification, **vote.log_extra},
     )
 
 
@@ -191,10 +193,16 @@ async def market_report(
         or hive_event.get("open_owner", "") in watch_users
         or hive_event.get("owner", "") in watch_users
     ):
-        message = format_market_event(hive_event)
+        if hive_event.get("type") == MarketOpTypes.LIMIT_ORDER_CREATE:
+            market_op = LimitOrderCreate.model_validate(hive_event)
+        elif hive_event.get("type") == MarketOpTypes.FILL_ORDER:
+            market_op = FillOrder.model_validate(hive_event)
+        else:
+            return
+        message = market_op.log_str
         logger.info(
-            f"{icon} {message}",
-            extra={"notification": True, "hive_event": hive_event},
+            f"{message}",
+            extra={"notification": True, **market_op.log_extra},
         )
 
 
@@ -354,7 +362,7 @@ async def balance_server_hbd_level(hive_trx: HiveTransaction):
 
 
 async def db_store_witness_vote(
-    hive_event: dict, db_client: MongoDBClient, *args: Any, **kwargs: Any
+    vote: AccountWitnessVote, db_client: MongoDBClient, *args: Any, **kwargs: Any
 ) -> None:
     """
     Stores a witness vote in the database.
@@ -377,15 +385,14 @@ async def db_store_witness_vote(
         Exception: For any other exceptions, logs the error with additional context.
     """
     try:
-        trx_id = hive_event.get("trx_id", "")
-        op_in_trx = hive_event.get("op_in_trx", 0)
+        trx_id = vote.trx_id
+        op_in_trx = vote.op_in_trx
         query = {"trx_id": trx_id, "op_in_trx": op_in_trx}
-        if hive_event.get("type") == "account_witness_vote":
-            hive_event["_id"] = get_event_id(hive_event)
+        if vote.type == "account_witness_vote":
             _ = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
                 query=query,
-                update=hive_event,
+                update=vote.model_dump(),
                 upsert=True,
             )
     except DuplicateKeyError:
@@ -767,7 +774,7 @@ async def real_ops_loop(
                         vote.get_voter_details()
                         async_publish(
                             Events.HIVE_WITNESS_VOTE,
-                            vote=AccountWitnessVote,
+                            vote=vote,
                             watch_witness=watch_witness,
                             db_client=db_client,
                         )
