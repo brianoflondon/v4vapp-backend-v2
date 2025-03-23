@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from beem import Hive  # type: ignore
 from beem.account import Account  # type: ignore
