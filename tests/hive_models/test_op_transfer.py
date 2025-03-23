@@ -52,7 +52,7 @@ HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
 HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 
 
-def test_model_validate_transfer_enhanced():
+def test_model_validate_transfer_enhanced(set_base_config_path):
     """
     Test the validation of the TransferEnhanced model with enhanced transfer events.
 
@@ -88,7 +88,7 @@ def test_model_validate_transfer_enhanced():
 
 
 @pytest.mark.asyncio
-async def test_model_dump_transfer_enhanced():
+async def test_model_dump_transfer_enhanced(set_base_config_path):
     await Transfer.update_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
