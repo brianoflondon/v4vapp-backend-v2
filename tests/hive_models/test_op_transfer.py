@@ -1,31 +1,43 @@
 import json
 import os
+from pathlib import Path
 from typing import Dict, Generator
 
 import pytest
 from beem.amount import Amount  # type: ignore
 from pymongo.errors import DuplicateKeyError
 
-from tests.config.test_db_config import set_base_config_path
-from tests.hive_models.load_data import load_hive_events
+from tests.load_data import load_hive_events
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
-# files_names: Dict[OpTypes, str] = {
-#     OpTypes.TRANSFER: "tests/data/hive_models/logs_with_transfer_hive_events.jsonl",
-# }
+
+@pytest.fixture()
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
+    )
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    yield
+    # Unpatch the monkeypatch
+    monkeypatch.undo()
 
 
-# def load_hive_events(op_type: OpTypes) -> Generator[Dict, None, None]:
-#     file_name = files_names[op_type]
-#     with open(file_name, "r") as f:
-#         for line in f:
-#             hive_event = None
-#             if "hive_event" in line:
-#                 hive_event = json.loads(line)["hive_event"]
-#                 yield hive_event
+@pytest.fixture(autouse=True)
+def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
 def test_model_validate_transfer():
@@ -116,6 +128,7 @@ async def test_model_dump_mongodb(set_base_config_path):
     Args:
         set_base_config_path (None): Fixture to set the base configuration path.
     """
+    internal_config = InternalConfig()
     collection_name = "op_transfer"
     await Transfer.update_quote()
     async with MongoDBClient(
