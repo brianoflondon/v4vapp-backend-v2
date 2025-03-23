@@ -1,3 +1,5 @@
+import json
+
 from beem.amount import Amount  # type: ignore
 from pydantic import BaseModel
 
@@ -22,11 +24,18 @@ class AmountPyd(BaseModel):
     precision: int
 
     def __init__(self, **data) -> None:
-        super().__init__(**data)
+        if "asset" in data and data.get("asset", None):
+            beam_amount = Amount(**data)
+            new_data = beam_amount.json()
+            super().__init__(**new_data)
+        else:
+            super().__init__(**data)
 
     @property
     def beam(self) -> Amount:
-        return Amount(self.amount, self.nai)
+        return Amount(
+            {"amount": self.amount, "nai": self.nai, "precision": self.precision}
+        )
 
     def __str__(self) -> str:
         return self.beam.__str__()
@@ -49,8 +58,8 @@ class AmountPyd(BaseModel):
     @property
     def amount_decimal(self) -> float:
         """Convert string amount to decimal with proper precision"""
-        # return float(self.amount) / (10**self.precision)
-        return self.beam.amount_decimal
+        # return self.beam.amount_decimal
+        return float(self.amount) / (10**self.precision)
 
     @property
     def symbol(self) -> str:

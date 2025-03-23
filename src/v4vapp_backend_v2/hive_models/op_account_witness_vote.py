@@ -1,8 +1,7 @@
 from dataclasses import asdict
 from datetime import datetime
-from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.hive.voting_power import VotingPower
 

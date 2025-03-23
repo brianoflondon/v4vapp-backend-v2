@@ -1,10 +1,8 @@
-import json
 from pprint import pprint
-from typing import Dict, Generator
 
 import pytest
 
-from tests.hive_models.load_data import load_hive_events
+from tests.load_data import load_hive_events
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
