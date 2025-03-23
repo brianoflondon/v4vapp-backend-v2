@@ -9,4 +9,4 @@ def test_amount_pyd():
     assert amount_pyd.beam == Amount("22000 HIVE")
     assert isinstance(amount_pyd.beam, Amount)
     assert isinstance(str(amount_pyd), str)
-    assert len(amount_pyd.fixed_width_str(14)) == 14 + 5
+    assert len(amount_pyd.fixed_width_str(21)) == 21
