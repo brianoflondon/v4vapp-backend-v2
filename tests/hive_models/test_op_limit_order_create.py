@@ -13,20 +13,20 @@ from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 def test_model_validate_limit_order_create():
     for hive_event in load_hive_events(OpTypes.LIMIT_ORDER_CREATE):
         if hive_event["type"] == "limit_order_create":
-            LimitOrderCreate = LimitOrderCreate.model_validate(hive_event)
-            assert LimitOrderCreate.trx_id == hive_event["trx_id"]
+            limit_order = LimitOrderCreate.model_validate(hive_event)
+            assert limit_order.trx_id == hive_event["trx_id"]
             assert (
-                LimitOrderCreate.amount_to_sell.amount
+                limit_order.amount_to_sell.amount
                 == hive_event["amount_to_sell"]["amount"]
             )
-            assert str(LimitOrderCreate.amount_to_sell) == str(
+            assert str(limit_order.amount_to_sell) == str(
                 Amount(hive_event["amount_to_sell"])
             )
-            print(LimitOrderCreate.log_str)
+            print(limit_order.log_str)
 
-    len(LimitOrderCreate.open_orderids) == 28
-    LimitOrderCreate.expire_orders()
-    len(LimitOrderCreate.open_orderids) == 0
+    len(limit_order.open_orderids) == 28
+    limit_order.expire_orders()
+    len(limit_order.open_orderids) == 0
 
 
 def test_model_validate_limit_order_create_and_fill_orders():
