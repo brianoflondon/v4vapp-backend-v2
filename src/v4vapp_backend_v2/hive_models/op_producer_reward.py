@@ -2,16 +2,19 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
-class VestingShares(BaseModel):
-    amount: str = Field(description="The amount as a string representation")
-    nai: str = Field(description="Network Asset Identifier")
-    precision: int = Field(description="Decimal precision for the amount")
 
-    @property
-    def decimal_amount(self) -> float:
-        """Convert string amount to decimal with proper precision"""
-        return float(self.amount) / (10**self.precision)
+class VestingShares(AmountPyd):
+    pass
+    # amount: str = Field(description="The amount as a string representation")
+    # nai: str = Field(description="Network Asset Identifier")
+    # precision: int = Field(description="Decimal precision for the amount")
+
+    # @property
+    # def decimal_amount(self) -> float:
+    #     """Convert string amount to decimal with proper precision"""
+    #     return float(self.amount) / (10**self.precision)
 
 
 class ProducerReward(BaseModel):
