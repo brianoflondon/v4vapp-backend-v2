@@ -67,6 +67,8 @@ class LimitOrderCreate(OpBase):
         for orderid in expired_orders:
             self.open_orderids.pop(orderid)
 
+    # TODO: #40 Add logic for checking off filled orders
+
     @property
     def rate(self) -> float:
         if self.amount_to_sell.symbol == "HIVE":

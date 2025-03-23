@@ -1,9 +1,13 @@
+from datetime import datetime
+
 from pydantic import BaseModel
+
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 from .amount_pyd import AmountPyd
 
 
-class FillOrder(BaseModel):
+class FillOrder(OpBase):
     type: str
     current_orderid: int
     current_owner: str
@@ -12,7 +16,7 @@ class FillOrder(BaseModel):
     open_owner: str
     open_pays: AmountPyd
     _id: str
-    timestamp: str
+    timestamp: datetime
     block_num: int
     trx_num: int
     trx_id: str

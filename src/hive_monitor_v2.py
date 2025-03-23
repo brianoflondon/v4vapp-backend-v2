@@ -601,7 +601,15 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 )
             )
             try:
+                last_trx_id = ""
+                op_in_trx = 0
                 async for hive_event in async_stream:
+                    if hive_event.get("trx_id") == last_trx_id:
+                        op_in_trx += 1
+                    else:
+                        last_trx_id = hive_event.get("trx_id")
+                        op_in_trx = 0
+                    hive_event["op_in_trx"] = op_in_trx
                     hive_event_timestamp = hive_event.get(
                         "timestamp", "1970-01-01T00:00:00+00:00"
                     )
@@ -764,8 +772,8 @@ async def real_ops_loop(
                     else:
                         last_trx_id = hive_event.get("trx_id")
                         op_in_trx = 0
-
                     hive_event["op_in_trx"] = op_in_trx
+
                     hive_event["_id"] = get_event_id(hive_event)
                     #                   # Tracking op_in_trx ID for each transaction manually.
 

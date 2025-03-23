@@ -69,7 +69,15 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/hive:/app/logs
-    command: ["python", "src/hive_monitor_v2.py", "v4vapp", "v4vapp.tre", "v4vapp.dhf", "brianoflondon", "v4vapp-test"]
+    command: [
+      "python", "src/hive_monitor_v2.py",
+      "--user", "v4vapp",
+      "--user", "v4vapp.tre",
+      "--user", "v4vapp.dhf",
+      "--user", "brianoflondon",
+      "--user", "v4vapp-test",
+      "--witness", "brianoflondon",
+    ]
     restart: unless-stopped
     networks:
       - v4vapp-backend
