@@ -864,7 +864,7 @@ def format_market_event(hive_event: dict) -> str:
         return "Problem formatting market event {e}"
 
 
-async def runner(watch_users: List[str]):
+async def main_async_start(watch_users: List[str]):
     """
     Main function to run the Hive Watcher client.
     Args:
@@ -947,7 +947,7 @@ def main(
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
     COMMAND_LINE_WATCH_USERS = watch_users
-    asyncio.run(runner(watch_users))
+    asyncio.run(main_async_start(watch_users))
     INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
 
