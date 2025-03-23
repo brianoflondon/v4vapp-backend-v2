@@ -4,23 +4,10 @@ from typing import Dict, Generator
 
 import pytest
 
+from tests.hive_models.load_data import load_hive_events
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
-
-files_names: Dict[OpTypes, str] = {
-    OpTypes.PRODUCER_REWARD: "tests/data/hive_models/all_ops_log.jsonl",
-}
-
-
-def load_hive_events(op_type: OpTypes) -> Generator[Dict, None, None]:
-    file_name = files_names[op_type]
-    with open(file_name, "r") as f:
-        for line in f:
-            hive_event = None
-            if "hive_event" in line:
-                hive_event = json.loads(line)["hive_event"]
-                yield hive_event
 
 
 @pytest.mark.asyncio
@@ -29,13 +16,17 @@ async def test_model_validate_producer_reward():
     Test the validation of the ProducerReward model with hive events of type 'producer_reward'.
     This test function performs the following steps:
     1. Initializes a counter to track the number of 'producer_reward' events.
-    2. Iterates through hive events of type 'producer_reward' loaded by the `load_hive_events` function.
+    2. Iterates through hive events of type 'producer_reward' loaded by the `load_hive_events`
+    function.
     3. For each event of type 'producer_reward':
         - Increments the counter.
         - Validates the event using the `ProducerReward.model_validate` method.
-        - Asserts that the transaction ID (`trx_id`) matches between the event and the validated model.
-        - Asserts that the `vesting_shares` amount and NAI match between the event and the validated model.
-        - If the producer is 'threespeak', fetches witness details using `get_hive_witness_details` and asserts that:
+        - Asserts that the transaction ID (`trx_id`) matches between the event and the
+        validated model.
+        - Asserts that the `vesting_shares` amount and NAI match between the event and the
+        validated model.
+        - If the producer is 'threespeak', fetches witness details using
+        `get_hive_witness_details` and asserts that:
             - The witness details are not None.
             - The witness name is 'threespeak'.
         - Prints the producer's name.

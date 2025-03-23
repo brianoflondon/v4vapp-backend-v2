@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
 from typing import Annotated, Any, List
@@ -26,7 +25,8 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_witness_details,
 )
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
-from v4vapp_backend_v2.hive.voting_power import VotingPower
+from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
@@ -157,7 +157,9 @@ async def hive_transaction_report(
     )
 
 
-async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> None:
+async def witness_vote_report(
+    vote: AccountWitnessVote, watch_witness: str, *args: Any, **kwargs: Any
+) -> None:
     """
     Asynchronously reports witness votes.
 
@@ -166,19 +168,10 @@ async def witness_vote_report(hive_event: dict, *args: Any, **kwargs: Any) -> No
     Args:
         hive_event (dict): The Hive witness vote event.
     """
-    notification = True if hive_event.get("witness") == "brianoflondon" else False
-    voted_for = "voted for" if hive_event.get("approve") else "unvoted"
-    message = (
-        f"{icon}👁️ {hive_event.get('account')} "
-        f"{voted_for} {hive_event.get('witness')} "
-        f"with {hive_event.get('total_value', 0):,.0f} HP"
-    )
+    notification = True if vote.witness == watch_witness else False
     logger.info(
-        message,
-        extra={
-            "notification": notification,
-            "witness_vote": hive_event,
-        },
+        f"{icon} {vote.log_str}",
+        extra={"notification": notification, "account_witness_vote": vote.model_dump()},
     )
 
 
@@ -233,15 +226,14 @@ async def db_store_block_marker(
     """
     try:
         query = {"trx_id": "block_marker", "op_in_trx": 0}
-        block_marker = {
-            "block_num": hive_event["block_num"],
-            "timestamp": hive_event["timestamp"],
-            "trx_id": "block_marker",
-            "op_in_trx": 0,
-            "_id": "block_marker",
-        }
+        block_marker = BlockMarker(
+            block_num=hive_event["block_num"], timestamp=hive_event["timestamp"]
+        )
         _ = await db_client.update_one(
-            HIVE_TRX_COLLECTION_V2, query=query, update=block_marker, upsert=True
+            HIVE_TRX_COLLECTION_V2,
+            query=query,
+            update=block_marker.model_dump(),
+            upsert=True,
         )
     except DuplicateKeyError:
         pass
@@ -700,7 +692,9 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 last_good_block = last_good_event.get("block_num", 0) + 1
 
 
-async def real_ops_loop(watch_users: List[str]):
+async def real_ops_loop(
+    watch_witness: str = "", watch_users: List[str] = COMMAND_LINE_WATCH_USERS
+):
     """
     Asynchronously loops through transactions and processes them.
 
@@ -769,12 +763,12 @@ async def real_ops_loop(watch_users: List[str]):
                     #                   # Tracking op_in_trx ID for each transaction manually.
 
                     if hive_event.get("type") in WitnessOpTypes:
-                        voter_power = VotingPower(hive_event["account"])
-                        hive_event["total_value"] = voter_power.total_value
-                        hive_event["voter_details"] = asdict(voter_power)
+                        vote = AccountWitnessVote.model_validate(hive_event)
+                        vote.get_voter_details()
                         async_publish(
                             Events.HIVE_WITNESS_VOTE,
-                            hive_event=hive_event,
+                            vote=AccountWitnessVote,
+                            watch_witness=watch_witness,
                             db_client=db_client,
                         )
                     if hive_event.get("type") in TransferOpTypes:
@@ -909,7 +903,7 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
 
         async_subscribe(Events.HIVE_MARKET, market_report)
         tasks = [
-            real_ops_loop(watch_users=watch_users),
+            real_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
             virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
@@ -951,8 +945,11 @@ def main(
     Watch the Hive blockchain for transactions.
 
     Args:
-        watch_users: The Hive user(s) to watch for transactions. Specify multiple users with repeated --watch-users, e.g., --watch-users alice --watch-users bob.
-        watch_witness: The Hive witness to watch for transactions. Defaults to "brianoflondon".
+        watch_users: The Hive user(s) to watch for transactions.
+        Specify multiple users with repeated --watch-users, e.g.,
+        --watch-users alice --watch-users bob.
+        watch_witness: The Hive witness to watch for transactions.
+        Defaults to "brianoflondon".
 
     Returns:
         None
