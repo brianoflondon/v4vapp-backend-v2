@@ -16,6 +16,7 @@ from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -116,7 +117,7 @@ def get_good_nodes() -> List[str]:
     return good_nodes
 
 
-async def get_hive_witness_details(hive_accname: str) -> dict:
+async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
     """
     Fetches details about a Hive witness.
 
@@ -130,20 +131,21 @@ async def get_hive_witness_details(hive_accname: str) -> dict:
         dict: A dictionary containing the details of the Hive witness.
     """
     try:
+        if not hive_accname:
+            url = "https://api.syncad.com/hafbe-api/witnesses"
+        else:
+            url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}",
-            )
+            response = await client.get(url)
             answer = response.json()
+            wd = WitnessDetails.model_validate(answer)
+            return wd
+
     except Exception as e:
         logger.warning(f"Failed to get_hive_witness_details: {e}")
-        return {}
+        return None
 
-    witness = answer.get("witness")
-    if witness and witness.get("witness_name") == hive_accname:
-        return witness
-
-    return {}
+    return None
 
 
 class HiveInternalQuote(BaseModel):

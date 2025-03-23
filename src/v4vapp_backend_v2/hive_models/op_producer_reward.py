@@ -2,22 +2,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from v4vapp_backend_v2.hive.hive_extras import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.witness_details import Witness
 
 
 class VestingShares(AmountPyd):
     pass
-    # amount: str = Field(description="The amount as a string representation")
-    # nai: str = Field(description="Network Asset Identifier")
-    # precision: int = Field(description="Decimal precision for the amount")
-
-    # @property
-    # def decimal_amount(self) -> float:
-    #     """Convert string amount to decimal with proper precision"""
-    #     return float(self.amount) / (10**self.precision)
 
 
-class ProducerReward(BaseModel):
+class ProducerRewardRaw(BaseModel):
     type: str = Field(description="Type of the event")
     producer: str = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")
@@ -25,6 +19,40 @@ class ProducerReward(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(description="Transaction number within the block")
     trx_id: str = Field(description="Transaction ID")
-    op_in_trx: int = Field(description="Operation index in the transaction")
+    op_in_trx: int = Field(default=0, description="Operation index in the transaction")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class ProducerReward(ProducerRewardRaw):
+    witness: Witness | None = Field(None, description="Witness details")
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+    @property
+    def log_str(self):
+        log_str = (
+            f"{self.block_num:,.0f} | "
+            f"Missed: {self.witness.missed_blocks} | "
+            f"Rank: {self.witness.rank} | {self.producer}"
+        )
+        return log_str
+
+    async def get_witness_details(self):
+        """
+        Asynchronously retrieves and sets the witness details for the producer.
+
+        This method checks if the producer attribute is set. If it is, it fetches
+        the witness details for the producer using the `get_hive_witness_details`
+        function. If witness details are found, it sets the `witness` attribute
+        with the retrieved witness information.
+
+        Returns:
+            None
+        """
+
+        if self.producer:
+            witness_details = await get_hive_witness_details(self.producer)
+            if witness_details:
+                self.witness = witness_details.witness

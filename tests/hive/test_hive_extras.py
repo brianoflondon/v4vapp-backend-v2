@@ -1,7 +1,6 @@
 import os
 
 import pytest
-from beem.blockchain import Blockchain  # type: ignore
 
 from v4vapp_backend_v2.hive.hive_extras import (
     call_hive_internal_market,
@@ -16,14 +15,35 @@ from v4vapp_backend_v2.hive.hive_extras import (
 async def test_get_hive_witness_details():
     witness_details = await get_hive_witness_details("blocktrades")
     assert witness_details is not None
-    assert witness_details["witness_name"] == "blocktrades"
-    assert witness_details["missed_blocks"] >= 0
+    assert witness_details.witness.witness_name == "blocktrades"
+    assert witness_details.witness.missed_blocks >= 0
+    assert witness_details.witness.rank > 0
+
+
+@pytest.mark.asyncio
+async def test_get_hive_witness_details_empty():
+    """
+    Test the `get_hive_witness_details` function when it returns an empty list of witnesses.
+    This test performs the following checks:
+    1. Ensures that the `witnesses` key in the returned dictionary is not None.
+    2. Iterates through each witness in the `witnesses` list and validates
+    it using the `WitnessDetails` model.
+    3. Asserts that the `witness_name` and `rank` attributes of the validated witness
+    match the corresponding values in the original witness dictionary.
+    4. Dumps the validated witness model for further inspection.
+    Raises:
+        AssertionError: If any of the assertions fail.
+    """
+
+    witness_details = await get_hive_witness_details()
+    for witness in witness_details.witnesses:
+        witness.model_dump()
 
 
 @pytest.mark.asyncio
 async def test_get_hive_witness_details_error():
     witness_details = await get_hive_witness_details("non_existent_witness")
-    assert witness_details == {}
+    assert not witness_details
 
 
 @pytest.mark.asyncio

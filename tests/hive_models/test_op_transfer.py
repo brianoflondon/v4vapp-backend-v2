@@ -7,7 +7,6 @@ from beem.amount import Amount  # type: ignore
 from pymongo.errors import DuplicateKeyError
 
 from tests.config.test_db_config import set_base_config_path
-from tests.database.test_db import drop_collection_and_user
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
@@ -98,7 +97,7 @@ async def test_model_dump_transfer_enhanced():
 
 
 @pytest.mark.asyncio
-async def test_model_dump_mongodb(set_base_config_path: None):
+async def test_model_dump_mongodb(set_base_config_path):
     """
     Test the dumping of the Transfer model into MongoDB.
     This test performs the following steps:
@@ -116,7 +115,6 @@ async def test_model_dump_mongodb(set_base_config_path: None):
     Args:
         set_base_config_path (None): Fixture to set the base configuration path.
     """
-    
     collection_name = "op_transfer"
     await Transfer.update_quote()
     async with MongoDBClient(

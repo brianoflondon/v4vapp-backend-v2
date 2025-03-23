@@ -27,6 +27,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.voting_power import VotingPower
+from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
     RealOpsLoopTypes,
@@ -502,7 +503,7 @@ async def witness_first_run(watch_witness: str) -> dict:
                 logger.info(
                     f"{icon} {watch_witness} "
                     f"block: {hive_event['block_num']:,.0f} ",
-                    extra={"db": last_good_event, "notification": True},
+                    extra={"db": last_good_event, "notification": False},
                 )
         if last_good_event:
             return last_good_event
@@ -613,8 +614,8 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         and seconds_since_last_block
                         > mean_time_diff.total_seconds() * HIVE_WITNESS_DELAY_FACTOR
                     ):
-                        witness_details = await get_hive_witness_details(watch_witness)
-                        missed_blocks = witness_details.get("missed_blocks", 0)
+                        wd = await get_hive_witness_details(watch_witness)
+                        witness = wd.witness
                         time_since_last_block = seconds_only(
                             timedelta(seconds=seconds_since_last_block)
                         )
@@ -622,7 +623,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             hive_event["block_num"] - last_good_event["block_num"]
                         )
                         logger.warning(
-                            f"{icon} 🚨 Missed: {missed_blocks} "
+                            f"{icon} 🚨 Missed: {witness.missed_blocks} "
                             f"Witness Time since last block: {time_since_last_block} "
                             f"Mean: {mean_time_diff} "
                             f"Block Now: {hive_event['block_num']:,.0f} "
@@ -635,22 +636,26 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         )
                         send_once = True
                     if hive_event.get("producer") == watch_witness:
-                        witness_details = await get_hive_witness_details(watch_witness)
-                        missed_blocks = witness_details.get("missed_blocks", 0)
+                        producer_reward = ProducerReward.model_validate(hive_event)
+                        await producer_reward.get_witness_details()
+                        if not producer_reward.witness:
+                            logger.error(
+                                f"{icon} No witness found for {watch_witness}",
+                                extra={"notification": True},
+                            )
+                            continue
                         time_diff = seconds_only(
                             hive_event["timestamp"].replace(tzinfo=timezone.utc)
                             - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
-                        hive_event["witness_details"] = witness_details
                         logger.info(
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
                             f"Mean {mean_time_diff} | "
-                            f"{hive_event['block_num']:,.0f} | "
-                            f"Missed: {missed_blocks}",
+                            f"{producer_reward.log_str}",
                             extra={
-                                "hive_event": hive_event,
+                                "producer_reward": producer_reward.model_dump(),
                                 "notification": True,
                                 "error_code_clear": "Hive Witness delay",
                             },
@@ -662,7 +667,8 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         last_good_event = hive_event
                         try:
                             _ = await db_client.insert_one(
-                                HIVE_WITNESS_PRODUCER_COLLECTION, hive_event
+                                HIVE_WITNESS_PRODUCER_COLLECTION,
+                                producer_reward.model_dump(),
                             )
                         except DuplicateKeyError:
                             pass
@@ -864,7 +870,7 @@ def format_market_event(hive_event: dict) -> str:
         return "Problem formatting market event {e}"
 
 
-async def main_async_start(watch_users: List[str]):
+async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     """
     Main function to run the Hive Watcher client.
     Args:
@@ -873,9 +879,9 @@ async def main_async_start(watch_users: List[str]):
     Returns:
         None
     """
-    async with V4VAsyncRedis(decode_responses=False) as redis_cllient:
+    async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
-            await redis_cllient.ping()
+            await redis_client.ping()
         except Exception as e:
             logger.error(f"{icon} Redis connection test failed", extra={"error": e})
             raise e
@@ -892,7 +898,7 @@ async def main_async_start(watch_users: List[str]):
     )
     try:
         # Events.HIVE_TRANSFER - takes HiveEvent and stores only the required ones
-        # re-pbulishes the event as Events.HIVE_TRANSFER_NOTIFY as a
+        # re-publishes the event as Events.HIVE_TRANSFER_NOTIFY as a
         # HiveTransfer object
         # async_subscribe(Events.HIVE_TRANSFER, hive_transfer_automatic_sell)
         async_subscribe(Events.HIVE_TRANSFER, db_store_transfer)
@@ -903,8 +909,8 @@ async def main_async_start(watch_users: List[str]):
 
         async_subscribe(Events.HIVE_MARKET, market_report)
         tasks = [
-            real_ops_loop(watch_users),
-            virtual_ops_loop("brianoflondon", watch_users),
+            real_ops_loop(watch_users=watch_users),
+            virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -926,14 +932,27 @@ async def main_async_start(watch_users: List[str]):
 def main(
     watch_users: Annotated[
         List[str],
-        typer.Argument(help=("Hive User(s) to watch for transactions")),
+        typer.Option(
+            "--user",
+            help="Hive User(s) to watch for transactions, can have multiple",
+            show_default=True,
+        ),
     ] = None,
+    watch_witness: Annotated[
+        str,
+        typer.Option(
+            "--witness",
+            help="Hive Witness to watch for transactions",
+            show_default=True,
+        ),
+    ] = "brianoflondon",
 ):
     """
     Watch the Hive blockchain for transactions.
+
     Args:
-        watch_user (Annotated[List[str] | None, Argument]): The Hive user(s)
-                    to watch for transactions.
+        watch_users: The Hive user(s) to watch for transactions. Specify multiple users with repeated --watch-users, e.g., --watch-users alice --watch-users bob.
+        watch_witness: The Hive witness to watch for transactions. Defaults to "brianoflondon".
 
     Returns:
         None
@@ -947,7 +966,7 @@ def main(
     if watch_users is None:
         watch_users = ["v4vapp", "brianoflondon"]
     COMMAND_LINE_WATCH_USERS = watch_users
-    asyncio.run(main_async_start(watch_users))
+    asyncio.run(main_async_start(watch_users, watch_witness))
     INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
 
