@@ -10,7 +10,6 @@ from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
 from v4vapp_backend_v2.hive.hive_extras import (
     decode_memo,
-    get_event_id,
     get_hive_block_explorer_link,
 )
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypeMixin
@@ -18,8 +17,7 @@ from v4vapp_backend_v2.hive_models.op_types_enums import OpTypeMixin
 from .amount_pyd import AmountPyd
 
 
-class Transfer(BaseModel):
-    id: str = Field(alias="_id")
+class TransferRaw(BaseModel):
     amount: AmountPyd
     block_num: int
     from_account: str = Field(alias="from")
@@ -36,13 +34,10 @@ class Transfer(BaseModel):
     )
 
     def __init__(self, **hive_event: Any) -> None:
-        if "id" not in hive_event and "_id" in hive_event:
-            hive_event["id"] = get_event_id(hive_event)
-
         super().__init__(**hive_event)
 
 
-class TransferEnhanced(Transfer, OpTypeMixin):
+class Transfer(TransferRaw, OpTypeMixin):
     d_memo: str = ""
     conv: CryptoConv = CryptoConv()
 

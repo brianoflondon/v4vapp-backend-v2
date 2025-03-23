@@ -1,10 +1,10 @@
 from typing import Union
 
 from .op_producer_reward import ProducerReward
-from .op_transfer import TransferEnhanced
+from .op_transfer import Transfer
 
-OpAll = Union[TransferEnhanced]
+OpAll = Union[Transfer]
 
 
-class OpAny(TransferEnhanced, ProducerReward):
+class OpAny(Transfer, ProducerReward):
     pass
