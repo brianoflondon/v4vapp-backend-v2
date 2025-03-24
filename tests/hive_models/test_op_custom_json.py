@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 
 import pytz
 
@@ -40,3 +40,5 @@ def test_custom_json_validate():
         assert custom_json.json_data.to_account == json_data["hive_accname_to"]
         assert custom_json.json_data.sats == json_data["sats"]
         assert custom_json.cj_id == "v4vapp_transfer"
+        print(custom_json.log_str)
+        print(custom_json.log_extra)

@@ -27,9 +27,11 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
     RealOpsLoopTypes,
@@ -746,12 +748,14 @@ async def real_ops_loop(
     last_good_block = await get_last_good_block() + 1
     count = 0
     start = timer()
+    await Transfer.update_quote()
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,
     ) as db_client:
         while True:
+            op_in_trx_counter = OpInTrxCounter(op_real_virtual="real")
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
                     opNames=op_names,
@@ -762,20 +766,12 @@ async def real_ops_loop(
             )
             error_code = ""
             try:
-                last_trx_id = ""
-                op_in_trx = 0
                 async for hive_event in async_stream:
                     # For trx_id's with multiple transfers, record position in trx
                     # Moved outside the specific blocks for different op codes
-                    if hive_event.get("trx_id") == last_trx_id:
-                        op_in_trx += 1
-                    else:
-                        last_trx_id = hive_event.get("trx_id")
-                        op_in_trx = 0
+                    op_in_trx = op_in_trx_counter.inc(hive_event["trx_id"])
                     hive_event["op_in_trx"] = op_in_trx
-
                     hive_event["_id"] = get_event_id(hive_event)
-                    #                   # Tracking op_in_trx ID for each transaction manually.
 
                     if hive_event.get("type") in WitnessOpTypes:
                         vote = AccountWitnessVote.model_validate(hive_event)
@@ -788,6 +784,11 @@ async def real_ops_loop(
                         )
                     if hive_event.get("type") in TransferOpTypes:
                         # Only advance block count on new trx_id
+                        transfer = Transfer.model_validate(hive_event)
+                        logger.info(
+                            f"{icon} {transfer.log_str}",
+                            extra={"notification": False, **transfer.log_extra},
+                        )
                         if last_good_block < hive_event.get("block_num"):
                             last_good_block = hive_event.get("block_num")
                         error_code = log_time_difference_errors(
@@ -808,6 +809,7 @@ async def real_ops_loop(
                                 f"{icon} {count} transactions processed. "
                                 f"Node: {old_node} -> {hive_client.rpc.url}"
                             )
+                            await Transfer.update_quote()
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()

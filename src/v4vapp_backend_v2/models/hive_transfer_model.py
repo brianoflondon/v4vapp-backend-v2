@@ -106,7 +106,7 @@ class HiveTransaction(BaseModel):
         )
         ans = (
             f"{self.hive_from} sent {self.amount_str} to {self.hive_to} "
-            f"(${self.conv.usd:>.2f}) {self.d_memo} {markdown_link}"
+            f"(${self.conv.usd:>,.2f} {self.conv.sats:,}) {self.d_memo} {markdown_link}"
         )
         return ans
 

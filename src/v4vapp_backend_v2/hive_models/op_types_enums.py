@@ -52,6 +52,10 @@ class MarketOpTypes(StrEnum):
     LIMIT_ORDER_CANCEL = auto()
 
 
+class OtherOpTypes(StrEnum):
+    CUSTOM_JSON = auto()
+
+
 class WitnessOpTypes(StrEnum):
     ACCOUNT_WITNESS_VOTE = auto()
     PRODUCER_REWARD = auto()
@@ -82,9 +86,13 @@ def create_master_enum(*enums):
     return StrEnum("HiveTypes", members)
 
 
-HiveOpTypes = create_master_enum(TransferOpTypes, MarketOpTypes)
+HiveOpTypes = create_master_enum(
+    TransferOpTypes, MarketOpTypes, OtherOpTypes, VirtualOpTypes
+)
 # Used in real_ops_loop in hive_monitor_v2.py
-RealOpsLoopTypes = create_master_enum(TransferOpTypes, MarketOpTypes, WitnessOpTypes)
+RealOpsLoopTypes = create_master_enum(
+    TransferOpTypes, MarketOpTypes, WitnessOpTypes, OtherOpTypes
+)
 
 OpTypes = create_master_enum(
     TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes

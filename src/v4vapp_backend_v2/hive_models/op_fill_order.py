@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
@@ -29,12 +30,13 @@ class FillOrder(OpBase):
             rate = self.current_pays.amount_decimal / self.open_pays.amount_decimal
         rate_str = f"{rate:.3f} "  # HIVE/HBD
         icon = "📈"
+        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
         return (
             f"{icon}{rate_str:>8} - "
             f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order "
             f"for {self.current_owner} "
-            f"{completed_order}"
+            f"{completed_order} {link}"
         )
 
     def check_open_orders(self) -> str:

@@ -52,7 +52,7 @@ class Transfer(TransferRaw):
                 asyncio.run(self.update_quote())
             except RuntimeError:
                 loop = asyncio.get_running_loop()
-                loop.run_until_complete(self.update_quote())
+                asyncio.run_coroutine_threadsafe(self.update_quote(), loop=loop)
         self.update_conv()
 
     def post_process(self, hive_inst: Hive | None = None) -> None:
