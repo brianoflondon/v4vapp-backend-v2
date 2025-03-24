@@ -8,26 +8,23 @@ from pydantic import BaseModel, ConfigDict, Field
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
-from v4vapp_backend_v2.hive.hive_extras import (
-    decode_memo,
-    get_hive_block_explorer_link,
-)
-from v4vapp_backend_v2.hive_models.op_types_enums import OpTypeMixin
+from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_hive_block_explorer_link
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 from .amount_pyd import AmountPyd
 
 
-class TransferRaw(BaseModel):
+class TransferRaw(OpBase):
+    # trx_id: str
+    # op_in_trx: int = 0
+    # type: str
     amount: AmountPyd
     block_num: int
     from_account: str = Field(alias="from")
     memo: str
-    op_in_trx: int = 0
     timestamp: datetime
     to_account: str = Field(alias="to")
-    trx_id: str
     trx_num: int
-    type: str
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -37,7 +34,7 @@ class TransferRaw(BaseModel):
         super().__init__(**hive_event)
 
 
-class Transfer(TransferRaw, OpTypeMixin):
+class Transfer(TransferRaw):
     d_memo: str = ""
     conv: CryptoConv = CryptoConv()
 
