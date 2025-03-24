@@ -13,14 +13,14 @@ class VestingShares(AmountPyd):
 
 
 class ProducerRewardRaw(OpBase):
-    type: str = Field(description="Type of the event")
+    # trx_id: str = Field(description="Transaction ID")
+    # op_in_trx: int = Field(default=0, description="Operation index in the transaction")
+    # type: str = Field(description="Type of the event")
     producer: str = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")
     timestamp: datetime = Field(description="Timestamp of the reward")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(description="Transaction number within the block")
-    trx_id: str = Field(description="Transaction ID")
-    op_in_trx: int = Field(default=0, description="Operation index in the transaction")
 
     model_config = ConfigDict(populate_by_name=True)
 

@@ -23,14 +23,14 @@ class VoterDetails(BaseModel):
 
 
 class AccountWitnessVote(OpBase):
-    op_in_trx: int
-    trx_id: str
+    # op_in_trx: int
+    # trx_id: str
+    # type: str
     account: str
     approve: bool
     block_num: int
     timestamp: datetime
     trx_num: int
-    type: str
     voter_details: VoterDetails | None = None
     witness: str
 

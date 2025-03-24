@@ -11,19 +11,18 @@ from .op_base import OpBase
 
 
 class LimitOrderCreate(OpBase):
-    _id: str
+    # trx_id: str
+    # op_in_trx: int
+    # type: str
     amount_to_sell: AmountPyd
     block_num: int
     expiration: datetime
     fill_or_kill: bool
     min_to_receive: AmountPyd
-    op_in_trx: int
     orderid: int
     owner: str
     timestamp: datetime
-    trx_id: str
     trx_num: int
-    type: str
 
     # Used to store the amount remaining to be filled when doing math
     amount_remaining: Amount | None = Field(None, alias="amount_remaining")

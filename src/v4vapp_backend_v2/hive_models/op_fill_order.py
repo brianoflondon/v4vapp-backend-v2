@@ -6,7 +6,9 @@ from .amount_pyd import AmountPyd
 
 
 class FillOrder(OpBase):
-    type: str
+    # trx_id: str
+    # op_in_trx: int
+    # type: str
     current_orderid: int
     current_owner: str
     current_pays: AmountPyd
@@ -17,8 +19,6 @@ class FillOrder(OpBase):
     timestamp: datetime
     block_num: int
     trx_num: int
-    trx_id: str
-    op_in_trx: int
 
     @property
     def log_str(self) -> str:
