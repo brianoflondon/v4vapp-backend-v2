@@ -11,9 +11,6 @@ from .op_base import OpBase
 
 
 class LimitOrderCreate(OpBase):
-    # trx_id: str
-    # op_in_trx: int
-    # type: str
     amount_to_sell: AmountPyd
     block_num: int
     expiration: datetime
@@ -28,7 +25,7 @@ class LimitOrderCreate(OpBase):
     amount_remaining: Amount | None = Field(None, alias="amount_remaining")
 
     # Class variable shared by all instances
-    open_orderids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
+    open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -37,7 +34,7 @@ class LimitOrderCreate(OpBase):
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
-        LimitOrderCreate.open_orderids[self.orderid] = self.model_copy()
+        LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
 
     @classmethod
     def name(cls) -> str:
@@ -60,11 +57,11 @@ class LimitOrderCreate(OpBase):
             None
         """
         expired_orders: List[int] = []
-        for orderid, order in self.open_orderids.items():
+        for orderid, order in self.open_order_ids.items():
             if order.expiration < datetime.now(tz=timezone.utc):
                 expired_orders.append(orderid)
         for orderid in expired_orders:
-            self.open_orderids.pop(orderid)
+            self.open_order_ids.pop(orderid)
 
     # TODO: #40 Add logic for checking off filled orders
 
