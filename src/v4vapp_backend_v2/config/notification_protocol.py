@@ -42,10 +42,10 @@ class NotificationProtocol(Protocol):
             record.__dict__["levelno"] = logging.INFO
 
         try:
-            # If the loop is running, schedule the task; if not, run it
+            # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
-                asyncio.create_task(
-                    self._send_notification(message, record, alert_level)
+                asyncio.run_coroutine_threadsafe(
+                    self._send_notification(message, record, alert_level), loop
                 )
             else:
                 loop.run_until_complete(
