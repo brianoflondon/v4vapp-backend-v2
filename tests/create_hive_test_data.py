@@ -14,6 +14,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_blockchain_instance,
     get_hive_client,
 )
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpInTrxCounter, OpRealm
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     OpTypes,
     RealOpsLoopTypes,
@@ -23,23 +24,25 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
 found_ops = {}
 
 
-async def scan_hive(virtual=False):
+async def scan_hive(op_real_virtual: OpRealm):
     hive = get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive)
     op_in_trx = 0
-    last_trx_id = ""
     hive = get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive)
     end_block = int(hive.get_dynamic_global_properties().get("head_block_number"))
     start_block = int(end_block - 14000 / 3)
-    if virtual:
+    if op_real_virtual == OpRealm.VIRTUAL:
         op_names = VirtualOpTypes
     else:
         op_names = RealOpsLoopTypes
+
     logger.info(
-        f"Start scanning hive blockchain virtual: {virtual}",
+        f"Start scanning hive blockchain virtual: {op_real_virtual}",
         extra={"notification": False},
     )
+    only_virtual_ops = op_real_virtual == OpRealm.VIRTUAL
+    real_virtual = "virtual" if only_virtual_ops else "real"
     try:
         async_stream = sync_to_async_iterable(
             blockchain.stream(
@@ -48,29 +51,33 @@ async def scan_hive(virtual=False):
                 stop=end_block,
                 # raw_ops=False,
                 # max_batch_size=MAX_HIVE_BATCH_SIZE,
-                only_virtual_ops=virtual,
+                only_virtual_ops=only_virtual_ops,
             )
         )
+        op_in_trx_counter = OpInTrxCounter(op_real_virtual=op_real_virtual)
         async for post in async_stream:
+            op_in_trx = op_in_trx_counter.inc(post["trx_id"])
+            post["op_in_trx"] = op_in_trx
             if post["block_num"] > start_block:
                 start_block = post["block_num"]
-            op_in_trx, last_trx_id = op_in_trx_counter(op_in_trx, last_trx_id, post)
             if found_ops.get(post.get("type")):
                 found_ops[post.get("type")] += 1
             else:
                 found_ops[post.get("type")] = 1
-            if found_ops[post.get("type")] < 20:
-                real_virtual = "virtual" if virtual else "real"
-                print(
-                    f"{op_in_trx:>3} {real_virtual:<8} {post['type']:>30} {found_ops[post.get('type')]:>3}"
-                )
-                logger.info(
-                    f"Test data {post['block_num']} - {post.get("type")}",
-                    extra={"hive_event": post},
-                )
+
+            # if found_ops[post.get("type")] < 20:
+            # logger.info(
+            #     f"Test data {post['block_num']} - {post.get("type")}",
+            #     extra={"hive_event": post},
+            # )
+            op_base = OpBase.model_validate(post)
+            print(
+                f"{op_base.op_in_trx:>3} {op_base.trx_id} {op_base.realm:<8} {op_base.type:>30} "
+                f"{found_ops[post.get('type')]:>3}"
+            )
         # logger.info(f"End scanning hive blockchain", extra={"notification": False})
         pprint(found_ops, indent=4)
-
+        await asyncio.sleep(0.01)
     except KeyboardInterrupt:
         logger.info(f"End scanning hive blockchain", extra={"notification": False})
         pprint(found_ops, indent=4)
@@ -94,9 +101,10 @@ def op_in_trx_counter(
 
 
 async def main_async_start():
+
     async with asyncio.TaskGroup() as tg:
-        real = tg.create_task(scan_hive(virtual=False))
-        virtual = tg.create_task(scan_hive(virtual=True))
+        real = tg.create_task(scan_hive(OpRealm.REAL))
+        virtual = tg.create_task(scan_hive(OpRealm.VIRTUAL))
 
     pprint(real.result())
     pprint(virtual.result())

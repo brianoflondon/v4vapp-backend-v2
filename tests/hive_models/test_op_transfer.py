@@ -1,15 +1,10 @@
-import json
 import os
 from pathlib import Path
-from typing import Dict, Generator
 
 import pytest
 from beem.amount import Amount  # type: ignore
-from pymongo.errors import DuplicateKeyError
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes

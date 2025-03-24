@@ -92,16 +92,6 @@ OpTypes = create_master_enum(
 )
 
 
-class OpTypeMixin:
-    @property
-    def log_str(self) -> str:
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @property
-    def notification_str(self) -> str:
-        raise NotImplementedError("Subclasses must implement this method")
-
-
 if __name__ == "__main__":
     print("fill_order" in HiveOpTypes)
     print("fill_order" in MarketOpTypes)

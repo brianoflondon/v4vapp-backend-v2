@@ -1,3 +1,4 @@
+from datetime import datetime
 from random import choice
 from secrets import token_hex
 
@@ -40,3 +41,13 @@ def test_log_extra_virtual():
         }
     }
     assert op_base.name() == "op_base"
+
+
+def test_op_base_model_dump():
+    op_type = choice(list(HIVE_VIRTUAL_OPS.keys()))
+    trx_id = token_hex(20)
+
+    op_base = OpBase(trx_id=trx_id, type=op_type, op_in_trx=0)
+
+    print(op_base.model_dump())
+    

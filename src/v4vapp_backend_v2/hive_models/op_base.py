@@ -1,5 +1,5 @@
 from collections import deque
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 from typing import Any, ClassVar, Deque, Dict
 
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from v4vapp_backend_v2.hive_models.real_virtual_ops import (
 )
 
 
-class OpRealm(Enum):
+class OpRealm(StrEnum):
     REAL = auto()
     VIRTUAL = auto()
 
