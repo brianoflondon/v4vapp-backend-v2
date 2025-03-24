@@ -1,6 +1,4 @@
-from typing import, Union
-
-
+from typing import Union
 
 from .op_account_witness_vote import AccountWitnessVote
 from .op_fill_order import FillOrder
