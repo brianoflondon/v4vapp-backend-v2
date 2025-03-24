@@ -10,8 +10,8 @@ allowed_ids = ["v4vapp_transfer"]
 
 
 class KeepsatsTransfer(BaseModel):
-    from_account: str = Field(alias="hive_accname_from")
-    to_account: str = Field(alias="hive_accname_to")
+    from_account: str = Field("", alias="hive_accname_from")
+    to_account: str = Field("", alias="hive_accname_to")
     sats: int
     memo: str = ""
 
@@ -41,7 +41,12 @@ class CustomJson(OpBase):
 
     @property
     def log_str(self) -> str:
+        if self.json_data.to_account == "":
+            return (
+                f"⏩️{self.json_data.to_account} received {self.json_data.sats:,.0f} "
+                f"sats to Keepsats {self.json_data.memo}"
+            )
         return (
             f"⏩️{self.json_data.from_account} sent {self.json_data.sats:,.0f} "
-            f"sats to {self.json_data.to_account} KeepSats"
+            f"sats to {self.json_data.to_account} via KeepSats"
         )
