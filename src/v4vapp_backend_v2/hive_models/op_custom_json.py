@@ -22,7 +22,7 @@ class KeepsatsTransfer(BaseModel):
         super().__init__(**data)
 
 
-class CustomJsonKeepsats(OpBase):
+class CustomJson(OpBase):
     type: str
     cj_id: str = Field(alias="id")
     json_data: KeepsatsTransfer = Field(alias="json")
@@ -38,3 +38,10 @@ class CustomJsonKeepsats(OpBase):
         if isinstance(data["json"], str):
             data["json"] = json.loads(data["json"])
         super().__init__(**data)
+
+    @property
+    def log_str(self) -> str:
+        return (
+            f"⏩️{self.json_data.from_account} sent {self.json_data.sats:,.0f} "
+            f"sats to {self.json_data.to_account} KeepSats"
+        )

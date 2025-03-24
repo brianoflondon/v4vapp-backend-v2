@@ -15,7 +15,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_client,
 )
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpInTrxCounter, OpRealm
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJsonKeepsats
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     OpTypes,
     RealOpsLoopTypes,
@@ -32,9 +32,9 @@ async def scan_hive(op_real_virtual: OpRealm):
     hive = get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive)
     end_block = int(hive.get_dynamic_global_properties().get("head_block_number"))
-    start_block = int(end_block - 14000 / 3)
-    start_block = 94415566
-    end_block = start_block
+    start_block = int(end_block)
+    # start_block = 94415566
+    end_block = start_block + 7200000
     if op_real_virtual == OpRealm.VIRTUAL:
         op_names = VirtualOpTypes
     else:
@@ -73,12 +73,18 @@ async def scan_hive(op_real_virtual: OpRealm):
             #     extra={"hive_event": post},
             # )
             op_base = OpBase.model_validate(post)
-            print(
-                f"{op_base.op_in_trx:>3} {op_base.trx_id} {op_base.realm:<8} {op_base.type:>30} "
-                f"{found_ops[post.get('type')]:>3}"
-            )
+            if post.get("type") == "custom_json":
+                if "v4vapp" in post.get("id"):
+                    print(
+                        f"{op_base.op_in_trx:>3} {op_base.trx_id} {op_base.realm:<8} {op_base.type:>30} "
+                        f"{found_ops[post.get('type')]:>3}"
+                    )
             try:
-                custom_json = CustomJsonKeepsats.model_validate(post)
+                custom_json = CustomJson.model_validate(post)
+                logger.info(
+                    f"{custom_json.log_str}",
+                    extra={"notification": True, **custom_json.log_extra},
+                )
                 print("-----------")
                 pprint(post, indent=2)
                 print("-----------")
