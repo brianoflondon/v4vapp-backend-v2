@@ -13,6 +13,30 @@ def snake_case(name: str) -> str:
     return "".join(["_" + i.lower() if i.isupper() else i for i in name]).lstrip("_")
 
 
+def camel_case(snake_str: str) -> str:
+    """
+    Convert a snake_case string to camelCase.
+    Args:
+        snake_str (str): The snake_case string to convert.
+    Returns:
+        str: The string converted to camelCase.
+    """
+    components = snake_str.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
+
+
+def cap_camel_case(snake_str: str) -> str:
+    """
+    Convert a snake_case string to CamelCase.
+    Args:
+        snake_str (str): The snake_case string to convert.
+    Returns:
+        str: The string converted to CamelCase.
+    """
+    camel_case_word = camel_case(snake_str)
+    return camel_case_word[0].upper() + camel_case_word[1:]
+
+
 def seconds_only(delta: timedelta) -> timedelta:
     """
     Returns a new timedelta object with only the days and seconds

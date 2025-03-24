@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    camel_case,
+    cap_camel_case,
     detect_convert_keepsats,
     detect_hbd,
     detect_keepsats,
@@ -16,12 +18,32 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 
 
 def test_snake_case():
+    for word in [
+        "OpBase",
+        "ProducerReward",
+        "ProducerRewardRaw",
+        "VestingShares",
+        "AccountWitnessVote",
+        "VoterDetails",
+    ]:
+        snake_case_word = snake_case(word)
+        assert word == cap_camel_case(snake_case_word)
+
     assert snake_case("OpBase") == "op_base"
     assert snake_case("ProducerReward") == "producer_reward"
     assert snake_case("ProducerRewardRaw") == "producer_reward_raw"
     assert snake_case("VestingShares") == "vesting_shares"
     assert snake_case("AccountWitnessVote") == "account_witness_vote"
     assert snake_case("VoterDetails") == "voter_details"
+
+
+def test_cap_camel_case():
+    assert cap_camel_case("op_base") == "OpBase"
+    assert cap_camel_case("producer_reward") == "ProducerReward"
+    assert cap_camel_case("producer_reward_raw") == "ProducerRewardRaw"
+    assert cap_camel_case("vesting_shares") == "VestingShares"
+    assert cap_camel_case("account_witness_vote") == "AccountWitnessVote"
+    assert cap_camel_case("voter_details") == "VoterDetails"
 
 
 def test_seconds_only():
