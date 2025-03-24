@@ -22,7 +22,7 @@ import logging
 from logging import LogRecord
 from typing import Protocol
 
-from v4vapp_backend_v2.config.setup import Config, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.notification_bot import NotificationBot
 
 
@@ -52,8 +52,9 @@ class NotificationProtocol(Protocol):
                     self._send_notification(message, record, alert_level)
                 )
         except Exception as ex:
+            logger.exception(ex, extra={"notification": False})
             logger.warning(
-                f"An error occurred while sending the message: {ex}",
+                f"An error occurred while sending the message: {ex} {message}",
                 extra={
                     "notification": False,
                     "failed_message": message,
@@ -78,6 +79,7 @@ class BotNotification(NotificationProtocol):
     ) -> None:
         """
         Asynchronously sends a notification message using the NotificationBot.
+        Set the extra attribute 'silent' to True in the log record to disable notifications.
 
         Args:
             _config (Config): Configuration object for the notification.

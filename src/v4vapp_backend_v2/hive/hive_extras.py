@@ -136,16 +136,44 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         else:
             url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
         async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            answer = response.json()
+            response = await client.get(url, timeout=20)
+            if response.status_code == 200:
+                answer = response.json()
+                async with V4VAsyncRedis() as redis_client:
+                    await redis_client.set(
+                        name=f"witness_{hive_accname}", value=json.dumps(answer)
+                    )
+            else:
+                async with V4VAsyncRedis() as redis_client:
+                    answer = json.loads(
+                        await redis_client.get(f"witness_{hive_accname}")
+                    )
+                    if not answer:
+                        logger.warning(
+                            f"Failed to get_hive_witness_details "
+                            f"from cache after error: {response.status_code}"
+                        )
+                        return None
+
             wd = WitnessDetails.model_validate(answer)
             return wd
 
     except Exception as e:
-        logger.warning(f"Failed to get_hive_witness_details: {e}")
-        return None
+        logger.exception(f"Failed to get_hive_witness_details: {e}")
+        try:
+            async with V4VAsyncRedis() as redis_client:
+                answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+                if answer:
+                    wd = WitnessDetails.model_validate(answer)
+                    return wd
 
-    return None
+            logger.warning(
+                f"Failed to get_hive_witness_details "
+                f"from cache after error: {response.status_code}"
+            )
+        except Exception as e:
+            logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
+        return None
 
 
 class HiveInternalQuote(BaseModel):

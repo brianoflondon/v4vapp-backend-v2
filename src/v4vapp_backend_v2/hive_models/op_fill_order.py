@@ -1,7 +1,5 @@
 from datetime import datetime
 
-from pydantic import BaseModel
-
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 from .amount_pyd import AmountPyd

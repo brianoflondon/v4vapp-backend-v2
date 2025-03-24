@@ -1,7 +1,9 @@
 import asyncio
+import json
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import pytest
 from redis.exceptions import ConnectionError
 
@@ -190,3 +192,27 @@ def test_sync_redis_client_context_manager():
         assert redis_sync_client.get("test_key") == "test_value"
         redis_sync_client.flushdb()
     redis_sync_client.close()
+
+
+@pytest.mark.asyncio
+async def test_with_get_response():
+    hive_accname = "blocktrades"
+    url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, timeout=20)
+        if response.status_code == 200:
+            async with V4VAsyncRedis() as redis_client:
+                await redis_client.set(
+                    name=f"witness_{hive_accname}", value=json.dumps(response.json())
+                )
+
+            async with V4VAsyncRedis() as redis_client:
+                witness_data = json.loads(
+                    await redis_client.get(f"witness_{hive_accname}")
+                )
+                assert witness_data is not None
+                assert witness_data["witness"]["witness_name"] == hive_accname
+                await redis_client.delete(f"witness_{hive_accname}")
+        else:
+            print(f"Failed to get response for {hive_accname}")
+            print(response.status_code)
