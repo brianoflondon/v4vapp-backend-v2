@@ -1,5 +1,4 @@
 from enum import StrEnum, auto
-from typing import Protocol
 
 """
 This module defines various operation types for Hive transactions using enumerations.

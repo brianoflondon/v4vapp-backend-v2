@@ -25,36 +25,40 @@ def test_model_validate_limit_order_create():
             print(limit_order.log_str)
             print(limit_order.log_extra)
 
-    len(limit_order.open_orderids) == 28
+    len(limit_order.open_order_ids) == 28
     limit_order.expire_orders()
-    len(limit_order.open_orderids) == 0
+    len(limit_order.open_order_ids) == 0
 
 
 def test_model_validate_limit_order_create_and_fill_orders():
+    print()
     filled_orders: List[FillOrder] = []
     for hive_event in load_hive_events(OpTypes.LIMIT_ORDER_CREATE):
         if hive_event["type"] == "limit_order_create":
             limit_order_create = LimitOrderCreate.model_validate(hive_event)
         if hive_event["type"] == "fill_order":
-            filled_orders.append(FillOrder.model_validate(hive_event))
+            fill_order = FillOrder.model_validate(hive_event)
+            print(fill_order.log_str)
+            # filled_orders.append(FillOrder.model_validate(hive_event))
 
     print(f"Number of filled orders: {len(filled_orders)}")
-    for fill_order in filled_orders:
-        open_order = LimitOrderCreate.open_orderids.get(fill_order.open_orderid, None)
-        if open_order is not None:
-            print(f"{open_order.log_str} {fill_order.log_str}")
-            outstanding_amount = (
-                open_order.amount_to_sell.amount_decimal
-                - fill_order.open_pays.amount_decimal
-            )
-            if outstanding_amount > 0:
-                open_order.amount_remaining = (
-                    open_order.amount_to_sell.beam - fill_order.open_pays.beam
-                )
-            else:
-                LimitOrderCreate.open_orderids.pop(fill_order.open_orderid)
-                print(f"Order {open_order.orderid} has been filled.")
-    print(f"Number of open orders: {len(LimitOrderCreate.open_orderids)}")
-    for open_order in LimitOrderCreate.open_orderids.values():
-        if open_order.amount_remaining is not None:
-            print(f"{str(open_order.amount_remaining):>9} {open_order.log_str}")
+    # for fill_order in filled_orders:
+    #     open_order = LimitOrderCreate.open_order_ids.get(fill_order.open_orderid, None)
+    #     # Call to log will check and clear open orders
+    #     print(f"{{fill_order.log_str}")
+    #     # if open_order is not None:
+    #     #     outstanding_amount = (
+    #     #         open_order.amount_to_sell.amount_decimal
+    #     #         - fill_order.open_pays.amount_decimal
+    #     #     )
+    #     #     if outstanding_amount > 0:
+    #     #         open_order.amount_remaining = (
+    #     #             open_order.amount_to_sell.beam - fill_order.open_pays.beam
+    #     #         )
+    #     #     else:
+    #     #         LimitOrderCreate.open_order_ids.pop(fill_order.open_orderid)
+    #     #         print(f"Order {open_order.orderid} has been filled.")
+    # print(f"Number of open orders: {len(LimitOrderCreate.open_order_ids)}")
+    # for open_order in LimitOrderCreate.open_order_ids.values():
+    #     if open_order.amount_remaining is not None:
+    #         print(f"{str(open_order.amount_remaining):>9} {open_order.log_str}")
