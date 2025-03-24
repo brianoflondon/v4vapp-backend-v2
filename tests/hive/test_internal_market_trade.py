@@ -1,10 +1,6 @@
-from unittest.mock import patch
+import pytest
+from beem.amount import Amount  # type: ignore
 
-import pytest  # type: ignore
-from beem.amount import Amount
-
-from v4vapp_backend_v2.config.setup import HiveAccountConfig
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import check_order_book
 
 
@@ -36,3 +32,5 @@ def test_check_order_book_no_liquidity():
     trade = Amount("1_000_000_000 HBD")
     with pytest.raises(ValueError):
         check_order_book(trade, use_cache=True)
+
+

@@ -285,22 +285,22 @@ def check_order_book(
 
 if __name__ == "__main__":
 
-    try:
-        account_trade(HiveAccountConfig(name="v4vapp-test"), Amount("2.5 HBD"))
-        account_trade(HiveAccountConfig(name="v4vapp-test"), Amount("17 HIVE"))
-    except Exception as e:
-        logger.info(f"{icon} {e}")
+    # try:
+    #     account_trade(HiveAccountConfig(name="v4vapp-test"), Amount("2.5 HBD"))
+    #     account_trade(HiveAccountConfig(name="v4vapp-test"), Amount("14 HIVE"))
+    # except Exception as e:
+    #     logger.info(f"{icon} {e}")
 
     try:
         trade = Amount("0.2 HBD")
         trx = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
-        logger.info(f"{icon} " f"trx: {trx}")
+        logger.info(f"{icon} " f"trx: {trx}", extra={"notification": False})
     except Exception as e:
         logger.info(f"{icon} {e}")
 
     try:
         trade = Amount("1 HIVE")
         trx2 = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
-        logger.info(f"{icon} " f"trx2: {trx2}")
+        logger.info(f"{icon} " f"trx2: {trx2}", extra={"notification": False})
     except Exception as e:
         logger.info(f"{icon} {e}")

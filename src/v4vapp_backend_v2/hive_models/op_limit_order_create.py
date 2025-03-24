@@ -83,7 +83,7 @@ class LimitOrderCreate(OpBase):
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
         icon = "📈"
         return (
-            f"{icon}{rate_str:>8}  - "
+            f"{icon}{rate_str:>8} - "
             f"{sell} for {receive} "
             f"{self.owner} created order "
             f"{self.orderid}"

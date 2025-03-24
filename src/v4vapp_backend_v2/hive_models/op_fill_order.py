@@ -29,9 +29,10 @@ class FillOrder(OpBase):
         else:
             rate = self.current_pays.amount_decimal / self.open_pays.amount_decimal
         rate_str = f"{rate:.3f} "  # HIVE/HBD
+        icon = "📈"
         return (
-            f"💵{rate_str:>8}  - "
-            f"{current_pays_str:>18} -> {open_pays_str:>18} "
+            f"{icon}{rate_str:>8} - "
+            f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order "
             f"for {self.current_owner} with "
             f"{self.open_orderid}"
