@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from random import randint
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -169,9 +170,10 @@ def test_send_notification_error_handling(
     """Test send_notification logs an error if _send_notification fails."""
     mock_internal_config.notification_loop.is_running = MagicMock(return_value=False)
     notifier = BotNotification()
-
+    rand_int = randint(1, 999999)
+    error_text = f"Test error {rand_int}"
     with patch.object(
-        notifier, "_send_notification", side_effect=Exception("Test error")
+        notifier, "_send_notification", side_effect=Exception(error_text)
     ):
         with patch(
             "v4vapp_backend_v2.config.notification_protocol.logger.warning",
@@ -179,7 +181,4 @@ def test_send_notification_error_handling(
         ) as mock_log:
             caplog.set_level(logging.WARNING)
             notifier.send_notification(TEST_JSON["message"], mock_log_record)
-            assert (
-                "An error occurred while sending the message: Test error"
-                in mock_log.call_args[0]
-            )
+            assert error_text in mock_log.call_args[0][0]
