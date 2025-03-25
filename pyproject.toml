@@ -63,5 +63,10 @@ max-line-length = 99
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore::DeprecationWarning:beem\\..*",  # Suppress warnings from the beem library
-    "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz library
+    "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz librar
 ]
+
+[tool.mypy]
+exclude = ".*typing.py"  # Exclude typing.py from mypy checks
+exclude = ".*_pb2.*"  # Exclude generated protobuf files from mypy checks
+exclude = ".*.proto"  # Exclude generated protobuf files from mypy checks
