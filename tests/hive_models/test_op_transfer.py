@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from pprint import pprint
 
 import pytest
 from beem.amount import Amount  # type: ignore
@@ -79,7 +80,11 @@ def test_model_validate_transfer_enhanced(set_base_config_path):
             if transfer.trx_id == "e936d9d3ec5b9c6971c4fe83d65d3fdce7768353":
                 assert transfer.d_memo != hive_event["memo"]
                 assert transfer.d_memo == "This is an encrypted test message"
-            print(transfer.notification_str)
+                print(transfer.notification_str)
+                print(transfer.logs.log)
+                pprint(transfer.logs.log_extra, indent=2, width=120)
+            assert transfer.from_account in transfer.notification_str
+            assert transfer.to_account in transfer.logs.notification
 
 
 @pytest.mark.asyncio
