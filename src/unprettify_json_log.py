@@ -1,6 +1,5 @@
 import json
 import shutil
-import os
 
 input_file = '/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/logs_docker/voltage/v4vapp-backend-v2.log.jsonl'
 backup_file = '/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/logs_docker/voltage/v4vapp-backend-v2.log.backup.jsonl'
@@ -29,4 +28,4 @@ print(f"Un-prettified JSON log file written to {output_file}")
 
 # Step 3: Overwrite the original log file with the un-prettified log file
 shutil.move(output_file, input_file)
-print(f"Original log file overwritten with un-prettified log file")
+print("Original log file overwritten with un-prettified log file")
