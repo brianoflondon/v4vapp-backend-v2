@@ -15,16 +15,11 @@ from .amount_pyd import AmountPyd
 
 
 class TransferRaw(OpBase):
-    # trx_id: str
-    # op_in_trx: int = 0
-    # type: str
     amount: AmountPyd
-    block_num: int
     from_account: str = Field(alias="from")
     memo: str
     timestamp: datetime
     to_account: str = Field(alias="to")
-    trx_num: int
 
     model_config = ConfigDict(
         populate_by_name=True,
