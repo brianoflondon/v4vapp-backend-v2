@@ -98,49 +98,6 @@ class BotNotification(NotificationProtocol):
             await bot.send_message(message)
 
 
-# class TelegramNotification(NotificationProtocol):
-#     async def _send_notification(
-#         self,
-#         message: str,
-#         record: LogRecord,
-#         alert_level: int = 1,
-#     ) -> None:
-#         raise NotImplementedError("Email notification is not implemented yet.")
-#         # Send notification to Telegram
-#         url = (
-#             f"{_config.tailscale.notification_server}."
-#             f"{_config.tailscale.tailnet_name}:"
-#             f"{_config.tailscale.notification_server_port}/send_notification/"
-#         )
-#         params: Dict = {
-#             "notify": message,
-#             "alert_level": alert_level,
-#             "room_id": _config.telegram.chat_id,
-#         }
-#         try:
-#             async with httpx.AsyncClient() as client:
-#                 ans = await client.get(url, params=params, timeout=60)
-#                 if ans.status_code != 200:
-#                     logger.warning(
-#                         f"An error occurred while sending the message: {ans.text}",
-#                         extra={
-#                             "notification": False,
-#                             "failed_message": message,
-#                         },
-#                     )
-#                 else:
-#                     logger.debug(f"Sent message: {message}")
-
-#         except Exception as ex:
-#             logger.warning(
-#                 f"An error occurred while sending the message: {ex}",
-#                 extra={
-#                     "notification": False,
-#                     "failed_message": message,
-#                 },
-#             )
-
-
 class EmailNotification(NotificationProtocol):
     async def _send_notification(
         self,
