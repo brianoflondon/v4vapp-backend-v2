@@ -1,7 +1,5 @@
-from typing import Dict
 
 from tests.load_data import load_hive_events
-from tests.hive_models.test_op_account_witness_vote import load_hive_events
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
