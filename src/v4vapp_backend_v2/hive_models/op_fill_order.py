@@ -28,7 +28,7 @@ class FillOrder(OpBase):
             rate = self.open_pays.amount_decimal / self.current_pays.amount_decimal
         else:
             rate = self.current_pays.amount_decimal / self.open_pays.amount_decimal
-        rate_str = f"{rate:.3f} "  # HIVE/HBD
+        rate_str = f"{rate:.3f}"  # HIVE/HBD
         icon = "📈"
         link = get_hive_block_explorer_link(self.trx_id, markdown=True)
         return (
