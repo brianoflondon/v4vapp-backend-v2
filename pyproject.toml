@@ -58,4 +58,10 @@ allow-direct-references = true
 packages = ["src/v4vapp_backend_v2"]
 
 [tool.flake8]
-max-line-length = 88
+max-line-length = 99
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:beem\\..*",  # Suppress warnings from the beem library
+    "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz library
+]
