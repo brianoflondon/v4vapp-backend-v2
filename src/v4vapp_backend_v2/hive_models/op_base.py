@@ -1,10 +1,12 @@
 from collections import deque
-from enum import Enum, StrEnum, auto
-from typing import Any, ClassVar, Deque, Dict
+from dataclasses import dataclass
+from enum import StrEnum, auto
+from typing import Any, ClassVar, Deque, Dict, Protocol
 
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import (
     HIVE_REAL_OPS,
     HIVE_VIRTUAL_OPS,
@@ -16,14 +18,62 @@ class OpRealm(StrEnum):
     VIRTUAL = auto()
 
 
+class OpLogData(BaseModel):
+    """
+    OpLogData is a Pydantic model that represents the structure of log data.
+
+    Attributes:
+        log (str): The main log message.
+        notification (str): A notification message associated with the log.
+        log_extra (Dict[str, Any]): Additional data or metadata related to the log.
+    """
+    log: str
+    notification: str
+    log_extra: Dict[str, Any]
+
+
 class OpBase(BaseModel):
+    """
+    OpBase is a base model representing a Hive blockchain operation. It provides attributes
+    and methods to handle both real and virtual operations, along with logging and notification
+    functionalities.
+
+    Attributes:
+        realm (OpRealm): Specifies whether the operation is REAL (user-generated) or VIRTUAL
+            (blockchain-generated). Defaults to OpRealm.REAL.
+        trx_id (str): The transaction ID associated with the operation.
+        op_in_trx (int): The index of the operation within the block. Defaults to 0.
+        type (str): The type of the event or operation.
+        block_num (int): The block number containing the transaction.
+        trx_num (int): The transaction number within the block.
+
+    Methods:
+        __init__(**data): Initializes the OpBase instance. Automatically sets the `realm`
+            attribute based on the `type` of the operation. Raises a ValueError if the
+            operation type is unknown.
+        name() -> str: Returns the snake_case representation of the class name.
+        log_extra() -> Dict[str, Any]: A property that returns a dictionary containing the
+            serialized model data, keyed by the snake_case class name.
+        log_str() -> str: A property that returns a formatted string for logging purposes,
+            including the operation type, index, and a link to the Hive block explorer.
+        notification_str() -> str: A property that returns a formatted string for notification
+            purposes, including the operation type, index, and a markdown link to the Hive
+            block explorer.
+        logs() -> OpLogData: A property that returns an OpLogData object containing the log
+            string, notification string, and additional log data.
+    """
     realm: OpRealm = Field(
         default=OpRealm.REAL,
-        description="Hive transactions are either REAL: user-generated or VIRTUAL: blockchain-generated",
+        description=(
+            "Hive transactions are either REAL: user-generated or VIRTUAL:"
+            "blockchain-generated"
+        ),
     )
     trx_id: str = Field(description="Transaction ID")
     op_in_trx: int = Field(default=0, description="Operation index in the block")
     type: str = Field(description="Type of the event")
+    block_num: int = Field(description="Block number containing this transaction")
+    trx_num: int = Field(description="Transaction number within the block")
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -42,6 +92,24 @@ class OpBase(BaseModel):
     @property
     def log_extra(self) -> Dict[str, Any]:
         return {self.name(): self.model_dump()}
+
+    @property
+    def log_str(self) -> str:
+        link = get_hive_block_explorer_link(self.trx_id)
+        return f"{self.type} | {self.op_in_trx} | {link}"
+
+    @property
+    def notification_str(self) -> str:
+        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
+        return f"{self.type} | {self.op_in_trx} | {link}"
+
+    @property
+    def logs(self) -> OpLogData:
+        return OpLogData(
+            log=self.log_str,
+            notification=self.notification_str,
+            log_extra=self.log_extra,
+        )
 
 
 class OpInTrxCounter:
