@@ -98,6 +98,7 @@ def market_trade(
 
         if amount.symbol == "HIVE":
             market = Market("HIVE:HBD", blockchain_instance=hive)
+            rate = price_float
             trx = market.sell(
                 price=price_float,
                 amount=str(amount),
@@ -107,6 +108,7 @@ def market_trade(
 
         else:
             market = Market("HBD:HIVE", blockchain_instance=hive)
+            rate = 1 / price_float
             trx = market.sell(
                 price=1 / price_float,
                 amount=amount,
@@ -114,8 +116,10 @@ def market_trade(
                 killfill=killfill,
             )
         link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
+        rate_str = f"{rate:.3f}"
         logger.info(
-            f"{icon} " f"{hive_acc.name} sold {amount} {link}",
+            f"{icon}{rate_str:>8} " f"{hive_acc.name} sold {amount} {link}",
+            f"{hive_acc.name} sold {amount} {link}",
             extra={"notification": True, "trx": trx},
         )
         return trx
