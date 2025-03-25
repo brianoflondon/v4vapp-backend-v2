@@ -16,7 +16,6 @@ class KeepsatsTransfer(BaseModel):
     memo: str = ""
 
     def __init__(self, **data: Any):
-        print("KeepsatsTransfer data:", data)
         if data.get("memo", None) is None:
             data["memo"] = ""
         super().__init__(**data)

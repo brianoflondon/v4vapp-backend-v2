@@ -15,6 +15,7 @@ from v4vapp_backend_v2.hive_models.real_virtual_ops import (
 class OpRealm(StrEnum):
     REAL = auto()
     VIRTUAL = auto()
+    MARKER = auto()
 
 
 class OpLogData(BaseModel):
@@ -74,7 +75,7 @@ class OpBase(BaseModel):
     op_in_trx: int = Field(default=0, description="Operation index in the block")
     type: str = Field(description="Type of the event")
     block_num: int = Field(description="Block number containing this transaction")
-    trx_num: int = Field(description="Transaction number within the block")
+    trx_num: int = Field(default=0, description="Transaction number within the block")
 
     def __init__(self, **data):
         super().__init__(**data)

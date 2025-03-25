@@ -57,8 +57,8 @@ class OtherOpTypes(StrEnum):
 
 
 class WitnessOpTypes(StrEnum):
-    ACCOUNT_WITNESS_VOTE = auto()
-    PRODUCER_REWARD = auto()
+    ACCOUNT_WITNESS_VOTE = auto()       # Real
+    PRODUCER_REWARD = auto()            # Virtual
 
 
 class VirtualOpTypes(StrEnum):
@@ -68,7 +68,6 @@ class VirtualOpTypes(StrEnum):
     during block processing. They are not initiated directly by users. These operations may appear
     on other lists.
     """
-
     PRODUCER_REWARD = auto()
     FILL_ORDER = auto()
     FILL_RECURRENT_TRANSFER = auto()

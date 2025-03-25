@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 from beem import Hive  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
