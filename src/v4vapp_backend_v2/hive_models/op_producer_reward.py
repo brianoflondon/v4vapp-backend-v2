@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -13,14 +13,9 @@ class VestingShares(AmountPyd):
 
 
 class ProducerRewardRaw(OpBase):
-    # trx_id: str = Field(description="Transaction ID")
-    # op_in_trx: int = Field(default=0, description="Operation index in the transaction")
-    # type: str = Field(description="Type of the event")
     producer: str = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")
     timestamp: datetime = Field(description="Timestamp of the reward")
-    block_num: int = Field(description="Block number containing this transaction")
-    trx_num: int = Field(description="Transaction number within the block")
 
     model_config = ConfigDict(populate_by_name=True)
 

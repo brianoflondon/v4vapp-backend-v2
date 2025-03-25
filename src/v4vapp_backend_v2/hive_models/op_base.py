@@ -1,7 +1,6 @@
 from collections import deque
-from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Any, ClassVar, Deque, Dict, Protocol
+from typing import Any, ClassVar, Deque, Dict
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +26,7 @@ class OpLogData(BaseModel):
         notification (str): A notification message associated with the log.
         log_extra (Dict[str, Any]): Additional data or metadata related to the log.
     """
+
     log: str
     notification: str
     log_extra: Dict[str, Any]
@@ -62,6 +62,7 @@ class OpBase(BaseModel):
         logs() -> OpLogData: A property that returns an OpLogData object containing the log
             string, notification string, and additional log data.
     """
+
     realm: OpRealm = Field(
         default=OpRealm.REAL,
         description=(
@@ -118,9 +119,10 @@ class OpInTrxCounter:
     of the last 100 transaction IDs stored in a class-level deque.
     """
 
-    # Class variables: Two separate deques for REAL and VIRTUAL transactions, limited to 100 IDs each
-    real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=100)
-    virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=100)
+    # Class variables: Two separate deques for REAL and VIRTUAL transactions,
+    # limited to 50 IDs each
+    real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
+    virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
 
     def __init__(self, op_real_virtual: OpRealm) -> None:
         """
@@ -154,7 +156,8 @@ class OpInTrxCounter:
             self.op_in_trx += 1
             return self.op_in_trx
 
-        # Case 2: Transaction exists in the shared stack, update instance's last_trx_id and increment
+        # Case 2: Transaction exists in the shared stack,
+        # update instance's last_trx_id and increment
         if self.op_real_virtual == OpRealm.REAL:
             use_stack = OpInTrxCounter.real_trx_id_stack
         else:  # OpRealVirtual.VIRTUAL

@@ -23,14 +23,32 @@ class VoterDetails(BaseModel):
 
 
 class AccountWitnessVote(OpBase):
-    # op_in_trx: int
-    # trx_id: str
-    # type: str
+    """
+    Represents an account's witness vote operation in the Hive blockchain.
+
+    Attributes:
+        account (str): The name of the account performing the vote.
+        approve (bool): Indicates whether the vote is to approve (True)
+            or unapprove (False) the witness.
+        timestamp (datetime): The timestamp of the vote operation.
+        voter_details (VoterDetails | None): Optional details about the voter,
+            such as voting power and total value.
+        witness (str): The name of the witness being voted for or unvoted.
+
+    Methods:
+        __init__(**data):
+            Initializes the AccountWitnessVote instance with the provided data.
+
+        get_voter_details():
+            Retrieves and sets the voter details, including voting power and total value,
+            for the account.
+
+        log_str:
+            A property that generates a human-readable log string summarizing the vote operation.
+    """
     account: str
     approve: bool
-    block_num: int
     timestamp: datetime
-    trx_num: int
     voter_details: VoterDetails | None = None
     witness: str
 
