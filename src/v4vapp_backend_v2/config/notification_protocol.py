@@ -92,6 +92,8 @@ class BotNotification(NotificationProtocol):
         """
         bot = NotificationBot()
         # Using Silent as the attribute name to avoid conflicts with the logging module
+        if hasattr(record, "notification_str"):
+            message = record.notification_str
         if hasattr(record, "silent") and record.silent:
             await bot.send_message(message, disable_notification=True)
         else:

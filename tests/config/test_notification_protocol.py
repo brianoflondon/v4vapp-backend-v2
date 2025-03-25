@@ -133,6 +133,24 @@ async def test_bot_notification_silent_mode(mock_log_record):
 
 
 @pytest.mark.asyncio
+async def test_bot_notification_different_notification_str(mock_log_record):
+    """Test BotNotification respects silent mode with JSON data."""
+    mock_log_record.notification_str = "Completely different notification message"
+    with patch(
+        "v4vapp_backend_v2.config.notification_protocol.NotificationBot"
+    ) as mock_bot:
+        bot_instance = mock_bot.return_value
+        bot_instance.send_message = AsyncMock()
+
+        notifier = BotNotification()
+        await notifier._send_notification(TEST_JSON["message"], mock_log_record)
+
+        bot_instance.send_message.assert_awaited_once_with(
+            "Completely different notification message"
+        )
+
+
+@pytest.mark.asyncio
 async def test_email_notification_not_implemented(mock_log_record):
     """Test EmailNotification raises NotImplementedError."""
     notifier = EmailNotification()
