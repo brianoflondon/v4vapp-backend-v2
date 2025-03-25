@@ -32,5 +32,3 @@ def test_check_order_book_no_liquidity():
     trade = Amount("1_000_000_000 HBD")
     with pytest.raises(ValueError):
         check_order_book(trade, use_cache=True)
-
-

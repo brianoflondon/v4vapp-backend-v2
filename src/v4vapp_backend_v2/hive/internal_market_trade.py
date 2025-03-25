@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pprint import pprint
 from typing import Any, Dict
 
 from beem import Hive  # type: ignore
@@ -59,7 +58,6 @@ def account_trade(hive_acc: HiveAccountConfig, set_amount_to: Amount) -> dict:
 
     hive = get_hive_client(keys=hive_acc.keys, nobroadcast=True)
     account = Account(hive_acc.name, blockchain_instance=hive)
-    pprint(account.available_balances, indent=2)
     balance = {}
     balance["HIVE"] = account.available_balances[0]
     balance["HBD"] = account.available_balances[1]
@@ -98,7 +96,7 @@ def market_trade(
 
         if amount.symbol == "HIVE":
             market = Market("HIVE:HBD", blockchain_instance=hive)
-            rate = price_float
+            rate = 1 / price_float
             trx = market.sell(
                 price=price_float,
                 amount=str(amount),
@@ -108,19 +106,27 @@ def market_trade(
 
         else:
             market = Market("HBD:HIVE", blockchain_instance=hive)
-            rate = 1 / price_float
+            rate = price_float
             trx = market.sell(
                 price=1 / price_float,
                 amount=amount,
                 account=hive_acc.name,
                 killfill=killfill,
             )
-        link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
+        link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=False)
+        link_markdwon = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
         rate_str = f"{rate:.3f}"
+        log_str = f"{icon}{rate_str:>8} " f"{hive_acc.name} sold {amount} {link}"
+        notification_str = (
+            f"{icon}{rate_str:>8} " f"{hive_acc.name} sold {amount} {link_markdwon}"
+        )
         logger.info(
-            f"{icon}{rate_str:>8} " f"{hive_acc.name} sold {amount} {link}",
-            f"{hive_acc.name} sold {amount} {link}",
-            extra={"notification": True, "trx": trx},
+            log_str,
+            extra={
+                "notification": True,
+                "trx": trx,
+                "notification_str": notification_str,
+            },
         )
         return trx
     except UnhandledRPCError as e:

@@ -3,7 +3,6 @@ from pprint import pprint
 import pytest
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
@@ -50,6 +49,7 @@ async def test_model_validate_producer_reward():
                 assert producer_reward.witness is not None
                 assert producer_reward.witness.witness_name == "threespeak"
                 pprint(producer_reward.witness, indent=2)
+                pprint(producer_reward.model_dump(), indent=2)
     assert count == 28
 
 

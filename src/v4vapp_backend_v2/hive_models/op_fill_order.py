@@ -19,8 +19,7 @@ class FillOrder(OpBase):
     block_num: int
     trx_num: int
 
-    @property
-    def log_str(self) -> str:
+    def _log_internal(self) -> str:
         completed_order = self.check_open_orders()
         current_pays_str = self.current_pays.fixed_width_str(15)
         open_pays_str = self.open_pays.fixed_width_str(15)
@@ -30,14 +29,25 @@ class FillOrder(OpBase):
             rate = self.current_pays.amount_decimal / self.open_pays.amount_decimal
         rate_str = f"{rate:.3f}"  # HIVE/HBD
         icon = "📈"
-        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
         return (
             f"{icon}{rate_str:>8} - "
             f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order "
             f"for {self.current_owner} "
-            f"{completed_order} {link}"
+            f"{completed_order}"
         )
+
+    @property
+    def log_str(self) -> str:
+        ans = self._log_internal()
+        link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        return f"{ans} {link}"
+
+    @property
+    def notification_str(self) -> str:
+        ans = self._log_internal()
+        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
+        return f"{ans} {link}"
 
     def check_open_orders(self) -> str:
         open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
