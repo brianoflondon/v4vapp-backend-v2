@@ -643,7 +643,8 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             f"Mean: {mean_time_diff} "
                             f"Block Now: {hive_event['block_num']:,.0f} "
                             f"Last Good Block: {witness.last_confirmed_block_num:,} "
-                            f"Num blocks: {block_diff:,}",
+                            f"Num blocks: {block_diff:,} | "
+                            f"{check_time_diff(hive_event_timestamp)}",
                             extra={
                                 "notification": True,
                                 "error_code": "Hive Witness delay",
@@ -671,7 +672,8 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
                             f"Mean {mean_time_diff} | "
-                            f"{producer_reward.log_str}",
+                            f"{producer_reward.log_str} | "
+                            f"{check_time_diff(producer_reward.timestamp)}",
                             extra={
                                 "notification": True,
                                 "error_code_clear": "Hive Witness delay",
@@ -723,9 +725,7 @@ async def slow_publish_fill_event(hive_event: dict, watch_users: List[str]):
     sending them to the event queue.
     """
     await asyncio.sleep(3)
-    async_publish(
-        Events.HIVE_MARKET, hive_event=hive_event, watch_users=watch_users
-    )
+    async_publish(Events.HIVE_MARKET, hive_event=hive_event, watch_users=watch_users)
 
 
 async def real_ops_loop(
