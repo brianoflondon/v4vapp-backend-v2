@@ -141,60 +141,6 @@ def market_trade(
             extra={"notification": False, "quote": quote, "error": e},
         )
         raise e
-    return {}
-
-
-# def market_trade_broken(
-#     hive_acc: HiveAccountConfig,
-#     amount: Amount,
-#     price: Price | None = None,
-#     use_cache: bool = False,
-#     killfill: bool = False,
-#     nobroadcast: bool = False,
-#     expiration: int = 3600,
-# ) -> dict:
-#     hive_configs = InternalConfig().config.hive
-#     if hive_acc.name in hive_configs.hive_accs:
-#         hive_acc = hive_configs.hive_accs[hive_acc.name]
-#     hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
-#     quote = check_order_book(amount, hive, use_cache=use_cache)
-
-#     base_asset = amount.symbol
-#     quote_asset = "HBD" if base_asset == "HIVE" else "HIVE"
-#     market_symbol = f"{base_asset}:{quote_asset}"
-#     market = Market(market_symbol, blockchain_instance=hive)
-#     amount_str = str(amount)
-#     price_float = float(quote.price["price"])
-#     logger.info(
-#         f"{icon} " f"Converting {amount} to {quote.minimum_amount} at {quote.price}",
-#         extra={"notification": True, "quote": quote},
-#     )
-#     try:
-#         trx = market.sell(
-#             price=price_float,
-#             amount=amount_str,
-#             account=hive_acc.name,
-#             killfill=killfill,
-#             expiration=expiration,
-#         )
-#         link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
-#         logger.info(
-#             f"{icon} " f"Transaction {amount} {link} {trx.get("trx_id")} completed",
-#             extra={"notification": True, "extra": trx},
-#         )
-#         return trx
-#     except UnhandledRPCError as e:
-#         logger.warning(
-#             f"Market Trade error: {e}",
-#             extra={"notification": True, "quote": quote, "error": e},
-#         )
-#         raise e
-#     except Exception as e:
-#         logger.warning(
-#             f"{icon} " f"Market Trade error: {e}",
-#             extra={"notification": False, "quote": quote, "error": e},
-#         )
-#         raise e
 
 
 def check_order_book(
@@ -308,9 +254,9 @@ if __name__ == "__main__":
     except Exception as e:
         logger.info(f"{icon} {e}")
 
-    try:
-        trade = Amount("1 HIVE")
-        trx2 = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
-        logger.info(f"{icon} " f"trx2: {trx2}", extra={"notification": False})
-    except Exception as e:
-        logger.info(f"{icon} {e}")
+    # try:
+    #     trade = Amount("1 HIVE")
+    #     trx2 = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)
+    #     logger.info(f"{icon} " f"trx2: {trx2}", extra={"notification": False})
+    # except Exception as e:
+    #     logger.info(f"{icon} {e}")

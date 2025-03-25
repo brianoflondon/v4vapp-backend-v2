@@ -4,6 +4,7 @@ from typing import Any, ClassVar, Dict, List
 from beem.amount import Amount  # type: ignore
 from pydantic import BaseModel, ConfigDict, Field
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 from .amount_pyd import AmountPyd
@@ -22,7 +23,7 @@ class LimitOrderCreate(OpBase):
     trx_num: int
 
     # Used to store the amount remaining to be filled when doing math
-    amount_remaining: Amount | None = Field(None, alias="amount_remaining")
+    amount_remaining: Amount = Field(0.0, alias="amount_remaining")
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
@@ -31,10 +32,13 @@ class LimitOrderCreate(OpBase):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
+        self.amount_remaining = self.amount_to_sell.amount_decimal
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
         LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
+        icon = "📈"
+        logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
 
     @classmethod
     def name(cls) -> str:
@@ -85,3 +89,7 @@ class LimitOrderCreate(OpBase):
             f"{self.owner} created order "
             f"{self.orderid}"
         )
+
+    @property
+    def notification_str(self) -> str:
+        return self.log_str

@@ -691,11 +691,10 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         except DuplicateKeyError:
                             pass
                     if hive_event.get("type") in MarketOpTypes:
-                        async_publish(
-                            Events.HIVE_MARKET,
-                            hive_event=hive_event,
-                            watch_users=watch_users,
+                        asyncio.create_task(
+                            slow_publish_fill_event(hive_event, watch_users)
                         )
+
                     count += 1
                     if count % 100 == 0:
                         hive_client.rpc.next()
@@ -716,6 +715,17 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 )
                 producer_reward = await witness_first_run(watch_witness)
                 last_good_block = last_good_event.get("block_num", 0) + 1
+
+
+async def slow_publish_fill_event(hive_event: dict, watch_users: List[str]):
+    """
+    Because fill events arrive before the limit_order_create events, will wait before
+    sending them to the event queue.
+    """
+    await asyncio.sleep(3)
+    async_publish(
+        Events.HIVE_MARKET, hive_event=hive_event, watch_users=watch_users
+    )
 
 
 async def real_ops_loop(
@@ -821,6 +831,9 @@ async def real_ops_loop(
                                 f"Node: {old_node} -> {hive_client.rpc.url}"
                             )
                             await Transfer.update_quote()
+                            logger.info(
+                                f"{icon} Updated Quotes Age: {Transfer.last_quote.age}"
+                            )
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()

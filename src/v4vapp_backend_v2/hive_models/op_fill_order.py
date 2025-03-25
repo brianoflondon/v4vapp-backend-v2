@@ -14,7 +14,6 @@ class FillOrder(OpBase):
     open_orderid: int
     open_owner: str
     open_pays: AmountPyd
-    _id: str
     timestamp: datetime
     block_num: int
     trx_num: int
@@ -32,8 +31,8 @@ class FillOrder(OpBase):
         return (
             f"{icon}{rate_str:>8} - "
             f"{current_pays_str} --> {open_pays_str} "
-            f"{self.open_owner} filled order "
-            f"for {self.current_owner} "
+            f"{self.open_owner} filled order for "
+            f"{self.current_owner} "
             f"{completed_order}"
         )
 
@@ -50,17 +49,12 @@ class FillOrder(OpBase):
         return f"{ans} {link}"
 
     def check_open_orders(self) -> str:
-        open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
+        open_order = LimitOrderCreate.open_order_ids.get(self.current_orderid, None)
         if open_order is not None:
-            outstanding_amount = (
-                open_order.amount_to_sell.amount_decimal - self.open_pays.amount_decimal
-            )
-            if outstanding_amount > 0:
-                open_order.amount_remaining = (
-                    open_order.amount_to_sell.beam - self.open_pays.beam
-                )
-                return f"Remaining {str(open_order.amount_remaining):>9} {open_order.orderid}"
+            open_order.amount_remaining -= self.open_pays.amount_decimal
+            if open_order.amount_remaining > 0:
+                return f"Remaining {open_order.amount_remaining:.3f} {open_order.orderid}"
             else:
-                LimitOrderCreate.open_order_ids.pop(self.open_orderid)
-                return f"Order {open_order.orderid} has been filled."
+                LimitOrderCreate.open_order_ids.pop(self.current_orderid)
+                return f"✅ Order {open_order.orderid} has been filled."
         return f"id {self.open_orderid}"
