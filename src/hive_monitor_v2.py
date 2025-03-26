@@ -151,7 +151,7 @@ async def transfer_report(transfer: Transfer, *args: Any, **kwargs: Any) -> None
         f"{icon} {transfer.log_str}",
         extra={
             "notification": True,
-            "notification_str": transfer.notification_str,
+            "notification_str": f"{icon} {transfer.notification_str}",
             **transfer.log_extra,
         },
     )
