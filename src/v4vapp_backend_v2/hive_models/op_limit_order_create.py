@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase
@@ -32,7 +33,7 @@ class LimitOrderCreate(OpBase):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        self.amount_remaining = self.amount_to_sell.amount_decimal
+        self.amount_remaining = self.min_to_receive.amount_decimal
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
@@ -77,8 +78,7 @@ class LimitOrderCreate(OpBase):
             )
         return self.amount_to_sell.amount_decimal / self.min_to_receive.amount_decimal
 
-    @property
-    def log_str(self) -> str:
+    def _log_internal(self) -> str:
         sell = self.amount_to_sell.fixed_width_str(15)
         receive = self.min_to_receive.fixed_width_str(15)
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
@@ -91,5 +91,13 @@ class LimitOrderCreate(OpBase):
         )
 
     @property
+    def log_str(self) -> str:
+        ans = self._log_internal()
+        link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        return f"{ans} {link}"
+
+    @property
     def notification_str(self) -> str:
-        return self.log_str
+        ans = self._log_internal()
+        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
+        return f"{ans} {link}"
