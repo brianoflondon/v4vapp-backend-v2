@@ -27,30 +27,34 @@ from v4vapp_backend_v2.helpers.notification_bot import NotificationBot
 
 
 class NotificationProtocol(Protocol):
+    pending_tasks: list[asyncio.Task]
+
+    def __init__(self):
+        self.pending_tasks = []
+
     def send_notification(
         self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
         internal_config = InternalConfig()
-
         loop = internal_config.notification_loop
+
         if loop.is_closed():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            internal_config.notification_loop = loop  # Update the stored loop
+            internal_config.notification_loop = loop
 
         if "levelno" not in record.__dict__:
             record.__dict__["levelno"] = logging.INFO
 
         try:
-            # If the loop is running, schedule the task using the correct loop
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    self._send_notification(message, record, alert_level), loop
-                )
-            else:
-                loop.run_until_complete(
-                    self._send_notification(message, record, alert_level)
-                )
+            # Schedule the notification task
+            task = loop.create_task(
+                self._send_notification(message, record, alert_level)
+            )
+            self.pending_tasks.append(task)
+
+            # Remove completed tasks from the list
+            task.add_done_callback(lambda t: self.pending_tasks.remove(t))
         except Exception as ex:
             logger.exception(ex, extra={"notification": False})
             logger.warning(

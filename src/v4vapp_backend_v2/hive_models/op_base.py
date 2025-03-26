@@ -113,6 +113,12 @@ class OpBase(BaseModel):
             log_extra=self.log_extra,
         )
 
+    @property
+    def get_class(self):
+        if self.type == "producer_reward":
+            return ProducerReward
+
+
 
 class OpInTrxCounter:
     """

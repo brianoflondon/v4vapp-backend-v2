@@ -514,59 +514,26 @@ class InternalConfig:
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
 
-    # def update_config(self, setting: str, insert: dict) -> None:
-    #     """
-    #     Update the configuration with a new value.
-
-    #     Args:
-    #         setting (str): The name of the setting to update.
-    #         insert (dict): The dictionary containing the new values to update.
-
-    #     Raises:
-    #         ValueError: If the key is not found in the configuration.
-    #     """
-    #     if insert:
-    #         try:
-    #             # Get the current value of the setting
-    #             current_value = getattr(self.config, setting, None)
-    #             if current_value is None:
-    #                 raise ValueError(
-    #                     f"Setting '{setting}' not found in the configuration"
-    #                 )
-
-    #             # Update the current value with the new values
-    #             current_value.update(insert)
-
-    #             # Validate the updated configuration
-    #             new_config = self.config.model_copy(
-    #                 update={setting: current_value}, deep=True
-    #             )
-    #             self.config = Config.model_validate(new_config.model_dump())
-    #             self.save_config()
-    #         except ValidationError as e:
-    #             raise ValueError(f"Invalid configuration: {e}")
-    #     else:
-    #         raise ValueError("No values provided to update the configuration")
-
-    # def save_config(self) -> None:
-    #     """
-    #     Save the current configuration back to the YAML file.
-    #     """
-    #     config_file = Path(BASE_CONFIG_PATH, "config-test.yaml")
-    #     with open(config_file, "w") as f_out:
-    #         config_json = self.config.model_dump_json(default=str)
-    #         safe_dump(self.config.model_dump(), f_out)
-
     def shutdown(self):
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
                 logger.info("Closing notification loop")
+
+                # Wait for all pending tasks to complete
+                pending_tasks = asyncio.all_tasks(self.notification_loop)
+                if pending_tasks:
+                    self.notification_loop.run_until_complete(
+                        asyncio.gather(*pending_tasks, return_exceptions=True)
+                    )
+
                 # Schedule the loop to stop from the current thread
                 self.notification_loop.call_soon_threadsafe(self.notification_loop.stop)
+
                 # Wait for the loop to stop by polling (non-blocking)
                 while self.notification_loop.is_running():
-                    time.sleep(0.1)  # Brief sleep to avoid tight loop
-                # Now that the loop is stopped, we can safely shut down async generators
+                    time.sleep(0.1)
+
+                # Shut down async generators and close the loop
                 self.notification_loop.run_until_complete(
                     self.notification_loop.shutdown_asyncgens()
                 )

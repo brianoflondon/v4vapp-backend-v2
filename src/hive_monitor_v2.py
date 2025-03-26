@@ -27,7 +27,7 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson, custom_json_test
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -837,19 +837,18 @@ async def real_ops_loop(
                         if timer() - start > 55:
                             await db_store_block_marker(hive_event, db_client)
                             start = timer()
-                    if hive_event.get("type") in OtherOpTypes:
-                        if "v4vapp" in hive_event.get("id", None):
-                            custom_json = CustomJson.model_validate(hive_event)
-                            logger.info(
-                                f"{custom_json.log_str}",
-                                extra={"notification": True, **custom_json.log_extra},
-                            )
-                            async_publish(
-                                Events.HIVE_TRANSFER,
-                                op=custom_json,
-                                watch_users=watch_users,
-                                db_client=db_client,
-                            )
+                    if CustomJson.test(hive_event):
+                        custom_json = CustomJson.model_validate(hive_event)
+                        logger.info(
+                            f"{custom_json.log_str}",
+                            extra={"notification": True, **custom_json.log_extra},
+                        )
+                        async_publish(
+                            Events.HIVE_TRANSFER,
+                            op=custom_json,
+                            watch_users=watch_users,
+                            db_client=db_client,
+                        )
                     if hive_event.get("type") in MarketOpTypes:
                         async_publish(
                             Events.HIVE_MARKET,
@@ -861,7 +860,7 @@ async def real_ops_loop(
                 raise e
 
             except Exception as e:
-                logger.error(f"{icon} {e}", extra={"error": e})
+                logger.exception(f"{icon} {e}", extra={"error": e})
                 raise e
 
 
