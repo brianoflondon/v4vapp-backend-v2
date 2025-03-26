@@ -16,6 +16,7 @@ TelegramNotification._send_notification(self, _config: Config, message: str,
 EmailNotification._send_notification(self, _config: Config, message: str,
 
 """
+import threading
 
 import asyncio
 import logging
@@ -33,7 +34,8 @@ class NotificationProtocol(Protocol):
         internal_config = InternalConfig()
 
         loop = internal_config.notification_loop
-        if loop.is_closed():
+        if loop.is_closed() or not loop.is_running():
+            # Recreate the event loop if it is closed
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             internal_config.notification_loop = loop  # Update the stored loop
@@ -44,12 +46,17 @@ class NotificationProtocol(Protocol):
         try:
             # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
+                try:
+                    logger.info(f"✉️ Notification loop: {threading.get_ident()}")
+                except Exception as ex:
+                    logger.exception(ex, extra={"notification": False})
                 asyncio.run_coroutine_threadsafe(
                     self._send_notification(message, record, alert_level), loop
                 )
             else:
+                # Run the task in the loop and handle shutdown gracefully
                 loop.run_until_complete(
-                    self._send_notification(message, record, alert_level)
+                    self._run_with_resilience(message, record, alert_level)
                 )
         except Exception as ex:
             logger.exception(ex, extra={"notification": False})
@@ -60,6 +67,17 @@ class NotificationProtocol(Protocol):
                     "failed_message": message,
                 },
             )
+
+    async def _run_with_resilience(
+        self, message: str, record: LogRecord, alert_level: int
+    ):
+        try:
+            logger.info(f"📩 Running notification task in loop: {threading.get_ident()}")
+            await self._send_notification(message, record, alert_level)
+        except asyncio.CancelledError:
+            logger.warning("Notification task was cancelled.")
+        except Exception as ex:
+            logger.exception(f"Error in notification task: {ex}")
 
     async def _send_notification(
         self,
@@ -82,7 +100,6 @@ class BotNotification(NotificationProtocol):
         Set the extra attribute 'silent' to True in the log record to disable notifications.
 
         Args:
-            _config (Config): Configuration object for the notification.
             message (str): The message to be sent.
             record (LogRecord): The log record associated with the notification.
             alert_level (int, optional): The alert level of the notification. Defaults to 1.

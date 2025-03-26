@@ -873,6 +873,8 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     Returns:
         None
     """
+    loop = asyncio.get_running_loop()
+    logger.info(f"{icon} Main Loop: {loop._thread_id}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
             await redis_client.ping()
@@ -890,6 +892,7 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
         },
     )
+
     try:
         async_subscribe(Events.HIVE_TRANSFER, db_store_op)
         async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)

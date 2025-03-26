@@ -191,12 +191,13 @@ def test_send_notification_error_handling(
     rand_int = randint(1, 999999)
     error_text = f"Test error {rand_int}"
     with patch.object(
-        notifier, "_send_notification", side_effect=Exception(error_text)
-    ):
+        notifier, "_send_notification", new=AsyncMock(side_effect=Exception(error_text))
+    ) as mock_send:
         with patch(
-            "v4vapp_backend_v2.config.notification_protocol.logger.warning",
+            "v4vapp_backend_v2.config.notification_protocol.logger.exception",
             new=MagicMock(),
         ) as mock_log:
             caplog.set_level(logging.WARNING)
             notifier.send_notification(TEST_JSON["message"], mock_log_record)
             assert error_text in mock_log.call_args[0][0]
+            assert mock_send.call_count == 1

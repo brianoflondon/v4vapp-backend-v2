@@ -522,6 +522,7 @@ class InternalConfig:
                 # Wait for all pending tasks to complete
                 pending_tasks = asyncio.all_tasks(self.notification_loop)
                 if pending_tasks:
+                    logger.info("Waiting for pending tasks to complete")
                     self.notification_loop.run_until_complete(
                         asyncio.gather(*pending_tasks, return_exceptions=True)
                     )
@@ -531,6 +532,7 @@ class InternalConfig:
 
                 # Wait for the loop to stop by polling (non-blocking)
                 while self.notification_loop.is_running():
+                    logger.info("Waiting for loop to stop")
                     time.sleep(0.1)
 
                 # Shut down async generators and close the loop
@@ -538,11 +540,13 @@ class InternalConfig:
                     self.notification_loop.shutdown_asyncgens()
                 )
                 self.notification_loop.close()
-                print("Notification loop closed")
+                print("InternalConfig Shutdown Notification loop closed")
             else:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
-                print("Notification loop closed (was not running)")
+                print(
+                    "InternalConfig Shutdown Notification loop closed (was not running)"
+                )
 
 
 """
