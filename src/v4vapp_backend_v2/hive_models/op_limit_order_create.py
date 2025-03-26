@@ -41,12 +41,12 @@ class LimitOrderCreate(OpBase):
         logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
 
     @classmethod
-    def name(cls) -> str:
+    def op_name(cls) -> str:
         return snake_case(cls.__name__)
 
     @property
     def log_extra(self) -> Dict[str, Any]:
-        return {self.name(): self.model_dump()}
+        return {self.op_name(): self.model_dump()}
 
     @classmethod
     def expire_orders(self) -> None:

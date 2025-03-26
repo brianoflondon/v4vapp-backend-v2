@@ -27,7 +27,7 @@ def test_log_extra_real():
             "trx_num": 1,
         }
     }
-    assert op_base.name() == "op_base"
+    assert op_base.op_name() == "op_base"
 
 
 def test_log_extra_virtual():
@@ -48,7 +48,7 @@ def test_log_extra_virtual():
             "trx_num": 1,
         }
     }
-    assert op_base.name() == "op_base"
+    assert op_base.op_name() == "op_base"
 
 
 def test_op_base_model_dump():

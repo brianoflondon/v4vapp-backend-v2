@@ -88,12 +88,12 @@ class OpBase(BaseModel):
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @classmethod
-    def name(cls) -> str:
+    def op_name(cls) -> str:
         return snake_case(cls.__name__)
 
     @property
     def log_extra(self) -> Dict[str, Any]:
-        return {self.name(): self.model_dump()}
+        return {self.op_name(): self.model_dump()}
 
     @property
     def log_str(self) -> str:
@@ -117,7 +117,6 @@ class OpBase(BaseModel):
     def get_class(self):
         if self.type == "producer_reward":
             return ProducerReward
-
 
 
 class OpInTrxCounter:

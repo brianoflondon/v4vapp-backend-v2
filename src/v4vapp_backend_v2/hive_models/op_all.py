@@ -32,14 +32,14 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         return Transfer(**hive_event)
     elif op_type == "producer_reward":
         return ProducerReward(**hive_event)
-    elif op_type == "custom_json":
-        return CustomJson(**hive_event)
     elif op_type == "account_witness_vote":
         return AccountWitnessVote(**hive_event)
     elif op_type == "fill_order":
         return FillOrder(**hive_event)
     elif op_type == "limit_order_create":
         return LimitOrderCreate(**hive_event)
+    elif op_type == "custom_json":
+        return CustomJson(**hive_event)
 
     else:
         raise ValueError(f"Unknown operation type: {op_type}")

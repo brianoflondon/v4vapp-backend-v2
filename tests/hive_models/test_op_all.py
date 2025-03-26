@@ -7,10 +7,17 @@ def test_all_validate():
     for hive_event in load_hive_events():
         try:
             op = op_any(hive_event)
-            assert op.type == op.name
+            assert op.type == op.op_name()
             print(hive_event.get("type"), op.type)
+        except ValueError as e:
+
+            assert "Unknown operation type" in str(
+                e
+            ) or "Invalid CustomJson data" in str(e)
+            print(e, hive_event.get("type"))
         except Exception as e:
-            pass
+            print(e)
+            assert False
 
         # if hive_event["type"] == "limit_order_create":
         #     limit_order = LimitOrderCreate.model_validate(hive_event)

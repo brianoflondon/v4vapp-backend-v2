@@ -95,6 +95,8 @@ class CustomJson(OpBase):
     trx_num: int
 
     def __init__(self, **data):
+        if not custom_json_test(data):
+            raise ValueError("Invalid CustomJson data")
         try:
             json_object = custom_json_filter(data)
             data["json"] = json_object
