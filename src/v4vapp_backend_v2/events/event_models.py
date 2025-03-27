@@ -13,7 +13,7 @@ class Events(StrEnum):
 
     # Hive Transfer events
     HIVE_TRANSFER = auto()
-    HIVE_TRANSFER_NOTIFY = auto()
+    # HIVE_TRANSFER_NOTIFY = auto()
 
     # Hive Witness Vote events
     HIVE_WITNESS_VOTE = auto()

@@ -1,5 +1,7 @@
+import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 from telegram import Bot
 from telegram.error import InvalidToken
@@ -80,7 +82,7 @@ class NotificationBot:
         except Exception as e:
             raise NotificationNotSetupError(e)
 
-    async def send_message(self, text: str, **kwargs):
+    async def send_message(self, text: str, **kwargs: Any):
         """Use this method to send text messages, chat_id will be provided.
 
         Args:
@@ -166,33 +168,71 @@ class NotificationBot:
             :class:`telegram.error.TelegramError`: For other errors.
 
         """
-        if self.bot and self.config.chat_id:
-            if is_markdown(text):
-                kwargs["parse_mode"] = "Markdown"  # Use V1
-                if text.endswith("no_preview"):
-                    kwargs["disable_web_page_preview"] = (
-                        True  # Optional: disable link previews
-                    )
-                    text = text.rstrip("no_preview").strip()
-                sanitized_text = sanitize_markdown_v1(text)
-                try:
-                    await self.bot.send_message(
-                        chat_id=self.config.chat_id, text=sanitized_text, **kwargs
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
-                        extra={"notification": False},
-                    )
-                    await self.bot.send_message(chat_id=self.config.chat_id, text=text)
-            else:
-                await self.bot.send_message(
-                    chat_id=self.config.chat_id, text=text, **kwargs
-                )
-        else:
+        if not self.bot or not self.config.chat_id:
             raise NotificationNotSetupError(
                 "No chat ID set. Please start the bot first by sending /start"
             )
+
+        text = self.truncate_text(text)
+        if is_markdown(text):
+            kwargs["parse_mode"] = "Markdown"
+            if text.endswith("no_preview"):
+                kwargs["disable_web_page_preview"] = True
+                text = text.rstrip("no_preview").strip()
+            text = sanitize_markdown_v1(text)
+
+        try:
+            await self.bot.send_message(
+                chat_id=self.config.chat_id, text=text, **kwargs
+            )
+        except Exception as e:
+            logger.exception(
+                f"Error sending [ {text} ]: {e}",
+                extra={"notification": False, "error": e},
+            )
+            logger.error("Problem in Notification bot", {"notification": True})
+
+        # if self.bot and self.config.chat_id:
+        #     text = self.truncate_to_3000(text)
+        #     try:
+        #         if is_markdown(text):
+        #             kwargs["parse_mode"] = "Markdown"  # Use V1
+        #             if text.endswith("no_preview"):
+        #                 kwargs["disable_web_page_preview"] = (
+        #                     True  # Optional: disable link previews
+        #                 )
+        #                 text = text.rstrip("no_preview").strip()
+        #             sanitized_text = sanitize_markdown_v1(text)
+        #             try:
+        #                 await self.bot.send_message(
+        #                     chat_id=self.config.chat_id, text=sanitized_text, **kwargs
+        #                 )
+        #             except Exception as e:
+        #                 logger.warning(
+        #                     f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
+        #                     extra={"notification": False},
+        #                 )
+        #                 try:
+        #                     await self.bot.send_message(
+        #                         chat_id=self.config.chat_id, text=sanitized_text
+        #                     )
+        #                 except Exception as e:
+        #                     logger.exception(
+        #                         f"Error sending [ {text} ] for second time: {e}",
+        #                         extra={"notification": False},
+        #                     )
+        #         else:
+        #             await self.bot.send_message(
+        #                 chat_id=self.config.chat_id, text=text, **kwargs
+        #             )
+        #     except Exception as e:
+        #         logger.exception(
+        #             f"Error sending [ {text} ]: {e}", extra={"notification": False}
+        #         )
+        # else:
+        #     raise NotificationNotSetupError(
+        #         "No chat ID set. Please start the bot first by sending /start"
+        #     )
 
     async def handle_update(self, update):
         if update.message:
@@ -205,6 +245,15 @@ class NotificationBot:
                 await self.send_menu()
             elif update.message.text == "/status":
                 await self.send_message("Bot is running")
+
+    def truncate_text(self, text: str, length: int = 1000) -> str:
+        # Check if string exceeds 3000 characters
+        if len(text) > length:
+            # Truncate to 3000 characters and add ellipsis to indicate truncation
+            truncated_text = text[:length] + "..."
+            return truncated_text
+        else:
+            return text
 
     async def send_menu(self):
         menu_text = """
@@ -227,6 +276,8 @@ class NotificationBot:
                         offset = update.update_id + 1
         except InvalidToken as e:
             raise NotificationBadTokenError(e)
+        except asyncio.CancelledError:
+            logger.info("Bot shutdown gracefully.")
         except Exception as e:
             raise NotificationNotSetupError(e)
 

@@ -1,9 +1,7 @@
 import asyncio
 from base64 import b64encode
 from hashlib import sha256
-import json
 from secrets import token_hex
-from typing import List
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from google.protobuf.json_format import MessageToDict

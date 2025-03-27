@@ -16,7 +16,7 @@ from pydantic import BaseModel  # type: ignore
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
+from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -117,7 +117,7 @@ def get_good_nodes() -> List[str]:
     return good_nodes
 
 
-async def get_hive_witness_details(hive_accname: str) -> dict:
+async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
     """
     Fetches details about a Hive witness.
 
@@ -131,20 +131,49 @@ async def get_hive_witness_details(hive_accname: str) -> dict:
         dict: A dictionary containing the details of the Hive witness.
     """
     try:
+        if not hive_accname:
+            url = "https://api.syncad.com/hafbe-api/witnesses"
+        else:
+            url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}",
-            )
-            answer = response.json()
+            response = await client.get(url, timeout=20)
+            if response.status_code == 200:
+                answer = response.json()
+                async with V4VAsyncRedis() as redis_client:
+                    await redis_client.set(
+                        name=f"witness_{hive_accname}", value=json.dumps(answer)
+                    )
+            else:
+                async with V4VAsyncRedis() as redis_client:
+                    answer = json.loads(
+                        await redis_client.get(f"witness_{hive_accname}")
+                    )
+                    if not answer:
+                        logger.warning(
+                            f"Failed to get_hive_witness_details "
+                            f"from cache after error: {response.status_code}"
+                        )
+                        return None
+
+            wd = WitnessDetails.model_validate(answer)
+            return wd
+
     except Exception as e:
-        logger.warning(f"Failed to get_hive_witness_details: {e}")
-        return {}
+        logger.exception(f"Failed to get_hive_witness_details: {e}")
+        try:
+            async with V4VAsyncRedis() as redis_client:
+                answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+                if answer:
+                    wd = WitnessDetails.model_validate(answer)
+                    return wd
 
-    witness = answer.get("witness")
-    if witness and witness.get("witness_name") == hive_accname:
-        return witness
-
-    return {}
+            logger.warning(
+                f"Failed to get_hive_witness_details "
+                f"from cache after error: {response.status_code}"
+            )
+        except Exception as e:
+            logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
+        return None
 
 
 class HiveInternalQuote(BaseModel):
@@ -225,7 +254,7 @@ def get_hive_block_explorer_link(
     return markdown_link
 
 
-def get_event_id(hive_event: dict) -> str:
+def get_event_id(hive_event: Any) -> str:
     """
     Get the event id from the Hive event.
 
@@ -235,6 +264,12 @@ def get_event_id(hive_event: dict) -> str:
     Returns:
         str: The event id.
     """
+    if not hive_event:
+        return ""
+    if not isinstance(hive_event, dict):
+        return ""
+    if not hive_event.get("trx_id"):
+        return ""
     trx_id = hive_event.get("trx_id", "")
     op_in_trx = hive_event.get("op_in_trx", 0)
     return f"{trx_id}_{op_in_trx}" if not int(op_in_trx) == 0 else str(trx_id)
@@ -286,7 +321,7 @@ def decode_memo(
             return memo
         return d_memo[1:]
     except struct.error:
-        # arrises when an unencrypted memo is decrypted..
+        # arises when an unencrypted memo is decrypted..
         return memo
     except ValueError as e:
         # Memo is not encrypted

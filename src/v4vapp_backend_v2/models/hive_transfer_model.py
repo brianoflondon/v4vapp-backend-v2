@@ -26,7 +26,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_block_explorer_link,
     get_hive_client,
 )
-from v4vapp_backend_v2.hive_models.op_models import TransferOpTypes
+from v4vapp_backend_v2.hive_models.op_types_enums import TransferOpTypes
 
 
 class HiveTransactionFlags(BaseModel):
@@ -106,7 +106,7 @@ class HiveTransaction(BaseModel):
         )
         ans = (
             f"{self.hive_from} sent {self.amount_str} to {self.hive_to} "
-            f"(${self.conv.usd:>.2f}) {self.d_memo} {markdown_link}"
+            f"(${self.conv.usd:>,.2f} {self.conv.sats:,}) {self.d_memo} {markdown_link}"
         )
         return ans
 

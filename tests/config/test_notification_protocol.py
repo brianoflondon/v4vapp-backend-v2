@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from random import randint
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -132,6 +133,24 @@ async def test_bot_notification_silent_mode(mock_log_record):
 
 
 @pytest.mark.asyncio
+async def test_bot_notification_different_notification_str(mock_log_record):
+    """Test BotNotification respects silent mode with JSON data."""
+    mock_log_record.notification_str = "Completely different notification message"
+    with patch(
+        "v4vapp_backend_v2.config.notification_protocol.NotificationBot"
+    ) as mock_bot:
+        bot_instance = mock_bot.return_value
+        bot_instance.send_message = AsyncMock()
+
+        notifier = BotNotification()
+        await notifier._send_notification(TEST_JSON["message"], mock_log_record)
+
+        bot_instance.send_message.assert_awaited_once_with(
+            "Completely different notification message"
+        )
+
+
+@pytest.mark.asyncio
 async def test_email_notification_not_implemented(mock_log_record):
     """Test EmailNotification raises NotImplementedError."""
     notifier = EmailNotification()
@@ -169,17 +188,16 @@ def test_send_notification_error_handling(
     """Test send_notification logs an error if _send_notification fails."""
     mock_internal_config.notification_loop.is_running = MagicMock(return_value=False)
     notifier = BotNotification()
-
+    rand_int = randint(1, 999999)
+    error_text = f"Test error {rand_int}"
     with patch.object(
-        notifier, "_send_notification", side_effect=Exception("Test error")
-    ):
+        notifier, "_send_notification", new=AsyncMock(side_effect=Exception(error_text))
+    ) as mock_send:
         with patch(
-            "v4vapp_backend_v2.config.notification_protocol.logger.warning",
+            "v4vapp_backend_v2.config.notification_protocol.logger.exception",
             new=MagicMock(),
         ) as mock_log:
             caplog.set_level(logging.WARNING)
             notifier.send_notification(TEST_JSON["message"], mock_log_record)
-            assert (
-                "An error occurred while sending the message: Test error"
-                in mock_log.call_args[0]
-            )
+            assert error_text in mock_log.call_args[0][0]
+            assert mock_send.call_count == 1

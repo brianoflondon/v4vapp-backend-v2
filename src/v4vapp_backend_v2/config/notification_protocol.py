@@ -19,10 +19,11 @@ EmailNotification._send_notification(self, _config: Config, message: str,
 
 import asyncio
 import logging
+import threading
 from logging import LogRecord
 from typing import Protocol
 
-from v4vapp_backend_v2.config.setup import Config, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.notification_bot import NotificationBot
 
 
@@ -31,9 +32,10 @@ class NotificationProtocol(Protocol):
         self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
         internal_config = InternalConfig()
-
+        internal_config.notification_lock = True
         loop = internal_config.notification_loop
-        if loop.is_closed():
+        if loop.is_closed() or not loop.is_running():
+            # Recreate the event loop if it is closed
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             internal_config.notification_loop = loop  # Update the stored loop
@@ -42,23 +44,51 @@ class NotificationProtocol(Protocol):
             record.__dict__["levelno"] = logging.INFO
 
         try:
-            # If the loop is running, schedule the task; if not, run it
+            # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
-                asyncio.create_task(
-                    self._send_notification(message, record, alert_level)
-                )
+                try:
+                    logger.info(
+                        f"✉️ Notification Thread: {threading.get_ident()} loop already running"
+                    )
+                    asyncio.run_coroutine_threadsafe(
+                        self._send_notification(message, record, alert_level), loop
+                    )
+                except Exception as ex:
+                    logger.exception(ex, extra={"notification": False})
             else:
+                # Run the task in the loop and handle shutdown gracefully
                 loop.run_until_complete(
-                    self._send_notification(message, record, alert_level)
+                    self._run_with_resilience(message, record, alert_level)
                 )
         except Exception as ex:
+            logger.exception(ex, extra={"notification": False})
             logger.warning(
-                f"An error occurred while sending the message: {ex}",
+                f"An error occurred while sending the message: {ex} {message}",
                 extra={
                     "notification": False,
                     "failed_message": message,
                 },
             )
+        finally:
+            internal_config.notification_lock = False
+
+    async def _run_with_resilience(
+        self, message: str, record: LogRecord, alert_level: int
+    ):
+        try:
+            logger.info(
+                f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
+            )
+            await self._send_notification(message, record, alert_level)
+
+        except asyncio.CancelledError:
+            logger.warning("Notification task was cancelled.")
+        except Exception as ex:
+            logger.exception(
+                f"Error in notification task: {ex}", extra={"notification": False}
+            )
+        finally:
+            InternalConfig().notification_lock = False
 
     async def _send_notification(
         self,
@@ -78,9 +108,9 @@ class BotNotification(NotificationProtocol):
     ) -> None:
         """
         Asynchronously sends a notification message using the NotificationBot.
+        Set the extra attribute 'silent' to True in the log record to disable notifications.
 
         Args:
-            _config (Config): Configuration object for the notification.
             message (str): The message to be sent.
             record (LogRecord): The log record associated with the notification.
             alert_level (int, optional): The alert level of the notification. Defaults to 1.
@@ -90,53 +120,12 @@ class BotNotification(NotificationProtocol):
         """
         bot = NotificationBot()
         # Using Silent as the attribute name to avoid conflicts with the logging module
+        if hasattr(record, "notification_str"):
+            message = record.notification_str
         if hasattr(record, "silent") and record.silent:
             await bot.send_message(message, disable_notification=True)
         else:
             await bot.send_message(message)
-
-
-# class TelegramNotification(NotificationProtocol):
-#     async def _send_notification(
-#         self,
-#         message: str,
-#         record: LogRecord,
-#         alert_level: int = 1,
-#     ) -> None:
-#         raise NotImplementedError("Email notification is not implemented yet.")
-#         # Send notification to Telegram
-#         url = (
-#             f"{_config.tailscale.notification_server}."
-#             f"{_config.tailscale.tailnet_name}:"
-#             f"{_config.tailscale.notification_server_port}/send_notification/"
-#         )
-#         params: Dict = {
-#             "notify": message,
-#             "alert_level": alert_level,
-#             "room_id": _config.telegram.chat_id,
-#         }
-#         try:
-#             async with httpx.AsyncClient() as client:
-#                 ans = await client.get(url, params=params, timeout=60)
-#                 if ans.status_code != 200:
-#                     logger.warning(
-#                         f"An error occurred while sending the message: {ans.text}",
-#                         extra={
-#                             "notification": False,
-#                             "failed_message": message,
-#                         },
-#                     )
-#                 else:
-#                     logger.debug(f"Sent message: {message}")
-
-#         except Exception as ex:
-#             logger.warning(
-#                 f"An error occurred while sending the message: {ex}",
-#                 extra={
-#                     "notification": False,
-#                     "failed_message": message,
-#                 },
-#             )
 
 
 class EmailNotification(NotificationProtocol):

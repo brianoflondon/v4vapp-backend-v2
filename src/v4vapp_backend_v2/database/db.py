@@ -75,7 +75,12 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     raise e
                 except (ConnectionFailure, OperationFailure) as e:
                     retries += 1
-                    extra = {"error": str(e), "error_code": e.code, "retries": retries}
+                    error_code = e.code if hasattr(e, "code") else type(e).__name__
+                    extra = {
+                        "error": str(e),
+                        "error_code": error_code,
+                        "retries": retries,
+                    }
                     if retries >= max_retries:
                         logger.error(
                             f"Failed to execute {func.__name__} after {retries} "

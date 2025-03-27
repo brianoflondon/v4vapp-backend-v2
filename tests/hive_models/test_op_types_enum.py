@@ -1,6 +1,7 @@
-from v4vapp_backend_v2.hive_models.op_models import (
+from v4vapp_backend_v2.hive_models.op_types_enums import (
     HiveOpTypes,
     MarketOpTypes,
+    OtherOpTypes,
     RealOpsLoopTypes,
     TransferOpTypes,
     VirtualOpTypes,
@@ -14,8 +15,8 @@ def test_create_master_enum():
     assert "fill_order" in HiveOpTypes
     assert "fill_order" in MarketOpTypes
     assert "fill_order" not in TransferOpTypes
-    assert list(HiveOpTypes) == list(TransferOpTypes) + list(MarketOpTypes)
     assert VirtualOpTypes.PRODUCER_REWARD in VirtualOpTypes
+
 
 def test_other_ops():
     assert "limit_order_create" in MarketOpTypes

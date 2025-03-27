@@ -1,66 +1,40 @@
 import asyncio
-from datetime import datetime
-from typing import Any, ClassVar, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, ClassVar
 
 from beem import Hive  # type: ignore
-from beem.amount import Amount  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_event_id
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
+from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_hive_block_explorer_link
+from v4vapp_backend_v2.hive_models.op_base import OpBase
+
+from .amount_pyd import AmountPyd
 
 
-class AmountPyd(BaseModel):
-    amount: str
-    nai: str
-    precision: int
-
-    @property
-    def decimal_amount(self) -> float:
-        """Convert string amount to decimal with proper precision"""
-        return float(self.amount) / (10**self.precision)
-
-    @property
-    def beam(self) -> Amount:
-        return Amount(self.amount, self.nai)
-
-
-class Transfer(BaseModel):
-    id: str = Field(alias="_id")
+class TransferRaw(OpBase):
     amount: AmountPyd
-    block_num: int
     from_account: str = Field(alias="from")
     memo: str
-    op_in_trx: int = 0
     timestamp: datetime
     to_account: str = Field(alias="to")
-    trx_id: str
-    trx_num: int
-    type: str
 
     model_config = ConfigDict(
         populate_by_name=True,
     )
 
     def __init__(self, **hive_event: Any) -> None:
-        if "id" not in hive_event and "_id" in hive_event:
-            trx_id = hive_event.get("trx_id", "")
-            op_in_trx = hive_event.get("op_in_trx", 0)
-            if op_in_trx == 0:
-                hive_event["id"] = str(trx_id)
-            else:
-                hive_event["id"] = str(f"{trx_id}_{op_in_trx}")
-
         super().__init__(**hive_event)
 
 
-class TransferEnhanced(Transfer):
+class Transfer(TransferRaw):
     d_memo: str = ""
     conv: CryptoConv = CryptoConv()
 
     model_config = ConfigDict(populate_by_name=True)
-    # Definied as a CLASS VARIABLE outside the
+    # Defined as a CLASS VARIABLE outside the
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **hive_event: Any) -> None:
@@ -73,12 +47,14 @@ class TransferEnhanced(Transfer):
                 asyncio.run(self.update_quote())
             except RuntimeError:
                 loop = asyncio.get_running_loop()
-                loop.run_until_complete(self.update_quote())
+                asyncio.run_coroutine_threadsafe(self.update_quote(), loop=loop)
         self.update_conv()
 
     def post_process(self, hive_inst: Hive | None = None) -> None:
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
+        else:
+            self.d_memo = self.memo
 
     @classmethod
     async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
@@ -114,4 +90,40 @@ class TransferEnhanced(Transfer):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        self.conv = CryptoConversion(amount=self.amount.beam, quote=self.last_quote).conversion
+        self.conv = CryptoConversion(
+            amount=self.amount.beam, quote=self.last_quote
+        ).conversion
+
+    @property
+    def amount_decimal(self) -> float:
+        """Convert string amount to decimal with proper precision"""
+        return self.amount.amount_decimal
+
+    @property
+    def amount_str(self) -> str:
+        return self.amount.__str__()
+
+    @property
+    def log_str(self) -> str:
+        log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        time_diff = seconds_only(datetime.now(tz=timezone.utc) - self.timestamp)
+        log_str = (
+            f"{self.from_account:<17} "
+            f"sent {self.amount.fixed_width_str(14)} "
+            f"to {self.to_account:<17} "
+            f" - {self.d_memo[:30]:>30} "
+            f"{time_diff} ago "
+            f"{log_link} {self.op_in_trx:>3}"
+        )
+        return log_str
+
+    @property
+    def notification_str(self) -> str:
+        markdown_link = (
+            get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
+        )
+        ans = (
+            f"{self.from_account} sent {self.amount_str} to {self.to_account} "
+            f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {markdown_link}"
+        )
+        return ans

@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": false,
         },
         {
             "name": "Notification Bot",
@@ -38,11 +38,18 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
+                "--user",
                 "v4vapp",
+                "--user",
                 "brianoflondon",
+                "--user",
                 "v4vapp.tre",
+                "--user",
                 "v4vapp.dhf",
-                "v4vapp-test"
+                "--user",
+                "v4vapp-test",
+                "--witness",
+                "brianoflondon"
             ],
             "justMyCode": true,
         },
