@@ -30,6 +30,54 @@ class TransferRaw(OpBase):
 
 
 class Transfer(TransferRaw):
+    """
+    Transfer class represents a transaction operation with additional processing
+    and conversion functionalities.
+
+    Important to note: the `last_quote` class variable is used to store the last quote
+    and needs to be fetched asyncronously. The `update_quote` method is used to update
+    the last quote.
+
+    This class extends the TransferRaw class and provides methods for handling
+    transaction details, updating conversion rates, and generating log and
+    notification strings. It also includes mechanisms for decoding memos and
+    validating the age of the last quote.
+
+    Attributes:
+        d_memo (str): Decoded memo string. Defaults to an empty string.
+        conv (CryptoConv): Conversion object for the transaction. Defaults to a new CryptoConv instance.
+        model_config (ConfigDict): Configuration for the model, with `populate_by_name` set to True.
+        last_quote (ClassVar[QuoteResponse]): Class-level variable to store the last quote.
+
+    Methods:
+        __init__(**hive_event: Any) -> None:
+            Initializes the Transfer object, processes the hive event, and updates the conversion.
+
+        post_process(hive_inst: Hive | None = None) -> None:
+            Processes the memo field and decodes it if necessary.
+
+        update_quote(cls, quote: QuoteResponse | None = None) -> None:
+            Asynchronously updates the last quote for the class. If no quote is provided,
+            fetches all quotes and sets the last quote to the fetched quote.
+
+        update_conv(quote: QuoteResponse | None = None) -> None:
+            Updates the conversion for the transaction using the provided quote or the last quote.
+
+        amount_decimal -> float:
+            Property that converts the string amount to a decimal with proper precision.
+
+        amount_str -> str:
+            Property that returns the string representation of the amount.
+
+        log_str -> str:
+            Property that generates a log string with transaction details, including a link
+            to the Hive block explorer.
+
+        notification_str -> str:
+            Property that generates a notification string with transaction details, including
+            a markdown link to the Hive block explorer.
+    """
+
     d_memo: str = ""
     conv: CryptoConv = CryptoConv()
 
@@ -42,12 +90,7 @@ class Transfer(TransferRaw):
         hive_inst: Hive | None = hive_event.get("hive_inst", None)
         self.post_process(hive_inst=hive_inst)
         if self.last_quote.get_age() > 600.0:
-            # raise ValueError("HiveTransaction.last_quote is too old")
-            try:
-                asyncio.run(self.update_quote())
-            except RuntimeError:
-                loop = asyncio.get_running_loop()
-                asyncio.run_coroutine_threadsafe(self.update_quote(), loop=loop)
+            self.update_quote_sync(AllQuotes().get_binance_quote())
         self.update_conv()
 
     def post_process(self, hive_inst: Hive | None = None) -> None:
@@ -55,6 +98,24 @@ class Transfer(TransferRaw):
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
             self.d_memo = self.memo
+
+    @classmethod
+    def update_quote_sync(cls, quote: QuoteResponse) -> None:
+        """
+        Synchronously updates the last quote for the class.
+
+        If a quote is provided, it sets the last quote to the provided quote.
+        If no quote is provided, it fetches all quotes and sets the last quote
+        to the fetched quote.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
+
+        Returns:
+            None
+        """
+        cls.last_quote = quote
 
     @classmethod
     async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
