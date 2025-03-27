@@ -1,5 +1,3 @@
-import os
-from decimal import ROUND_UP, Decimal
 
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
@@ -20,8 +18,6 @@ def get_client(testnet: bool = False) -> Client:
     Get a Binance API client
     """
     internal_config = InternalConfig()
-    api_key = internal_config.config.api_keys.binance_api_key
-    api_secret = internal_config.config.api_keys.binance_api_secret
     try:
         if testnet:
             client = Client(
@@ -66,3 +62,29 @@ def get_balances(symbols: list, testnet: bool = False) -> dict:
     except Exception as error:
         logger.error(error)
         raise BinanceErrorBadConnection(error)
+
+
+def get_current_price(symbol: str, testnet: bool = False) -> dict:
+    """
+    Retrieve the current price details for a given trading symbol from Binance.
+
+    Args:
+        symbol (str): The trading pair symbol (e.g., 'BTCUSDT') for which to fetch the price.
+        testnet (bool, optional): Whether to use the Binance testnet. Defaults to False.
+
+    Returns:
+        dict: A dictionary containing the following keys:
+            - "ask_price" (str): The current ask price for the symbol.
+            - "bid_price" (str): The current bid price for the symbol.
+            - "current_price" (str): The latest price for the symbol.
+    """
+
+    client = get_client(testnet)
+
+    price = {}
+    ticker_info = client.book_ticker(symbol)
+    price["ask_price"] = ticker_info["askPrice"]
+    price["bid_price"] = ticker_info["bidPrice"]
+    ticker_price = client.ticker_price(symbol)
+    price["current_price"] = ticker_price["price"]
+    return price
