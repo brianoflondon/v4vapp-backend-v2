@@ -26,7 +26,21 @@ async def main_async_start(database_connection: str, db_name: str, lnd_connectio
         f"🔗 Database name: {db_name} "
         f"🔗 Lightning node: {lnd_connection} "
     )
-    pass
+    await check_notifications()
+
+
+async def check_notifications():
+    await asyncio.sleep(1)
+    while (
+        INTERNAL_CONFIG.notification_loop.is_running()
+        or INTERNAL_CONFIG.notification_lock
+    ):
+        print(
+            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+        )
+        await asyncio.sleep(0.1)
+    return
 
 
 @app.command()

@@ -73,8 +73,10 @@ class NotificationBotConfig(BaseConfig):
 
 
 class ApiKeys(BaseConfig):
-    binance_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
-    binance_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
+    binance_api_key: str = os.getenv("BINANCE_API_KEY", "")
+    binance_api_secret: str = os.getenv("BINANCE_API_SECRET", "")
+    binance_testnet_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
+    binance_testnet_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
     coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
 
 
@@ -396,6 +398,7 @@ class InternalConfig:
     _instance = None
     config: Config
     notification_loop: asyncio.AbstractEventLoop
+    notification_lock = False
     base_config_path: Path = BASE_CONFIG_PATH
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
 
@@ -471,7 +474,7 @@ class InternalConfig:
                     "Started new event loop for notification logging",
                     extra={"loop": self.notification_loop.__dict__},
                 )
-            atexit.register(self.shutdown)
+            atexit.register(lambda: asyncio.run(self.async_shutdown()))
 
         # Set up the simple format string
         try:
@@ -513,6 +516,10 @@ class InternalConfig:
 
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
+
+    async def async_shutdown(self):
+        await asyncio.sleep(0.1)
+        self.shutdown()
 
     def shutdown(self):
         if hasattr(self, "notification_loop") and self.notification_loop is not None:

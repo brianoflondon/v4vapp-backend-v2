@@ -904,19 +904,34 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
+        await check_notifications()
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
         logger.info(
             f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True}
         )
-        await asyncio.sleep(0.2)
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(
             f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e}
         )
-        await asyncio.sleep(0.2)
         raise e
+    finally:
+        await check_notifications()
+
+
+async def check_notifications():
+    await asyncio.sleep(1)
+    while (
+        INTERNAL_CONFIG.notification_loop.is_running()
+        or INTERNAL_CONFIG.notification_lock
+    ):
+        print(
+            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+        )
+        await asyncio.sleep(0.1)
+    return
 
 
 @app.command()

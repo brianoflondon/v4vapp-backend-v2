@@ -32,7 +32,7 @@ class NotificationProtocol(Protocol):
         self, message: str, record: LogRecord, alert_level: int = 1
     ) -> None:
         internal_config = InternalConfig()
-
+        internal_config.notification_lock = True
         loop = internal_config.notification_loop
         if loop.is_closed() or not loop.is_running():
             # Recreate the event loop if it is closed
@@ -47,7 +47,7 @@ class NotificationProtocol(Protocol):
             # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
                 try:
-                    logger.info(f"✉️ Notification loop: {threading.get_ident()}")
+                    logger.info(f"✉️ Notification Thread: {threading.get_ident()}")
                 except Exception as ex:
                     logger.exception(ex, extra={"notification": False})
                 asyncio.run_coroutine_threadsafe(
@@ -67,21 +67,26 @@ class NotificationProtocol(Protocol):
                     "failed_message": message,
                 },
             )
+        finally:
+            internal_config.notification_lock = False
 
     async def _run_with_resilience(
         self, message: str, record: LogRecord, alert_level: int
     ):
         try:
             logger.info(
-                f"📩 Running notification task in loop: {threading.get_ident()}"
+                f"📩 Notification Thread: {threading.get_ident()}"
             )
             await self._send_notification(message, record, alert_level)
+
         except asyncio.CancelledError:
             logger.warning("Notification task was cancelled.")
         except Exception as ex:
             logger.exception(
                 f"Error in notification task: {ex}", extra={"notification": False}
             )
+        finally:
+            InternalConfig().notification_lock = False
 
     async def _send_notification(
         self,
