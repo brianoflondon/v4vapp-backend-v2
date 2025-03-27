@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+import pytest
 import pytz
 
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -42,3 +43,12 @@ def test_custom_json_validate():
         assert custom_json.cj_id == "v4vapp_transfer"
         print(custom_json.log_str)
         print(custom_json.log_extra)
+        assert CustomJson.test(post)
+
+
+def test_custom_json_not_valid():
+    post3 = post2.copy()
+    post3["id"] = "podping"
+    assert not CustomJson.test(post3)
+    with pytest.raises(ValueError):
+        CustomJson.model_validate(post3)

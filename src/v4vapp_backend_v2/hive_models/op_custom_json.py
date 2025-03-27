@@ -114,6 +114,6 @@ class CustomJson(OpBase):
 
     @classmethod
     def test(cls, data: Dict[str, Any]) -> bool:
-        if data.get("custom_json", None) is None:
+        if data.get("json", None) is None:
             return False
         return custom_json_test(data)
