@@ -371,7 +371,11 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
 
 
 async def db_store_witness_vote(
-    vote: AccountWitnessVote, db_client: MongoDBClient, *args: Any, **kwargs: Any
+    vote: AccountWitnessVote,
+    db_client: MongoDBClient,
+    watch_witness: str = "",
+    *args: Any,
+    **kwargs: Any,
 ) -> None:
     """
     Asynchronously stores a witness vote in the database.
@@ -396,7 +400,7 @@ async def db_store_witness_vote(
         trx_id = vote.trx_id
         op_in_trx = vote.op_in_trx
         query = {"trx_id": trx_id, "op_in_trx": op_in_trx}
-        if vote.type == "account_witness_vote":
+        if vote.type == "account_witness_vote" and vote.witness == watch_witness:
             _ = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
                 query=query,
