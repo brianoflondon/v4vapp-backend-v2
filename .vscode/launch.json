@@ -14,6 +14,17 @@
             "justMyCode": false,
         },
         {
+            "name": "Binance App",
+            "type": "debugpy",
+            "consoleName": "Binance App",
+            "request": "launch",
+            "program": "src/binance_monitor.py",
+            "args": [
+                // "--help"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Notification Bot",
             "type": "debugpy",
             "consoleName": "Template App Help",
