@@ -59,8 +59,23 @@ def get_hive_client(*args, **kwargs) -> Hive:
         # good_nodes = DEFAULT_GOOD_NODES
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
-    hive = Hive(*args, **kwargs)
-    return hive
+
+    count = len(kwargs["node"])
+    errors = 0
+    while errors < count:
+
+        try:
+            hive = Hive(*args, **kwargs)
+            return hive
+        except TypeError as e:
+            logger.warning(
+                f"Node {kwargs['node'][0]} not working {e} error: {errors}",
+                extra={"notification": True, "nodes": kwargs["node"]},
+            )
+            # remove the first node from the list
+            kwargs["node"] = kwargs["node"][1:]
+            errors += 1
+    raise ValueError(f"No working node found {errors} errors")
 
 
 def get_blockchain_instance(*args, **kwargs) -> Blockchain:

@@ -1,4 +1,5 @@
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -139,6 +140,24 @@ def test_decode_memo_from_memo_text(test_data):
     print(
         "memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text
     )
+
+
+@pytest.mark.asyncio
+async def test_get_hive_client_error():
+    # Mock `get_hive_client` to raise the TypeError
+    with patch(
+        "v4vapp_backend_v2.hive.hive_extras.Hive",
+    ) as mock_get_hive:
+        mock_get_hive.side_effect = TypeError(
+            "string indices must be integers, not 'str'"
+        )
+
+        # Call the function that uses `get_hive_client` and assert it handles the error
+        with pytest.raises(ValueError) as e:
+            hive_inst = get_hive_client(
+                keys=["5JPoEfF4GbrV9QqKYrHDBo3K8n78PdgWtWVaEqyAjZ8teaHVgTq"]
+            )
+            assert "No working node found" in str(e)
 
 
 if __name__ == "__main__":
