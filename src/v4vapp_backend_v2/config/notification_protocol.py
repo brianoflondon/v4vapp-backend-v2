@@ -16,10 +16,10 @@ TelegramNotification._send_notification(self, _config: Config, message: str,
 EmailNotification._send_notification(self, _config: Config, message: str,
 
 """
-import threading
 
 import asyncio
 import logging
+import threading
 from logging import LogRecord
 from typing import Protocol
 
@@ -72,12 +72,16 @@ class NotificationProtocol(Protocol):
         self, message: str, record: LogRecord, alert_level: int
     ):
         try:
-            logger.info(f"📩 Running notification task in loop: {threading.get_ident()}")
+            logger.info(
+                f"📩 Running notification task in loop: {threading.get_ident()}"
+            )
             await self._send_notification(message, record, alert_level)
         except asyncio.CancelledError:
             logger.warning("Notification task was cancelled.")
         except Exception as ex:
-            logger.exception(f"Error in notification task: {ex}")
+            logger.exception(
+                f"Error in notification task: {ex}", extra={"notification": False}
+            )
 
     async def _send_notification(
         self,

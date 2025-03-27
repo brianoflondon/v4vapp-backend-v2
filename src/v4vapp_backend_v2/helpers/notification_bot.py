@@ -167,27 +167,41 @@ class NotificationBot:
 
         """
         if self.bot and self.config.chat_id:
-            if is_markdown(text):
-                kwargs["parse_mode"] = "Markdown"  # Use V1
-                if text.endswith("no_preview"):
-                    kwargs["disable_web_page_preview"] = (
-                        True  # Optional: disable link previews
-                    )
-                    text = text.rstrip("no_preview").strip()
-                sanitized_text = sanitize_markdown_v1(text)
-                try:
+            text = self.truncate_to_3000(text)
+            try:
+                if is_markdown(text):
+                    kwargs["parse_mode"] = "Markdown"  # Use V1
+                    if text.endswith("no_preview"):
+                        kwargs["disable_web_page_preview"] = (
+                            True  # Optional: disable link previews
+                        )
+                        text = text.rstrip("no_preview").strip()
+                    sanitized_text = sanitize_markdown_v1(text)
+                    try:
+                        await self.bot.send_message(
+                            chat_id=self.config.chat_id, text=sanitized_text, **kwargs
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
+                            extra={"notification": False},
+                        )
+                        try:
+                            await self.bot.send_message(
+                                chat_id=self.config.chat_id, text=sanitized_text
+                            )
+                        except Exception as e:
+                            logger.exception(
+                                f"Error sending [ {text} ] for second time: {e}",
+                                extra={"notification": False},
+                            )
+                else:
                     await self.bot.send_message(
-                        chat_id=self.config.chat_id, text=sanitized_text, **kwargs
+                        chat_id=self.config.chat_id, text=text, **kwargs
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
-                        extra={"notification": False},
-                    )
-                    await self.bot.send_message(chat_id=self.config.chat_id, text=text)
-            else:
-                await self.bot.send_message(
-                    chat_id=self.config.chat_id, text=text, **kwargs
+            except Exception as e:
+                logger.exception(
+                    f"Error sending [ {text} ]: {e}", extra={"notification": False}
                 )
         else:
             raise NotificationNotSetupError(
@@ -205,6 +219,15 @@ class NotificationBot:
                 await self.send_menu()
             elif update.message.text == "/status":
                 await self.send_message("Bot is running")
+
+    def truncate_to_3000(self, text):
+        # Check if string exceeds 3000 characters
+        if len(text) > 3000:
+            # Truncate to 3000 characters and add ellipsis to indicate truncation
+            truncated_text = text[:3000] + "..."
+            return truncated_text
+        else:
+            return text
 
     async def send_menu(self):
         menu_text = """
