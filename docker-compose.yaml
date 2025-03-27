@@ -82,6 +82,17 @@ services:
     networks:
       - v4vapp-backend
 
+  binance-monitor:
+    depends_on:
+      - node-monitor
+    image: node-monitor:latest
+    volumes:
+      - ./config:/app/config
+      - ./logs_docker/binance:/app/logs
+    restart: unless-stopped
+    command: ["python", "src/binance_monitor.py"]
+
+
 volumes:
   mongo_data:
   mongo_config:

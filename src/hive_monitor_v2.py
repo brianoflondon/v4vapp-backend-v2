@@ -27,14 +27,13 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson, custom_json_test
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
-    OtherOpTypes,
     RealOpsLoopTypes,
     TransferOpTypes,
     VirtualOpTypes,
