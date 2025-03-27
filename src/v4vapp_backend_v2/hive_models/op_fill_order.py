@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -17,10 +17,12 @@ class FillOrder(OpBase):
     open_owner: str
     open_pays: AmountPyd
     timestamp: datetime
-    block_num: int
-    trx_num: int
 
-    log_internal: str = ""
+    log_internal: str = Field(
+        default="",
+        exclude=True,
+        description="Holds the internal log string for the log and notification log operations",
+    )
 
     def _log_internal(self) -> str:
         if self.log_internal:
