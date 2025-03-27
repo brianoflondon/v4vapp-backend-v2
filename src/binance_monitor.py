@@ -6,6 +6,7 @@ import typer
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.binance_extras import get_balances, get_current_price
+from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -40,16 +41,18 @@ async def check_binance_balances():
                         f"Δ {delta_balances.get('HIVE', 0):.3f} HIVE "
                         f"({int(delta_balances.get('SATS', 0)):,} sats)"
                     )
-                    logger.info(delta_message)
             current_price = get_current_price("HIVEBTC", testnet=testnet)
             saved_balances = balances
 
             current_price_sats = float(current_price["current_price"]) * 1e8
             hive_target = BINANACE_HIVE_ALERT_LEVEL_SATS / current_price_sats
-
+            percentage = hive_balance / hive_target * 100
+            percentage_meter = draw_percentage_meter(
+                percentage=percentage, max_percent=200, width=10
+            )
             message = (
                 f"{ICON} "
-                f"{hive_balance/hive_target * 100:.0f}% "
+                f"{percentage_meter} "
                 f"{hive_balance - hive_target:.0f} HIVE "
                 f"{delta_message} "
                 f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats) "

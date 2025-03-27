@@ -3,12 +3,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    camel_case,
     cap_camel_case,
     detect_convert_keepsats,
     detect_hbd,
     detect_keepsats,
     detect_paywithsats,
+    draw_percentage_meter,
     format_time_delta,
     get_in_flight_time,
     is_markdown,
@@ -183,6 +183,12 @@ def test_is_markdown():
         print(f"Is Markdown? {is_markdown(msg)}\n")
         assert is_markdown(msg) is True
     assert is_markdown("Plain text message") is False
+
+
+def test_draw_percentage_meter_data():
+    print()
+    for i in range(0, 240, 10):
+        print(draw_percentage_meter(i, width=8))
 
 
 if __name__ == "__main__":
