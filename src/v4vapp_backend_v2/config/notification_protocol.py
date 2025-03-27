@@ -47,12 +47,14 @@ class NotificationProtocol(Protocol):
             # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
                 try:
-                    logger.info(f"✉️ Notification Thread: {threading.get_ident()}")
+                    logger.info(
+                        f"✉️ Notification Thread: {threading.get_ident()} loop already running"
+                    )
+                    asyncio.run_coroutine_threadsafe(
+                        self._send_notification(message, record, alert_level), loop
+                    )
                 except Exception as ex:
                     logger.exception(ex, extra={"notification": False})
-                asyncio.run_coroutine_threadsafe(
-                    self._send_notification(message, record, alert_level), loop
-                )
             else:
                 # Run the task in the loop and handle shutdown gracefully
                 loop.run_until_complete(
@@ -75,7 +77,7 @@ class NotificationProtocol(Protocol):
     ):
         try:
             logger.info(
-                f"📩 Notification Thread: {threading.get_ident()}"
+                f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
             )
             await self._send_notification(message, record, alert_level)
 
