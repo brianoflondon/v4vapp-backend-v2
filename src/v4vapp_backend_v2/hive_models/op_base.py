@@ -113,11 +113,6 @@ class OpBase(BaseModel):
             log_extra=self.log_extra,
         )
 
-    @property
-    def get_class(self):
-        if self.type == "producer_reward":
-            return ProducerReward
-
 
 class OpInTrxCounter:
     """
@@ -130,7 +125,7 @@ class OpInTrxCounter:
     real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
     virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
 
-    def __init__(self, op_real_virtual: OpRealm) -> None:
+    def __init__(self, realm: OpRealm) -> None:
         """
         Initialize an instance with its own operation counter and last transaction ID.
 
@@ -138,9 +133,9 @@ class OpInTrxCounter:
             op_in_trx (int): Number of operations in the current transaction for this instance.
             last_trx_id (str): The ID of the last seen transaction for this instance.
         """
-        self.op_in_trx: int = 0
+        self.op_in_trx: int = 1
         self.last_trx_id: str = ""
-        self.op_real_virtual: OpRealm = op_real_virtual
+        self.op_real_virtual: OpRealm = realm
 
     def inc(self, trx_id: str) -> int:
         """
@@ -156,7 +151,7 @@ class OpInTrxCounter:
         """
         # Case 1: Same transaction as last time for this instance, just increment
         if trx_id == "0000000000000000000000000000000000000000":
-            return 0
+            return 1
 
         if self.last_trx_id == trx_id:
             self.op_in_trx += 1
@@ -177,8 +172,8 @@ class OpInTrxCounter:
         # Case 3: New transaction, reset instance count and add to shared stack
         use_stack.append(trx_id)  # Access class variable
         self.last_trx_id = trx_id
-        self.op_in_trx = 0  # Reset count for new transaction in this instance
-        return 0
+        self.op_in_trx = 1  # Reset count for new transaction in this instance
+        return 1
 
 
 def op_in_trx_counter(

@@ -7,6 +7,7 @@ from typing import Annotated, Any, List, Union
 import typer
 from beem.amount import Amount  # type: ignore
 from beem.blockchain import Blockchain  # type: ignore
+
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 
@@ -17,25 +18,27 @@ from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
-from v4vapp_backend_v2.hive.hive_extras import (MAX_HIVE_BATCH_SIZE,
-                                                get_hive_client,
-                                                get_hive_witness_details)
+from v4vapp_backend_v2.hive.hive_extras import (
+    MAX_HIVE_BATCH_SIZE,
+    get_hive_client,
+    get_hive_witness_details,
+)
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
-from v4vapp_backend_v2.hive_models.op_account_witness_vote import \
-    AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
-from v4vapp_backend_v2.hive_models.op_limit_order_create import \
-    LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
-from v4vapp_backend_v2.hive_models.op_types_enums import (MarketOpTypes,
-                                                          RealOpsLoopTypes,
-                                                          TransferOpTypes,
-                                                          VirtualOpTypes,
-                                                          WitnessOpTypes)
+from v4vapp_backend_v2.hive_models.op_types_enums import (
+    MarketOpTypes,
+    RealOpsLoopTypes,
+    TransferOpTypes,
+    VirtualOpTypes,
+    WitnessOpTypes,
+)
 from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
 INTERNAL_CONFIG = InternalConfig()
@@ -604,7 +607,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
         db_user=HIVE_DATABASE_USER,
     ) as db_client:
         while True:
-            op_in_trx_counter = OpInTrxCounter(op_real_virtual="virtual")
+            op_in_trx_counter = OpInTrxCounter(realm="virtual")
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
                     opNames=op_names,
@@ -782,7 +785,7 @@ async def real_ops_loop(
             logger.info(
                 f"{icon} Real Loop using nodes: {hive_client.get_default_nodes()}"
             )
-            op_in_trx_counter = OpInTrxCounter(op_real_virtual="real")
+            op_in_trx_counter = OpInTrxCounter(realm="real")
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
                     opNames=op_names,
@@ -877,6 +880,7 @@ async def real_ops_loop(
                     f"error from {hive_client.rpc.url}",
                 )
                 hive_client.rpc.next()
+
 
 async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     """

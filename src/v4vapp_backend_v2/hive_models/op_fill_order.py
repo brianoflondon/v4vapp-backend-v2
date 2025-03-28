@@ -48,13 +48,26 @@ class FillOrder(OpBase):
     @property
     def log_str(self) -> str:
         ans = self._log_internal()
-        link = get_hive_block_explorer_link(self.trx_id, markdown=False)
+        # link = get_hive_block_explorer_link(
+        #     trx_id=self.trx_id, markdown=False, any_op=self
+        # )
+        link = get_hive_block_explorer_link(
+            self.trx_id,
+            markdown=False,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+        )
         return f"{ans} {link}"
 
     @property
     def notification_str(self) -> str:
         ans = self._log_internal()
-        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
+        link = get_hive_block_explorer_link(
+            self.trx_id,
+            markdown=True,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+        )
         return f"{ans} {link}"
 
     def check_open_orders(self) -> str:

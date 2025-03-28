@@ -57,7 +57,7 @@ async def scan_hive(op_real_virtual: OpRealm):
                 only_virtual_ops=only_virtual_ops,
             )
         )
-        op_in_trx_counter = OpInTrxCounter(op_real_virtual=op_real_virtual)
+        op_in_trx_counter = OpInTrxCounter(realm=op_real_virtual)
         async for post in async_stream:
             op_in_trx = op_in_trx_counter.inc(post["trx_id"])
             post["op_in_trx"] = op_in_trx

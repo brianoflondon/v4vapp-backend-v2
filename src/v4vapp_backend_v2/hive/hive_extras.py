@@ -250,7 +250,12 @@ class HiveExp(StrEnum):
 
 
 def get_hive_block_explorer_link(
-    trx_id: str, block_explorer: HiveExp = HiveExp.HiveHub, markdown: bool = False
+    trx_id: str,
+    block_explorer: HiveExp = HiveExp.HiveHub,
+    markdown: bool = False,
+    block_num: int = 0,
+    op_in_trx: int = 0,
+    # any_op: OpBase | None = None,
 ) -> str:
     """
     Generate a Hive blockchain explorer URL for a given transaction ID.
@@ -262,6 +267,10 @@ def get_hive_block_explorer_link(
     Returns:
         str: The complete URL with the transaction ID inserted
     """
+    if block_num and op_in_trx:
+        trx_id = f"{block_num}/{trx_id}/{op_in_trx}"
+    # if any_op:
+    #     trx_id = f"{any_op.block_num}/{any_op.trx_id}/{any_op.op_in_trx+1}"
     link_html = block_explorer.value.format(trx_id=trx_id)
     if not markdown:
         return link_html
