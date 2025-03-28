@@ -188,3 +188,5 @@ class Transfer(TransferRaw):
             f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {markdown_link}"
         )
         return ans
+
+#TODO #45 Add Recurrent Transfer type
