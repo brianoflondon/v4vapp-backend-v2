@@ -51,7 +51,7 @@ async def check_binance_balances():
                 testnet,
             )
             silent = True if new_balances.get("HIVE") > hive_target else False
-            if new_balances.get("HIVE") < hive_target:
+            if new_balances != saved_balances:
                 send_message = True
             if send_message:
                 logger.info(
@@ -71,7 +71,7 @@ async def check_binance_balances():
         finally:
             await asyncio.sleep(60)
             elapsed = timer() - start
-            if elapsed > 600:  # or 10 minutes have passed
+            if elapsed > 3600:  # or 1 hour
                 send_message = True
                 start = timer()
 
@@ -106,9 +106,11 @@ def generate_message(saved_balances: dict, testnet: bool = False):
             k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances
         }
         if delta_balances:
+            hive_direction = "⬆️🟢" if delta_balances.get("HIVE", 0) >= 0 else "📉🟥"
+            sats_direction = "⬆️🟢" if delta_balances.get("SATS", 0) >= 0 else "📉🟥"
             delta_message = (
-                f"Δ {delta_balances.get('HIVE', 0):.3f} HIVE "
-                f"({int(delta_balances.get('SATS', 0)):,} sats)"
+                f"{hive_direction} {delta_balances.get('HIVE', 0):.3f} HIVE "
+                f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
             )
     current_price = get_current_price("HIVEBTC", testnet=testnet)
     saved_balances = balances
