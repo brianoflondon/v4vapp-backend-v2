@@ -26,6 +26,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_all import op_any
 from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -771,6 +772,7 @@ async def real_ops_loop(
         involving a watched user is detected.
     """
     logger.info(f"{icon} Watching users: {watch_users}")
+    LimitOrderCreate.watch_users = watch_users
     op_names = RealOpsLoopTypes
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
@@ -803,35 +805,14 @@ async def real_ops_loop(
                     # Moved outside the specific blocks for different op codes
                     op_in_trx = op_in_trx_counter.inc(hive_event["trx_id"])
                     hive_event["op_in_trx"] = op_in_trx
-                    if hive_event.get("type") in WitnessOpTypes:
-                        vote = AccountWitnessVote.model_validate(hive_event)
-                        vote.get_voter_details()
-                        async_publish(
-                            Events.HIVE_WITNESS_VOTE,
-                            vote=vote,
-                            watch_witness=watch_witness,
-                            db_client=db_client,
-                        )
-                    if hive_event.get("type") in TransferOpTypes:
-                        # Only advance block count on new trx_id
-                        hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
-                        hive_event["hive_inst"] = hive_inst
-                        transfer = Transfer.model_validate(hive_event)
-                        # Log ever transaction (even if not in watch list)
-                        logger.debug(
-                            f"{icon} {transfer.log_str}",
-                            extra={"notification": False, **transfer.log_extra},
-                        )
-                        if last_good_block < transfer.block_num:
-                            last_good_block = transfer.block_num
+                    try:
+                        op = op_any(hive_event)
+                        if not op:
+                            continue
+                        if last_good_block < op.block_num:
+                            last_good_block = op.block_num
                         error_code = log_time_difference_errors(
-                            transfer.timestamp, error_code
-                        )
-                        async_publish(
-                            Events.HIVE_TRANSFER,
-                            op=transfer,
-                            watch_users=watch_users,
-                            db_client=db_client,
+                            op.timestamp, error_code
                         )
                         count += 1
                         # if count == 2:
@@ -847,11 +828,40 @@ async def real_ops_loop(
                             logger.info(
                                 f"{icon} Updated Quotes Age: {Transfer.last_quote.age}"
                             )
-                        if timer() - start > 55:
-                            await db_store_block_marker(hive_event, db_client)
-                            start = timer()
-                    if CustomJson.test(hive_event):
-                        custom_json = CustomJson.model_validate(hive_event)
+                    except ValueError:
+                        # Not one of the ops we want to track
+                        continue
+
+                    if op.type in WitnessOpTypes:
+                        vote = AccountWitnessVote.model_validate(hive_event)
+                        vote = op
+                        vote.get_voter_details()
+                        async_publish(
+                            Events.HIVE_WITNESS_VOTE,
+                            vote=vote,
+                            watch_witness=watch_witness,
+                            db_client=db_client,
+                        )
+                    if op.type in TransferOpTypes:
+                        # Only advance block count on new trx_id
+                        hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
+                        hive_event["hive_inst"] = hive_inst
+                        transfer = Transfer.model_validate(hive_event)
+                        # Log ever transaction (even if not in watch list)
+                        logger.debug(
+                            f"{icon} {transfer.log_str}",
+                            extra={"notification": False, **transfer.log_extra},
+                        )
+
+                        async_publish(
+                            Events.HIVE_TRANSFER,
+                            op=transfer,
+                            watch_users=watch_users,
+                            db_client=db_client,
+                        )
+
+                    if op.type == "custom_json":
+                        custom_json: CustomJson = op
                         logger.info(
                             f"{custom_json.log_str}",
                             extra={"notification": True, **custom_json.log_extra},
@@ -868,6 +878,10 @@ async def real_ops_loop(
                             hive_event=hive_event,
                             watch_users=watch_users,
                         )
+                    if timer() - start > 55:
+                        # TODO: #48 move the BlockMarker object creation to here.
+                        await db_store_block_marker(hive_event, db_client)
+                        start = timer()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
                 raise e
