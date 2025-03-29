@@ -307,14 +307,14 @@ def draw_percentage_meter(percentage, max_percent=200, width=20):
         width (int): Width in characters (default 20)
     """
     # Bound the percentage
-    percentage = max(0, min(percentage, max_percent))
+    percentage_calc = max(0, min(percentage, max_percent))
 
     # Unicode block characters from empty to full (8 levels + empty)
     blocks = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
 
     # Total "units" of resolution (width * 8 since each char has 8 levels)
     total_units = width * 8
-    filled_units = int(total_units * percentage / max_percent)
+    filled_units = int(total_units * percentage_calc / max_percent)
 
     meter = ""
     remaining_units = filled_units

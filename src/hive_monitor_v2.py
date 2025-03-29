@@ -620,7 +620,6 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 f"{icon} Virtual Loop using nodes: {hive_client.get_default_nodes()}"
             )
             try:
-                op_in_trx = 0
                 async for hive_event in async_stream:
                     op_in_trx = op_in_trx_counter.inc(hive_event["trx_id"])
                     hive_event["op_in_trx"] = op_in_trx
