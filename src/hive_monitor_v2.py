@@ -109,10 +109,11 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
         whether the error code should be cleared
     """
     time_diff = check_time_diff(timestamp)
+    comparison_text = f"than {TIME_DIFFERENCE_CHECK} s"
     if not error_code and time_diff > timedelta(seconds=TIME_DIFFERENCE_CHECK):
-        error_code = "Hive Time diff greater than 1 min"
+        error_code = f"Hive Time diff greater {comparison_text}"
         logger.warning(
-            f"{icon} Time diff: {time_diff} greater than {TIME_DIFFERENCE_CHECK} s",
+            f"{icon} Time diff: {time_diff} greater {comparison_text}",
             extra={
                 "notification": True,
                 "error_code": error_code,
@@ -120,7 +121,7 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
         )
     if error_code and time_diff <= timedelta(seconds=TIME_DIFFERENCE_CHECK):
         logger.warning(
-            f"{icon} Time diff: {time_diff} less than 1 minute",
+            f"{icon} Time diff: {time_diff} less {comparison_text}",
             extra={
                 "notification": True,
                 "error_code_clear": error_code,
