@@ -104,3 +104,6 @@ async def test_model_dump_transfer_enhanced(set_base_config_path):
                 transfer.conv.conv_from
                 == Amount(hive_event_model["amount"]).symbol.lower()
             )
+        if hive_event["type"] == "recurrent_transfer":
+            transfer_r = TransferRaw.model_validate(hive_event)
+            hive_event_model = transfer_r.model_dump(by_alias=True)

@@ -6,7 +6,7 @@ from .op_custom_json import CustomJson
 from .op_fill_order import FillOrder
 from .op_limit_order_create import LimitOrderCreate
 from .op_producer_reward import ProducerReward
-from .op_transfer import Transfer
+from .op_transfer import RecurrentTransfer, Transfer
 
 OpMarket = Union[FillOrder, LimitOrderCreate]
 
@@ -43,6 +43,8 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         return CustomJson(**hive_event)
     elif op_type == "transfer":
         return Transfer(**hive_event)
+    elif op_type == "recurrent_transfer":
+        return RecurrentTransfer(**hive_event)
     elif op_type == "account_witness_vote":
         return AccountWitnessVote(**hive_event)
     elif op_type == "producer_reward":

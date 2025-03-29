@@ -190,4 +190,22 @@ class Transfer(TransferRaw):
         return ans
 
 
-#TODO #45 Add Recurrent Transfer type
+class RecurrentTransfer(Transfer):
+    """
+    RecurrentTransfer class represents a recurrent transfer operation.
+
+    This class extends the Transfer class and provides additional functionalities
+    specific to recurrent transfers.
+
+    Attributes:
+        excecutions (int): Number of executions for the recurrent transfer.
+            Defaults to 0.
+        recurrence (int): Recurrence interval for the transfer in hours .
+            Defaults to 0.
+    """
+
+    excecutions: int = 0
+    recurrence: int = 0
+
+
+# TODO #45 Add Recurrent Transfer type

@@ -32,7 +32,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer
+from v4vapp_backend_v2.hive_models.op_transfer import RecurrentTransfer, Transfer
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     MarketOpTypes,
     RealOpsLoopTypes,
@@ -846,7 +846,10 @@ async def real_ops_loop(
                         # Only advance block count on new trx_id
                         hive_inst = get_hive_client(keys=CONFIG.hive.memo_keys)
                         hive_event["hive_inst"] = hive_inst
-                        transfer = Transfer.model_validate(hive_event)
+                        if op.type == "transfer":
+                            transfer = Transfer.model_validate(hive_event)
+                        elif op.type == "recurrent_transfer":
+                            transfer = RecurrentTransfer.model_validate(hive_event)
                         # Log ever transaction (even if not in watch list)
                         logger.debug(
                             f"{icon} {transfer.log_str}",
