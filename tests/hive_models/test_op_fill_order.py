@@ -36,6 +36,6 @@ def test_model_dump_fill_order():
         if hive_event["type"] == "fill_order":
             op_fill_order = FillOrder.model_validate(hive_event)
             fill_order = op_fill_order.model_dump()
-            assert not "log_internal" in fill_order
+            assert "log_internal" not in fill_order
             assert "trx_id" in fill_order
             assert "current_pays" in fill_order
