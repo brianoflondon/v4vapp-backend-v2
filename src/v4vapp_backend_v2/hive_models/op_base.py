@@ -2,10 +2,10 @@ from collections import deque
 from enum import StrEnum, auto
 from typing import Any, ClassVar, Deque, Dict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
-from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
+from v4vapp_backend_v2.hive.hive_extras import HiveExp, get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import (
     HIVE_REAL_OPS,
     HIVE_VIRTUAL_OPS,
@@ -77,6 +77,12 @@ class OpBase(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
 
+    block_explorer: HiveExp = Field(
+        default=HiveExp.HiveHub,
+        exclude=True,
+        description="Hive Block explorer to use for links",
+    )
+
     def __init__(self, **data):
         super().__init__(**data)
         if data.get("type", None) is not None:
@@ -113,10 +119,39 @@ class OpBase(BaseModel):
             log_extra=self.log_extra,
         )
 
+    @computed_field
+    def link(self) -> str:
+        """
+        Generates a link to the Hive block explorer for the transaction ID.
+
+        Returns:
+            str: A formatted string containing the link to the Hive block explorer.
+        """
+        if self.realm == OpRealm.MARKER:
+            return f"MARKER: {self.trx_id}"
+        return get_hive_block_explorer_link(
+            trx_id=self.trx_id,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+            block_explorer=self.block_explorer,
+            markdown=False,
+        )
+
     @property
-    def get_class(self):
-        if self.type == "producer_reward":
-            return ProducerReward
+    def markdown_link(self) -> str:
+        """
+        Generates a markdown link to the Hive block explorer for the transaction ID.
+
+        Returns:
+            str: A formatted markdown string containing the link to the Hive block explorer.
+        """
+        return get_hive_block_explorer_link(
+            trx_id=self.trx_id,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+            block_explorer=self.block_explorer,
+            markdown=True,
+        )
 
 
 class OpInTrxCounter:
@@ -130,7 +165,7 @@ class OpInTrxCounter:
     real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
     virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
 
-    def __init__(self, op_real_virtual: OpRealm) -> None:
+    def __init__(self, realm: OpRealm) -> None:
         """
         Initialize an instance with its own operation counter and last transaction ID.
 
@@ -138,9 +173,9 @@ class OpInTrxCounter:
             op_in_trx (int): Number of operations in the current transaction for this instance.
             last_trx_id (str): The ID of the last seen transaction for this instance.
         """
-        self.op_in_trx: int = 0
+        self.op_in_trx: int = 1
         self.last_trx_id: str = ""
-        self.op_real_virtual: OpRealm = op_real_virtual
+        self.op_real_virtual: OpRealm = realm
 
     def inc(self, trx_id: str) -> int:
         """
@@ -156,7 +191,7 @@ class OpInTrxCounter:
         """
         # Case 1: Same transaction as last time for this instance, just increment
         if trx_id == "0000000000000000000000000000000000000000":
-            return 0
+            return 1
 
         if self.last_trx_id == trx_id:
             self.op_in_trx += 1
@@ -177,8 +212,8 @@ class OpInTrxCounter:
         # Case 3: New transaction, reset instance count and add to shared stack
         use_stack.append(trx_id)  # Access class variable
         self.last_trx_id = trx_id
-        self.op_in_trx = 0  # Reset count for new transaction in this instance
-        return 0
+        self.op_in_trx = 1  # Reset count for new transaction in this instance
+        return 1
 
 
 def op_in_trx_counter(

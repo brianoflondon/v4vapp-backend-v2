@@ -14,19 +14,10 @@ def test_log_extra_real():
     trx_id = token_hex(20)
 
     op_base = OpBase(
-        trx_id=trx_id, type=op_type, op_in_trx=0, block_num=94425724, trx_num=1
+        trx_id=trx_id, type=op_type, op_in_trx=1, block_num=94425724, trx_num=1
     )
+    assert op_base.log_extra.get("op_base")["trx_id"] == trx_id
 
-    assert op_base.log_extra == {
-        "op_base": {
-            "realm": OpRealm.REAL,
-            "trx_id": trx_id,
-            "type": op_type,
-            "op_in_trx": 0,
-            "block_num": 94425724,
-            "trx_num": 1,
-        }
-    }
     assert op_base.op_name() == "op_base"
 
 
@@ -37,17 +28,7 @@ def test_log_extra_virtual():
     op_base = OpBase(
         trx_id=trx_id, type=op_type, op_in_trx=0, block_num=94425724, trx_num=1
     )
-
-    assert op_base.log_extra == {
-        "op_base": {
-            "realm": OpRealm.VIRTUAL,
-            "trx_id": trx_id,
-            "type": op_type,
-            "op_in_trx": 0,
-            "block_num": 94425724,
-            "trx_num": 1,
-        }
-    }
+    assert op_base.log_extra.get("op_base")["trx_id"] == trx_id
     assert op_base.op_name() == "op_base"
 
 

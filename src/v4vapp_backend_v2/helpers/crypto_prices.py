@@ -188,6 +188,19 @@ class AllQuotes(BaseModel):
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     source: str = ""
 
+    def get_binance_quote(self) -> QuoteResponse:
+        """
+        Get the quote from Binance. Special non async call for use in Transfer init
+
+        Returns:
+            QuoteResponse: The quote from Binance or an error message if the quote
+            could not be fetched.
+        """
+        binance_quote = Binance().get_quote_sync()
+        self.quotes["Binance"] = binance_quote
+        self.fetch_date = binance_quote.fetch_date
+        return binance_quote
+
     async def get_all_quotes(self, use_cache: bool = True, timeout: float = 30.0):
         all_services = [
             CoinGecko(),
@@ -412,15 +425,53 @@ class CoinGecko(QuoteService):
 
 
 class Binance(QuoteService):
+
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
+        """
+        Retrieve a cryptocurrency quote, optionally using a cached value.
+
+        Args:
+            use_cache (bool): Whether to use the cached quote if available. Defaults to True.
+
+        Returns:
+            QuoteResponse: The retrieved cryptocurrency quote, either from the cache or fetched synchronously.
+
+        Notes:
+            - If a cached quote is available and `use_cache` is True, it will be returned.
+            - If no cached quote is available or `use_cache` is False, a new quote will be fetched
+              synchronously and stored in the cache for future use.
+        """
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
             return cached_quote
+        quote = self.get_quote_sync(use_cache=use_cache)
+        await self.set_cache(quote)
+        return quote
+
+    def get_quote_sync(self, use_cache: bool = True) -> QuoteResponse:
+        """
+        Fetches cryptocurrency quotes synchronously using the Binance API.
+
+        This method retrieves the median prices for HIVE/USDT, HIVE/BTC, and BTC/USDT
+        trading pairs from Binance. It calculates additional derived values such as
+        HIVE to HBD and HIVE to BTC prices. The results are returned in a `QuoteResponse`
+        object.
+
+        Args:
+            use_cache (bool): Whether to use cached data. Defaults to True.
+
+        Returns:
+            QuoteResponse: An object containing the fetched cryptocurrency prices,
+            metadata, and any errors encountered during the process.
+
+        Raises:
+            Exception: If an error occurs during the API call or data processing,
+            it is caught and logged, and an error response is returned.
+        """
         internal_config = InternalConfig()
         api_keys_config = internal_config.config.api_keys
         try:
             # raise Exception("debug")
-
             client = Spot(
                 api_key=api_keys_config.binance_api_key,
                 api_secret=api_keys_config.binance_api_secret,
@@ -452,7 +503,6 @@ class Binance(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
-            await self.set_cache(quote_response)
             return quote_response
 
         except Exception as ex:

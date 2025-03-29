@@ -28,6 +28,7 @@ class LimitOrderCreate(OpBase):
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
+    watch_users: ClassVar[List[str]] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -37,9 +38,11 @@ class LimitOrderCreate(OpBase):
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
-        LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
-        icon = "📈"
-        logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
+        if self.watch_users and self.owner in self.watch_users:
+            LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
+            icon = "📈"
+            self.expire_orders()
+            logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
 
     @classmethod
     def op_name(cls) -> str:
@@ -63,10 +66,28 @@ class LimitOrderCreate(OpBase):
         """
         expired_orders: List[int] = []
         for orderid, order in self.open_order_ids.items():
+            if self.watch_users and order.owner not in self.watch_users:
+                expired_orders.append(orderid)
+                continue
             if order.expiration < datetime.now(tz=timezone.utc):
                 expired_orders.append(orderid)
         for orderid in expired_orders:
             self.open_order_ids.pop(orderid)
+        self._maintain_order_limit()
+
+    @classmethod
+    def _maintain_order_limit(cls) -> None:
+        """
+        Ensures the open_order_ids dictionary only holds the latest 50 items.
+        Removes the oldest items if the limit is exceeded.
+        """
+        if len(cls.open_order_ids) > 50:
+            # Sort by timestamp and remove the oldest entries
+            sorted_orders = sorted(
+                cls.open_order_ids.items(), key=lambda item: item[1].timestamp
+            )
+            for orderid, _ in sorted_orders[: len(cls.open_order_ids) - 50]:
+                cls.open_order_ids.pop(orderid)
 
     # TODO: #40 Add logic for checking off filled orders
 

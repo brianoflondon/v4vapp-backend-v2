@@ -267,3 +267,68 @@ def sanitize_markdown_v1(text: str) -> str:
             parts.append(segment)  # No escaping needed
 
     return "".join(parts)
+
+
+# def draw_percentage_meter(
+#     percentage: int, max_percent: int = 200, width: int = 20
+# ) -> str:
+#     """
+#     Draws a text-based percentage meter from 0% to max_percent
+
+#     Args:
+#         percentage (float): The current percentage (e.g., 175)
+#         max_percent (float): Maximum percentage scale (default 200)
+#         width (int): Width of the meter in characters (default 50)
+#     """
+#     # Ensure percentage stays within bounds
+#     draw_percentage = max(0, min(percentage, max_percent))
+
+#     # Calculate the filled portion
+#     filled_width = int(width * draw_percentage / max_percent)
+#     empty_width = width - filled_width
+
+#     # Create the meter using Unicode block characters
+#     meter = "█" * filled_width + "░" * empty_width
+
+#     # Calculate percentage string
+#     percent_str = f"{percentage:.0f}%"
+
+#     # Combine everything with some styling
+#     return f"[{meter}] {percent_str:>6} / {max_percent:.0f}%"
+
+
+def draw_percentage_meter(percentage, max_percent=200, width=20):
+    """
+    Draws a fine-grained percentage meter using fractional block characters
+
+    Args:
+        percentage (float): Current percentage (e.g., 175)
+        max_percent (float): Maximum percentage (default 200)
+        width (int): Width in characters (default 20)
+    """
+    # Bound the percentage
+    percentage_calc = max(0, min(percentage, max_percent))
+
+    # Unicode block characters from empty to full (8 levels + empty)
+    blocks = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+
+    # Total "units" of resolution (width * 8 since each char has 8 levels)
+    total_units = width * 8
+    filled_units = int(total_units * percentage_calc / max_percent)
+
+    meter = ""
+    remaining_units = filled_units
+
+    # Build the meter character by character
+    for _ in range(width):
+        if remaining_units >= 8:
+            meter += blocks[8]  # Full block
+            remaining_units -= 8
+        elif remaining_units > 0:
+            meter += blocks[remaining_units]  # Partial block
+            remaining_units = 0
+        else:
+            meter += blocks[0]  # Empty
+
+    percent_str = f"{percentage:.0f}%"
+    return f"[{meter}] {percent_str:>6} / {max_percent}%"

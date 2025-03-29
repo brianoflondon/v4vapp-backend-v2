@@ -1,11 +1,13 @@
 import asyncio
 import sys
+from timeit import default_timer as timer
 from typing import Annotated
 
 import typer
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.binance_extras import get_balances, get_current_price
+from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
@@ -17,63 +19,120 @@ BINANACE_BTC_ALERT_LEVEL = 0.02
 
 
 async def check_binance_balances():
+    """
+    Asynchronously monitors Binance balances and logs updates.
+
+    This function continuously checks Binance account balances in a loop,
+    compares them with a saved state, and logs a message if there are changes
+    or if certain conditions are met. It also ensures that notifications are
+    sent only once per balance change unless the balance falls below a target.
+
+    Key Features:
+    - Retrieves and compares Binance balances.
+    - Sends notifications when balances change or fall below a target.
+    - Logs messages with additional metadata for notifications and balance details.
+    - Handles exceptions gracefully and logs errors.
+    - Resets the notification state every 10 minutes.
+
+    Note:
+    - The function runs indefinitely with a 60-second delay between iterations.
+    - It uses an external `generate_message` function to compute new balances,
+        target values, and the message to log.
+    """
     """Get the Binance balances"""
     saved_balances = {}
-    delta_balances = {}
-    log_once = True
+    send_message = True
+    start = timer()
     while True:
         testnet = False
         try:
-            notification = False
-            delta_message = ""
-            balances = get_balances(["BTC", "HIVE"], testnet=testnet)
-            hive_balance = balances.get("HIVE", 0)
-            sats_balance = balances.get("SATS", 0)
-            if saved_balances and balances != saved_balances:
-                log_once = True
-                notification = True
-                delta_balances = {
-                    k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances
-                }
-                if delta_balances:
-                    delta_message = (
-                        f"Δ {delta_balances.get('HIVE', 0):.3f} HIVE "
-                        f"({int(delta_balances.get('SATS', 0)):,} sats)"
-                    )
-                    logger.info(delta_message)
-            current_price = get_current_price("HIVEBTC", testnet=testnet)
-            saved_balances = balances
-
-            current_price_sats = float(current_price["current_price"]) * 1e8
-            hive_target = BINANACE_HIVE_ALERT_LEVEL_SATS / current_price_sats
-
-            message = (
-                f"{ICON} "
-                f"{hive_balance/hive_target * 100:.0f}% "
-                f"{hive_balance - hive_target:.0f} HIVE "
-                f"{delta_message} "
-                f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats) "
-                f"Target: {hive_target:.3f}"
+            new_balances, hive_target, notficiation_str, log_str = generate_message(
+                saved_balances,
+                testnet,
             )
-            silent = True if balances.get("HIVE") > hive_target else False
-            if log_once:
+            silent = True if new_balances.get("HIVE") > hive_target else False
+            if new_balances != saved_balances:
+                send_message = True
+            if send_message:
                 logger.info(
-                    message,
+                    log_str,
                     extra={
-                        "notification": notification,
-                        "binance-balances": balances,
+                        "notification": True,
+                        "binance-balances": new_balances,
                         "silent": silent,
+                        "notification_str": notficiation_str,
                     },
                 )
-            delta_balances = {}
-            log_once = False
-
+            send_message = False  # Send message once unless the balance changes
+            saved_balances = new_balances
         except Exception as ex:
             logger.error(f"Problem with API. {ex} {ex.__class__}")
             logger.exception(ex, extra={"error": ex, "notification": False})
 
         finally:
             await asyncio.sleep(60)
+            elapsed = timer() - start
+            if elapsed > 3600:  # or 1 hour
+                send_message = True
+                start = timer()
+
+
+def generate_message(saved_balances: dict, testnet: bool = False):
+    """
+    Generates a message summarizing the current and target balances of HIVE and SATS,
+    along with any changes (delta) in balances since the last check.
+
+    Args:
+        saved_balances (dict): A dictionary containing the previously saved balances
+            for comparison. Keys are asset symbols (e.g., "HIVE", "SATS") and values
+            are their respective balances.
+        testnet (bool, optional): A flag indicating whether to use the Binance testnet
+            for fetching balances and prices. Defaults to False.
+
+    Returns:
+        tuple: A tuple containing:
+            - balances (dict): The current balances of assets (e.g., "HIVE", "SATS").
+            - hive_target (float): The target HIVE balance calculated based on the
+              alert level in SATS and the current HIVEBTC price.
+            - message (str): A formatted string summarizing the current status,
+              including the percentage meter, delta balances, and target information.
+    """
+    delta_message = ""
+    delta_balances = {}
+    balances = get_balances(["BTC", "HIVE"], testnet=testnet)
+    hive_balance = balances.get("HIVE", 0)
+    sats_balance = balances.get("SATS", 0)
+    if saved_balances and balances != saved_balances:
+        delta_balances = {
+            k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances
+        }
+        if delta_balances:
+            hive_direction = "⬆️🟢" if delta_balances.get("HIVE", 0) >= 0 else "📉🟥"
+            sats_direction = "⬆️🟢" if delta_balances.get("SATS", 0) >= 0 else "📉🟥"
+            delta_message = (
+                f"{hive_direction} {delta_balances.get('HIVE', 0):.3f} HIVE "
+                f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
+            )
+    current_price = get_current_price("HIVEBTC", testnet=testnet)
+    saved_balances = balances
+
+    current_price_sats = float(current_price["current_price"]) * 1e8
+    hive_target = BINANACE_HIVE_ALERT_LEVEL_SATS / current_price_sats
+    percentage = hive_balance / hive_target * 100
+    percentage_meter = draw_percentage_meter(
+        percentage=percentage, max_percent=200, width=10
+    )
+    notification_str = (
+        f"{ICON} "
+        f"{percentage_meter}\n"
+        f"{hive_balance - hive_target:.0f} HIVE "
+        f"{delta_message} "
+        f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats)\n"
+        f"Target: {hive_target:.3f}"
+    )
+    log_str = notification_str.replace("\n", " ")
+
+    return balances, hive_target, notification_str, log_str
 
 
 async def main_async_start():

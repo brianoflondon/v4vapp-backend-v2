@@ -222,7 +222,7 @@ async def test_hive_internal_market_service_error(mocker):
 
 
 @pytest.mark.asyncio
-async def test_get_all_quotes(mocker):
+async def test_get_all_quotes(mocker, set_base_config_path):
     # Load all responses
     with open("tests/data/crypto_prices/CoinGecko.json") as f:
         coingecko_resp = json.load(f).get("raw_response")
@@ -236,6 +236,16 @@ async def test_get_all_quotes(mocker):
         elif "coinmarketcap.com" in url:
             return Response(status_code=200, json=coinmarketcap_resp)
         return Response(status_code=404)  # Default case
+
+    # Mock the Redis check_cache method to always return None
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.QuoteService.check_cache",
+        return_value=None,
+    )
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.crypto_prices.QuoteService.set_cache",
+        return_value=None,
+    )
 
     # Apply the patch
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=mock_get))

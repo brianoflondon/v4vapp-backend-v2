@@ -190,49 +190,7 @@ class NotificationBot:
                 f"Error sending [ {text} ]: {e}",
                 extra={"notification": False, "error": e},
             )
-            logger.error("Problem in Notification bot", {"notification": True})
-
-        # if self.bot and self.config.chat_id:
-        #     text = self.truncate_to_3000(text)
-        #     try:
-        #         if is_markdown(text):
-        #             kwargs["parse_mode"] = "Markdown"  # Use V1
-        #             if text.endswith("no_preview"):
-        #                 kwargs["disable_web_page_preview"] = (
-        #                     True  # Optional: disable link previews
-        #                 )
-        #                 text = text.rstrip("no_preview").strip()
-        #             sanitized_text = sanitize_markdown_v1(text)
-        #             try:
-        #                 await self.bot.send_message(
-        #                     chat_id=self.config.chat_id, text=sanitized_text, **kwargs
-        #                 )
-        #             except Exception as e:
-        #                 logger.warning(
-        #                     f"Markdown V1 error: {e}. Sending without parse_mode. Text: {text}",
-        #                     extra={"notification": False},
-        #                 )
-        #                 try:
-        #                     await self.bot.send_message(
-        #                         chat_id=self.config.chat_id, text=sanitized_text
-        #                     )
-        #                 except Exception as e:
-        #                     logger.exception(
-        #                         f"Error sending [ {text} ] for second time: {e}",
-        #                         extra={"notification": False},
-        #                     )
-        #         else:
-        #             await self.bot.send_message(
-        #                 chat_id=self.config.chat_id, text=text, **kwargs
-        #             )
-        #     except Exception as e:
-        #         logger.exception(
-        #             f"Error sending [ {text} ]: {e}", extra={"notification": False}
-        #         )
-        # else:
-        #     raise NotificationNotSetupError(
-        #         "No chat ID set. Please start the bot first by sending /start"
-        #     )
+            logger.error("Problem in Notification bot", {"notification": False})
 
     async def handle_update(self, update):
         if update.message:

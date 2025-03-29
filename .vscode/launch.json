@@ -14,9 +14,9 @@
             "justMyCode": false,
         },
         {
-            "name": "Binance App",
+            "name": "Binance Monitor",
             "type": "debugpy",
-            "consoleName": "Binance App",
+            "consoleName": "Binance Monitor",
             "request": "launch",
             "program": "src/binance_monitor.py",
             "args": [

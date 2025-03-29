@@ -59,8 +59,23 @@ def get_hive_client(*args, **kwargs) -> Hive:
         # good_nodes = DEFAULT_GOOD_NODES
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
-    hive = Hive(*args, **kwargs)
-    return hive
+
+    count = len(kwargs["node"])
+    errors = 0
+    while errors < count:
+
+        try:
+            hive = Hive(*args, **kwargs)
+            return hive
+        except TypeError as e:
+            logger.warning(
+                f"Node {kwargs['node'][0]} not working {e} error: {errors}",
+                extra={"notification": True, "nodes": kwargs["node"]},
+            )
+            # remove the first node from the list
+            kwargs["node"] = kwargs["node"][1:]
+            errors += 1
+    raise ValueError(f"No working node found {errors} errors")
 
 
 def get_blockchain_instance(*args, **kwargs) -> Blockchain:
@@ -228,14 +243,19 @@ async def call_hive_internal_market() -> HiveInternalQuote:
 
 
 class HiveExp(StrEnum):
-    HiveHub = "https://hivehub.dev/tx/{trx_id}"
-    HiveBlockExplorer = "https://hiveblockexplorer.com/tx/{trx_id}"
-    HiveExplorer = "https://hivexplorer.com/tx/{trx_id}"
-    HiveScanInfo = "https://hivescan.info/transaction/{trx_id}"
+    HiveHub = "https://hivehub.dev/{prefix_path}"
+    HiveBlockExplorer = "https://hiveblockexplorer.com/{prefix_path}"
+    HiveExplorer = "https://hivexplorer.com/{prefix_path}"
+    HiveScanInfo = "https://hivescan.info/{prefix_path}"
 
 
 def get_hive_block_explorer_link(
-    trx_id: str, block_explorer: HiveExp = HiveExp.HiveHub, markdown: bool = False
+    trx_id: str,
+    block_explorer: HiveExp = HiveExp.HiveHub,
+    markdown: bool = False,
+    block_num: int = 0,
+    op_in_trx: int = 0,
+    # any_op: OpBase | None = None,
 ) -> str:
     """
     Generate a Hive blockchain explorer URL for a given transaction ID.
@@ -247,7 +267,25 @@ def get_hive_block_explorer_link(
     Returns:
         str: The complete URL with the transaction ID inserted
     """
-    link_html = block_explorer.value.format(trx_id=trx_id)
+    if trx_id and not (block_num and op_in_trx):
+        path = f"{trx_id}"
+        prefix = "tx/"
+    elif trx_id and block_num and op_in_trx:
+        path = f"{block_num}/{trx_id}/{op_in_trx}"
+        prefix = "tx/"
+    elif not trx_id and block_num:
+        path = f"{block_num}"
+        prefix = "b/"
+
+    if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
+        if prefix == "tx/":
+            prefix = "transaction/"
+        elif prefix == "b/":
+            prefix = "block/"
+
+    prefix_path = f"{prefix}{path}"
+
+    link_html = block_explorer.value.format(prefix_path=prefix_path)
     if not markdown:
         return link_html
     markdown_link = f"[{block_explorer.name}]({link_html})"
