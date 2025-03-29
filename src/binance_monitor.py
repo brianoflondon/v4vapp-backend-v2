@@ -123,10 +123,10 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     )
     message = (
         f"{ICON} "
-        f"{percentage_meter} "
+        f"{percentage_meter}\n"
         f"{hive_balance - hive_target:.0f} HIVE "
         f"{delta_message} "
-        f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats) "
+        f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats)\n"
         f"Target: {hive_target:.3f}"
     )
 
