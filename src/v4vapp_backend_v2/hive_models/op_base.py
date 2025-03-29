@@ -121,6 +121,8 @@ class OpBase(BaseModel):
         Returns:
             str: A formatted string containing the link to the Hive block explorer.
         """
+        if self.realm == OpRealm.MARKER:
+            return f"MARKER: {self.trx_id}"
         return get_hive_block_explorer_link(
             trx_id=self.trx_id,
             block_num=self.block_num,

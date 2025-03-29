@@ -243,10 +243,10 @@ async def call_hive_internal_market() -> HiveInternalQuote:
 
 
 class HiveExp(StrEnum):
-    HiveHub = "https://hivehub.dev/tx/{trx_id}"
-    HiveBlockExplorer = "https://hiveblockexplorer.com/tx/{trx_id}"
-    HiveExplorer = "https://hivexplorer.com/tx/{trx_id}"
-    HiveScanInfo = "https://hivescan.info/transaction/{trx_id}"
+    HiveHub = "https://hivehub.dev/{prefix_path}"
+    HiveBlockExplorer = "https://hiveblockexplorer.com/{prefix_path}"
+    HiveExplorer = "https://hivexplorer.com/{prefix_path}"
+    HiveScanInfo = "https://hivescan.info/{prefix_path}"
 
 
 def get_hive_block_explorer_link(
@@ -267,11 +267,25 @@ def get_hive_block_explorer_link(
     Returns:
         str: The complete URL with the transaction ID inserted
     """
-    if block_num and op_in_trx:
-        trx_id = f"{block_num}/{trx_id}/{op_in_trx}"
-    # if any_op:
-    #     trx_id = f"{any_op.block_num}/{any_op.trx_id}/{any_op.op_in_trx+1}"
-    link_html = block_explorer.value.format(trx_id=trx_id)
+    if trx_id and not (block_num and op_in_trx):
+        path = f"{trx_id}"
+        prefix = "tx/"
+    elif trx_id and block_num and op_in_trx:
+        path = f"{block_num}/{trx_id}/{op_in_trx}"
+        prefix = "tx/"
+    elif not trx_id and block_num:
+        path = f"{block_num}"
+        prefix = "b/"
+
+    if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
+        if prefix == "tx/":
+            prefix = "transaction/"
+        elif prefix == "b/":
+            prefix = "block/"
+
+    prefix_path = f"{prefix}{path}"
+
+    link_html = block_explorer.value.format(prefix_path=prefix_path)
     if not markdown:
         return link_html
     markdown_link = f"[{block_explorer.name}]({link_html})"
