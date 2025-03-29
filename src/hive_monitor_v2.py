@@ -52,6 +52,8 @@ HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
 AUTO_BALANCE_SERVER = True
 
+TIME_DIFFERENCE_CHECK = 120
+
 COMMAND_LINE_WATCH_USERS = []
 
 
@@ -107,16 +109,16 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
         whether the error code should be cleared
     """
     time_diff = check_time_diff(timestamp)
-    if not error_code and time_diff > timedelta(minutes=1):
+    if not error_code and time_diff > timedelta(seconds=TIME_DIFFERENCE_CHECK):
         error_code = "Hive Time diff greater than 1 min"
         logger.warning(
-            f"{icon} Time diff: {time_diff} greater than 1 minute",
+            f"{icon} Time diff: {time_diff} greater than {TIME_DIFFERENCE_CHECK} s",
             extra={
                 "notification": True,
                 "error_code": error_code,
             },
         )
-    if error_code and time_diff <= timedelta(minutes=1):
+    if error_code and time_diff <= timedelta(seconds=TIME_DIFFERENCE_CHECK):
         logger.warning(
             f"{icon} Time diff: {time_diff} less than 1 minute",
             extra={
