@@ -46,7 +46,7 @@ async def check_binance_balances():
     while True:
         testnet = False
         try:
-            new_balances, hive_target, message = generate_message(
+            new_balances, hive_target, notficiation_str, log_str = generate_message(
                 saved_balances,
                 testnet,
             )
@@ -55,11 +55,12 @@ async def check_binance_balances():
                 send_message = True
             if send_message:
                 logger.info(
-                    message,
+                    log_str,
                     extra={
                         "notification": True,
                         "binance-balances": new_balances,
                         "silent": silent,
+                        "notification_str": notficiation_str,
                     },
                 )
             send_message = False  # Send message once unless the balance changes
@@ -121,7 +122,7 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     percentage_meter = draw_percentage_meter(
         percentage=percentage, max_percent=200, width=10
     )
-    message = (
+    notification_str = (
         f"{ICON} "
         f"{percentage_meter}\n"
         f"{hive_balance - hive_target:.0f} HIVE "
@@ -129,8 +130,9 @@ def generate_message(saved_balances: dict, testnet: bool = False):
         f"{float(hive_balance):,.3f} ({int(sats_balance):,} sats)\n"
         f"Target: {hive_target:.3f}"
     )
+    log_str = notification_str.replace("\n", " ")
 
-    return balances, hive_target, message
+    return balances, hive_target, notification_str, log_str
 
 
 async def main_async_start():

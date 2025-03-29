@@ -76,7 +76,7 @@ class NotificationProtocol(Protocol):
         self, message: str, record: LogRecord, alert_level: int
     ):
         try:
-            logger.info(
+            logger.debug(
                 f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
             )
             await self._send_notification(message, record, alert_level)

@@ -817,7 +817,7 @@ async def real_ops_loop(
                         count += 1
                         # if count == 2:
                         #     raise Exception("Test exception in hive monitor")
-                        if count % 100 == 0:
+                        if count % 1000 == 0:
                             old_node = hive_client.rpc.url
                             hive_client.rpc.next()
                             logger.info(
