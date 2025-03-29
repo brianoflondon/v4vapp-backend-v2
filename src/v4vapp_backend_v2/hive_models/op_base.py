@@ -2,7 +2,7 @@ from collections import deque
 from enum import StrEnum, auto
 from typing import Any, ClassVar, Deque, Dict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
@@ -111,6 +111,36 @@ class OpBase(BaseModel):
             log=self.log_str,
             notification=self.notification_str,
             log_extra=self.log_extra,
+        )
+
+    @computed_field
+    def link(self) -> str:
+        """
+        Generates a link to the Hive block explorer for the transaction ID.
+
+        Returns:
+            str: A formatted string containing the link to the Hive block explorer.
+        """
+        return get_hive_block_explorer_link(
+            trx_id=self.trx_id,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+            markdown=False,
+        )
+
+    @property
+    def markdown_link(self) -> str:
+        """
+        Generates a markdown link to the Hive block explorer for the transaction ID.
+
+        Returns:
+            str: A formatted markdown string containing the link to the Hive block explorer.
+        """
+        return get_hive_block_explorer_link(
+            trx_id=self.trx_id,
+            block_num=self.block_num,
+            op_in_trx=self.op_in_trx,
+            markdown=True,
         )
 
 

@@ -8,7 +8,7 @@ def test_all_validate():
         try:
             op = op_any(hive_event)
             assert op.type == op.op_name()
-            print(hive_event.get("type"), op.type)
+            print(hive_event.get("type"), op.type, op.link)
         except ValueError as e:
 
             assert "Unknown operation type" in str(
