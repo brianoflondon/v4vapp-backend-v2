@@ -5,7 +5,7 @@ from typing import Any, ClassVar, Deque, Dict
 from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
-from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
+from v4vapp_backend_v2.hive.hive_extras import HiveExp, get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import (
     HIVE_REAL_OPS,
     HIVE_VIRTUAL_OPS,
@@ -77,6 +77,12 @@ class OpBase(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
 
+    block_explorer: HiveExp = Field(
+        default=HiveExp.HiveHub,
+        exclude=True,
+        description="Hive Block explorer to use for links",
+    )
+
     def __init__(self, **data):
         super().__init__(**data)
         if data.get("type", None) is not None:
@@ -127,6 +133,7 @@ class OpBase(BaseModel):
             trx_id=self.trx_id,
             block_num=self.block_num,
             op_in_trx=self.op_in_trx,
+            block_explorer=self.block_explorer,
             markdown=False,
         )
 
@@ -142,6 +149,7 @@ class OpBase(BaseModel):
             trx_id=self.trx_id,
             block_num=self.block_num,
             op_in_trx=self.op_in_trx,
+            block_explorer=self.block_explorer,
             markdown=True,
         )
 
