@@ -623,10 +623,15 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
             logger.info(
                 f"{icon} Virtual Loop using nodes: {hive_client.get_default_nodes()}"
             )
+            # error_code = ""
             try:
                 async for hive_event in async_stream:
-                    op_in_trx = op_in_trx_counter.inc(hive_event["trx_id"])
-                    hive_event["op_in_trx"] = op_in_trx
+                    hive_event["op_in_trx"] = op_in_trx_counter.inc(
+                        hive_event["trx_id"]
+                    )
+                    # error_code = log_time_difference_errors(
+                    #     hive_event["timestamp"], error_code
+                    # )
                     hive_event_timestamp = hive_event.get(
                         "timestamp", "1970-01-01T00:00:00+00:00"
                     )
@@ -803,17 +808,18 @@ async def real_ops_loop(
                 async for hive_event in async_stream:
                     # For trx_id's with multiple transfers, record position in trx
                     # Moved outside the specific blocks for different op codes
-                    op_in_trx = op_in_trx_counter.inc(hive_event["trx_id"])
-                    hive_event["op_in_trx"] = op_in_trx
+                    hive_event["op_in_trx"] = op_in_trx_counter.inc(
+                        hive_event["trx_id"]
+                    )
                     try:
+                        error_code = log_time_difference_errors(
+                            hive_event["timestamp"], error_code
+                        )
                         op = op_any(hive_event)
                         if not op:
                             continue
                         if last_good_block < op.block_num:
                             last_good_block = op.block_num
-                        error_code = log_time_difference_errors(
-                            op.timestamp, error_code
-                        )
                         count += 1
                         # if count == 2:
                         #     raise Exception("Test exception in hive monitor")
