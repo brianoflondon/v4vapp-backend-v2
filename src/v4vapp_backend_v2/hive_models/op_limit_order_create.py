@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
 from beem.amount import Amount  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -31,7 +31,7 @@ class FillOrder(OpBase):
     def _log_internal(self) -> str:
         if self.log_internal:
             return self.log_internal
-        self.completed_order = self.check_open_orders()
+        _ = self.check_open_orders()        # forces self.completed_orders to be set
         current_pays_str = self.current_pays.fixed_width_str(15)
         open_pays_str = self.open_pays.fixed_width_str(15)
         if self.current_pays.symbol == "HIVE":
@@ -82,6 +82,7 @@ class FillOrder(OpBase):
                 return (
                     f"Remaining {open_order.amount_remaining:.3f} {open_order.orderid}"
                 )
+                self.completed_order = False
             else:
                 LimitOrderCreate.open_order_ids.pop(self.current_orderid)
                 return f"✅ Order {open_order.orderid} has been filled."
