@@ -189,6 +189,7 @@ async def market_report(
     Args:
         hive_event (dict): The Hive market event.
     """
+    notification = True
     if (
         hive_event.get("current_owner", "") in watch_users
         or hive_event.get("open_owner", "") in watch_users
@@ -198,12 +199,14 @@ async def market_report(
             market_op = LimitOrderCreate.model_validate(hive_event)
         elif hive_event.get("type") == MarketOpTypes.FILL_ORDER:
             market_op = FillOrder.model_validate(hive_event)
+            if not market_op.completed_order:
+                notification = False
         else:
             return
         logger.info(
             f"{market_op.log_str}",
             extra={
-                "notification": market_op.completed_order,
+                "notification": notification,
                 "notification_str": market_op.notification_str,
                 **market_op.log_extra,
             },
