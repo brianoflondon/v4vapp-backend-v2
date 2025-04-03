@@ -17,6 +17,10 @@ class FillOrder(OpBase):
     open_owner: str
     open_pays: AmountPyd
     timestamp: datetime
+    completed_order: bool = Field(
+        default=False,
+        description="True if the order was completed, False if it was partially filled",
+    )
 
     log_internal: str = Field(
         default="",
@@ -27,7 +31,7 @@ class FillOrder(OpBase):
     def _log_internal(self) -> str:
         if self.log_internal:
             return self.log_internal
-        completed_order = self.check_open_orders()
+        self.completed_order = self.check_open_orders()
         current_pays_str = self.current_pays.fixed_width_str(15)
         open_pays_str = self.open_pays.fixed_width_str(15)
         if self.current_pays.symbol == "HIVE":
@@ -41,7 +45,7 @@ class FillOrder(OpBase):
             f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order for "
             f"{self.current_owner} "
-            f"{completed_order}"
+            f"{self.completed_order}"
         )
         return self.log_internal
 
@@ -81,4 +85,5 @@ class FillOrder(OpBase):
             else:
                 LimitOrderCreate.open_order_ids.pop(self.current_orderid)
                 return f"✅ Order {open_order.orderid} has been filled."
+                self.completed_order = True
         return f"id {self.open_orderid}"

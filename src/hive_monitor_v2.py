@@ -203,7 +203,7 @@ async def market_report(
         logger.info(
             f"{market_op.log_str}",
             extra={
-                "notification": True,
+                "notification": market_op.completed_order,
                 "notification_str": market_op.notification_str,
                 **market_op.log_extra,
             },

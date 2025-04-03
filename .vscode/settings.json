@@ -40,12 +40,12 @@
         "./src/v4vapp_backend_v2/lnd_grpc",
         "./src/v4vapp_backend_v2/config"
     ],
+    "flake8.args": [
+        "--max-line-length=99"
+    ],
     "workbench.colorCustomizations": {
         "activityBar.background": "#4F134B",
         "titleBar.activeBackground": "#6F1B69",
         "titleBar.activeForeground": "#FDF8FD"
-    },
-    "flake8.args": [
-        "--max-line-length=99"
-    ]
+    }
 }
