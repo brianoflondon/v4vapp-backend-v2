@@ -310,7 +310,7 @@ async def db_store_op(
 async def db_process_transfer(op: Transfer) -> Transfer | None:
     global COMMAND_LINE_WATCH_USERS
     if watch_users_notification(transfer=op, watch_users=COMMAND_LINE_WATCH_USERS):
-        if Transfer.last_quote.age > 60:
+        if not Transfer.last_quote and Transfer.last_quote.age > 60:
             await Transfer.update_quote()
             quote = Transfer.last_quote
             logger.info(

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from beem.amount import Amount  # type: ignore
 from pydantic import Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
@@ -31,7 +32,7 @@ class FillOrder(OpBase):
     def _log_internal(self) -> str:
         if self.log_internal:
             return self.log_internal
-        _ = self.check_open_orders()        # forces self.completed_orders to be set
+        check_str = self.check_open_orders()  # forces self.completed_orders to be set
         current_pays_str = self.current_pays.fixed_width_str(15)
         open_pays_str = self.open_pays.fixed_width_str(15)
         if self.current_pays.symbol == "HIVE":
@@ -45,7 +46,7 @@ class FillOrder(OpBase):
             f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order for "
             f"{self.current_owner} "
-            f"{self.completed_order}"
+            f"{check_str}"
         )
         return self.log_internal
 
@@ -76,15 +77,27 @@ class FillOrder(OpBase):
 
     def check_open_orders(self) -> str:
         open_order = LimitOrderCreate.open_order_ids.get(self.current_orderid, None)
+        if not open_order:
+            open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
         if open_order is not None:
-            open_order.amount_remaining -= self.open_pays.amount_decimal
-            if open_order.amount_remaining > 0:
-                return (
-                    f"Remaining {open_order.amount_remaining:.3f} {open_order.orderid}"
-                )
-                self.completed_order = False
+            print(f"amount_remaining: {open_order.amount_remaining}")
+            if (
+                self.open_owner == open_order.owner
+            ):  # This is when we fill someone else's order
+                amount_remaining = Amount(str(open_order.amount_remaining))
+                amount_remaining -= Amount(self.current_pays.model_dump())
             else:
-                LimitOrderCreate.open_order_ids.pop(self.current_orderid)
-                return f"✅ Order {open_order.orderid} has been filled."
+                amount_remaining = Amount(str(open_order.amount_remaining))
+                amount_remaining -= Amount(self.open_pays.model_dump())
+            open_order.amount_remaining = amount_remaining
+            if amount_remaining > 0:
+                self.completed_order = False
+                return f"Remaining {open_order.amount_remaining} {open_order.orderid}"
+            else:
+                LimitOrderCreate.open_order_ids.pop(open_order.orderid)
                 self.completed_order = True
+                return (
+                    f"✅ Order {open_order.orderid} has been filled "
+                    f"(xs {amount_remaining})"
+                )
         return f"id {self.open_orderid}"

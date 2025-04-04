@@ -24,7 +24,7 @@ class LimitOrderCreate(OpBase):
     trx_num: int
 
     # Used to store the amount remaining to be filled when doing math
-    amount_remaining: Amount = Field(0.0, alias="amount_remaining")
+    amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
@@ -34,7 +34,7 @@ class LimitOrderCreate(OpBase):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        self.amount_remaining = self.min_to_receive.amount_decimal
+        self.amount_remaining = self.min_to_receive
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
