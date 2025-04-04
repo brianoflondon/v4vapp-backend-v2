@@ -49,6 +49,7 @@ def test_model_dump_fill_order():
 def test_create_order_fill_order():
     filename = "tests/data/hive_models/complete_sell_fill.jsonl"
     LimitOrderCreate.watch_users = ["v4vapp"]
+    all_logs = []
     with open(filename, "r") as f:
         for line in f:
             line_json = json.loads(line)
@@ -64,5 +65,9 @@ def test_create_order_fill_order():
                 del op_data["log_str"]
 
             op = op_any(op_data)
-
-            print(op.notification_str)
+            all_logs.append(op.notification_str)
+    assert len(all_logs) > 0
+    for log in all_logs:
+        print(log)
+    # count text "|has been filled" in all_logs
+    assert len([log for log in all_logs if "has been filled" in log]) > 1
