@@ -65,14 +65,14 @@ class LimitOrderCreate(OpBase):
             None
         """
         expired_orders: List[int] = []
-        for orderid, order in self.open_order_ids.items():
+        for orderid, order in LimitOrderCreate.open_order_ids.items():
             if self.watch_users and order.owner not in self.watch_users:
                 expired_orders.append(orderid)
                 continue
             if order.expiration < datetime.now(tz=timezone.utc):
                 expired_orders.append(orderid)
         for orderid in expired_orders:
-            self.open_order_ids.pop(orderid)
+            LimitOrderCreate.open_order_ids.pop(orderid)
         self._maintain_order_limit()
 
     @classmethod

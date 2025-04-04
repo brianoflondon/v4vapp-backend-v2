@@ -47,6 +47,29 @@ def test_model_dump_fill_order():
 
 
 def test_create_order_fill_order():
+    """
+    Test the process of creating and filling an order.
+
+    This test reads a JSONL file containing operation data for orders, processes
+    the data to simulate order creation and filling, and verifies the expected
+    behavior. It ensures that:
+    - At least one log entry is generated.
+    - There are multiple logs containing the text "|has been filled".
+
+    Steps:
+    1. Load operation data from a JSONL file.
+    2. Extract and clean relevant fields from the data.
+    3. Simulate operations and collect notification logs.
+    4. Assert that logs are generated and contain the expected content.
+
+    Assertions:
+    - The number of logs generated is greater than zero.
+    - The number of logs containing the text "|has been filled" is greater than one.
+
+    Note:
+    - The file `tests/data/hive_models/complete_sell_fill.jsonl` is used as input.
+    - The `LimitOrderCreate.watch_users` is set to `["v4vapp"]` for the test.
+    """
     filename = "tests/data/hive_models/complete_sell_fill.jsonl"
     LimitOrderCreate.watch_users = ["v4vapp"]
     all_logs = []
@@ -71,3 +94,18 @@ def test_create_order_fill_order():
         print(log)
     # count text "|has been filled" in all_logs
     assert len([log for log in all_logs if "has been filled" in log]) > 1
+
+
+def test_expire_orders():
+    filename = "tests/data/hive_models/complete_sell_fill.jsonl"
+    LimitOrderCreate.watch_users = ["v4vapp"]
+    with open(filename, "r") as f:
+        for line in f:
+            line_json = json.loads(line)
+            op_data = line_json.get("limit_order_create", None)
+            if op_data:
+                if op_data.get("amount_remaining", None) is not None:
+                    del op_data["amount_remaining"]
+                    del op_data["link"]
+                op = LimitOrderCreate.model_validate(op_data)
+                op.expire_orders()
