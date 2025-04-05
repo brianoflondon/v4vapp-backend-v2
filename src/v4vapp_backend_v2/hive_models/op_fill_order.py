@@ -29,6 +29,11 @@ class FillOrder(OpBase):
         description="Holds the internal log string for the log and notification log operations",
     )
 
+    def __init__(self, **data: dict):
+        super().__init__(**data)
+        # Set the log_internal string to None to force it to be generated
+        self.log_internal = self._log_internal()
+
     def _log_internal(self) -> str:
         if self.log_internal:
             return self.log_internal
@@ -76,6 +81,29 @@ class FillOrder(OpBase):
         return f"{ans} {link}"
 
     def check_open_orders(self) -> str:
+        """
+        Checks and updates the status of open orders based on the current order's details.
+        This method determines if there is an open order associated with the current order ID
+        or the open order ID. If an open order is found, it calculates the remaining amount
+        after processing the current transaction and updates the order's status accordingly.
+        Returns:
+            str: A message indicating the status of the order. Possible messages include:
+                - The remaining amount and order ID if the order is partially filled.
+                - A confirmation that the order has been fully filled.
+                - The open order ID if no matching open order is found.
+        Attributes:
+            self.current_orderid (str): The ID of the current order being processed.
+            self.open_orderid (str): The ID of the open order to check.
+            self.open_owner (str): The owner of the open order.
+            self.current_pays (Amount): The amount being paid in the current transaction.
+            self.open_pays (Amount): The amount being paid in the open order.
+            self.completed_order (bool): A flag indicating whether the order has been fully completed.
+        Notes:
+            - If the remaining amount of the open order is greater than zero, the order is
+              marked as incomplete and the remaining amount is returned.
+            - If the remaining amount is zero or less, the order is removed from the list
+              of open orders and marked as completed.
+        """
         open_order = LimitOrderCreate.open_order_ids.get(self.current_orderid, None)
         if not open_order:
             open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
