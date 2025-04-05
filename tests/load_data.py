@@ -12,7 +12,9 @@ files_names: Dict[OpTypes, str] = {
 }
 
 
-def load_hive_events(op_type: OpTypes | None = None) -> Generator[Dict, None, None]:
+def load_hive_events(
+    op_type: OpTypes | None = None,
+) -> Generator[Dict, None, None]:
     if not op_type:
         file_name = "tests/data/hive_models/all_ops_log.jsonl"
     else:
