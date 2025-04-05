@@ -12,7 +12,8 @@ def test_all_validate():
             try:
                 op = op_any(hive_event)
                 assert op.type == op.op_name()
-                print(hive_event.get("type"), op.type, op.link)
+                # print(op.markdown_link)
+                # print(hive_event.get("type"), op.type, op.link)
                 if op.link:
                     response = httpx_client.head(op.link)
                     assert response.status_code == 200
