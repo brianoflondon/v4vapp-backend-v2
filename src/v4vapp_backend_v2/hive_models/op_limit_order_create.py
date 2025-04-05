@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
-from beem.amount import Amount  # type: ignore
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
@@ -39,10 +38,14 @@ class LimitOrderCreate(OpBase):
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
         if self.watch_users and self.owner in self.watch_users:
-            LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
-            icon = "📈"
-            self.expire_orders()
-            logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
+            if self.orderid not in LimitOrderCreate.open_order_ids:
+                LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
+                icon = "📈"
+                logger.info(
+                    f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
+                    extra={"open_order_ids": LimitOrderCreate.open_order_ids},
+                )
+        self.expire_orders()
 
     @classmethod
     def op_name(cls) -> str:
