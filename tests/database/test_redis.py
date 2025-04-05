@@ -185,13 +185,13 @@ def test_sync_redis_client_default():
 
 
 def test_sync_redis_client_context_manager():
-    with V4VAsyncRedis().sync_redis as redis_sync_client:
+    with V4VAsyncRedis() as redis_sync_client:
         assert redis_sync_client is not None
         assert redis_sync_client.ping()
         redis_sync_client.set("test_key", "test_value")
         assert redis_sync_client.get("test_key") == "test_value"
         redis_sync_client.flushdb()
-    redis_sync_client.close()
+
 
 
 @pytest.mark.asyncio
