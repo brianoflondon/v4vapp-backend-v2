@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
-from beem.amount import Amount  # type: ignore
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
@@ -24,7 +23,7 @@ class LimitOrderCreate(OpBase):
     trx_num: int
 
     # Used to store the amount remaining to be filled when doing math
-    amount_remaining: Amount = Field(0.0, alias="amount_remaining")
+    amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
@@ -34,15 +33,19 @@ class LimitOrderCreate(OpBase):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        self.amount_remaining = self.min_to_receive.amount_decimal
+        self.amount_remaining = self.min_to_receive
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
         # Add the instance to the class variable
         if self.watch_users and self.owner in self.watch_users:
-            LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
-            icon = "📈"
-            self.expire_orders()
-            logger.info(f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}")
+            if self.orderid not in LimitOrderCreate.open_order_ids:
+                LimitOrderCreate.open_order_ids[self.orderid] = self.model_copy()
+                icon = "📈"
+                logger.info(
+                    f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
+                    extra={"open_order_ids": LimitOrderCreate.open_order_ids},
+                )
+        self.expire_orders()
 
     @classmethod
     def op_name(cls) -> str:
@@ -65,14 +68,14 @@ class LimitOrderCreate(OpBase):
             None
         """
         expired_orders: List[int] = []
-        for orderid, order in self.open_order_ids.items():
+        for orderid, order in LimitOrderCreate.open_order_ids.items():
             if self.watch_users and order.owner not in self.watch_users:
                 expired_orders.append(orderid)
                 continue
             if order.expiration < datetime.now(tz=timezone.utc):
                 expired_orders.append(orderid)
         for orderid in expired_orders:
-            self.open_order_ids.pop(orderid)
+            LimitOrderCreate.open_order_ids.pop(orderid)
         self._maintain_order_limit()
 
     @classmethod
