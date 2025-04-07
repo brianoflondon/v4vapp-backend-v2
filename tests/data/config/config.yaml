@@ -11,6 +11,10 @@ logging:
     httpcore: WARNING
     httpx: WARNING
     lighthive: DEBUG
+  log_notification_silent:
+    - beemapi
+    - lighthive
+    - nectarapi
 
 ########### TEST CONFIG NO SECRETS #################
 default_lnd_connection: example

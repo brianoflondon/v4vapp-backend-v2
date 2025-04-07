@@ -68,6 +68,9 @@ def test_internal_config(set_base_config_path: None):
         int_config.lnd_connections["example"].address
         == raw_config["lnd_connections"]["example"]["address"]
     )
+    assert int_config.logging.log_notification_silent == raw_config["logging"][
+        "log_notification_silent"
+    ]
     with pytest.raises(KeyError):
         int_config.lnd_connections["bad_example"]
 
@@ -110,7 +113,7 @@ def test_hive_acc_name(set_base_config_path: None):
     internal_config = InternalConfig()
     hive_accs = internal_config.config.hive.hive_accs
     assert hive_accs is not None
-    hive_acc = hive_accs["someaccount"] 
+    hive_acc = hive_accs["someaccount"]
     assert hive_acc.name == "someaccount"
 
 

@@ -369,7 +369,7 @@ wheels = [
 [[package]]
 name = "hive-nectar"
 version = "0.0.3"
-source = { git = "https://github.com/brianoflondon/hive-nectar.git?rev=add-py.typed-files-to-stop-mypy-warnings#19158b01c50009d9032051d4fb97cde716499732" }
+source = { git = "https://github.com/TheCrazyGM/hive-nectar.git#786a137c75a6c3fe2952dc66401d348d4156fbb6" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -1126,7 +1126,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = "==1.62.0" },
     { name = "grpcio", specifier = ">=1.63.0,<2.0.0" },
     { name = "grpcio-tools", specifier = "==1.62.0" },
-    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?rev=add-py.typed-files-to-stop-mypy-warnings" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "motor", specifier = ">=3.7.0,<4.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
@@ -1145,7 +1145,7 @@ requires-dist = [
 dev = [
     { name = "black", specifier = ">=25.1.0,<26.0.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0.0" },
-    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?rev=add-py.typed-files-to-stop-mypy-warnings" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git" },
     { name = "mongomock-motor", specifier = ">=0.0.35,<1.0.0" },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
     { name = "pytest", specifier = ">=8.3.4,<9.0.0" },

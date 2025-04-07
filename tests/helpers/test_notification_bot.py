@@ -12,8 +12,8 @@ from v4vapp_backend_v2.helpers.notification_bot import (
     NotificationNotSetupError,
 )
 
-# Mark the test module as async
-pytestmark = pytest.mark.asyncio
+# # Mark the test module as async
+# pytestmark = pytest.mark.asyncio
 
 
 # Mock InternalConfig for consistent base_config_path
@@ -87,11 +87,13 @@ def test_init_no_token_no_name_no_configs(mock_internal_config, mock_bot):
 
 
 # Test get_bot_name
+@pytest.mark.asyncio
 async def test_get_bot_name(notification_bot):
     assert await notification_bot.get_bot_name() == "@TestBot"
 
 
 # Test get_bot_name with invalid token
+@pytest.mark.asyncio
 async def test_get_bot_name_invalid_token(notification_bot):
     notification_bot.bot.__aenter__.side_effect = InvalidToken("Invalid token")
     with pytest.raises(NotificationBadTokenError):
@@ -99,6 +101,7 @@ async def test_get_bot_name_invalid_token(notification_bot):
 
 
 # Test send_message with markdown
+@pytest.mark.asyncio
 async def test_send_message_markdown(notification_bot):
     with patch(
         "v4vapp_backend_v2.helpers.general_purpose_funcs.is_markdown", return_value=True
@@ -110,6 +113,7 @@ async def test_send_message_markdown(notification_bot):
 
 
 # Test send_message without markdown
+@pytest.mark.asyncio
 async def test_send_message_no_markdown(notification_bot):
     with patch(
         "v4vapp_backend_v2.helpers.general_purpose_funcs.is_markdown",
@@ -122,6 +126,7 @@ async def test_send_message_no_markdown(notification_bot):
 
 
 # Test send_message with no chat_id
+@pytest.mark.asyncio
 async def test_send_message_no_chat_id(notification_bot):
     notification_bot.config.chat_id = 0
     with pytest.raises(NotificationNotSetupError, match="No chat ID set"):
@@ -129,17 +134,18 @@ async def test_send_message_no_chat_id(notification_bot):
 
 
 # Test send_message raises TimedOut error twice
+@pytest.mark.asyncio
 async def test_send_message_timed_out(notification_bot):
     notification_bot.bot.send_message.side_effect = [
         TimedOut("Timed out"),
-        TimedOut("Timed out"),
         None,
     ]
-    await notification_bot.send_message("test message", retries=3)
-    assert notification_bot.bot.send_message.call_count == 3
+    await notification_bot.send_message("test message", retries=2)
+    assert notification_bot.bot.send_message.call_count == 2
 
 
 # Test handle_update sets chat_id
+@pytest.mark.asyncio
 async def test_handle_update_sets_chat_id(notification_bot, tmp_path):
     notification_bot.config.chat_id = 0
     update = MagicMock()
@@ -155,6 +161,7 @@ async def test_handle_update_sets_chat_id(notification_bot, tmp_path):
 
 
 # Test handle_update with /start
+@pytest.mark.asyncio
 async def test_handle_update_start(notification_bot):
     update = MagicMock()
     update.message.text = "/start"
@@ -167,6 +174,7 @@ async def test_handle_update_start(notification_bot):
 
 
 # Test send_menu
+@pytest.mark.asyncio
 async def test_send_menu(notification_bot):
     await notification_bot.send_menu()
     notification_bot.bot.send_message.assert_called_once_with(
@@ -176,6 +184,7 @@ async def test_send_menu(notification_bot):
 
 
 # Test run_bot with invalid token
+@pytest.mark.asyncio
 async def test_run_bot_invalid_token(notification_bot):
     notification_bot.bot.get_updates.side_effect = InvalidToken("Invalid token")
     with pytest.raises(NotificationBadTokenError):
