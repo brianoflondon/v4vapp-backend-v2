@@ -5,9 +5,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from beem import Hive  # type: ignore
-from beem.market import Market  # type: ignore
+from nectar import Hive
 from httpx import Request, Response
+from nectar.market import Market
 
 from v4vapp_backend_v2.helpers.crypto_prices import (
     ALL_PRICES_COINGECKO,

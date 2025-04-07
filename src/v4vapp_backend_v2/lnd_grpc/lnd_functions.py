@@ -1,5 +1,5 @@
 from google.protobuf.json_format import MessageToDict
-from grpc.aio import AioRpcError  # type: ignore
+from grpc.aio import AioRpcError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger

@@ -1,8 +1,8 @@
 import logging
 from dataclasses import asdict, dataclass
 
-from beem import Hive  # type: ignore
-from beem.account import Account  # type: ignore
+from nectar import Hive
+from nectar.account import Account
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
@@ -61,7 +61,7 @@ class VotingPower:
     total_value: float = 0.0
     total_percent: float = 0.0
 
-    def __init__(self, voter: str = "", hive: Hive = None, proposal: int = 0):
+    def __init__(self, voter: str = "", hive: Hive | None = None, proposal: int = 0):
         super().__init__()
         if voter:
             self.set_up(voter, hive, proposal)
@@ -70,7 +70,7 @@ class VotingPower:
     def set_up(
         self,
         voter: str = "",
-        hive: Hive = None,
+        hive: Hive | None = None,
         proposal: int = 0,
     ) -> None:
         if not voter:

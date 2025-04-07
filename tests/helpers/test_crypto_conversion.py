@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency

@@ -2,7 +2,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram.error import InvalidToken
+from telegram.error import InvalidToken, TimedOut
 
 from v4vapp_backend_v2.config.setup import NotificationBotConfig
 from v4vapp_backend_v2.helpers.notification_bot import (
@@ -73,11 +73,12 @@ def test_init_with_name(mock_internal_config, mock_bot, mock_config):
 
 # Test initialization failure when no token or name provided and no configs exist
 def test_init_no_token_no_name_no_configs(mock_internal_config, mock_bot):
-    with patch(
-        "v4vapp_backend_v2.helpers.notification_bot.Bot", return_value=mock_bot
-    ), patch(
-        "v4vapp_backend_v2.helpers.notification_bot.NotificationBot.names_list",
-        return_value=[],
+    with (
+        patch("v4vapp_backend_v2.helpers.notification_bot.Bot", return_value=mock_bot),
+        patch(
+            "v4vapp_backend_v2.helpers.notification_bot.NotificationBot.names_list",
+            return_value=[],
+        ),
     ):
         with pytest.raises(
             NotificationNotSetupError, match="No token or name set for bot."
@@ -125,6 +126,17 @@ async def test_send_message_no_chat_id(notification_bot):
     notification_bot.config.chat_id = 0
     with pytest.raises(NotificationNotSetupError, match="No chat ID set"):
         await notification_bot.send_message("test message")
+
+
+# Test send_message raises TimedOut error twice
+async def test_send_message_timed_out(notification_bot):
+    notification_bot.bot.send_message.side_effect = [
+        TimedOut("Timed out"),
+        TimedOut("Timed out"),
+        None,
+    ]
+    await notification_bot.send_message("test message", retries=3)
+    assert notification_bot.bot.send_message.call_count == 3
 
 
 # Test handle_update sets chat_id

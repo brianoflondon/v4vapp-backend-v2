@@ -3,6 +3,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pprint import pprint
 from typing import Any, OrderedDict, override
 
 from v4vapp_backend_v2.config.notification_protocol import (
@@ -10,6 +11,8 @@ from v4vapp_backend_v2.config.notification_protocol import (
     NotificationProtocol,
 )
 from v4vapp_backend_v2.config.setup import logger
+
+LOG_NOTIFICATION_SUPRESS = ["nectarapi"]
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -228,6 +231,12 @@ class NotificationFilter(logging.Filter):
                 f"No levelno: {record}", extra={"notification": False, "record": record}
             )
             record.levelno = logging.INFO
+
+        if hasattr(record, "name"):
+            package_name = record.name.split(".")[0]
+            if package_name in LOG_NOTIFICATION_SUPRESS:
+                # If the module is in the suppression list, do not send to Notification
+                return False
 
         # If the record.notification flag is set to False,
         # do not send the message to Notification

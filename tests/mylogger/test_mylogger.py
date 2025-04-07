@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from v4vapp_backend_v2.config.mylogger import (
     MyJSONFormatter,
+    NotificationFilter,
     human_readable_datetime_str,
     timedelta_display,
 )
@@ -87,6 +88,35 @@ def test_format_log_record_with_custom_keys():
     custom_keys = {"log_message": "message", "log_timestamp": "timestamp"}
     formatter = MyJSONFormatter(fmt_keys=custom_keys)
 
+    # Format the log record
+    formatted_message = formatter.format(record)
+
+    # Parse the JSON output
+    log_dict = json.loads(formatted_message)
+
+    # Check the output
+    assert log_dict["log_message"] == "Test message with custom keys"
+    assert "log_timestamp" in log_dict
+
+
+def test_notification_supress():
+    # Create a log record
+    record = logging.LogRecord(
+        name="nectarapi",
+        level=logging.WARNING,
+        pathname=__file__,
+        lineno=30,
+        msg="Test message with custom keys",
+        args=(),
+        exc_info=None,
+    )
+    record.created = datetime.now(tz=timezone.utc).timestamp()
+
+    # Create an instance of MyJSONFormatter with custom keys
+    custom_keys = {"log_message": "message", "log_timestamp": "timestamp"}
+    formatter = MyJSONFormatter(fmt_keys=custom_keys)
+    filter = NotificationFilter()
+    assert filter.filter(record) is False
     # Format the log record
     formatted_message = formatter.format(record)
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from telegram import Bot
-from telegram.error import InvalidToken
+from telegram.error import InvalidToken, TimedOut
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -82,7 +82,7 @@ class NotificationBot:
         except Exception as e:
             raise NotificationNotSetupError(e)
 
-    async def send_message(self, text: str, **kwargs: Any):
+    async def send_message(self, text: str, retries: int = 3, **kwargs: Any):
         """Use this method to send text messages, chat_id will be provided.
 
         Args:
@@ -180,17 +180,34 @@ class NotificationBot:
                 kwargs["disable_web_page_preview"] = True
                 text = text.rstrip("no_preview").strip()
             text = sanitize_markdown_v1(text)
+        attempt = 0
+        while attempt < retries:
+            try:
+                await self.bot.send_message(
+                    chat_id=self.config.chat_id, text=text, **kwargs
+                )
+                return
+            except TimedOut as e:
+                attempt += 1
+                if attempt > retries:
+                    logger.exception(
+                        f"Error sending [ {text} ] after {retries} retries: {e}",
+                        extra={"notification": False, "error": e},
+                    )
+                    return  # Fail silently after retries
+                logger.warning(
+                    f"Timed out while sending message. Retrying {attempt}/{retries}...",
+                    extra={"notification": False},
+                )
+                await asyncio.sleep(2**attempt)  # Exponential backoff
 
-        try:
-            await self.bot.send_message(
-                chat_id=self.config.chat_id, text=text, **kwargs
-            )
-        except Exception as e:
-            logger.exception(
-                f"Error sending [ {text} ]: {e}",
-                extra={"notification": False, "error": e},
-            )
-            logger.error("Problem in Notification bot", {"notification": False})
+            except Exception as e:
+                logger.exception(
+                    f"Error sending [ {text} ]: {e}",
+                    extra={"notification": False, "error": e},
+                )
+                logger.error("Problem in Notification bot", {"notification": False})
+                return
 
     async def handle_update(self, update):
         if update.message:

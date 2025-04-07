@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 from pydantic import Field
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link

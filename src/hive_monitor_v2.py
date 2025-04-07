@@ -5,8 +5,8 @@ from timeit import default_timer as timer
 from typing import Annotated, Any, List, Union
 
 import typer
-from beem.amount import Amount  # type: ignore
-from beem.blockchain import Blockchain  # type: ignore
+from nectar.amount import Amount
+from nectar.blockchain import Blockchain
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
@@ -365,10 +365,10 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         set_amount_to = Amount(hive_acc.hbd_balance)
         try:
             trx = account_trade(hive_acc=hive_acc, set_amount_to=set_amount_to)
-            logger.info(
-                f"{icon} Started conversion {trx.get("trx_id", "")}",
-                extra={"notification": False},
-            )
+            if trx:
+                logger.info(
+                    f"Transaction broadcasted: {trx.get("trx_id")}", extra={"trx": trx}
+                )
         except Exception as e:
             logger.error(
                 f"{icon} Conversion error: {e}",

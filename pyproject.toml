@@ -5,7 +5,7 @@ description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.12,<4.0"
 dependencies = [
     "grpcio>=1.63.0,<2.0.0",
     "grpcio-tools==1.62.0",
@@ -29,6 +29,7 @@ dependencies = [
     "redis>=5.2.1,<6.0.0",
     "binance-connector>=3.12.0,<4.0.0",
     "python-telegram-bot>=22.0,<23.0",
+    "hive-nectar>=0.0.3",
 ]
 
 [dependency-groups]
@@ -45,6 +46,7 @@ dev = [
     "types-aiofiles>=24.1.0.20241221,<25.0.0",
     "types-colorama>=0.4.15.20240311,<1.0.0",
     "dill>=0.3.9,<1.0.0",
+    "hive-nectar>=0.0.3",
 ]
 
 [build-system]
@@ -60,6 +62,10 @@ packages = ["src/v4vapp_backend_v2"]
 [tool.flake8]
 max-line-length = 99
 
+[tool.ruff]
+line-length = 99
+
+
 [tool.pytest.ini_options]
 log_cli = true
 filterwarnings = [
@@ -69,3 +75,6 @@ filterwarnings = [
 
 [tool.mypy]
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
+
+[tool.uv.sources]
+hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", rev = "add-py.typed-files-to-stop-mypy-warnings" }

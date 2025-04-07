@@ -2,21 +2,21 @@ import asyncio
 import os
 import sys
 from typing import Any, AsyncGenerator, Callable
-from google.protobuf.json_format import MessageToDict
-
 
 import backoff
-from grpc import composite_channel_credentials  # type: ignore
-from grpc import metadata_call_credentials  # type: ignore
-from grpc import ssl_channel_credentials  # type: ignore
-from grpc.aio import AioRpcError, secure_channel  # type: ignore
+from google.protobuf.json_format import MessageToDict
+from grpc import (
+    composite_channel_credentials,
+    metadata_call_credentials,
+    ssl_channel_credentials,
+)
+from grpc.aio import AioRpcError, secure_channel
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
-from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc import invoices_pb2_grpc as invoicesstub
-
+from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lightningstub
+from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,

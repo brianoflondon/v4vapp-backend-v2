@@ -1,6 +1,6 @@
 import json
 
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 from pydantic import BaseModel
 
 

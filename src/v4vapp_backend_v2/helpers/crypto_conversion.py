@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
@@ -53,7 +53,7 @@ class CryptoConversion(BaseModel):
 
     def __init__(
         self,
-        amount: Amount = None,
+        amount: Amount = Amount("0.0 HIVE"),
         value: float | int = 0.0,
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,
@@ -118,8 +118,9 @@ class CryptoConversion(BaseModel):
             sats=int(self.sats),  # Cast to int to match CryptoConv type
             msats=self.msats,
             btc=self.btc,
-            sats_hive=self.quote.sats_hive,
-            sats_hbd=self.quote.sats_hbd,
+            # These two values are floats, they are property functions of quote
+            sats_hive=self.quote.sats_hive,  # type: float
+            sats_hbd=self.quote.sats_hbd,  # type: float
             conv_from=self.conv_from,
             value=self.value,
             source=self.quote.source,

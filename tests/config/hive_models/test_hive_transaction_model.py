@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from beem.amount import Amount
+from nectar.amount import Amount
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.hive.hive_extras import get_event_id, get_hive_client
