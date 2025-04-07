@@ -3,16 +3,10 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import Any, OrderedDict, override
 
-from v4vapp_backend_v2.config.notification_protocol import (
-    BotNotification,
-    NotificationProtocol,
-)
-from v4vapp_backend_v2.config.setup import logger
-
-LOG_NOTIFICATION_SUPRESS = ["nectarapi"]
+from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -97,9 +91,7 @@ class MyJSONFormatter(logging.Formatter):
         always_fields = {
             "message": record.getMessage(),
             "human_time": human_readable_str,
-            "timestamp": dt.datetime.fromtimestamp(
-                record.created, tz=dt.timezone.utc
-            ).isoformat(),
+            "timestamp": dt.datetime.fromtimestamp(record.created, tz=dt.timezone.utc).isoformat(),
         }
         if record.exc_info is not None:
             always_fields["exc_info"] = self.formatException(record.exc_info)
@@ -180,9 +172,7 @@ class CustomNotificationHandler(logging.Handler):
         # Do something special here with error codes or details
         if self.error_codes and hasattr(record, "error_code_clear"):
             error_code_obj = self.error_codes.get(record.error_code_clear)
-            elapsed_time = (
-                error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
-            )
+            elapsed_time = error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message = (
                 f"✅ Error code {record.error_code_clear} "
@@ -234,7 +224,7 @@ class NotificationFilter(logging.Filter):
 
         if hasattr(record, "name"):
             package_name = record.name.split(".")[0]
-            if package_name in LOG_NOTIFICATION_SUPRESS:
+            if package_name in InternalConfig().config.logging.log_notification_silent:
                 # If the module is in the suppression list, do not send to Notification
                 return False
 

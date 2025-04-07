@@ -42,8 +42,9 @@ class BaseConfig(BaseModel):
 class LoggingConfig(BaseConfig):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
-    log_levels: Any
+    log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
+    log_notification_silent: List[str] = []
 
 
 class LndConnectionConfig(BaseConfig):
@@ -153,9 +154,7 @@ class HiveAccountConfig(BaseConfig):
         Returns:
             List[str]]: A list of the private keys for the account.
         """
-        return [
-            key for key in [self.posting_key, self.active_key, self.memo_key] if key
-        ]
+        return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
 
 
 class HiveConfig(BaseConfig):
@@ -214,9 +213,7 @@ class HiveConfig(BaseConfig):
         Returns:
             List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
         """
-        return [
-            acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury
-        ]
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury]
 
     @property
     def treasury_account_names(self) -> List[str]:
@@ -285,15 +282,9 @@ class Config(BaseModel):
         # Check that the default connection is in the list of connections
         # if it is given.
         print("Checking all defaults")
-        if (
-            v.default_lnd_connection
-            and v.default_lnd_connection not in v.lnd_connections.keys()
-        ):
+        if v.default_lnd_connection and v.default_lnd_connection not in v.lnd_connections.keys():
             raise ValueError("Default connection not found in lnd_connections")
-        if (
-            v.default_db_connection
-            and v.default_db_connection not in v.db_connections.keys()
-        ):
+        if v.default_db_connection and v.default_db_connection not in v.db_connections.keys():
             raise ValueError("Default database connection not found in database")
         if v.default_db_name and v.default_db_name not in v.dbs.keys():
             raise ValueError("Default database name not found in databases")
@@ -342,9 +333,7 @@ class Config(BaseModel):
         Returns:
             str: A list containing the bot tokens separated by ,.
         """
-        [bot_name] = [
-            name for name, bot in self.notification_bots.items() if bot.token == token
-        ]
+        [bot_name] = [name for name, bot in self.notification_bots.items() if bot.token == token]
         if not bot_name:
             raise ValueError("Bot name not found in the configuration")
         return bot_name
@@ -438,9 +427,7 @@ class InternalConfig:
 
     def setup_logging(self):
         try:
-            config_file = Path(
-                BASE_LOGGING_CONFIG_PATH, self.config.logging.log_config_file
-            )
+            config_file = Path(BASE_LOGGING_CONFIG_PATH, self.config.logging.log_config_file)
             with open(config_file) as f_in:
                 config = json.load(f_in)
         except FileNotFoundError as ex:
@@ -481,8 +468,7 @@ class InternalConfig:
             format_str = config["formatters"]["simple"]["format"]
         except KeyError:
             format_str = (
-                "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s "
-                "%(lineno)6d : %(message)s"
+                "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s %(lineno)6d : %(message)s"
             )
 
         # Custom namer for file_json handler
@@ -551,9 +537,7 @@ class InternalConfig:
             else:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
-                print(
-                    "InternalConfig Shutdown Notification loop closed (was not running)"
-                )
+                print("InternalConfig Shutdown Notification loop closed (was not running)")
 
 
 """
@@ -584,8 +568,7 @@ def async_time_decorator(func):
             end_time = time.time()
             execution_time = end_time - start_time
             logger.info(
-                f"Function '{func.__name__[:16]}' "
-                f"took {execution_time:.4f} seconds to execute"
+                f"Function '{func.__name__[:16]}' took {execution_time:.4f} seconds to execute"
             )
             return result
         except Exception as e:
