@@ -1,14 +1,10 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from typing import Generator
 
 import pytest
 
 # Assuming the code is in a file called async_wrapper.py
-from v4vapp_backend_v2.helpers.async_wrapper import (
-    sync_to_async,
-    sync_to_async_iterable,
-)
+from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async, sync_to_async_iterable
 
 
 # Test fixtures and sample functions
@@ -19,14 +15,6 @@ def sync_normal_function(x: int, y: int) -> int:
 def sync_generator_function(n: int) -> Generator[int, None, None]:
     for i in range(n):
         yield i
-
-
-@pytest.fixture
-def event_loop():
-    """Create an event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 # Test cases
