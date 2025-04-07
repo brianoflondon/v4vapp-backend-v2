@@ -80,7 +80,7 @@ async def check_binance_balances():
             logger.exception(ex, extra={"error": ex, "notification": False})
 
         finally:
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)
             elapsed = timer() - start
             if elapsed > 3600:  # or 1 hour
                 send_message = True
