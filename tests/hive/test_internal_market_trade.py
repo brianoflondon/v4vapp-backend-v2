@@ -1,5 +1,5 @@
 import pytest
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 
 from v4vapp_backend_v2.hive.internal_market_trade import check_order_book
 

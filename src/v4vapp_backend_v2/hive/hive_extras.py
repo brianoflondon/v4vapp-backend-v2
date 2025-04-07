@@ -5,14 +5,15 @@ from enum import StrEnum
 from typing import Any, Dict, List
 
 import httpx
-from beem import Hive  # type: ignore
-from beem.blockchain import Blockchain  # type: ignore
-from beem.exceptions import MissingKeyError  # type: ignore
-from beem.market import Market  # type: ignore
-from beem.memo import Memo  # type: ignore
-from beem.price import Price  # type: ignore
 from ecdsa import MalformedPointError  # type: ignore
-from pydantic import BaseModel  # type: ignore
+from nectar import Hive
+from nectar.blockchain import Blockchain
+from nectar.exceptions import MissingKeyError
+from nectar.market import Market
+from nectar.memo import Memo
+from nectar.price import Price
+from nectarapi.node import Node
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis

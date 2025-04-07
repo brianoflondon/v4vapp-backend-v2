@@ -1,4 +1,4 @@
-from beem.amount import Amount
+from nectar.amount import Amount
 from pydantic import BaseModel, Field
 
 

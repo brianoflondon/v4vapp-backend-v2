@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from beem import Hive  # type: ignore
-from beem.account import Account  # type: ignore
-from beem.amount import Amount  # type: ignore
-from beem.market import Market  # type: ignore
-from beem.price import Price  # type: ignore
-from beemapi.exceptions import UnhandledRPCError  # type: ignore
+from beem import Hive
+from beemapi.exceptions import UnhandledRPCError
+from nectar.account import Account
+from nectar.amount import Amount
+from nectar.market import Market
+from nectar.price import Price
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (

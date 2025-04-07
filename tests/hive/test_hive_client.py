@@ -2,7 +2,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from beem.blockchain import Blockchain  # type: ignore
+from nectar.blockchain import Blockchain
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive.hive_extras import (

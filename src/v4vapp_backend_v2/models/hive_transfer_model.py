@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from timeit import default_timer as timer
 from typing import Any, ClassVar
 
-from beem.amount import Amount  # type: ignore
 from colorama import Fore
+from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger

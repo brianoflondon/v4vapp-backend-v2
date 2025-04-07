@@ -3,7 +3,7 @@ from pathlib import Path
 from pprint import pprint
 
 import pytest
-from beem.amount import Amount  # type: ignore
+from nectar.amount import Amount
 
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, ClassVar
 
-from beem import Hive  # type: ignore
+from beem import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
@@ -190,4 +190,4 @@ class Transfer(TransferRaw):
         return ans
 
 
-#TODO #45 Add Recurrent Transfer type
+# TODO #45 Add Recurrent Transfer type
