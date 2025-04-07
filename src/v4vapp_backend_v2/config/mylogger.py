@@ -131,6 +131,11 @@ class ErrorCode:
     code: Any
     start_time: datetime = datetime.now(tz=timezone.utc)
 
+    def __init__(self, code: Any):
+        self.code = code
+        self.start_time = datetime.now(tz=timezone.utc)
+        logger.info(f"Error code set: {self.code}")
+
     @property
     def elapsed_time(self) -> timedelta:
         return datetime.now(tz=timezone.utc) - self.start_time
