@@ -22,7 +22,9 @@ class HiveQuote:
     minimum_amount: Amount
 
 
-def account_trade(hive_acc: HiveAccountConfig, set_amount_to: Amount) -> dict:
+def account_trade(
+    hive_acc: HiveAccountConfig, set_amount_to: Amount, nobroadcast: bool = False
+) -> dict:
     """
     Executes a trade for a given Hive account to reach a specified amount.
 
@@ -53,7 +55,7 @@ def account_trade(hive_acc: HiveAccountConfig, set_amount_to: Amount) -> dict:
         logger.error(f"{icon} Account {hive_acc.name} not found in config")
         raise ValueError(f"Account {hive_acc.name} Active Keys not found in config")
 
-    hive = get_hive_client(keys=hive_acc.keys, nobroadcast=True)
+    hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
     account = Account(hive_acc.name, blockchain_instance=hive)
     balance = {}
     balance["HIVE"] = account.available_balances[0]

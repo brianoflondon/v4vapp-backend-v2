@@ -49,6 +49,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
+                "--watch-only",
                 "--user",
                 "v4vapp",
                 "--user",

@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, List, Optional
@@ -18,16 +19,10 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndChannelName,
     LndEventsGroup,
 )
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    format_time_delta,
-    get_in_flight_time,
-)
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, get_in_flight_time
 from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
-    LNDConnectionError,
-    LNDSubscriptionError,
-)
+from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDSubscriptionError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_channel_name,
     get_node_alias_from_pay_request,
@@ -40,6 +35,17 @@ CONFIG = INTERNAL_CONFIG.config
 DATABASE_NAME = "lnd_monitor_v2"
 
 app = typer.Typer()
+
+# Define a global flag to track shutdown
+shutdown_event = asyncio.Event()
+
+
+def handle_shutdown_signal():
+    """
+    Signal handler to set the shutdown event.
+    """
+    logger.info("Received shutdown signal. Setting shutdown event.")
+    shutdown_event.set()
 
 
 async def track_events(
@@ -57,9 +63,7 @@ async def track_events(
         None
     """
     event_id = lnd_events_group.append(htlc_event)
-    dest_alias = await check_dest_alias(
-        htlc_event, lnd_client, lnd_events_group, event_id
-    )
+    dest_alias = await check_dest_alias(htlc_event, lnd_client, lnd_events_group, event_id)
     # message_str, ans_dict = lnd_events_group.message(htlc_event,
     # dest_alias=dest_alias)
     # The delay is necessary to allow the group to complete because sometimes
@@ -75,9 +79,7 @@ async def track_events(
                 if htlc_id:
                     # logger.info(f"Waiting for incoming invoice... {htlc_id}")
                     await asyncio.sleep(0.2)
-                    incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(
-                        htlc_id
-                    )
+                    incoming_invoice = lnd_events_group.lookup_invoice_by_htlc_id(htlc_id)
                 if incoming_invoice:
                     # logger.info(f"Found incoming invoice... {htlc_id}")
                     amount = int(incoming_invoice.value_msat / 1000)
@@ -86,9 +88,7 @@ async def track_events(
                 logger.exception(e)
                 pass
         await asyncio.sleep(0.2)
-        message_str, ans_dict = lnd_events_group.message(
-            htlc_event, dest_alias=dest_alias
-        )
+        message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
         if check_for_attempted_forwards(htlc_event, message_str):
             silent = True
             notification = False
@@ -103,9 +103,7 @@ async def track_events(
                     type(htlc_event).__name__: ans_dict,
                 },
             )
-        asyncio.create_task(
-            remove_event_group(htlc_event, lnd_client, lnd_events_group)
-        )
+        asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))
 
 
 def check_for_attempted_forwards(htlc_event: EventItem, message_str: str) -> bool:
@@ -261,9 +259,7 @@ async def db_store_payment(
             )
             query = {"payment_hash": payment_pyd.payment_hash}
             payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
-            ans = await db_client.update_one(
-                "payments", query, payment_dict, upsert=True
-            )
+            ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
             logger.info(
                 f"{lnd_client.icon}{DATABASE_ICON} "
                 f"New payment recorded: {payment_pyd.payment_index:>6} "
@@ -305,13 +301,9 @@ async def payment_report(
     lnd_events_group: LndEventsGroup,
 ) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
-    creation_date = datetime.fromtimestamp(
-        htlc_event.creation_time_ns / 1e9, tz=timezone.utc
-    )
+    creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
     pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(
-        htlc_event.payment_request, lnd_client
-    )
+    dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
@@ -340,17 +332,12 @@ async def htlc_event_report(
     )
     htlc_id = htlc_event.incoming_htlc_id or htlc_event.outgoing_htlc_id
     preimage = (
-        htlc_event.settle_event.preimage.hex()
-        if htlc_event.settle_event.preimage != b""
-        else None
+        htlc_event.settle_event.preimage.hex() if htlc_event.settle_event.preimage != b"" else None
     )
     is_complete = lnd_events_group.complete_group(htlc_event)
     is_complete_str = "💎" if is_complete else "🔨"
     logger.info(
-        (
-            f"{lnd_client.icon} {is_complete_str} htlc:    {htlc_id:>6} "
-            f"{event_type} {preimage}"
-        ),
+        (f"{lnd_client.icon} {is_complete_str} htlc:    {htlc_id:>6} {event_type} {preimage}"),
         extra={
             "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True),
             "complete": is_complete,
@@ -358,9 +345,7 @@ async def htlc_event_report(
     )
 
 
-async def invoices_loop(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
-) -> None:
+async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
     Args:
@@ -380,6 +365,8 @@ async def invoices_loop(
                 request_sub,
                 call_name="SubscribeInvoices",
             ):
+                if shutdown_event.is_set():
+                    raise asyncio.CancelledError("Docker Shutdown")
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
                     event_name=Events.LND_INVOICE,
@@ -394,18 +381,17 @@ async def invoices_loop(
             pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
-            logger.error(
-                "🔴 Connection error in invoices_loop", exc_info=e, stack_info=True
-            )
+            logger.error("🔴 Connection error in invoices_loop", exc_info=e, stack_info=True)
             raise e
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            return
         except Exception as e:
             logger.exception(e)
             pass
 
 
-async def payments_loop(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
-) -> None:
+async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -414,6 +400,8 @@ async def payments_loop(
                 request,
                 call_name="TrackPayments",
             ):
+                if shutdown_event.is_set():
+                    raise asyncio.CancelledError("Docker Shutdown")
                 lnrpc_payment: lnrpc.Payment
                 async_publish(
                     event_name=Events.LND_PAYMENT,
@@ -428,18 +416,17 @@ async def payments_loop(
             pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
-            logger.error(
-                "🔴 Connection error in payments_loop", exc_info=e, stack_info=True
-            )
+            logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
             raise e
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            return
         except Exception as e:
             logger.exception(e)
             pass
 
 
-async def htlc_events_loop(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
-) -> None:
+async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = routerrpc.SubscribeHtlcEventsRequest()
     while True:
         try:
@@ -448,6 +435,8 @@ async def htlc_events_loop(
                 request,
                 call_name="SubscribeHtlcEvents",
             ):
+                if shutdown_event.is_set():
+                    raise asyncio.CancelledError("Docker Shutdown")
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
                     event_name=Events.HTLC_EVENT,
@@ -462,33 +451,17 @@ async def htlc_events_loop(
             pass
         except LNDConnectionError as e:
             # Raised after the max number of retries is reached.
-            logger.error(
-                "🔴 Connection error in payments_loop", exc_info=e, stack_info=True
-            )
+            logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
             raise e
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            return
         except Exception as e:
             logger.exception(e)
             pass
 
 
-async def transactions_loop(lnd_client: LNDClient) -> None:
-    request_sub = lnrpc.GetTransactionsRequest(
-        start_height=0,
-        end_height=0,
-    )
-    logger.info(f"{lnd_client.icon} 🔍 Monitoring transactions...")
-    while True:
-        async for transaction in lnd_client.call_async_generator(
-            lnd_client.lightning_stub.SubscribeTransactions,
-            request_sub,
-        ):
-            transaction: lnrpc.Transaction
-            logger.info(transaction)
-
-
-async def fill_channel_names(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup
-) -> None:
+async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = lnrpc.ListChannelsRequest()
     channels = await lnd_client.call(
         lnd_client.lightning_stub.ListChannels,
@@ -508,10 +481,7 @@ async def fill_channel_names(
     for channel_name in names_list:
         lnd_events_group.append(channel_name)
         logger.info(
-            (
-                f"{lnd_client.icon} "
-                f"Channel {channel_name.channel_id} -> {channel_name.name}"
-            ),
+            (f"{lnd_client.icon} Channel {channel_name.channel_id} -> {channel_name.name}"),
             extra={"channel_name": channel_name.to_dict()},
         )
 
@@ -559,9 +529,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 insert_data.append(insert_one)
                 query = {"r_hash": invoice.r_hash}
                 tasks.append(
-                    db_client.update_one(
-                        "invoices", query=query, update=insert_one, upsert=True
-                    )
+                    db_client.update_one("invoices", query=query, update=insert_one, upsert=True)
                 )
             try:
                 ans = await asyncio.gather(*tasks)
@@ -634,9 +602,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 insert_data.append(insert_one)
                 query = {"payment_hash": payment.payment_hash}
                 tasks.append(
-                    db_client.update_one(
-                        "payments", query=query, update=insert_one, upsert=True
-                    )
+                    db_client.update_one("payments", query=query, update=insert_one, upsert=True)
                 )
             try:
                 ans = await asyncio.gather(*tasks)
@@ -674,13 +640,12 @@ async def get_most_recent_invoice() -> Invoice:
             invoice = Invoice(**ans)
             break
         logger.info(
-            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} "
-            f"{invoice.settle_index}"
+            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
         )
         return invoice
 
 
-async def runner(connection_name: str) -> None:
+async def main_async_start(connection_name: str) -> None:
     """
     Main function to run the node monitor.
     Args:
@@ -690,13 +655,19 @@ async def runner(connection_name: str) -> None:
         None
     """
     try:
+        # Get the current event loop
+        loop = asyncio.get_event_loop()
+
+        # Register signal handlers for SIGTERM and SIGINT
+        loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
+        loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+
         global DATABASE_NAME
         DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
             logger.info(
-                f"{lnd_client.icon} 🔍 Monitoring node... "
-                f"{connection_name} {DATABASE_NAME}",
+                f"{lnd_client.icon} 🔍 Monitoring node... {connection_name} {DATABASE_NAME}",
                 extra={"notification": True},
             )
             if lnd_client.get_info:
@@ -727,9 +698,8 @@ async def runner(connection_name: str) -> None:
                 read_all_payments(lnd_client),
                 invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                htlc_events_loop(
-                    lnd_client=lnd_client, lnd_events_group=lnd_events_group
-                ),
+                htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                check_for_shutdown(),
             ]
             await asyncio.gather(*tasks)
 
@@ -737,6 +707,12 @@ async def runner(connection_name: str) -> None:
         logger.info("👋 Received signal to stop. Exiting...")
         if hasattr(lnd_client, "channel") and lnd_client.channel:
             await lnd_client.channel.close()
+        # Cancel all tasks except the current one
+        current_task = asyncio.current_task()
+        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
@@ -757,6 +733,29 @@ async def runner(connection_name: str) -> None:
     await asyncio.sleep(0.2)
 
 
+async def check_for_shutdown():
+    """
+    Check for shutdown signal and wait for it to be set.
+    """
+    await shutdown_event.wait()
+    logger.info("Shutdown signal received. Cleaning up...")
+    await asyncio.sleep(0.2)
+    # Perform any necessary cleanup here
+    await check_notifications()
+    raise asyncio.CancelledError("Docker Shutdown")
+
+
+async def check_notifications():
+    await asyncio.sleep(1)
+    while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
+        print(
+            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+        )
+        await asyncio.sleep(0.1)
+    return
+
+
 @app.command()
 def main(
     lnd_node: Annotated[
@@ -771,9 +770,7 @@ def main(
     ] = CONFIG.default_lnd_connection,
     database: Annotated[
         str,
-        typer.Argument(
-            help=(f"The database to monitor." f"Choose from: {CONFIG.dbs_names}")
-        ),
+        typer.Argument(help=(f"The database to monitor.Choose from: {CONFIG.dbs_names}")),
     ] = CONFIG.default_db_name,
 ):
     f"""
@@ -791,13 +788,12 @@ def main(
         f"{icon} ✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {CONFIG.version}"
     )
-    asyncio.run(runner(lnd_node))
+    asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")
     INTERNAL_CONFIG.shutdown()
 
 
 if __name__ == "__main__":
-
     try:
         logger.name = "lnd_monitor_v2"
         app()
