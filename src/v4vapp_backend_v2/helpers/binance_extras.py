@@ -1,4 +1,3 @@
-
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
 
@@ -54,9 +53,8 @@ def get_balances(symbols: list, testnet: bool = False) -> dict:
         return balances
     except ClientError as error:
         logger.error(
-            "Found error. status: {}, error code: {}, error message: {}".format(
-                error.status_code, error.error_code, error.error_message
-            )
+            f"Found error. status: {error.status_code}, error code: {error.error_code}, error message: {error.error_message}",
+            extra={"notification": False},
         )
         raise BinanceErrorBadConnection(error.error_message)
     except Exception as error:

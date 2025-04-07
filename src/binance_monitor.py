@@ -6,7 +6,11 @@ from typing import Annotated
 import typer
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.helpers.binance_extras import get_balances, get_current_price
+from v4vapp_backend_v2.helpers.binance_extras import (
+    BinanceErrorBadConnection,
+    get_balances,
+    get_current_price,
+)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
 INTERNAL_CONFIG = InternalConfig()
@@ -61,16 +65,22 @@ async def check_binance_balances():
                         "binance-balances": new_balances,
                         "silent": silent,
                         "notification_str": notficiation_str,
+                        "error_code_clear": "binance_api_error",
                     },
                 )
             send_message = False  # Send message once unless the balance changes
             saved_balances = new_balances
+        except BinanceErrorBadConnection as ex:
+            logger.warning(
+                f"{ICON} Problem with Binance API. {ex}", extra={"error_code": "binance_api_error"}
+            )
+            send_message = True  # This will allow the error to clear if things improve
         except Exception as ex:
-            logger.error(f"Problem with API. {ex} {ex.__class__}")
+            logger.error(f"{ICON} Problem with Binance API. {ex} {ex.__class__}")
             logger.exception(ex, extra={"error": ex, "notification": False})
 
         finally:
-            await asyncio.sleep(60)
+            await asyncio.sleep(10)
             elapsed = timer() - start
             if elapsed > 3600:  # or 1 hour
                 send_message = True
@@ -103,9 +113,7 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     hive_balance = balances.get("HIVE", 0)
     sats_balance = balances.get("SATS", 0)
     if saved_balances and balances != saved_balances:
-        delta_balances = {
-            k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances
-        }
+        delta_balances = {k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances}
         if delta_balances:
             hive_direction = "⬆️🟢" if delta_balances.get("HIVE", 0) >= 0 else "📉🟥"
             sats_direction = "⬆️🟢" if delta_balances.get("SATS", 0) >= 0 else "📉🟥"
@@ -119,9 +127,7 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     current_price_sats = float(current_price["current_price"]) * 1e8
     hive_target = BINANACE_HIVE_ALERT_LEVEL_SATS / current_price_sats
     percentage = hive_balance / hive_target * 100
-    percentage_meter = draw_percentage_meter(
-        percentage=percentage, max_percent=200, width=10
-    )
+    percentage_meter = draw_percentage_meter(percentage=percentage, max_percent=200, width=10)
     notification_str = (
         f"{ICON} "
         f"{percentage_meter}\n"
@@ -150,14 +156,10 @@ async def main_async_start():
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        logger.info(
-            f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True}
-        )
+        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
-        logger.error(
-            f"{ICON} Irregular shutdown in Binance Monitor {e}", extra={"error": e}
-        )
+        logger.error(f"{ICON} Irregular shutdown in Binance Monitor {e}", extra={"error": e})
         raise e
     finally:
         await check_notifications()
@@ -165,10 +167,7 @@ async def main_async_start():
 
 async def check_notifications():
     await asyncio.sleep(1)
-    while (
-        INTERNAL_CONFIG.notification_loop.is_running()
-        or INTERNAL_CONFIG.notification_lock
-    ):
+    while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
         print(
             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
@@ -203,7 +202,6 @@ def main(
 
 
 if __name__ == "__main__":
-
     try:
         logger.name = "binance_monitor"
         app()
