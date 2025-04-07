@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from beem import Hive
-from beemapi.exceptions import UnhandledRPCError
+from nectar import Hive
 from nectar.account import Account
 from nectar.amount import Amount
 from nectar.market import Market
 from nectar.price import Price
+from nectarapi.exceptions import UnhandledRPCError
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (

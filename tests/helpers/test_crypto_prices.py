@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from beem import Hive
+from nectar import Hive
 from httpx import Request, Response
 from nectar.market import Market
 
