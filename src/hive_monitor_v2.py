@@ -57,6 +57,7 @@ AUTO_BALANCE_SERVER = True
 TIME_DIFFERENCE_CHECK = 120
 
 COMMAND_LINE_WATCH_USERS = []
+COMMAND_LINE_WATCH_ONLY = False
 
 
 app = typer.Typer()
@@ -68,11 +69,11 @@ icon = "🐝"
 shutdown_event = asyncio.Event()
 
 
-def handle_shutdown_signal(signum, frame):
+def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
     """
-    logger.info(f"Received shutdown signal: {signum}")
+    logger.info("Received shutdown signal. Setting shutdown event.")
     shutdown_event.set()
 
 
@@ -373,8 +374,11 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     if hive_acc and hive_acc.active_key:
         # set the amount to the current HBD balance taken from Config
         set_amount_to = Amount(hive_acc.hbd_balance)
+        nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
         try:
-            trx = account_trade(hive_acc=hive_acc, set_amount_to=set_amount_to)
+            trx = account_trade(
+                hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
+            )
             if trx:
                 logger.info(f"Transaction broadcasted: {trx.get('trx_id')}", extra={"trx": trx})
         except Exception as e:
@@ -903,10 +907,12 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     Returns:
         None
     """
-    # Register signal handlers for SIGTERM and SIGINT
-    signal.signal(signal.SIGTERM, handle_shutdown_signal)
-    signal.signal(signal.SIGINT, handle_shutdown_signal)
     loop = asyncio.get_running_loop()
+
+    # Register signal handlers for SIGTERM and SIGINT
+    loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
+    loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+
     logger.info(f"{icon} Main Loop: {loop._thread_id}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
@@ -970,7 +976,14 @@ def main(
             help="Hive User(s) to watch for transactions, can have multiple",
             show_default=True,
         ),
-    ] = None,
+    ],
+    watch_only: Annotated[
+        bool,
+        typer.Option(
+            "--watch-only",
+            help="Watch only mode, uses `nobroadcast` option for Hive so HBD will not be sold",
+        ),
+    ] = False,
     watch_witness: Annotated[
         str,
         typer.Option(
@@ -994,14 +1007,16 @@ def main(
         None
     """
     global COMMAND_LINE_WATCH_USERS
+    global COMMAND_LINE_WATCH_ONLY
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
         extra={"notification": True},
     )
-    if watch_users is None:
+    if not watch_users:
         watch_users = ["v4vapp", "brianoflondon"]
     COMMAND_LINE_WATCH_USERS = watch_users
+    COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witness))
     INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
