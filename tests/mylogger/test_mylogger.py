@@ -1,6 +1,9 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
 
 from v4vapp_backend_v2.config.mylogger import (
     MyJSONFormatter,
@@ -8,6 +11,19 @@ from v4vapp_backend_v2.config.mylogger import (
     human_readable_datetime_str,
     timedelta_display,
 )
+
+
+@pytest.fixture(autouse=True)
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    yield
+    # No need to restore the original value, monkeypatch will handle it
 
 
 def test_format_basic_log_record():
@@ -129,7 +145,6 @@ def test_notification_supress():
 
 
 def test_timedelta_display():
-
     # Test with a timedelta of 1 hour, 2 minutes, and 3 seconds
     td = timedelta(hours=1, minutes=2, seconds=3)
     assert timedelta_display(td) == "01h 02m 03s"
@@ -144,7 +159,6 @@ def test_timedelta_display():
 
 
 def test_human_readable_datetime_str():
-
     # Test with a datetime object
     dt_obj = datetime(2022, 1, 1, 12, 30, 45, 123456)
     assert human_readable_datetime_str(dt_obj) == "12:30:45.123 Sat 01 Jan"
