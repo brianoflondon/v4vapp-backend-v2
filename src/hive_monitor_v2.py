@@ -1018,8 +1018,8 @@ def main(
     COMMAND_LINE_WATCH_USERS = watch_users
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witness))
-    INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
+    INTERNAL_CONFIG.shutdown()
 
 
 if __name__ == "__main__":

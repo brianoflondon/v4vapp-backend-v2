@@ -508,14 +508,24 @@ class InternalConfig:
         self.shutdown()
 
     def shutdown(self):
+
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
                 logger.info("Closing notification loop")
 
+                # Get the current task (the one running the shutdown logic)
+                current_task = asyncio.current_task(loop=self.notification_loop)
+
+                # Gather all tasks except the current one
+                pending_tasks = [
+                    task
+                    for task in asyncio.all_tasks(loop=self.notification_loop)
+                    if task is not current_task
+                ]
+
                 # Wait for all pending tasks to complete
-                pending_tasks = asyncio.all_tasks(loop=self.notification_loop)
                 if pending_tasks:
-                    logger.info("Waiting for pending tasks to complete")
+                    logger.info(f"Waiting for {len(pending_tasks)} pending tasks to complete")
                     self.notification_loop.run_until_complete(
                         asyncio.gather(*pending_tasks, return_exceptions=True)
                     )
@@ -528,9 +538,6 @@ class InternalConfig:
                     logger.info("Waiting for loop to stop")
                     time.sleep(0.1)
 
-                # Stop the loop before shutting down async generators
-                self.notification_loop.stop()
-
                 # Shut down async generators and close the loop
                 try:
                     self.notification_loop.run_until_complete(
@@ -540,12 +547,11 @@ class InternalConfig:
                     logger.warning("Event loop already closed or not running async generators")
                 finally:
                     self.notification_loop.close()
-                print("InternalConfig Shutdown Notification loop closed")
+                logger.info("InternalConfig Shutdown: Notification loop closed")
             else:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
-                print("InternalConfig Shutdown Notification loop closed (was not running)")
-
+                logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
 
 """
 General purpose functions
