@@ -1,8 +1,7 @@
-import asyncio
 from datetime import datetime, timezone
 from typing import Any, ClassVar
 
-from beem import Hive
+from nectar import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
@@ -151,9 +150,7 @@ class Transfer(TransferRaw):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        self.conv = CryptoConversion(
-            amount=self.amount.beam, quote=self.last_quote
-        ).conversion
+        self.conv = CryptoConversion(amount=self.amount.beam, quote=self.last_quote).conversion
 
     @property
     def amount_decimal(self) -> float:
@@ -180,9 +177,7 @@ class Transfer(TransferRaw):
 
     @property
     def notification_str(self) -> str:
-        markdown_link = (
-            get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
-        )
+        markdown_link = get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
         ans = (
             f"{self.from_account} sent {self.amount_str} to {self.to_account} "
             f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {markdown_link}"
