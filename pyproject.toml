@@ -25,7 +25,6 @@ dependencies = [
     "watchdog>=6.0.0,<7.0.0",
     "asgiref>=3.8.1,<4.0.0",
     "colorama>=0.4.6,<1.0.0",
-    "beem @ git+https://gitlab.syncad.com/hive/beem@3a3ffdf000903f0add9da0e0e428d7c31505b2ca",
     "redis>=5.2.1,<6.0.0",
     "binance-connector>=3.12.0,<4.0.0",
     "python-telegram-bot>=22.0,<23.0",
