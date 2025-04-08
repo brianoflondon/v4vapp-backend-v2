@@ -384,7 +384,7 @@ async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
             logger.error("🔴 Connection error in invoices_loop", exc_info=e, stack_info=True)
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
         except Exception as e:
             logger.exception(e)
@@ -419,7 +419,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
             logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
         except Exception as e:
             logger.exception(e)
@@ -454,7 +454,7 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
             logger.error("🔴 Connection error in payments_loop", exc_info=e, stack_info=True)
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            logger.info(f"Keyboard interrupt or Cancelled: Stopping event listener. {e}")
+            logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
             return
         except Exception as e:
             logger.exception(e)
@@ -501,55 +501,60 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
     Returns:
         None
     """
-
-    async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-    ) as db_client:
-        index_offset = 0
-        num_max_invoices = 1000
-        total_invoices = 0
-        logger.info(f"{lnd_client.icon} Reading all invoices...")
-        while True:
-            request = lnrpc.ListInvoiceRequest(
-                pending_only=False,
-                index_offset=index_offset,
-                num_max_invoices=num_max_invoices,
-                reversed=True,
-            )
-            invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
-                lnd_client.lightning_stub.ListInvoices,
-                request,
-            )
-            list_invoices = ListInvoiceResponse(invoices_raw)
-            index_offset = list_invoices.first_index_offset
-            insert_data = []
-            tasks = []
-            for invoice in list_invoices.invoices:
-                insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
-                insert_data.append(insert_one)
-                query = {"r_hash": invoice.r_hash}
-                tasks.append(
-                    db_client.update_one("invoices", query=query, update=insert_one, upsert=True)
+    try:
+        async with MongoDBClient(
+            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+        ) as db_client:
+            index_offset = 0
+            num_max_invoices = 1000
+            total_invoices = 0
+            logger.info(f"{lnd_client.icon} Reading all invoices...")
+            while True:
+                request = lnrpc.ListInvoiceRequest(
+                    pending_only=False,
+                    index_offset=index_offset,
+                    num_max_invoices=num_max_invoices,
+                    reversed=True,
                 )
-            try:
-                ans = await asyncio.gather(*tasks)
-                modified = [a.modified_count for a in ans]
-                inserted = [a.did_upsert for a in ans]
-                logger.info(
-                    f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Invoices {index_offset}... "
-                    f"modified: {sum(modified)} inserted: {sum(inserted)}"
+                invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
+                    lnd_client.lightning_stub.ListInvoices,
+                    request,
                 )
-                total_invoices += len(list_invoices.invoices)
-            except BulkWriteError as e:
-                logger.debug(e.details)
-                pass
-            if len(list_invoices.invoices) < num_max_invoices:
-                logger.info(
-                    f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Finished reading {total_invoices} invoices..."
-                )
-                break
+                list_invoices = ListInvoiceResponse(invoices_raw)
+                index_offset = list_invoices.first_index_offset
+                insert_data = []
+                tasks = []
+                for invoice in list_invoices.invoices:
+                    insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_data.append(insert_one)
+                    query = {"r_hash": invoice.r_hash}
+                    tasks.append(
+                        db_client.update_one(
+                            "invoices", query=query, update=insert_one, upsert=True
+                        )
+                    )
+                try:
+                    ans = await asyncio.gather(*tasks)
+                    modified = [a.modified_count for a in ans]
+                    inserted = [a.did_upsert for a in ans]
+                    logger.info(
+                        f"{lnd_client.icon} {DATABASE_ICON} "
+                        f"Invoices {index_offset}... "
+                        f"modified: {sum(modified)} inserted: {sum(inserted)}"
+                    )
+                    total_invoices += len(list_invoices.invoices)
+                except BulkWriteError as e:
+                    logger.debug(e.details)
+                    pass
+                if len(list_invoices.invoices) < num_max_invoices:
+                    logger.info(
+                        f"{lnd_client.icon} {DATABASE_ICON} "
+                        f"Finished reading {total_invoices} invoices..."
+                    )
+                    break
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        return
 
 
 async def read_all_payments(lnd_client: LNDClient) -> None:
@@ -567,65 +572,67 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
     Returns:
         None
     """
-
-    async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-    ) as db_client:
-        index_offset = 0
-        num_max_payments = 1000
-        total_payments = 0
-        logger.info(f"{lnd_client.icon} Reading all payments...")
-        while True:
-            request = lnrpc.ListPaymentsRequest(
-                include_incomplete=True,
-                index_offset=index_offset,
-                max_payments=num_max_payments,
-                reversed=True,
-            )
-            payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
-                lnd_client.lightning_stub.ListPayments,
-                request,
-            )
-            list_payments = ListPaymentsResponse(payments_raw)
-            index_offset = payments_raw.first_index_offset
-            insert_data = []
-            tasks = []
-            for payment in list_payments.payments:
-                await update_payment_route_with_alias(
-                    db_client=db_client,
-                    lnd_client=lnd_client,
-                    payment=payment,
-                    fill_cache=True,
-                    col_pub_keys="pub_keys",
+    try:
+        async with MongoDBClient(
+            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+        ) as db_client:
+            index_offset = 0
+            num_max_payments = 1000
+            total_payments = 0
+            logger.info(f"{lnd_client.icon} Reading all payments...")
+            while True:
+                request = lnrpc.ListPaymentsRequest(
+                    include_incomplete=True,
+                    index_offset=index_offset,
+                    max_payments=num_max_payments,
+                    reversed=True,
                 )
-                insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
-                insert_data.append(insert_one)
-                query = {"payment_hash": payment.payment_hash}
-                tasks.append(
-                    db_client.update_one("payments", query=query, update=insert_one, upsert=True)
+                payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
+                    lnd_client.lightning_stub.ListPayments,
+                    request,
                 )
-            try:
-                ans = await asyncio.gather(*tasks)
-                modified = [a.modified_count for a in ans]
-                inserted = [a.did_upsert for a in ans]
-                logger.info(
-                    f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Payments {index_offset}... "
-                    f"modified: {sum(modified)} inserted: {sum(inserted)}"
-                )
-                total_payments += len(list_payments.payments)
-            except BulkWriteError as e:
-                logger.debug(e.details)
-                pass
-            except Exception as e:
-                logger.exception(str(e), extra={"error": e})
-            if len(list_payments.payments) < num_max_payments:
-                logger.info(
-                    f"{lnd_client.icon} {DATABASE_ICON} "
-                    f"Finished reading {total_payments} payments..."
-                )
-                break
-
+                list_payments = ListPaymentsResponse(payments_raw)
+                index_offset = payments_raw.first_index_offset
+                insert_data = []
+                tasks = []
+                for payment in list_payments.payments:
+                    await update_payment_route_with_alias(
+                        db_client=db_client,
+                        lnd_client=lnd_client,
+                        payment=payment,
+                        fill_cache=True,
+                        col_pub_keys="pub_keys",
+                    )
+                    insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_data.append(insert_one)
+                    query = {"payment_hash": payment.payment_hash}
+                    tasks.append(
+                        db_client.update_one("payments", query=query, update=insert_one, upsert=True)
+                    )
+                try:
+                    ans = await asyncio.gather(*tasks)
+                    modified = [a.modified_count for a in ans]
+                    inserted = [a.did_upsert for a in ans]
+                    logger.info(
+                        f"{lnd_client.icon} {DATABASE_ICON} "
+                        f"Payments {index_offset}... "
+                        f"modified: {sum(modified)} inserted: {sum(inserted)}"
+                    )
+                    total_payments += len(list_payments.payments)
+                except BulkWriteError as e:
+                    logger.debug(e.details)
+                    pass
+                except Exception as e:
+                    logger.exception(str(e), extra={"error": e})
+                if len(list_payments.payments) < num_max_payments:
+                    logger.info(
+                        f"{lnd_client.icon} {DATABASE_ICON} "
+                        f"Finished reading {total_payments} payments..."
+                    )
+                    break
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        return
 
 async def get_most_recent_invoice() -> Invoice:
     async with MongoDBClient(

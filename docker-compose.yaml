@@ -49,6 +49,8 @@ services:
       - ./logs_docker/voltage:/app/logs
     command: ["python", "src/lnd_monitor_v2.py", "voltage"]
     restart: unless-stopped
+    stop_grace_period: 60s
+
 
   umbrel-node-monitor:
     depends_on:
@@ -60,6 +62,8 @@ services:
       - ./logs_docker/umbrel:/app/logs
     command: ["python", "src/lnd_monitor_v2.py", "umbrel"]
     restart: unless-stopped
+    stop_grace_period: 60s
+
 
   hive-monitor:
     depends_on:
@@ -92,6 +96,7 @@ services:
       - ./config:/app/config
       - ./logs_docker/binance:/app/logs
     restart: unless-stopped
+    stop_grace_period: 60s
     command: ["python", "src/binance_monitor.py"]
 
 
