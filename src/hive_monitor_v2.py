@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
@@ -56,12 +57,23 @@ AUTO_BALANCE_SERVER = True
 TIME_DIFFERENCE_CHECK = 120
 
 COMMAND_LINE_WATCH_USERS = []
+COMMAND_LINE_WATCH_ONLY = False
 
 
 app = typer.Typer()
 icon = "🐝"
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
+
+# Define a global flag to track shutdown
+shutdown_event = asyncio.Event()
+
+def handle_shutdown_signal():
+    """
+    Signal handler to set the shutdown event.
+    """
+    logger.info("Received shutdown signal. Setting shutdown event.")
+    shutdown_event.set()
 
 
 def check_time_diff(timestamp: str | datetime) -> timedelta:
@@ -317,9 +329,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
                 f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
                 extra={
                     "notification": False,
-                    "quote": HiveTransaction.last_quote.model_dump(
-                        exclude={"raw_response"}
-                    ),
+                    "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
                 },
             )
         await transfer_report(op)
@@ -363,12 +373,13 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     if hive_acc and hive_acc.active_key:
         # set the amount to the current HBD balance taken from Config
         set_amount_to = Amount(hive_acc.hbd_balance)
+        nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
         try:
-            trx = account_trade(hive_acc=hive_acc, set_amount_to=set_amount_to)
+            trx = account_trade(
+                hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
+            )
             if trx:
-                logger.info(
-                    f"Transaction broadcasted: {trx.get("trx_id")}", extra={"trx": trx}
-                )
+                logger.info(f"Transaction broadcasted: {trx.get('trx_id')}", extra={"trx": trx})
         except Exception as e:
             logger.error(
                 f"{icon} Conversion error: {e}",
@@ -507,8 +518,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         async_stream = sync_to_async_iterable(
             hive_blockchain.stream(
                 opNames=["producer_reward"],
-                start=end_block
-                - int(140 * 60 / 3),  # go back 140 minutes of 3 second blocks
+                start=end_block - int(140 * 60 / 3),  # go back 140 minutes of 3 second blocks
                 stop=end_block,
                 only_virtual_ops=True,
                 max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -522,8 +532,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
                     HIVE_WITNESS_PRODUCER_COLLECTION, producer_reward.model_dump()
                 )
                 logger.info(
-                    f"{icon} {producer_reward.witness} "
-                    f"block: {producer_reward.block_num:,} ",
+                    f"{icon} {producer_reward.witness} block: {producer_reward.block_num:,} ",
                     extra={"notification": False, **producer_reward.log_extra},
                 )
         if producer_reward:
@@ -623,24 +632,18 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                     max_batch_size=MAX_HIVE_BATCH_SIZE,
                 )
             )
-            logger.info(
-                f"{icon} Virtual Loop using nodes: {hive_client.get_default_nodes()}"
-            )
+            logger.info(f"{icon} Virtual Loop using nodes: {hive_client.get_default_nodes()}")
             # error_code = ""
             try:
                 async for hive_event in async_stream:
-                    hive_event["op_in_trx"] = op_in_trx_counter.inc(
-                        hive_event["trx_id"]
-                    )
+                    if shutdown_event.is_set():
+                        raise asyncio.CancelledError("Docker Shutdown")
+                    hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                     # error_code = log_time_difference_errors(
                     #     hive_event["timestamp"], error_code
                     # )
-                    hive_event_timestamp = hive_event.get(
-                        "timestamp", "1970-01-01T00:00:00+00:00"
-                    )
-                    seconds_since_last_block = (
-                        hive_event_timestamp - last_good_timestamp
-                    ).seconds
+                    hive_event_timestamp = hive_event.get("timestamp", "1970-01-01T00:00:00+00:00")
+                    seconds_since_last_block = (hive_event_timestamp - last_good_timestamp).seconds
                     if (
                         not send_once
                         and seconds_since_last_block
@@ -651,9 +654,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         time_since_last_block = seconds_only(
                             timedelta(seconds=seconds_since_last_block)
                         )
-                        block_diff = (
-                            hive_event["block_num"] - witness.last_confirmed_block_num
-                        )
+                        block_diff = hive_event["block_num"] - witness.last_confirmed_block_num
                         logger.warning(
                             f"{icon} 🚨 Missed: {witness.missed_blocks} "
                             f"Witness Time since last block: {time_since_last_block} "
@@ -698,9 +699,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             },
                         )
                         send_once = False
-                        last_good_timestamp = hive_event["timestamp"].replace(
-                            tzinfo=timezone.utc
-                        )
+                        last_good_timestamp = hive_event["timestamp"].replace(tzinfo=timezone.utc)
                         last_good_event = hive_event
                         try:
                             _ = await db_client.insert_one(
@@ -710,17 +709,14 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         except DuplicateKeyError:
                             pass
                     if hive_event.get("type") in MarketOpTypes:
-                        asyncio.create_task(
-                            slow_publish_fill_event(hive_event, watch_users)
-                        )
+                        asyncio.create_task(slow_publish_fill_event(hive_event, watch_users))
                         last_good_event = hive_event
                     count += 1
                     if count % 100 == 0:
                         hive_client.rpc.next()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(
-                    f"{icon} Keyboard interrupt or Cancelled: "
-                    f"Stopping event listener. {e}"
+                    f"{icon} Keyboard interrupt or Cancelled: Stopping event listener. {e}"
                 )
                 return
 
@@ -728,8 +724,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 logger.exception(e)
                 logger.warning(f"{icon} {e}", extra={"error": e})
                 logger.warning(
-                    f"{icon} last_good_block: {last_good_block:,.0f} "
-                    f"rerun witness_first_run",
+                    f"{icon} last_good_block: {last_good_block:,.0f} rerun witness_first_run",
                     extra={"error": e},
                 )
 
@@ -794,9 +789,7 @@ async def real_ops_loop(
         db_user=HIVE_DATABASE_USER,
     ) as db_client:
         while True:
-            logger.info(
-                f"{icon} Real Loop using nodes: {hive_client.get_default_nodes()}"
-            )
+            logger.info(f"{icon} Real Loop using nodes: {hive_client.get_default_nodes()}")
             op_in_trx_counter = OpInTrxCounter(realm="real")
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
@@ -809,11 +802,11 @@ async def real_ops_loop(
             error_code = ""
             try:
                 async for hive_event in async_stream:
+                    if shutdown_event.is_set():
+                        raise asyncio.CancelledError("Docker Shutdown")
                     # For trx_id's with multiple transfers, record position in trx
                     # Moved outside the specific blocks for different op codes
-                    hive_event["op_in_trx"] = op_in_trx_counter.inc(
-                        hive_event["trx_id"]
-                    )
+                    hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                     try:
                         error_code = log_time_difference_errors(
                             hive_event["timestamp"], error_code
@@ -834,9 +827,7 @@ async def real_ops_loop(
                                 f"Node: {old_node} -> {hive_client.rpc.url}"
                             )
                             await Transfer.update_quote()
-                            logger.info(
-                                f"{icon} Updated Quotes Age: {Transfer.last_quote.age}"
-                            )
+                            logger.info(f"{icon} Updated Quotes Age: {Transfer.last_quote.age}")
                     except ValueError:
                         # Not one of the ops we want to track
                         continue
@@ -892,7 +883,7 @@ async def real_ops_loop(
                         await db_store_block_marker(hive_event, db_client)
                         start = timer()
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
-                logger.info(f"{icon} Keyboard interrupt: Stopping event listener.")
+                logger.info(f"{icon} {e}: Stopping event listener.")
                 raise e
 
             except Exception as e:
@@ -901,8 +892,7 @@ async def real_ops_loop(
 
             finally:
                 logger.warning(
-                    f"{icon} Restarting real_ops_loop after "
-                    f"error from {hive_client.rpc.url}",
+                    f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url}",
                 )
                 hive_client.rpc.next()
 
@@ -917,6 +907,11 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
         None
     """
     loop = asyncio.get_running_loop()
+
+    # Register signal handlers for SIGTERM and SIGINT
+    loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
+    loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+
     logger.info(f"{icon} Main Loop: {loop._thread_id}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
@@ -947,34 +942,28 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
-        await check_notifications()
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
-        logger.info(
-            f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True}
-        )
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
-        logger.error(
-            f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e}
-        )
+        logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
-        await check_notifications()
+        logger.info(f"{icon} Clearing notifications")
+        logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+        await asyncio.sleep(1)
+        # await check_notifications()
 
 
-async def check_notifications():
-    await asyncio.sleep(1)
-    while (
-        INTERNAL_CONFIG.notification_loop.is_running()
-        or INTERNAL_CONFIG.notification_lock
-    ):
-        print(
-            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
-        )
-        await asyncio.sleep(0.1)
-    return
+# async def check_notifications():
+#     await asyncio.sleep(1)
+#     while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
+#         print(
+#             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+#             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+#         )
+#         await asyncio.sleep(0.5)
+#     return
 
 
 @app.command()
@@ -986,7 +975,14 @@ def main(
             help="Hive User(s) to watch for transactions, can have multiple",
             show_default=True,
         ),
-    ] = None,
+    ],
+    watch_only: Annotated[
+        bool,
+        typer.Option(
+            "--watch-only",
+            help="Watch only mode, uses `nobroadcast` option for Hive so HBD will not be sold",
+        ),
+    ] = False,
     watch_witness: Annotated[
         str,
         typer.Option(
@@ -1010,21 +1006,21 @@ def main(
         None
     """
     global COMMAND_LINE_WATCH_USERS
+    global COMMAND_LINE_WATCH_ONLY
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: " f"{icon}. Version: {CONFIG.version}",
+        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
         extra={"notification": True},
     )
-    if watch_users is None:
+    if not watch_users:
         watch_users = ["v4vapp", "brianoflondon"]
     COMMAND_LINE_WATCH_USERS = watch_users
+    COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witness))
-    INTERNAL_CONFIG.shutdown()
     print("👋 Goodbye!")
 
 
 if __name__ == "__main__":
-
     try:
         logger.name = "hive_monitor_v2"
         app()

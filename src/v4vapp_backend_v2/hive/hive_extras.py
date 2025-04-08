@@ -12,7 +12,6 @@ from nectar.exceptions import MissingKeyError
 from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
-from nectarapi.node import Node
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
@@ -28,10 +27,12 @@ DEFAULT_GOOD_NODES = [
     "https://api.c0ff33a.uk",
     "https://hive-api.3speak.tv",
     "https://hiveapi.actifit.io",
-    "https://rpc.mahdiyari.info",
     "https://api.syncad.com",
 ]
 
+EXCLUDE_NODES = [
+    "https://rpc.mahdiyari.info",
+]
 
 MAX_HIVE_BATCH_SIZE = 25
 
@@ -57,14 +58,12 @@ def get_hive_client(*args, **kwargs) -> Hive:
         else:
             good_nodes = get_good_nodes()
         redis_sync_client.close()
-        # good_nodes = DEFAULT_GOOD_NODES
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
 
     count = len(kwargs["node"])
     errors = 0
     while errors < count:
-
         try:
             hive = Hive(*args, **kwargs)
             return hive
@@ -108,10 +107,9 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes",
         )
         nodes = response.json()
-        logger.debug(
-            "Fetched good nodes Last good nodes", extra={"beacon_response": nodes}
-        )
+        logger.debug("Fetched good nodes Last good nodes", extra={"beacon_response": nodes})
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
+        good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         with V4VAsyncRedis().sync_redis as redis_sync_client:
             redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
@@ -121,13 +119,9 @@ def get_good_nodes() -> List[str]:
         if good_nodes_json and isinstance(good_nodes_json, str):
             good_nodes = json.loads(good_nodes_json)
         if good_nodes:
-            logger.warning(
-                f"Failed to fetch good nodes: {e} using last good nodes.", {"extra": e}
-            )
+            logger.warning(f"Failed to fetch good nodes: {e} using last good nodes.", {"extra": e})
         else:
-            logger.warning(
-                f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e}
-            )
+            logger.warning(f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e})
             good_nodes = DEFAULT_GOOD_NODES
 
     return good_nodes
@@ -161,9 +155,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                     )
             else:
                 async with V4VAsyncRedis() as redis_client:
-                    answer = json.loads(
-                        await redis_client.get(f"witness_{hive_accname}")
-                    )
+                    answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
                     if not answer:
                         logger.warning(
                             f"Failed to get_hive_witness_details "
@@ -227,16 +219,13 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         highest_bid_value = float(highest_bid["price"])
         lowest_ask: Price = ticker["lowest_ask"]
         lowest_ask_value = float(lowest_ask["price"])
-        hive_hbd = float(
-            ((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value
-        )
+        hive_hbd = float(((lowest_ask_value - highest_bid_value) / 2) + highest_bid_value)
         answer = HiveInternalQuote(hive_hbd=hive_hbd, raw_response=ticker)
         return answer
     except Exception as ex:
         # logging.exception(ex)
         logger.info(
-            f"Calling Market API on Hive: "
-            f"{market['blockchain_instance'].data['last_node']}"
+            f"Calling Market API on Hive: {market['blockchain_instance'].data['last_node']}"
         )
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
@@ -371,9 +360,7 @@ def decode_memo(
         return memo
 
     except Exception as e:
-        logger.error(
-            f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo}
-        )
+        logger.error(f"Problem in decode_memo: {e}", extra={"trx_id": trx_id, "memo": memo})
         logger.error(memo)
         logger.exception(e)
         return memo

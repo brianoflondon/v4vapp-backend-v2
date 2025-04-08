@@ -171,8 +171,7 @@ class LNDClient:
                         f"cleared error_count: {error_count}",
                         extra={
                             "notification": True,
-                            "error_code": str(original_error.code()),
-                            "error_code_clear": True,
+                            "error_code_clear": str(original_error.code()),
                             "error_count": error_count,
                             "original_error": original_error,
                         },

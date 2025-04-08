@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, OrderedDict, override
+from typing import Any, ClassVar, OrderedDict, override
 
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -131,6 +131,11 @@ class ErrorCode:
     code: Any
     start_time: datetime = datetime.now(tz=timezone.utc)
 
+    def __init__(self, code: Any):
+        self.code = code
+        self.start_time = datetime.now(tz=timezone.utc)
+        logger.info(f"Error code set: {self.code}")
+
     @property
     def elapsed_time(self) -> timedelta:
         return datetime.now(tz=timezone.utc) - self.start_time
@@ -156,7 +161,7 @@ class CustomNotificationHandler(logging.Handler):
             This method needs to be implemented to integrate with the Notification API.
     """
 
-    error_codes: dict[Any, ErrorCode] = {}
+    error_codes: ClassVar[dict[Any, ErrorCode]] = {}
     sender: NotificationProtocol = BotNotification()
 
     @override
@@ -174,19 +179,18 @@ class CustomNotificationHandler(logging.Handler):
             error_code_obj = self.error_codes.get(record.error_code_clear)
             elapsed_time = error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
             elapsed_time_str = timedelta_display(elapsed_time)
-            log_message = (
-                f"✅ Error code {record.error_code_clear} "
-                f"cleared after {elapsed_time_str}\n{log_message}"
+            log_message_clear = (
+                f"✅ Error code {record.error_code_clear} cleared after {elapsed_time_str}"
             )
             if record.error_code_clear in self.error_codes:
                 self.error_codes.pop(record.error_code_clear)
-                self.sender.send_notification(log_message, record, alert_level=5)
             else:
                 logger.warning(
                     f"Error code not found in error_codes {record.error_code_clear}",
                     extra={"notification": False},
                 )
-                self.sender.send_notification(log_message, record, alert_level=5)
+            logger.info(log_message_clear, extra={"notification": True, "record": record})
+            self.sender.send_notification(log_message, record)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
