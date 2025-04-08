@@ -607,7 +607,9 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                     insert_data.append(insert_one)
                     query = {"payment_hash": payment.payment_hash}
                     tasks.append(
-                        db_client.update_one("payments", query=query, update=insert_one, upsert=True)
+                        db_client.update_one(
+                            "payments", query=query, update=insert_one, upsert=True
+                        )
                     )
                 try:
                     ans = await asyncio.gather(*tasks)
@@ -633,6 +635,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         return
+
 
 async def get_most_recent_invoice() -> Invoice:
     async with MongoDBClient(
@@ -748,19 +751,19 @@ async def check_for_shutdown():
     logger.info("Shutdown signal received. Cleaning up...")
     await asyncio.sleep(0.2)
     # Perform any necessary cleanup here
-    await check_notifications()
+    # await check_notifications()
     raise asyncio.CancelledError("Docker Shutdown")
 
 
-async def check_notifications():
-    await asyncio.sleep(1)
-    while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
-        print(
-            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
-        )
-        await asyncio.sleep(0.1)
-    return
+# async def check_notifications():
+#     await asyncio.sleep(1)
+#     while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
+#         print(
+#             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+#             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+#         )
+#         await asyncio.sleep(0.1)
+#     return
 
 
 @app.command()

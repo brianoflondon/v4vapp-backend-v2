@@ -7,10 +7,7 @@ from telegram import Bot
 from telegram.error import InvalidToken, TimedOut
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    is_markdown,
-    sanitize_markdown_v1,
-)
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown, sanitize_markdown_v1
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
@@ -52,9 +49,7 @@ class NotificationBot:
 
     @property
     def n_bot_config_file(self) -> Path:
-        return Path(
-            InternalConfig.base_config_path, f"{self.name}{BOT_CONFIG_EXTENSION}"
-        )
+        return Path(InternalConfig.base_config_path, f"{self.name}{BOT_CONFIG_EXTENSION}")
 
     @classmethod
     def names(cls) -> str:
@@ -64,14 +59,10 @@ class NotificationBot:
     def names_list(cls) -> list:
         config_paths = [
             f
-            for f in Path(InternalConfig.base_config_path).glob(
-                f"*{BOT_CONFIG_EXTENSION}"
-            )
+            for f in Path(InternalConfig.base_config_path).glob(f"*{BOT_CONFIG_EXTENSION}")
             if f.is_file()
         ]
-        return [
-            config.name.replace(BOT_CONFIG_EXTENSION, "") for config in config_paths
-        ]
+        return [config.name.replace(BOT_CONFIG_EXTENSION, "") for config in config_paths]
 
     async def get_bot_name(self):
         try:
@@ -183,9 +174,7 @@ class NotificationBot:
         attempt = 0
         while attempt < retries:
             try:
-                await self.bot.send_message(
-                    chat_id=self.config.chat_id, text=text, **kwargs
-                )
+                await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
                 return
             except TimedOut as e:
                 attempt += 1
@@ -202,11 +191,8 @@ class NotificationBot:
                 await asyncio.sleep(2**attempt)  # Exponential backoff
 
             except Exception as e:
-                logger.exception(
-                    f"Error sending [ {text} ]: {e}",
-                    extra={"notification": False, "error": e},
-                )
-                logger.error("Problem in Notification bot", {"notification": False})
+                print(f"Error sending [ {text} ]: {e}")
+                print("Problem in Notification bot")
                 return
 
     async def handle_update(self, update):

@@ -402,11 +402,10 @@ class InternalConfig:
             self.setup_config()
             self.setup_logging()
             self._initialized = True
+            atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if hasattr(self, "notification_loop"):
-            if self.notification_loop is not None:
-                self.shutdown()
+        self.shutdown()
 
     def setup_config(self) -> None:
         try:
@@ -461,7 +460,6 @@ class InternalConfig:
                     "Started new event loop for notification logging",
                     extra={"loop": self.notification_loop.__dict__},
                 )
-            atexit.register(lambda: asyncio.run(self.async_shutdown()))
 
         # Set up the simple format string
         try:
@@ -503,12 +501,49 @@ class InternalConfig:
         # Optional: Add filters if needed
         handler.addFilter(ConsoleLogFilter())
 
-    async def async_shutdown(self):
-        await asyncio.sleep(0.1)
-        self.shutdown()
+    def check_notifications(self):
+        """
+        Monitors the state of the notification loop and lock.
+
+        This method continuously checks the status of the `notification_loop` and
+        `notification_lock` attributes, printing their states at regular intervals
+        until the notification loop is no longer running and the lock is released.
+
+        Returns:
+            None
+        """
+        while self.notification_loop.is_running() or self.notification_lock:
+            print(
+                f"Notification loop: {self.notification_loop.is_running()} "
+                f"Notification lock: {self.notification_lock}"
+            )
+            time.sleep(0.5)
+        return
 
     def shutdown(self):
+        """
+        Gracefully shuts down the notification loop and ensures all pending tasks are completed.
 
+        This method performs the following steps:
+        1. Checks if the `notification_loop` attribute exists and is not `None`.
+        2. If the loop is running:
+            - Logs the intention to close the notification loop.
+            - Retrieves the current task running the shutdown logic.
+            - Gathers all other pending tasks in the loop and waits for their completion.
+            - Schedules the loop to stop from the current thread.
+            - Polls until the loop stops running.
+            - Attempts to shut down asynchronous generators and closes the loop.
+        3. If the loop is not running, it simply closes the loop.
+        4. Logs the status of the shutdown process.
+
+        Notes:
+        - Handles exceptions if the event loop is already closed or no asynchronous generators are running.
+        - Ensures proper cleanup of resources associated with the notification loop.
+
+        Raises:
+            RuntimeError: If the event loop is already closed or cannot shut down async generators.
+        """
+        self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
                 logger.info("Closing notification loop")
@@ -552,6 +587,7 @@ class InternalConfig:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+
 
 """
 General purpose functions

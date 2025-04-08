@@ -943,7 +943,6 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
-        await check_notifications()
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
     except Exception as e:
@@ -953,18 +952,19 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     finally:
         logger.info(f"{icon} Clearing notifications")
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
-        await check_notifications()
+        await asyncio.sleep(1)
+        # await check_notifications()
 
 
-async def check_notifications():
-    await asyncio.sleep(1)
-    while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
-        print(
-            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
-        )
-        await asyncio.sleep(0.1)
-    return
+# async def check_notifications():
+#     await asyncio.sleep(1)
+#     while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
+#         print(
+#             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
+#             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+#         )
+#         await asyncio.sleep(0.5)
+#     return
 
 
 @app.command()
@@ -1019,7 +1019,6 @@ def main(
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witness))
     print("👋 Goodbye!")
-    INTERNAL_CONFIG.shutdown()
 
 
 if __name__ == "__main__":
