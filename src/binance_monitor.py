@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 from timeit import default_timer as timer
 from typing import Annotated
@@ -20,6 +21,37 @@ app = typer.Typer()
 
 BINANACE_HIVE_ALERT_LEVEL_SATS = 300_000
 BINANACE_BTC_ALERT_LEVEL = 0.02
+
+# Define a global flag to track shutdown
+shutdown_event = asyncio.Event()
+
+
+def handle_shutdown_signal():
+    """
+    Signal handler to set the shutdown event.
+    """
+    logger.info(f"{ICON} Received shutdown signal. Setting shutdown event.")
+    shutdown_event.set()
+
+
+async def sleep_with_shutdown_check(duration: int, check_interval: float = 1.0):
+    """
+    Sleep for a given duration, but check periodically if a shutdown event is set.
+
+    Args:
+        duration (int): Total duration to sleep in seconds.
+        check_interval (float): Interval to check the shutdown event in seconds.
+
+    Returns:
+        None
+    """
+    elapsed = 0
+    while elapsed < duration:
+        if shutdown_event.is_set():
+            logger.info(f"{ICON} Shutdown event detected during sleep.")
+            raise asyncio.CancelledError("Shutdown event triggered")
+        await asyncio.sleep(check_interval)
+        elapsed += check_interval
 
 
 async def check_binance_balances():
@@ -47,9 +79,11 @@ async def check_binance_balances():
     saved_balances = {}
     send_message = True
     start = timer()
-    while True:
+    while not shutdown_event.is_set():
         testnet = False
         try:
+            if shutdown_event.is_set():
+                raise asyncio.CancelledError("Docker Shutdown")
             new_balances, hive_target, notficiation_str, log_str = generate_message(
                 saved_balances,
                 testnet,
@@ -75,12 +109,17 @@ async def check_binance_balances():
                 f"{ICON} Problem with Binance API. {ex}", extra={"error_code": "binance_api_error"}
             )
             send_message = True  # This will allow the error to clear if things improve
+
         except Exception as ex:
             logger.error(f"{ICON} Problem with Binance API. {ex} {ex.__class__}")
             logger.exception(ex, extra={"error": ex, "notification": False})
 
+        except asyncio.CancelledError as e:
+            logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
+            raise e
+
         finally:
-            await asyncio.sleep(60)
+            await sleep_with_shutdown_check(60, 1)
             elapsed = timer() - start
             if elapsed > 3600:  # or 1 hour
                 send_message = True
@@ -152,11 +191,18 @@ async def main_async_start():
     """
     try:
         logger.info(f"{ICON} Binance Monitor started.")
+        # Get the current event loop
+        loop = asyncio.get_event_loop()
+
+        # Register signal handlers for SIGTERM and SIGINT
+        loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
+        loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+
         await check_binance_balances()
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+        logger.info(f"{ICON} 👋 Goodbye! from Binance Monitor", extra={"notification": True})
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Binance Monitor {e}", extra={"error": e})
