@@ -68,7 +68,6 @@ icon = "🐝"
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
-
 def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.

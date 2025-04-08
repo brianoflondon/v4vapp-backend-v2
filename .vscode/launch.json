@@ -207,7 +207,7 @@
             "request": "launch",
             "program": "src/template_app.py",
             "args": [
-                "--help"
+                // "--help"
             ],
             "console": "integratedTerminal"
         },
