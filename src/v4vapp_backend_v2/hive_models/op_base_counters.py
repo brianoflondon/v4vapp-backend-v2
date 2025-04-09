@@ -83,7 +83,7 @@ class BlockCounter:
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
-    marker_point: int = 50
+    marker_point: int = 100  # 100 blocks is 300s 5 minutes
     icon: str = "🧱"
 
     def __post_init__(self):
@@ -91,7 +91,7 @@ class BlockCounter:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""
 
-    def inc(self, hive_event: dict) -> Tuple[bool, bool]:
+    def inc(self, hive_event: dict, notification: bool = False) -> Tuple[bool, bool]:
         """
         Increment the block count and update the current block number.
         """
@@ -113,7 +113,7 @@ class BlockCounter:
                     f"{self.icon} {self.id:>9}{self.block_count:,} blocks processed. {self.time_diff} "
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
-                        "notification": False,
+                        "notification": notification,
                         "time_diff": self.time_diff,
                         "block_count": self.block_count,
                     },
@@ -144,7 +144,7 @@ class BlockCounter:
                 string if cleared) and the calculated time difference.
         """
         self.time_diff = check_time_diff(timestamp)
-        comparison_text = f"than {TIME_DIFFERENCE_CHECK} s"
+        comparison_text = f"than {TIME_DIFFERENCE_CHECK}"
 
         if not self.error_code and self.time_diff > TIME_DIFFERENCE_CHECK:
             self.error_code = f"{self.id}Hive Time diff greater {comparison_text}"

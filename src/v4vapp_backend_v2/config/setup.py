@@ -512,12 +512,13 @@ class InternalConfig:
         Returns:
             None
         """
-        while self.notification_loop.is_running() or self.notification_lock:
-            print(
-                f"Notification loop: {self.notification_loop.is_running()} "
-                f"Notification lock: {self.notification_lock}"
-            )
-            time.sleep(0.5)
+        if self.notification_loop:
+            while self.notification_loop.is_running() or self.notification_lock:
+                print(
+                    f"Notification loop: {self.notification_loop.is_running()} "
+                    f"Notification lock: {self.notification_lock}"
+                )
+                time.sleep(0.5)
         return
 
     def shutdown(self):

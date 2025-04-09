@@ -306,6 +306,20 @@ def draw_percentage_meter(percentage, max_percent=200, width=20):
     return f"[{meter}] {percent_str:>6} / {max_percent}%"
 
 
+def seconds_only_time_diff(timestamp: datetime) -> timedelta:
+    """
+    Calculate the absolute time difference between the current time and a given timestamp.
+    Removes the milliseconds from the timedelta.
+
+    Args:
+        timestamp (datetime): The timestamp to compare with the current time.
+
+    Returns:
+        timedelta: The absolute difference between the current time and the given timestamp.
+    """
+    return abs(seconds_only(datetime.now(tz=timezone.utc) - timestamp))
+
+
 def check_time_diff(timestamp: str | datetime) -> timedelta:
     """
     Calculate the difference between the current time and a given timestamp
@@ -326,9 +340,8 @@ def check_time_diff(timestamp: str | datetime) -> timedelta:
         else:
             if not timestamp.tzinfo:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
-        time_diff = seconds_only(datetime.now(tz=timezone.utc) - timestamp)
+        time_diff = seconds_only_time_diff(timestamp)
         # Ensure the timedelta is always positive
-        time_diff = abs(time_diff)
     except (ValueError, AttributeError, OverflowError, TypeError):
         time_diff = timedelta(seconds=0)
     return time_diff
