@@ -9,18 +9,11 @@ from typing import Any, Dict
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.hive.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_blockchain_instance,
-    get_hive_client,
-)
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpInTrxCounter, OpRealm
+from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
-from v4vapp_backend_v2.hive_models.op_types_enums import (
-    OpTypes,
-    RealOpsLoopTypes,
-    VirtualOpTypes,
-)
+from v4vapp_backend_v2.hive_models.op_types_enums import RealOpsLoopTypes, VirtualOpTypes
 
 found_ops = {}
 
@@ -90,14 +83,14 @@ async def scan_hive(op_real_virtual: OpRealm):
                 print("-----------")
                 pprint(custom_json.model_dump(), indent=2)
                 print("-----------")
-            except ValueError as e:
+            except ValueError:
                 pass
 
         # logger.info(f"End scanning hive blockchain", extra={"notification": False})
         pprint(found_ops, indent=4)
         await asyncio.sleep(0.01)
     except KeyboardInterrupt:
-        logger.info(f"End scanning hive blockchain", extra={"notification": False})
+        logger.info("End scanning hive blockchain", extra={"notification": False})
         pprint(found_ops, indent=4)
         pass
 
@@ -106,9 +99,7 @@ async def scan_hive(op_real_virtual: OpRealm):
         pass
 
 
-def op_in_trx_counter(
-    op_in_trx: int, last_trx_id: str, post: Dict[str, Any]
-) -> tuple[int, str]:
+def op_in_trx_counter(op_in_trx: int, last_trx_id: str, post: Dict[str, Any]) -> tuple[int, str]:
     if last_trx_id == post["trx_id"]:
         op_in_trx += 1
     else:
@@ -119,7 +110,6 @@ def op_in_trx_counter(
 
 
 async def main_async_start():
-
     async with asyncio.TaskGroup() as tg:
         real = tg.create_task(scan_hive(OpRealm.REAL))
         # virtual = tg.create_task(scan_hive(OpRealm.VIRTUAL))

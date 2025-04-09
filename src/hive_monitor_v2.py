@@ -3,9 +3,10 @@ import signal
 import sys
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, List, Union
+from typing import Annotated, Any, List, Tuple, Union
 
 import typer
+from nectar import Hive
 from nectar.amount import Amount
 from nectar.blockchain import Blockchain
 
@@ -28,7 +29,7 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import op_any
-from v4vapp_backend_v2.hive_models.op_base import OpInTrxCounter
+from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -68,6 +69,7 @@ icon = "🐝"
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
+
 def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
@@ -86,7 +88,7 @@ def check_time_diff(timestamp: str | datetime) -> timedelta:
         compare with the current time. Forces UTC if not timezone aware.
 
     Returns:
-        timedelta: The difference between the current time and the given timestamp.
+        timedelta: The absolute difference between the current time and the given timestamp.
 
     Logs a warning if the time difference is greater than 1 minute.
     """
@@ -97,36 +99,43 @@ def check_time_diff(timestamp: str | datetime) -> timedelta:
             if not timestamp.tzinfo:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
         time_diff = seconds_only(datetime.now(tz=timezone.utc) - timestamp)
+        # Ensure the timedelta is always positive
+        time_diff = abs(time_diff)
     except (ValueError, AttributeError, OverflowError, TypeError):
         time_diff = timedelta(seconds=0)
     return time_diff
 
 
-def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
+def log_time_difference_errors(
+    timestamp: str | datetime, error_code: str = "", id: str = ""
+) -> Tuple[str, timedelta]:
     """
-    Logs time difference errors based on the provided timestamp.
+    Logs warnings based on the time difference between the provided timestamp and the
+    current time.
 
-    This function checks the time difference between the current time and the provided
-    timestamp. If the time difference is greater than 1 minute, it logs a warning with
-    an error code indicating the time difference is greater than 1 minute. If an error
-    code is provided and the time difference is less than 1 minute, it logs a warning
-    indicating the error code should be cleared.
+    If the time difference exceeds a predefined threshold, an error code is generated
+    and logged. If the time difference is within the threshold and an error code exists,
+    the error code is cleared and logged.
 
     Args:
-        timestamp (str): The timestamp to compare against the current time.
-        error_code (str, optional): The error code to log if the time difference is less
-            than 1 minute. Defaults to an empty string.
+        timestamp (str | datetime): The timestamp to compare against the current time.
+            Can be a string or a datetime object.
+        error_code (str, optional): An existing error code to be cleared if the time
+            difference is within the threshold. Defaults to an empty string.
+        id (str, optional): An identifier for the error code. Defaults to an empty string.
 
     Returns:
-        Tuple[str, bool]: A tuple containing the error code and a flag indicating
-        whether the error code should be cleared
+        Tuple[str, timedelta]: A tuple containing the updated error code (or an empty
+            string if cleared) and the calculated time difference.
     """
     time_diff = check_time_diff(timestamp)
+    id = id + " " if id else ""
     comparison_text = f"than {TIME_DIFFERENCE_CHECK} s"
+
     if not error_code and time_diff > timedelta(seconds=TIME_DIFFERENCE_CHECK):
-        error_code = f"Hive Time diff greater {comparison_text}"
+        error_code = f"{id}Hive Time diff greater {comparison_text}"
         logger.warning(
-            f"{icon} Time diff: {time_diff} greater {comparison_text}",
+            f"{icon} {id}Time diff: {time_diff} greater {comparison_text}",
             extra={
                 "notification": True,
                 "error_code": error_code,
@@ -134,14 +143,58 @@ def log_time_difference_errors(timestamp: str | datetime, error_code: str = ""):
         )
     if error_code and time_diff <= timedelta(seconds=TIME_DIFFERENCE_CHECK):
         logger.warning(
-            f"{icon} Time diff: {time_diff} less {comparison_text}",
+            f"{icon} {id}Time diff: {time_diff} less {comparison_text}",
             extra={
                 "notification": True,
                 "error_code_clear": error_code,
             },
         )
         error_code = ""
-    return error_code
+    return error_code, time_diff
+
+
+async def block_counter(
+    last_good_block: int,
+    current_block: int,
+    block_count: int,
+    hive_client: Hive,
+    time_diff: timedelta,
+    id: str = "",
+    marker_point: int = 10,
+) -> Tuple[bool, int]:
+    """
+    Check if the current block is greater than the last good block.
+
+    Args:
+        last_good_block (int): The last good block number.
+        current_block (int): The current block number.
+        block_count (int): The current block count.
+        hive_client (Hive): The Hive client instance for blockchain interaction.
+        time_diff (timedelta): The time difference between the current and last block.
+
+    Returns:
+        Tuple[bool, int, int]: A tuple containing a boolean indicating if the marker has been
+        reached and the updated `block_count` and `last_good_block`.
+    """
+    marker = False
+    id = id + " " if id else ""
+    if last_good_block < current_block:
+        block_count += 1
+        marker = True
+        last_good_block = current_block
+        if block_count % marker_point == 0:
+            await Transfer.update_quote()
+            old_node = hive_client.rpc.url
+            hive_client.rpc.next()
+            logger.info(
+                f"{icon} {id}{block_count} blocks processed. {time_diff} "
+                f"Updated Quotes Age: {Transfer.last_quote.age:.2f}s "
+                f"Node: {old_node} -> {hive_client.rpc.url}",
+                extra={"notification": False, "time_diff": time_diff, "block_count": block_count},
+            )
+        # this pause between blocks allows another loop (real/virtual) to take over.
+        await asyncio.sleep(0.01)
+    return marker, block_count, last_good_block
 
 
 def watch_users_notification(transfer: Transfer, watch_users: List[str]) -> bool:
@@ -608,13 +661,13 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
         Exception: For any other exceptions that occur during the loop.
     """
     op_names = VirtualOpTypes
-    logger.info(f"{icon} Watching witness: {watch_witness}")
+    logger.info(f"{icon} Virtual Loop Watching witness: {watch_witness}")
     producer_reward = await witness_first_run(watch_witness)
     last_good_timestamp = producer_reward.timestamp
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
-    last_good_block = producer_reward.block_num + 1
-    count = 0
+    last_good_block = await get_last_good_block() + 1
+    block_count = 0
     mean_time_diff = await witness_average_block_time(watch_witness)
     send_once = False
     async with MongoDBClient(
@@ -633,15 +686,23 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                 )
             )
             logger.info(f"{icon} Virtual Loop using nodes: {hive_client.get_default_nodes()}")
-            # error_code = ""
+            error_code = ""
             try:
                 async for hive_event in async_stream:
                     if shutdown_event.is_set():
                         raise asyncio.CancelledError("Docker Shutdown")
                     hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
-                    # error_code = log_time_difference_errors(
-                    #     hive_event["timestamp"], error_code
-                    # )
+                    error_code, time_diff = log_time_difference_errors(
+                        hive_event["timestamp"], error_code, id="virtual_ops_loop"
+                    )
+                    _, block_count, last_good_block = await block_counter(
+                        last_good_block=last_good_block,
+                        current_block=hive_event["block_num"],
+                        block_count=block_count,
+                        hive_client=hive_client,
+                        time_diff=time_diff,
+                        id="virtual_ops_loop",
+                    )
                     hive_event_timestamp = hive_event.get("timestamp", "1970-01-01T00:00:00+00:00")
                     seconds_since_last_block = (hive_event_timestamp - last_good_timestamp).seconds
                     if (
@@ -711,9 +772,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                     if hive_event.get("type") in MarketOpTypes:
                         asyncio.create_task(slow_publish_fill_event(hive_event, watch_users))
                         last_good_event = hive_event
-                    count += 1
-                    if count % 100 == 0:
-                        hive_client.rpc.next()
+
             except (KeyboardInterrupt, asyncio.CancelledError) as e:
                 logger.info(
                     f"{icon} Keyboard interrupt or Cancelled: Stopping event listener. {e}"
@@ -774,13 +833,13 @@ async def real_ops_loop(
         Events.HIVE_TRANSFER_NOTIFY: When a transfer or recurrent transfer transaction
         involving a watched user is detected.
     """
-    logger.info(f"{icon} Watching users: {watch_users}")
+    logger.info(f"{icon} Real Loop Watching users: {watch_users}")
     LimitOrderCreate.watch_users = watch_users
     op_names = RealOpsLoopTypes
     hive_client = get_hive_client()
     hive_blockchain = Blockchain(hive=hive_client)
     last_good_block = await get_last_good_block() + 1
-    count = 0
+    block_count = 0
     start = timer()
     await Transfer.update_quote()
     async with MongoDBClient(
@@ -808,29 +867,25 @@ async def real_ops_loop(
                     # Moved outside the specific blocks for different op codes
                     hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                     try:
-                        error_code = log_time_difference_errors(
-                            hive_event["timestamp"], error_code
+                        error_code, time_diff = log_time_difference_errors(
+                            hive_event["timestamp"], error_code, id="real_ops_loop"
+                        )
+                        _, block_count, last_good_block = await block_counter(
+                            last_good_block=last_good_block,
+                            current_block=hive_event["block_num"],
+                            block_count=block_count,
+                            hive_client=hive_client,
+                            time_diff=time_diff,
+                            id="real_ops_loop",
                         )
                         op = op_any(hive_event)
                         if not op:
                             continue
-                        if last_good_block < op.block_num:
-                            last_good_block = op.block_num
-                        count += 1
-                        # if count == 2:
-                        #     raise Exception("Test exception in hive monitor")
-                        if count % 1000 == 0:
-                            old_node = hive_client.rpc.url
-                            hive_client.rpc.next()
-                            logger.info(
-                                f"{icon} {count} transactions processed. "
-                                f"Node: {old_node} -> {hive_client.rpc.url}"
-                            )
-                            await Transfer.update_quote()
-                            logger.info(f"{icon} Updated Quotes Age: {Transfer.last_quote.age}")
                     except ValueError:
                         # Not one of the ops we want to track
                         continue
+                    except Exception as ex:
+                        print(ex)
 
                     if op.type in WitnessOpTypes:
                         vote = AccountWitnessVote.model_validate(hive_event)
@@ -953,17 +1008,6 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         await asyncio.sleep(1)
         # await check_notifications()
-
-
-# async def check_notifications():
-#     await asyncio.sleep(1)
-#     while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
-#         print(
-#             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-#             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
-#         )
-#         await asyncio.sleep(0.5)
-#     return
 
 
 @app.command()
