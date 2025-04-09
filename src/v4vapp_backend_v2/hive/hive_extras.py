@@ -166,8 +166,29 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
             wd = WitnessDetails.model_validate(answer)
             return wd
 
+    except httpx.ConnectTimeout as e:
+        logger.warning(
+            f"Failed to get_hive_witness_details: {e}",
+            extra={"notification": False},
+        )
+        try:
+            async with V4VAsyncRedis() as redis_client:
+                answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+                if answer:
+                    wd = WitnessDetails.model_validate(answer)
+                    return wd
+            logger.warning(
+                f"Failed to get_hive_witness_details "
+                f"from cache after error: {response.status_code}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to get_hive_witness_details from cache: {e}",
+                extra={"notification": False},
+            )
+
     except Exception as e:
-        logger.exception(f"Failed to get_hive_witness_details: {e}")
+        logger.exception(f"Failed to get_hive_witness_details: {e}", extra={"notification": False})
         try:
             async with V4VAsyncRedis() as redis_client:
                 answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
@@ -181,7 +202,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
             )
         except Exception as e:
             logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
-        return None
+    return None
 
 
 class HiveInternalQuote(BaseModel):
