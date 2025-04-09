@@ -1,7 +1,5 @@
-from collections import deque
-from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Any, ClassVar, Deque, Dict
+from typing import Any, Dict
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -149,4 +147,3 @@ class OpBase(BaseModel):
             block_explorer=self.block_explorer,
             markdown=True,
         )
-

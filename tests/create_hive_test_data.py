@@ -15,7 +15,7 @@ from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_types_enums import RealOpsLoopTypes, VirtualOpTypes
 
-found_ops = {}
+found_ops: dict[str, int] = {}
 
 
 async def scan_hive(op_real_virtual: OpRealm):
@@ -31,7 +31,7 @@ async def scan_hive(op_real_virtual: OpRealm):
     if op_real_virtual == OpRealm.VIRTUAL:
         op_names = VirtualOpTypes
     else:
-        op_names = RealOpsLoopTypes
+        # op_names = RealOpsLoopTypes
         op_names = ["custom_json"]
 
     logger.info(

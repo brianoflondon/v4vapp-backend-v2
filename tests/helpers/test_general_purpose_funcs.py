@@ -4,6 +4,7 @@ import pytest
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     cap_camel_case,
+    check_time_diff,
     detect_convert_keepsats,
     detect_hbd,
     detect_keepsats,
@@ -12,6 +13,8 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     get_in_flight_time,
     is_markdown,
+    re_escape,
+    sanitize_markdown_v1,
     seconds_only,
     snake_case,
 )
@@ -185,10 +188,167 @@ def test_is_markdown():
     assert is_markdown("Plain text message") is False
 
 
+@pytest.mark.parametrize(
+    "text, reserved_chars, expected",
+    [
+        ("hello.world", ".", "hello\\.world"),  # Single reserved char
+        ("a.b*c[d]", ".*[]", "a\\.b\\*c\\[d\\]"),  # Multiple reserved chars
+        ("helloworld", ".*[]", "helloworld"),  # No reserved chars in text
+        ("", ".*[]", ""),  # Empty text
+        ("hello.world", "", "hello.world"),  # Empty reserved_chars
+        (".*[]", ".*[]", "\\.\\*\\[\\]"),  # All chars reserved
+        ("a...b", ".", "a\\.\\.\\.b"),  # Repeated reserved chars
+        ("hello世界.", ".", "hello世界\\."),  # Non-ASCII chars
+        ("helloworld", "^$", "helloworld"),  # Reserved chars not in text
+    ],
+    ids=[
+        "single_reserved_char",
+        "multiple_reserved_chars",
+        "no_reserved_chars",
+        "empty_text",
+        "empty_reserved_chars",
+        "all_chars_reserved",
+        "repeated_reserved_chars",
+        "non_ascii_chars",
+        "reserved_chars_not_in_text",
+    ],
+)
+def test_re_escape(text, reserved_chars, expected):
+    result = re_escape(text, reserved_chars)
+    assert result == expected, f"Expected '{expected}', got '{result}'"
+
+
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        # Basic text, no formatting
+        ("Hello world", "Hello world"),
+        # Single * or _ not escaped
+        ("Hello *world", "Hello *world"),
+        ("Hello _world", "Hello _world"),
+        # Paired * or _ escaped
+        ("Hello *world*", "Hello \\*world\\*"),
+        ("Hello _world_", "Hello \\_world\\_"),
+        # Mixed paired and unpaired
+        ("*Hello* world *test*", "\\*Hello\\* world \\*test\\*"),
+        ("_Hello_ world _test_", "\\_Hello\\_ world \\_test\\_"),
+        # Links preserved, no escaping inside
+        ("[link](https://example.com)", "[link](https://example.com)"),
+        # Text with link and formatting outside
+        ("See *this* [link](https://example.com)", "See \\*this\\* [link](https://example.com)"),
+        # Formatting inside link text (not escaped)
+        ("[*link*](https://example.com)", "[*link*](https://example.com)"),
+        # Multiple links with text
+        (
+            "Text [one](https://a.com) *bold* [two](https://b.com)",
+            "Text [one](https://a.com) \\*bold\\* [two](https://b.com)",
+        ),
+        # Empty string
+        ("", ""),
+        # Only link
+        ("[x](https://x.com)", "[x](https://x.com)"),
+        # Complex case with overlapping concerns
+        (
+            "Start *bold* [link *text*](https://example.com) _underline_ end",
+            "Start \\*bold\\* [link *text*](https://example.com) \\_underline\\_ end",
+        ),
+        # No valid link, treated as text
+        ("[text](not-a-url) *bold*", "[text](not-a-url) \\*bold\\*"),
+    ],
+    ids=[
+        "plain_text",
+        "single_star",
+        "single_underscore",
+        "paired_stars",
+        "paired_underscores",
+        "mixed_stars",
+        "mixed_underscores",
+        "simple_link",
+        "text_with_link",
+        "formatting_in_link",
+        "multiple_links",
+        "empty_string",
+        "only_link",
+        "complex_case",
+        "invalid_link",
+    ],
+)
+def test_sanitize_markdown_v1(text, expected):
+    result = sanitize_markdown_v1(text)
+    assert result == expected, f"Expected '{expected}', got '{result}'"
+
+
 def test_draw_percentage_meter_data():
     print()
     for i in range(0, 240, 10):
         print(draw_percentage_meter(i, width=8))
+
+
+def test_check_time_diff_string_timestamp_positive_diff():
+    # Create a timestamp 60 seconds in the past
+    past_time = datetime.now(tz=timezone.utc) - timedelta(seconds=60)
+    timestamp = past_time.isoformat()
+    result = check_time_diff(timestamp)
+    # Allow some variance due to execution time (e.g., 59-61 seconds)
+    assert 59 <= result.total_seconds() <= 61, f"Expected ~60s, got {result.total_seconds()}s"
+
+
+def test_check_time_diff_string_timestamp_negative_diff():
+    # Create a timestamp 60 seconds in the future
+    future_time = datetime.now(tz=timezone.utc) + timedelta(seconds=60)
+    timestamp = future_time.isoformat()
+    result = check_time_diff(timestamp)
+    # Absolute value, allow variance (59-61 seconds)
+    assert 59 <= result.total_seconds() <= 61, f"Expected ~60s, got {result.total_seconds()}s"
+
+
+def test_check_time_diff_datetime_with_tz():
+    # Datetime 120 seconds in the past, timezone-aware
+    past_time = datetime.now(tz=timezone.utc) - timedelta(seconds=120)
+    result = check_time_diff(past_time)
+    assert 119 <= result.total_seconds() <= 121, f"Expected ~120s, got {result.total_seconds()}s"
+
+
+def test_check_time_diff_datetime_without_tz():
+    # Datetime 180 seconds in the past, naive (no timezone)
+    past_time = datetime.now(tz=timezone.utc) - timedelta(seconds=180)
+    naive_time = past_time.replace(tzinfo=None)  # Strip timezone
+    result = check_time_diff(naive_time)
+    assert 179 <= result.total_seconds() <= 181, f"Expected ~180s, got {result.total_seconds()}s"
+
+
+def test_check_time_diff_invalid_string_timestamp():
+    timestamp = "invalid-timestamp"
+    result = check_time_diff(timestamp)
+    assert result == timedelta(seconds=0), "Expected 0s for invalid string"
+
+
+def test_check_time_diff_none_timestamp():
+    timestamp = None
+    result = check_time_diff(timestamp)
+    assert result == timedelta(seconds=0), "Expected 0s for None input"
+
+
+def test_check_time_diff_seconds_only_removes_microseconds():
+    # Test that microseconds are stripped by seconds_only
+    now = datetime.now(tz=timezone.utc)
+    # Create a timestamp with microseconds
+    micro_time = now - timedelta(seconds=5, microseconds=123456)
+    result = check_time_diff(micro_time.isoformat())
+    # Total seconds should be 5, no fractional part from microseconds
+    assert result == timedelta(seconds=5), f"Expected 5s, got {result}"
+
+
+def test_check_time_diff_large_time_difference():
+    # Test a large difference (e.g., 1 hour in the past)
+    past_time = datetime.now(tz=timezone.utc) - timedelta(hours=1)
+    result = check_time_diff(past_time.isoformat())
+    # 1 hour = 3600 seconds, allow small variance
+    assert 3599 <= result.total_seconds() <= 3601, (
+        f"Expected ~3600s, got {result.total_seconds()}s"
+    )
 
 
 if __name__ == "__main__":

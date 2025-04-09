@@ -269,34 +269,6 @@ def sanitize_markdown_v1(text: str) -> str:
     return "".join(parts)
 
 
-# def draw_percentage_meter(
-#     percentage: int, max_percent: int = 200, width: int = 20
-# ) -> str:
-#     """
-#     Draws a text-based percentage meter from 0% to max_percent
-
-#     Args:
-#         percentage (float): The current percentage (e.g., 175)
-#         max_percent (float): Maximum percentage scale (default 200)
-#         width (int): Width of the meter in characters (default 50)
-#     """
-#     # Ensure percentage stays within bounds
-#     draw_percentage = max(0, min(percentage, max_percent))
-
-#     # Calculate the filled portion
-#     filled_width = int(width * draw_percentage / max_percent)
-#     empty_width = width - filled_width
-
-#     # Create the meter using Unicode block characters
-#     meter = "█" * filled_width + "░" * empty_width
-
-#     # Calculate percentage string
-#     percent_str = f"{percentage:.0f}%"
-
-#     # Combine everything with some styling
-#     return f"[{meter}] {percent_str:>6} / {max_percent:.0f}%"
-
-
 def draw_percentage_meter(percentage, max_percent=200, width=20):
     """
     Draws a fine-grained percentage meter using fractional block characters
@@ -332,3 +304,31 @@ def draw_percentage_meter(percentage, max_percent=200, width=20):
 
     percent_str = f"{percentage:.0f}%"
     return f"[{meter}] {percent_str:>6} / {max_percent}%"
+
+
+def check_time_diff(timestamp: str | datetime) -> timedelta:
+    """
+    Calculate the difference between the current time and a given timestamp
+    Removes the milliseconds from the timedelta.
+
+    Args:
+        timestamp (str | datetime): The timestamp in ISO format or datetime object () to
+        compare with the current time. Forces UTC if not timezone aware.
+
+    Returns:
+        timedelta: The absolute difference between the current time and the given timestamp.
+
+    Logs a warning if the time difference is greater than 1 minute.
+    """
+    try:
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc)
+        else:
+            if not timestamp.tzinfo:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+        time_diff = seconds_only(datetime.now(tz=timezone.utc) - timestamp)
+        # Ensure the timedelta is always positive
+        time_diff = abs(time_diff)
+    except (ValueError, AttributeError, OverflowError, TypeError):
+        time_diff = timedelta(seconds=0)
+    return time_diff
