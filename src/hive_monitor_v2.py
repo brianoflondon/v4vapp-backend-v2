@@ -878,10 +878,9 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
-        logger.info(f"{icon} Clearing notifications")
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
-        await asyncio.sleep(1)
-        # await check_notifications()
+        logger.info(f"{icon} Clearing notifications")
+        await asyncio.sleep(2)
 
 
 @app.command()
@@ -935,13 +934,13 @@ def main(
     COMMAND_LINE_WATCH_USERS = watch_users
     COMMAND_LINE_WATCH_ONLY = watch_only
     asyncio.run(main_async_start(watch_users, watch_witness))
-    print("👋 Goodbye!")
 
 
 if __name__ == "__main__":
     try:
         logger.name = "hive_monitor_v2"
         app()
+        print("👋 Goodbye!")
     except (KeyboardInterrupt, asyncio.CancelledError):
         sys.exit(0)
 
