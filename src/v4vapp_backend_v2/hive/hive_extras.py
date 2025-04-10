@@ -16,7 +16,6 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -127,82 +126,82 @@ def get_good_nodes() -> List[str]:
     return good_nodes
 
 
-async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
-    """
-    Fetches details about a Hive witness.
+# async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
+#     """
+#     Fetches details about a Hive witness.
 
-    This function sends a GET request to "https://api.syncad.com/hafbe-api/witnesses"
-    and retrieves the details of a Hive witness with the specified account name.
+#     This function sends a GET request to "https://api.syncad.com/hafbe-api/witnesses"
+#     and retrieves the details of a Hive witness with the specified account name.
 
-    Args:
-        hive_accname (str): The account name of the Hive witness.
+#     Args:
+#         hive_accname (str): The account name of the Hive witness.
 
-    Returns:
-        dict: A dictionary containing the details of the Hive witness.
-    """
-    try:
-        if not hive_accname:
-            url = "https://api.syncad.com/hafbe-api/witnesses"
-        else:
-            url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=20)
-            if response.status_code == 200:
-                answer = response.json()
-                async with V4VAsyncRedis() as redis_client:
-                    await redis_client.set(
-                        name=f"witness_{hive_accname}", value=json.dumps(answer)
-                    )
-            else:
-                async with V4VAsyncRedis() as redis_client:
-                    answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-                    if not answer:
-                        logger.warning(
-                            f"Failed to get_hive_witness_details "
-                            f"from cache after error: {response.status_code}"
-                        )
-                        return None
+#     Returns:
+#         dict: A dictionary containing the details of the Hive witness.
+#     """
+#     try:
+#         if not hive_accname:
+#             url = "https://api.syncad.com/hafbe-api/witnesses"
+#         else:
+#             url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
+#         async with httpx.AsyncClient() as client:
+#             response = await client.get(url, timeout=20)
+#             if response.status_code == 200:
+#                 answer = response.json()
+#                 async with V4VAsyncRedis() as redis_client:
+#                     await redis_client.set(
+#                         name=f"witness_{hive_accname}", value=json.dumps(answer)
+#                     )
+#             else:
+#                 async with V4VAsyncRedis() as redis_client:
+#                     answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+#                     if not answer:
+#                         logger.warning(
+#                             f"Failed to get_hive_witness_details "
+#                             f"from cache after error: {response.status_code}"
+#                         )
+#                         return None
 
-            wd = WitnessDetails.model_validate(answer)
-            return wd
+#             wd = WitnessDetails.model_validate(answer)
+#             return wd
 
-    except httpx.ConnectTimeout as e:
-        logger.warning(
-            f"Failed to get_hive_witness_details: {e}",
-            extra={"notification": False},
-        )
-        try:
-            async with V4VAsyncRedis() as redis_client:
-                answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-                if answer:
-                    wd = WitnessDetails.model_validate(answer)
-                    return wd
-            logger.warning(
-                f"Failed to get_hive_witness_details "
-                f"from cache after error: {response.status_code}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to get_hive_witness_details from cache: {e}",
-                extra={"notification": False},
-            )
+#     except httpx.ConnectTimeout as e:
+#         logger.warning(
+#             f"Failed to get_hive_witness_details: {e}",
+#             extra={"notification": False},
+#         )
+#         try:
+#             async with V4VAsyncRedis() as redis_client:
+#                 answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+#                 if answer:
+#                     wd = WitnessDetails.model_validate(answer)
+#                     return wd
+#             logger.warning(
+#                 f"Failed to get_hive_witness_details "
+#                 f"from cache after error: {response.status_code}"
+#             )
+#         except Exception as e:
+#             logger.error(
+#                 f"Failed to get_hive_witness_details from cache: {e}",
+#                 extra={"notification": False},
+#             )
 
-    except Exception as e:
-        logger.exception(f"Failed to get_hive_witness_details: {e}", extra={"notification": False})
-        try:
-            async with V4VAsyncRedis() as redis_client:
-                answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-                if answer:
-                    wd = WitnessDetails.model_validate(answer)
-                    return wd
+#     except Exception as e:
+#         logger.exception(f"Failed to get_hive_witness_details: {e}", extra={"notification": False})
+#         try:
+#             async with V4VAsyncRedis() as redis_client:
+#                 answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+#                 if answer:
+#                     wd = WitnessDetails.model_validate(answer)
+#                     return wd
 
-            logger.warning(
-                f"Failed to get_hive_witness_details "
-                f"from cache after error: {response.status_code}"
-            )
-        except Exception as e:
-            logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
-    return None
+#             logger.warning(
+#                 f"Failed to get_hive_witness_details "
+#                 f"from cache after error: {response.status_code}"
+#             )
+#         except Exception as e:
+#             logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
+#     return None
 
 
 class HiveInternalQuote(BaseModel):

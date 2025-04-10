@@ -22,8 +22,8 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, sec
 from v4vapp_backend_v2.hive.hive_extras import (
     MAX_HIVE_BATCH_SIZE,
     get_hive_client,
-    get_hive_witness_details,
 )
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
@@ -269,7 +269,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
     """
     global COMMAND_LINE_WATCH_USERS
     if watch_users_notification(transfer=op, watch_users=COMMAND_LINE_WATCH_USERS):
-        if not Transfer.last_quote and Transfer.last_quote.age > 60:
+        if not Transfer.last_quote or (Transfer.last_quote and Transfer.last_quote.age > 60):
             await Transfer.update_quote()
             quote = Transfer.last_quote
             logger.info(
@@ -309,29 +309,29 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     Returns:
         None: The function does not return any value.
     """
-    await asyncio.sleep(1)
-    if transfer.from_account in CONFIG.hive.server_account_names:
-        use_account = transfer.from_account
-    elif transfer.to_account in CONFIG.hive.server_account_names:
-        use_account = transfer.to_account
-    else:
-        return
-    hive_acc = CONFIG.hive.hive_accs.get(use_account, None)
-    if hive_acc and hive_acc.active_key:
-        # set the amount to the current HBD balance taken from Config
-        set_amount_to = Amount(hive_acc.hbd_balance)
-        nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
-        try:
+    await asyncio.sleep(3)  # Sleeps to make sure we only balance HBD after time for a return
+    try:
+        if transfer.from_account in CONFIG.hive.server_account_names:
+            use_account = transfer.from_account
+        elif transfer.to_account in CONFIG.hive.server_account_names:
+            use_account = transfer.to_account
+        else:
+            return
+        hive_acc = CONFIG.hive.hive_accs.get(use_account, None)
+        if hive_acc and hive_acc.active_key:
+            # set the amount to the current HBD balance taken from Config
+            set_amount_to = Amount(hive_acc.hbd_balance)
+            nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
             trx = account_trade(
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
             )
             if trx:
-                logger.info(f"Transaction broadcasted: {trx.get('trx_id')}", extra={"trx": trx})
-        except Exception as e:
-            logger.error(
-                f"{icon} Conversion error: {e}",
-                extra={"notification": False, "error": e},
-            )
+                logger.info(f"Transaction broadcast: {trx.get('trx_id')}", extra={"trx": trx})
+    except Exception as e:
+        logger.error(
+            f"{icon} Error in {__name__}: {e}",
+            extra={"notification": False, "error": e},
+        )
 
 
 async def db_store_witness_vote(

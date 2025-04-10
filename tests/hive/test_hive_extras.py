@@ -8,43 +8,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     decode_memo,
     get_blockchain_instance,
     get_hive_client,
-    get_hive_witness_details,
 )
-
-
-@pytest.mark.asyncio
-async def test_get_hive_witness_details():
-    witness_details = await get_hive_witness_details("blocktrades")
-    assert witness_details is not None
-    assert witness_details.witness.witness_name == "blocktrades"
-    assert witness_details.witness.missed_blocks >= 0
-    assert witness_details.witness.rank > 0
-
-
-@pytest.mark.asyncio
-async def test_get_hive_witness_details_empty():
-    """
-    Test the `get_hive_witness_details` function when it returns an empty list of witnesses.
-    This test performs the following checks:
-    1. Ensures that the `witnesses` key in the returned dictionary is not None.
-    2. Iterates through each witness in the `witnesses` list and validates
-    it using the `WitnessDetails` model.
-    3. Asserts that the `witness_name` and `rank` attributes of the validated witness
-    match the corresponding values in the original witness dictionary.
-    4. Dumps the validated witness model for further inspection.
-    Raises:
-        AssertionError: If any of the assertions fail.
-    """
-
-    witness_details = await get_hive_witness_details()
-    for witness in witness_details.witnesses:
-        witness.model_dump()
-
-
-@pytest.mark.asyncio
-async def test_get_hive_witness_details_error():
-    witness_details = await get_hive_witness_details("non_existent_witness")
-    assert not witness_details
 
 
 @pytest.mark.asyncio
@@ -118,9 +82,7 @@ def test_decode_memo_from_memo_text_lookup_hive(test_data):
     )
     assert memo is not None
     assert d_memo == expected_plain_text
-    print(
-        "memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text
-    )
+    print("memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text)
 
 
 @pytest.mark.skipif(
@@ -137,9 +99,7 @@ def test_decode_memo_from_memo_text(test_data):
     )
     assert memo is not None
     assert d_memo == expected_plain_text
-    print(
-        "memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text
-    )
+    print("memo: ", memo, "d_memo", d_memo, "expected_plain_text: ", expected_plain_text)
 
 
 @pytest.mark.asyncio
@@ -148,9 +108,7 @@ async def test_get_hive_client_error():
     with patch(
         "v4vapp_backend_v2.hive.hive_extras.Hive",
     ) as mock_get_hive:
-        mock_get_hive.side_effect = TypeError(
-            "string indices must be integers, not 'str'"
-        )
+        mock_get_hive.side_effect = TypeError("string indices must be integers, not 'str'")
 
         # Call the function that uses `get_hive_client` and assert it handles the error
         with pytest.raises(ValueError) as e:
