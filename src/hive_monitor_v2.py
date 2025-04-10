@@ -252,6 +252,21 @@ async def db_store_op(
 
 
 async def db_process_transfer(op: Transfer) -> Transfer | None:
+    """
+    Asynchronously processes a Hive blockchain transfer operation.
+    This function handles notifications for watched users, updates exchange rate quotes if necessary,
+    generates a transfer report, and triggers server balance adjustments based on specific conditions.
+    Args:
+        op (Transfer): The transfer operation to process.
+    Returns:
+        Transfer | None: The processed transfer object if conditions are met, otherwise None.
+    Behavior:
+    - Checks if the transfer involves watched users and sends notifications if applicable.
+    - Updates the exchange rate quotes if the last quote is older than 60 seconds.
+    - Logs the updated quotes for reference.
+    - Generates a transfer report for the given operation.
+    - Initiates server balance adjustments if the transfer involves specific server and treasury accounts.
+    """
     global COMMAND_LINE_WATCH_USERS
     if watch_users_notification(transfer=op, watch_users=COMMAND_LINE_WATCH_USERS):
         if not Transfer.last_quote and Transfer.last_quote.age > 60:
@@ -575,11 +590,9 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         raise asyncio.CancelledError("Docker Shutdown")
                     hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                     new_block, marker = block_counter.inc(hive_event)
+                    # Allow switch to other block loop
                     if new_block:
-                        # Allow switch to other block loop
-                        await asyncio.sleep(0.001)
-                    if marker:
-                        await Transfer.update_quote()
+                        await asyncio.sleep(0.01)
 
                     hive_event_timestamp = hive_event.get("timestamp", "1970-01-01T00:00:00+00:00")
                     seconds_since_last_block = (hive_event_timestamp - last_good_timestamp).seconds
@@ -748,9 +761,9 @@ async def real_ops_loop(
                     hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                     try:
                         new_block, marker = block_counter.inc(hive_event)
+                        # Allow switch to other block loop
                         if new_block:
-                            # Allow switch to other block loop
-                            await asyncio.sleep(0.001)
+                            await asyncio.sleep(0.01)
 
                         op = op_any(hive_event)
                         if not op:
@@ -878,6 +891,12 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
+        # Cancel all tasks except the current one
+        current_task = asyncio.current_task()
+        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{icon} Clearing notifications")
         await asyncio.sleep(2)
