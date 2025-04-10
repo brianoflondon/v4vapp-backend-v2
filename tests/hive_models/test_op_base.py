@@ -1,8 +1,7 @@
-from datetime import datetime
 from random import choice
 from secrets import token_hex
 
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.real_virtual_ops import (
     HIVE_REAL_OPS,
     HIVE_VIRTUAL_OPS,

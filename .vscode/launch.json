@@ -43,13 +43,35 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Hive Monitor",
+            "name": "Hive Monitor HBD No SALE",
             "type": "debugpy",
             "consoleName": "Hive Monitor",
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--watch-only",
+                "--user",
+                "v4vapp",
+                "--user",
+                "brianoflondon",
+                "--user",
+                "v4vapp.tre",
+                "--user",
+                "v4vapp.dhf",
+                "--user",
+                "v4vapp-test",
+                "--witness",
+                "brianoflondon"
+            ],
+            "justMyCode": true,
+        },
+        {
+            "name": "SELLING Hive Monitor SELLING",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
                 "--user",
                 "v4vapp",
                 "--user",

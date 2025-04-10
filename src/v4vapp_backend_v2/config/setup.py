@@ -399,6 +399,7 @@ class InternalConfig:
     def __init__(self):
         if not hasattr(self, "_initialized"):
             super().__init__()
+            self.notification_loop = None  # Initialize notification_loop
             self.setup_config()
             self.setup_logging()
             self._initialized = True
@@ -512,12 +513,13 @@ class InternalConfig:
         Returns:
             None
         """
-        while self.notification_loop.is_running() or self.notification_lock:
-            print(
-                f"Notification loop: {self.notification_loop.is_running()} "
-                f"Notification lock: {self.notification_lock}"
-            )
-            time.sleep(0.5)
+        if getattr(self, "notification_loop") and self.notification_loop is not None:
+            while self.notification_loop.is_running() or self.notification_lock:
+                print(
+                    f"Notification loop: {self.notification_loop.is_running()} "
+                    f"Notification lock: {self.notification_lock}"
+                )
+                time.sleep(0.5)
         return
 
     def shutdown(self):
@@ -617,14 +619,14 @@ def async_time_decorator(func):
             end_time = time.time()
             execution_time = end_time - start_time
             logger.info(
-                f"Function '{func.__name__[:16]}' took {execution_time:.4f} seconds to execute"
+                f"Function '{func.__qualname__[:26]}' took {execution_time:.4f} seconds to execute"
             )
             return result
         except Exception as e:
             end_time = time.time()
             execution_time = end_time - start_time
             logger.info(
-                f"Function '{func.__name__[:16]}' "
+                f"Function '{func.__qualname__[:26]}' "
                 f"failed after {execution_time:.4f} seconds with error: {str(e)}"
             )
             raise
@@ -668,7 +670,7 @@ def async_time_stats_decorator(runs=1):
                 if len(timings) >= runs:
                     avg_time = mean(timings)
                     logger.info(
-                        f"Function '{func.__name__[:16]}' stats - "
+                        f"Function '{func.__qualname__[:26]}' stats - "
                         f"Last: {execution_time:.4f}s, "
                         f"Avg: {avg_time:.4f}s, "
                         f"Runs: {len(timings)}"
@@ -682,7 +684,7 @@ def async_time_stats_decorator(runs=1):
                 end_time = time.time()
                 execution_time = end_time - start_time
                 logger.warning(
-                    f"Function '{func.__name__[:16]}' failed after "
+                    f"Function '{func.__qualname__[:26]}' failed after "
                     f"{execution_time:.4f}s with error: {str(e)}"
                 )
                 raise

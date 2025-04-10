@@ -3,13 +3,14 @@ import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
+from timeit import default_timer as timer
 from typing import Annotated, Any, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
 from pydantic import BaseModel, computed_field
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -18,15 +19,13 @@ ALL_PRICES_COINGECKO = (
     "/price?ids=bitcoin,hive,"
     "hive_dollar&vs_currencies=btc,usd,eur,aud"
 )
-ALL_PRICES_COINMARKETCAP = (
-    "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-)
+ALL_PRICES_COINMARKETCAP = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
 
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 
 CACHE_TIMES = {
-    "CoinGecko": 60,
-    "Binance": 60,
+    "CoinGecko": 180,
+    "Binance": 120,
     "CoinMarketCap": 180,
     "HiveInternalMarket": 60,
 }
@@ -201,7 +200,7 @@ class AllQuotes(BaseModel):
         self.fetch_date = binance_quote.fetch_date
         return binance_quote
 
-    async def get_all_quotes(self, use_cache: bool = True, timeout: float = 30.0):
+    async def get_all_quotes(self, use_cache: bool = True, timeout: float = 60.0):
         all_services = [
             CoinGecko(),
             Binance(),
@@ -209,27 +208,25 @@ class AllQuotes(BaseModel):
             HiveInternalMarket(),
         ]
         self.fetch_date = datetime.now(tz=timezone.utc)
+        start = timer()
         try:
             async with asyncio.timeout(timeout):
+                logger.info(f"Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
                     tasks = {
-                        service.__class__.__name__: tg.create_task(
-                            service.get_quote(use_cache)
-                        )
+                        service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
                         for service in all_services
                     }
 
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             self.quotes = {
-                service.__class__.__name__: QuoteResponse(
-                    error=f"Timeout after {timeout} seconds"
-                )
+                service.__class__.__name__: QuoteResponse(error=f"Timeout after {timeout} seconds")
                 for service in all_services
             }
             logger.error(
-                f"Quote fetching exceeded timeout of {timeout} seconds {self.quotes}"
+                f"Quote fetching exceeded timeout of {timeout} seconds",
+                extra={"timeout": timeout, "error": e},
             )
-            return
 
         self.quotes = {}
         for service_name, task in tasks.items():
@@ -239,6 +236,7 @@ class AllQuotes(BaseModel):
                 logger.error(f"Error fetching quote from {service_name}: {e}")
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
+        logger.info(f"Quotes fetched successfully in {timer() - start:.2f} seconds")
         self.fetch_date = self.quote.fetch_date
 
     @property
@@ -258,10 +256,7 @@ class AllQuotes(BaseModel):
 
         """
         if self.quotes:
-            if (
-                Binance.__name__ in self.quotes
-                and not self.quotes[Binance.__name__].error
-            ):
+            if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
                 self.source = Binance.__name__
                 ans = self.quotes[Binance.__name__]
                 if HiveInternalMarket.__name__ in self.quotes:
@@ -299,9 +294,7 @@ class AllQuotes(BaseModel):
             if not (quote.error or quote.source == "HiveInternalMarket")
         ]
         error_details = {
-            quote.source: quote.error_details
-            for quote in self.quotes.values()
-            if quote.error
+            quote.source: quote.error_details for quote in self.quotes.values() if quote.error
         }
 
         if not good_quotes:
@@ -390,6 +383,7 @@ class QuoteService(ABC):
 
 
 class CoinGecko(QuoteService):
+    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
@@ -425,7 +419,7 @@ class CoinGecko(QuoteService):
 
 
 class Binance(QuoteService):
-
+    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         """
         Retrieve a cryptocurrency quote, optionally using a cached value.
@@ -516,6 +510,7 @@ class Binance(QuoteService):
 
 
 class CoinMarketCap(QuoteService):
+    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
@@ -579,6 +574,7 @@ class CoinMarketCap(QuoteService):
 
 
 class HiveInternalMarket(QuoteService):
+    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         self.source = "HiveInternalMarket"
         cached_quote = await self.check_cache(use_cache=use_cache)

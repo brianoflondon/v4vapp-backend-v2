@@ -3,7 +3,42 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from v4vapp_backend_v2.hive.hive_extras import get_hive_witness_details
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
+
+
+@pytest.mark.asyncio
+async def test_get_hive_witness_details_simple():
+    witness_details = await get_hive_witness_details("blocktrades")
+    assert witness_details is not None
+    assert witness_details.witness.witness_name == "blocktrades"
+    assert witness_details.witness.missed_blocks >= 0
+    assert witness_details.witness.rank > 0
+
+
+@pytest.mark.asyncio
+async def test_get_hive_witness_details_empty():
+    """
+    Test the `get_hive_witness_details` function when it returns an empty list of witnesses.
+    This test performs the following checks:
+    1. Ensures that the `witnesses` key in the returned dictionary is not None.
+    2. Iterates through each witness in the `witnesses` list and validates
+    it using the `WitnessDetails` model.
+    3. Asserts that the `witness_name` and `rank` attributes of the validated witness
+    match the corresponding values in the original witness dictionary.
+    4. Dumps the validated witness model for further inspection.
+    Raises:
+        AssertionError: If any of the assertions fail.
+    """
+
+    witness_details = await get_hive_witness_details()
+    for witness in witness_details.witnesses:
+        witness.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_get_hive_witness_details_error():
+    witness_details = await get_hive_witness_details("non_existent_witness")
+    assert not witness_details
 
 
 @pytest.mark.asyncio
@@ -12,7 +47,8 @@ async def test_get_hive_witness_details(mocker):
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
 
     # Mock the Redis context manager
-    mock_redis = mocker.patch("v4vapp_backend_v2.hive.hive_extras.V4VAsyncRedis")
+
+    mock_redis = mocker.patch("v4vapp_backend_v2.hive.witness_details.V4VAsyncRedis")
     mock_redis_instance = mock_redis.return_value
     mock_redis_instance.__aenter__.return_value = mock_redis_instance
     mock_redis_instance.__aexit__.return_value = None
@@ -70,12 +106,12 @@ async def test_get_hive_witness_details(mocker):
 
 
 @pytest.mark.asyncio
-async def test_get_hive_witness_details_empty(mocker):
+async def test_get_hive_witness_details_mock_empty(mocker):
     # Mock the httpx.AsyncClient.get method
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
 
     # Mock the Redis context manager
-    mock_redis = mocker.patch("v4vapp_backend_v2.hive.hive_extras.V4VAsyncRedis")
+    mock_redis = mocker.patch("v4vapp_backend_v2.hive.witness_details.V4VAsyncRedis")
     mock_redis_instance = mock_redis.return_value
     mock_redis_instance.__aenter__.return_value = mock_redis_instance
     mock_redis_instance.__aexit__.return_value = None
@@ -85,10 +121,12 @@ async def test_get_hive_witness_details_empty(mocker):
 
     # Configure the mock to return a response with the sample data
     mock_httpx_get.return_value.status_code = 300
-    mock_httpx_get.return_value.json.return_value = sample_response
+    mock_httpx_get.return_value.json = Mock(return_value=sample_response)
 
     # Mock Redis get
     mock_redis_instance.get = AsyncMock(return_value=json.dumps(sample_response))
+    mock_redis_instance.set = AsyncMock(return_value=None)
+    mock_redis_instance.ping = AsyncMock(return_value=True)
 
     # Call the function
     witness_details = await get_hive_witness_details()
@@ -97,9 +135,7 @@ async def test_get_hive_witness_details_empty(mocker):
     assert witness_details is None
 
     # Ensure the httpx get method was called with the correct URL
-    mock_httpx_get.assert_called_with(
-        "https://api.syncad.com/hafbe-api/witnesses", timeout=20
-    )
+    mock_httpx_get.assert_called_with("https://api.syncad.com/hafbe-api/witnesses", timeout=20)
 
     # Ensure the Redis set method was called with the correct parameters
     mock_redis_instance.get.assert_called_with(
@@ -108,7 +144,7 @@ async def test_get_hive_witness_details_empty(mocker):
 
 
 @pytest.mark.asyncio
-async def test_get_hive_witness_details_error(mocker):
+async def test_get_hive_witness_details_mock_error(mocker):
     # Mock the httpx.AsyncClient.get method
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
 

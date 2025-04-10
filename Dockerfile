@@ -6,7 +6,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv
 
 # Copy pyproject.toml and README.md together
-COPY ./pyproject.toml ./README.md /app/
+COPY ./pyproject.toml ./uv.lock ./README.md /app/
 
 WORKDIR /app/
 
@@ -28,4 +28,3 @@ COPY --from=builder /app /app
 
 # Ensure Python uses the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
-

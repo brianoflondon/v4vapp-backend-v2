@@ -29,7 +29,7 @@ services:
     image: redis:latest
     ports:
       - "127.0.0.1:6379:6379"
-      - "100.95.193.14:6379:6379"   # Needed on home-imac
+      - "${LOCAL_TAILSCALE_IP}:6379:6379"   # Needed on home-imac
     healthcheck:  # Check if the container is healthy
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, ClassVar
 
 from nectar import Hive
@@ -6,7 +6,7 @@ from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
@@ -103,13 +103,8 @@ class Transfer(TransferRaw):
         """
         Synchronously updates the last quote for the class.
 
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-
         Args:
             quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
 
         Returns:
             None
@@ -164,7 +159,7 @@ class Transfer(TransferRaw):
     @property
     def log_str(self) -> str:
         log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
-        time_diff = seconds_only(datetime.now(tz=timezone.utc) - self.timestamp)
+        time_diff = seconds_only_time_diff(self.timestamp)
         log_str = (
             f"{self.from_account:<17} "
             f"sent {self.amount.fixed_width_str(14)} "

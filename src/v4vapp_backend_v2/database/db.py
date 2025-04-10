@@ -34,7 +34,7 @@ class DbErrorCode(Enum):
 
 DATABASE_ICON = "📁"
 
-
+#TODO: #56 Consider replacing this decorator with the tenacity module
 def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
     def decorator(func):
         """

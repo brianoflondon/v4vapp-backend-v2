@@ -252,7 +252,7 @@ async def db_store_payment(
                 fill_cache=True,
                 col_pub_keys="pub_keys",
             )
-            logger.debug(
+            logger.info(
                 f"{lnd_client.icon}{DATABASE_ICON} "
                 f"Storing payment: {htlc_event.payment_index} "
                 f"{db_client.hex_id} {payment_pyd.route_str}"
@@ -717,12 +717,6 @@ async def main_async_start(connection_name: str) -> None:
         logger.info("👋 Received signal to stop. Exiting...")
         if hasattr(lnd_client, "channel") and lnd_client.channel:
             await lnd_client.channel.close()
-        # Cancel all tasks except the current one
-        current_task = asyncio.current_task()
-        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
@@ -734,6 +728,15 @@ async def main_async_start(connection_name: str) -> None:
             await lnd_client.channel.close()
         await asyncio.sleep(0.2)
         raise e
+
+    finally:
+        # Cancel all tasks except the current one
+        current_task = asyncio.current_task()
+        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
 
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
@@ -754,16 +757,6 @@ async def check_for_shutdown():
     # await check_notifications()
     raise asyncio.CancelledError("Docker Shutdown")
 
-
-# async def check_notifications():
-#     await asyncio.sleep(1)
-#     while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
-#         print(
-#             f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-#             f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
-#         )
-#         await asyncio.sleep(0.1)
-#     return
 
 
 @app.command()
