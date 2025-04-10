@@ -545,14 +545,15 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        logger.info("InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
-                logger.info("Closing notification loop")
+                logger.info("InternalConfig Shutdown: Closing notification loop")
 
-                # Get the current task (the one running the shutdown logic)
-                current_task = asyncio.current_task(loop=self.notification_loop)
-
+                # # Get the current task (the one running the shutdown logic)
+                # current_task = asyncio.current_task(loop=self.notification_loop)
+                current_task = []
                 # Gather all tasks except the current one
                 pending_tasks = [
                     task

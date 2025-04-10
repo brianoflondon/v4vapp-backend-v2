@@ -793,7 +793,6 @@ def main(
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")
-    # INTERNAL_CONFIG.shutdown()
 
 
 if __name__ == "__main__":
