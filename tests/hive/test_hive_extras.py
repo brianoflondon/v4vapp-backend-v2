@@ -112,9 +112,7 @@ async def test_get_hive_client_error():
 
         # Call the function that uses `get_hive_client` and assert it handles the error
         with pytest.raises(ValueError) as e:
-            hive_inst = get_hive_client(
-                keys=["5JPoEfF4GbrV9QqKYrHDBo3K8n78PdgWtWVaEqyAjZ8teaHVgTq"]
-            )
+            _ = get_hive_client(keys=["5JPoEfF4GbrV9QqKYrHDBo3K8n78PdgWtWVaEqyAjZ8teaHVgTq"])
             assert "No working node found" in str(e)
 
 

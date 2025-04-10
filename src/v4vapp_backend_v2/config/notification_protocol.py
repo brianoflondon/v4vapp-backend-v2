@@ -34,7 +34,7 @@ class NotificationProtocol(Protocol):
         internal_config = InternalConfig()
         internal_config.notification_lock = True
         loop = internal_config.notification_loop
-        if loop.is_closed() or not loop.is_running():
+        if not loop or loop.is_closed() or not loop.is_running():
             # Recreate the event loop if it is closed
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -69,6 +69,7 @@ class NotificationProtocol(Protocol):
                     "failed_message": message,
                 },
             )
+
         finally:
             internal_config.notification_lock = False
 

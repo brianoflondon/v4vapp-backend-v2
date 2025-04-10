@@ -10,7 +10,7 @@ import time
 from enum import StrEnum
 from pathlib import Path
 from statistics import mean, stdev
-from typing import Any, Dict, List, Optional, Protocol, override
+from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
 import colorlog
 from pydantic import BaseModel, model_validator
@@ -386,10 +386,10 @@ class InternalConfig:
 
     _instance = None
     config: Config
-    notification_loop: asyncio.AbstractEventLoop
-    notification_lock = False
     base_config_path: Path = BASE_CONFIG_PATH
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
+    notification_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
+    notification_lock: ClassVar[bool] = False
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -400,6 +400,7 @@ class InternalConfig:
         if not hasattr(self, "_initialized"):
             super().__init__()
             self.notification_loop = None  # Initialize notification_loop
+            self.notification_lock = False
             self.setup_config()
             self.setup_logging()
             self._initialized = True
