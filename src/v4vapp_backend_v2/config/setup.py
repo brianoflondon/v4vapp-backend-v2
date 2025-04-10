@@ -264,9 +264,9 @@ class Config(BaseModel):
     default_db_name: str = ""
 
     # Connections and DB configs
-    lnd_connections: Dict[str, LndConnectionConfig]
-    db_connections: Dict[str, DatabaseConnectionConfig]
-    dbs: Dict[str, DatabaseDetailsConfig]
+    lnd_connections: Dict[str, LndConnectionConfig] = {}
+    db_connections: Dict[str, DatabaseConnectionConfig] = {}
+    dbs: Dict[str, DatabaseDetailsConfig] = {}
     redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig = TailscaleConfig()
