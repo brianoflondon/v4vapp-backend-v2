@@ -14,8 +14,6 @@ from v4vapp_backend_v2.helpers.binance_extras import (
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
-INTERNAL_CONFIG = InternalConfig()
-CONFIG = INTERNAL_CONFIG.config
 ICON = "🅑"
 app = typer.Typer()
 
@@ -213,10 +211,10 @@ async def main_async_start():
 
 async def check_notifications():
     await asyncio.sleep(1)
-    while INTERNAL_CONFIG.notification_loop.is_running() or INTERNAL_CONFIG.notification_lock:
+    while InternalConfig().notification_loop.is_running() or InternalConfig().notification_lock:
         print(
-            f"Notification loop: {INTERNAL_CONFIG.notification_loop.is_running()} "
-            f"Notification lock: {INTERNAL_CONFIG.notification_lock}"
+            f"Notification loop: {InternalConfig().notification_loop.is_running()} "
+            f"Notification lock: {InternalConfig().notification_lock}"
         )
         await asyncio.sleep(0.1)
     return
@@ -238,8 +236,9 @@ def main(
         None
     """
     icon = ICON
+    version = InternalConfig().config.version
     logger.info(
-        f"{icon} ✅ Binance Monitor. Started. Version: {CONFIG.version}",
+        f"{icon} ✅ Binance Monitor. Started. Version: {version}",
         extra={"notification": True},
     )
 
