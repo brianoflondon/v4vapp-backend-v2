@@ -103,13 +103,8 @@ class Transfer(TransferRaw):
         """
         Synchronously updates the last quote for the class.
 
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-
         Args:
             quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
 
         Returns:
             None
