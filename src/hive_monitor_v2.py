@@ -19,12 +19,9 @@ from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
-from v4vapp_backend_v2.hive.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_hive_client,
-)
-from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
+from v4vapp_backend_v2.hive.hive_extras import MAX_HIVE_BATCH_SIZE, get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import op_any
@@ -43,11 +40,11 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
 )
 from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
-INTERNAL_CONFIG = InternalConfig()
-CONFIG = INTERNAL_CONFIG.config
-HIVE_DATABASE_CONNECTION = "local_connection"
-HIVE_DATABASE = "lnd_monitor_v2_voltage"
-HIVE_DATABASE_USER = "lnd_monitor"
+# INTERNAL_CONFIG = InternalConfig()
+# CONFIG = INTERNAL_CONFIG.config
+HIVE_DATABASE_CONNECTION = ""
+HIVE_DATABASE = ""
+HIVE_DATABASE_USER = ""
 HIVE_TRX_COLLECTION_V2 = "hive_ops"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness_ops"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
@@ -268,6 +265,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
     - Initiates server balance adjustments if the transfer involves specific server and treasury accounts.
     """
     global COMMAND_LINE_WATCH_USERS
+    CONFIG = InternalConfig().config
     if watch_users_notification(transfer=op, watch_users=COMMAND_LINE_WATCH_USERS):
         if not Transfer.last_quote or (Transfer.last_quote and Transfer.last_quote.age > 60):
             await Transfer.update_quote()
@@ -309,6 +307,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     Returns:
         None: The function does not return any value.
     """
+    CONFIG = InternalConfig().config
     await asyncio.sleep(3)  # Sleeps to make sure we only balance HBD after time for a return
     try:
         if transfer.from_account in CONFIG.hive.server_account_names:
@@ -724,6 +723,7 @@ async def real_ops_loop(
         Events.HIVE_TRANSFER_NOTIFY: When a transfer or recurrent transfer transaction
         involving a watched user is detected.
     """
+    CONFIG = InternalConfig().config
     logger.info(f"{icon} Real Loop Watching users: {watch_users}")
     LimitOrderCreate.watch_users = watch_users
     op_names = RealOpsLoopTypes
@@ -927,6 +927,18 @@ def main(
             show_default=True,
         ),
     ] = "brianoflondon",
+    database: Annotated[
+        str,
+        typer.Argument(help=("The database to monitor.")),
+    ] = "",
+    database_connection: Annotated[
+        str,
+        typer.Argument(help=("The database connection to use.")),
+    ] = "",
+    database_user: Annotated[
+        str,
+        typer.Argument(help=("The database user to use.")),
+    ] = "",
 ):
     """
     Watch the Hive blockchain for transactions.
@@ -941,8 +953,19 @@ def main(
     Returns:
         None
     """
+    CONFIG = InternalConfig().config
     global COMMAND_LINE_WATCH_USERS
     global COMMAND_LINE_WATCH_ONLY
+    global HIVE_DATABASE
+    global HIVE_DATABASE_CONNECTION
+    global HIVE_DATABASE_USER
+
+    if not database:
+        HIVE_DATABASE = CONFIG.default_db_name
+    if not database_connection:
+        HIVE_DATABASE_CONNECTION = CONFIG.default_db_connection
+    if not database_user:
+        HIVE_DATABASE_USER = CONFIG.default_db_user
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",

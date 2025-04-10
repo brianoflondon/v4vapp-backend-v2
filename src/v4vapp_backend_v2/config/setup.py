@@ -262,6 +262,7 @@ class Config(BaseModel):
     default_lnd_connection: str = ""
     default_db_connection: str = ""
     default_db_name: str = ""
+    default_db_user: str = ""
 
     # Connections and DB configs
     lnd_connections: Dict[str, LndConnectionConfig] = {}
