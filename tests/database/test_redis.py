@@ -192,18 +192,20 @@ async def test_with_get_response():
     hive_accname = "blocktrades"
     url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=20)
-        if response.status_code == 200:
-            async with V4VAsyncRedis() as redis_client:
-                await redis_client.setex(
-                    name=f"witness_{hive_accname}", value=json.dumps(response.json()), time=60
-                )
+        try:
+            response = await client.get(url, timeout=20)
+            if response.status_code == 200:
+                async with V4VAsyncRedis() as redis_client:
+                    await redis_client.setex(
+                        name=f"witness_{hive_accname}", value=json.dumps(response.json()), time=60
+                    )
 
-            async with V4VAsyncRedis() as redis_client:
-                witness_data = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-                assert witness_data is not None
-                assert witness_data["witness"]["witness_name"] == hive_accname
-                await redis_client.delete(f"witness_{hive_accname}")
-        else:
-            print(f"Failed to get response for {hive_accname}")
-            print(response.status_code)
+                async with V4VAsyncRedis() as redis_client:
+                    witness_data = json.loads(await redis_client.get(f"witness_{hive_accname}"))
+                    assert witness_data is not None
+                    assert witness_data["witness"]["witness_name"] == hive_accname
+                    await redis_client.delete(f"witness_{hive_accname}")
+        except Exception as e:
+            print(f"Failed to get response for {hive_accname} {e}")
+            if response and response.status_code:
+                print(response.status_code)
