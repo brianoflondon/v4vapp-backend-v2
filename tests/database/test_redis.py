@@ -13,9 +13,7 @@ from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -106,17 +104,13 @@ async def test_redis_client_decode_false():
 
 @pytest.mark.asyncio
 async def test_redis_client_with_connection_str():
-    redis_client = V4VAsyncRedis(
-        connection_str="redis://localhost:6379/0", decode_responses=True
-    )
+    redis_client = V4VAsyncRedis(connection_str="redis://localhost:6379/0", decode_responses=True)
     assert redis_client is not None
 
 
 @pytest.mark.asyncio
 async def test_redis_client_with_kwargs():
-    redis_client = V4VAsyncRedis(
-        host="localhost", port=6379, db=0, decode_responses=False
-    )
+    redis_client = V4VAsyncRedis(host="localhost", port=6379, db=0, decode_responses=False)
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
@@ -193,7 +187,6 @@ def test_sync_redis_client_context_manager():
         redis_sync_client.flushdb()
 
 
-
 @pytest.mark.asyncio
 async def test_with_get_response():
     hive_accname = "blocktrades"
@@ -202,14 +195,12 @@ async def test_with_get_response():
         response = await client.get(url, timeout=20)
         if response.status_code == 200:
             async with V4VAsyncRedis() as redis_client:
-                await redis_client.set(
-                    name=f"witness_{hive_accname}", value=json.dumps(response.json())
+                await redis_client.setex(
+                    name=f"witness_{hive_accname}", value=json.dumps(response.json()), time=60
                 )
 
             async with V4VAsyncRedis() as redis_client:
-                witness_data = json.loads(
-                    await redis_client.get(f"witness_{hive_accname}")
-                )
+                witness_data = json.loads(await redis_client.get(f"witness_{hive_accname}"))
                 assert witness_data is not None
                 assert witness_data["witness"]["witness_name"] == hive_accname
                 await redis_client.delete(f"witness_{hive_accname}")
