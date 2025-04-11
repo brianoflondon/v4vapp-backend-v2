@@ -23,13 +23,9 @@ class KeepsatsTransfer(BaseModel):
     @property
     def log_str(self) -> str:
         if self.to_account == "":
-            return (
-                f"⏩️{self.from_account} sent {self.sats:,.0f} "
-                f"sats via Keepsats to {self.memo}"
-            )
+            return f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {self.memo}"
         return (
-            f"⏩️{self.from_account} sent {self.sats:,.0f} "
-            f"sats to {self.to_account} via KeepSats"
+            f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
 
 
@@ -109,7 +105,14 @@ class CustomJson(OpBase):
     def log_str(self) -> str:
         # check if self.json_data has method log_str
         if hasattr(self.json_data, "log_str"):
-            return self.json_data.log_str
+            return f"{self.json_data.log_str} {self.link}"
+        return json.dumps(self.json_data)
+
+    @property
+    def notification_str(self) -> str:
+        # check if self.json_data has method log_str
+        if hasattr(self.json_data, "log_str"):
+            return f"{self.json_data.log_str} {self.markdown_link}"
         return json.dumps(self.json_data)
 
     @classmethod

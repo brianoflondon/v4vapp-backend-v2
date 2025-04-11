@@ -461,10 +461,11 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         hive_client = get_hive_client()
         hive_blockchain = Blockchain(hive=hive_client)
         end_block = hive_client.get_dynamic_global_properties().get("head_block_number")
+        op_in_trx_counter = OpInTrxCounter(realm="virtual")
         async_stream = sync_to_async_iterable(
             hive_blockchain.stream(
                 opNames=["producer_reward"],
-                start=end_block - int(140 * 60 / 3),  # go back 140 minutes of 3 second blocks
+                start=end_block - int(24 * 60 * 60 / 3),  # go back 24 hours of 3 second blocks
                 stop=end_block,
                 only_virtual_ops=True,
                 max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -472,6 +473,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         )
         async for hive_event in async_stream:
             if hive_event.get("producer") == watch_witness:
+                hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                 producer_reward = ProducerReward.model_validate(hive_event)
                 await producer_reward.get_witness_details()
                 _ = await db_client.insert_one(
