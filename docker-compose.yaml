@@ -65,39 +65,38 @@ services:
     stop_grace_period: 20s
 
 
-  hive-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/hive:/app/logs
-    command: [
-      "python", "src/hive_monitor_v2.py",
-      "--user", "v4vapp",
-      "--user", "v4vapp.tre",
-      "--user", "v4vapp.dhf",
-      "--user", "brianoflondon",
-      "--user", "v4vapp-test",
-      "--witness", "brianoflondon",
-    ]
-    restart: unless-stopped
-    stop_grace_period: 20s
+  # hive-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/hive:/app/logs
+  #   command: [
+  #     "python", "src/hive_monitor_v2.py",
+  #     "--user", "v4vapp",
+  #     "--user", "v4vapp.tre",
+  #     "--user", "v4vapp.dhf",
+  #     "--user", "brianoflondon",
+  #     "--user", "v4vapp-test",
+  #     "--witness", "brianoflondon",
+  #   ]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
+  #   networks:
+  #     - v4vapp-backend
 
-    networks:
-      - v4vapp-backend
-
-  binance-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./config:/app/config
-      - ./logs_docker/binance:/app/logs
-    restart: unless-stopped
-    stop_grace_period: 20s
-    command: ["python", "src/binance_monitor.py"]
+  # binance-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./config:/app/config
+  #     - ./logs_docker/binance:/app/logs
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
+  #   command: ["python", "src/binance_monitor.py"]
 
 
 volumes:
