@@ -5,10 +5,9 @@ from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
-from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
 
 from .amount_pyd import AmountPyd
-from .op_base import OpBase
+from .op_base import OpBase, OpRealm
 
 
 class LimitOrderCreate(OpBase):
@@ -33,6 +32,7 @@ class LimitOrderCreate(OpBase):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
+        self.realm = OpRealm.REAL
         self.amount_remaining = self.min_to_receive
         if self.expiration.tzinfo is None:
             self.expiration = self.expiration.replace(tzinfo=timezone.utc)
@@ -45,7 +45,6 @@ class LimitOrderCreate(OpBase):
                     f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
-        self.expire_orders()
 
     @classmethod
     def op_name(cls) -> str:
@@ -86,9 +85,7 @@ class LimitOrderCreate(OpBase):
         """
         if len(cls.open_order_ids) > 50:
             # Sort by timestamp and remove the oldest entries
-            sorted_orders = sorted(
-                cls.open_order_ids.items(), key=lambda item: item[1].timestamp
-            )
+            sorted_orders = sorted(cls.open_order_ids.items(), key=lambda item: item[1].timestamp)
             for orderid, _ in sorted_orders[: len(cls.open_order_ids) - 50]:
                 cls.open_order_ids.pop(orderid)
 
@@ -97,9 +94,7 @@ class LimitOrderCreate(OpBase):
     @property
     def rate(self) -> float:
         if self.amount_to_sell.symbol == "HIVE":
-            return (
-                self.min_to_receive.amount_decimal / self.amount_to_sell.amount_decimal
-            )
+            return self.min_to_receive.amount_decimal / self.amount_to_sell.amount_decimal
         return self.amount_to_sell.amount_decimal / self.min_to_receive.amount_decimal
 
     def _log_internal(self) -> str:
@@ -108,20 +103,15 @@ class LimitOrderCreate(OpBase):
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
         icon = "📈"
         return (
-            f"{icon}{rate_str:>8} - "
-            f"{sell} for {receive} "
-            f"{self.owner} created order "
-            f"{self.orderid}"
+            f"{icon}{rate_str:>8} - {sell} for {receive} {self.owner} created order {self.orderid}"
         )
 
     @property
     def log_str(self) -> str:
         ans = self._log_internal()
-        link = get_hive_block_explorer_link(self.trx_id, markdown=False)
-        return f"{ans} {link}"
+        return f"{ans} {self.link}"
 
     @property
     def notification_str(self) -> str:
         ans = self._log_internal()
-        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
-        return f"{ans} {link}"
+        return f"{ans} {self.markdown_link}"
