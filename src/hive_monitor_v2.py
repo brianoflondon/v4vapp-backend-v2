@@ -38,7 +38,6 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
     VirtualOpTypes,
     WitnessOpTypes,
 )
-from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
 # INTERNAL_CONFIG = InternalConfig()
 # CONFIG = INTERNAL_CONFIG.config
@@ -274,7 +273,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
                 f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
                 extra={
                     "notification": False,
-                    "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
+                    "quote": Transfer.last_quote.model_dump(exclude={"raw_response"}),
                 },
             )
         await transfer_report(op)
@@ -865,13 +864,13 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             raise e
         logger.info(f"{icon} Redis connection established")
 
-    await HiveTransaction.update_quote()
-    quote = HiveTransaction.last_quote
+    await Transfer.update_quote()
+    quote = Transfer.last_quote
     logger.info(
         f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
         extra={
             "notification": False,
-            "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
+            "quote": Transfer.last_quote.model_dump(exclude={"raw_response"}),
         },
     )
 

@@ -7,7 +7,7 @@ from nectar import Hive
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff
-from v4vapp_backend_v2.hive_models.op_base import OpRealm
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
 
@@ -21,12 +21,35 @@ class OpInTrxCounter:
 
     op_in_trx: int = 1
     last_trx_id: str = ""
+    last_block_num: int = 0
     realm: OpRealm = OpRealm.REAL
 
     # Class variables: Two separate deques for REAL and VIRTUAL transactions,
     # limited to 50 IDs each
     real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
     virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
+
+    def inc2(self, op: OpBase) -> int:
+        if op.realm == OpRealm.REAL:
+            if self.last_trx_id == op.trx_id:
+                self.op_in_trx += 1
+                op.op_in_trx = self.op_in_trx
+            else:
+                self.last_trx_id = op.trx_id
+                self.op_in_trx = 1
+                op.op_in_trx = 1
+                # self.real_trx_id_stack.append(op.trx_id)
+        elif op.realm == OpRealm.VIRTUAL:
+            if self.last_block_num == op.block_num and self.last_trx_id == op.trx_id:
+                self.op_in_trx += 1
+                op.op_in_trx = self.op_in_trx
+            else:
+                self.last_trx_id = op.trx_id
+                self.last_block_num = op.block_num
+                self.op_in_trx = 1
+                op.op_in_trx = 1
+                # self.virtual_trx_id_stack.append(op.trx_id)
+        return self.op_in_trx
 
     def inc(self, trx_id: str) -> int:
         """
@@ -50,7 +73,7 @@ class OpInTrxCounter:
             self.op_in_trx = 1
             return self.op_in_trx
 
-        if self.last_trx_id == trx_id:
+        if self.realm == OpRealm.REAL and self.last_trx_id == trx_id:
             self.op_in_trx += 1
             return self.op_in_trx
 

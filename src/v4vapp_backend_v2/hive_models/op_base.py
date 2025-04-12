@@ -4,7 +4,6 @@ from typing import Any, Dict
 from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
-from v4vapp_backend_v2.hive.hive_extras import HiveExp, get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 
@@ -12,6 +11,68 @@ class OpRealm(StrEnum):
     REAL = auto()
     VIRTUAL = auto()
     MARKER = auto()
+
+
+class HiveExp(StrEnum):
+    HiveHub = "https://hivehub.dev/{prefix_path}"
+    HiveScanInfo = "https://hivescan.info/{prefix_path}"
+    # HiveBlockExplorer = "https://hiveblockexplorer.com/{prefix_path}"
+    # HiveExplorer = "https://hivexplorer.com/{prefix_path}"
+
+
+def get_hive_block_explorer_link(
+    trx_id: str,
+    block_explorer: HiveExp = HiveExp.HiveHub,
+    markdown: bool = False,
+    block_num: int = 0,
+    op_in_trx: int = 0,
+    realm: OpRealm = OpRealm.REAL,
+    # any_op: OpBase | None = None,
+) -> str:
+    """
+    Generate a Hive blockchain explorer URL for a given transaction ID.
+
+    Args:
+        trx_id (str): The transaction ID to include in the URL
+        block_explorer (HiveExp): The blockchain explorer to use (defaults to HiveHub)
+
+    Returns:
+        str: The complete URL with the transaction ID inserted
+    """
+
+    if trx_id and not (block_num and op_in_trx):
+        path = f"{trx_id}"
+        prefix = "tx/"
+    elif trx_id == "0000000000000000000000000000000000000000" and block_num:
+        op_in_trx = op_in_trx if op_in_trx else 1
+        prefix = f"{block_num}/"
+        path = f"{trx_id}/{op_in_trx}"
+    elif trx_id and block_num and op_in_trx and realm == OpRealm.VIRTUAL:
+        path = f"{block_num}/{trx_id}/{op_in_trx}"
+        prefix = "tx/"
+    elif trx_id and op_in_trx and realm == OpRealm.REAL:
+        if op_in_trx > 1:
+            path = f"{trx_id}/{op_in_trx}"
+        else:
+            path = f"{trx_id}"
+        prefix = "tx/"
+    elif not trx_id and block_num:
+        path = f"{block_num}"
+        prefix = "b/"
+
+    if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
+        if prefix == "tx/":
+            prefix = "transaction/"
+        elif prefix == "b/":
+            prefix = "block/"
+
+    prefix_path = f"{prefix}{path}"
+
+    link_html = block_explorer.value.format(prefix_path=prefix_path)
+    if not markdown:
+        return link_html
+    markdown_link = f"[{block_explorer.name}]({link_html})"
+    return markdown_link
 
 
 class OpLogData(BaseModel):
@@ -98,13 +159,11 @@ class OpBase(BaseModel):
 
     @property
     def log_str(self) -> str:
-        link = get_hive_block_explorer_link(self.trx_id)
-        return f"{self.type} | {self.op_in_trx} | {link}"
+        return f"{self.block_num:,} | {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
-        link = get_hive_block_explorer_link(self.trx_id, markdown=True)
-        return f"{self.type} | {self.op_in_trx} | {link}"
+        return f"{self.type} | {self.op_in_trx} | {self.markdown_link}"
 
     @property
     def logs(self) -> OpLogData:
@@ -124,13 +183,7 @@ class OpBase(BaseModel):
         """
         if self.realm == OpRealm.MARKER:
             return f"MARKER: {self.trx_id}"
-        return get_hive_block_explorer_link(
-            trx_id=self.trx_id,
-            block_num=self.block_num,
-            op_in_trx=self.op_in_trx,
-            block_explorer=self.block_explorer,
-            markdown=False,
-        )
+        return self._get_hive_block_explorer_link(markdown=False)
 
     @property
     def markdown_link(self) -> str:
@@ -140,10 +193,43 @@ class OpBase(BaseModel):
         Returns:
             str: A formatted markdown string containing the link to the Hive block explorer.
         """
-        return get_hive_block_explorer_link(
-            trx_id=self.trx_id,
-            block_num=self.block_num,
-            op_in_trx=self.op_in_trx,
-            block_explorer=self.block_explorer,
-            markdown=True,
-        )
+        if self.realm == OpRealm.MARKER:
+            return f"MARKER: {self.trx_id}"
+        return self._get_hive_block_explorer_link(markdown=True)
+
+    def _get_hive_block_explorer_link(self, markdown: bool = False) -> str:
+        """
+        Generate a Hive blockchain explorer URL for a given transaction ID.
+
+        Args:
+            trx_id (str): The transaction ID to include in the URL
+            block_explorer (HiveExp): The blockchain explorer to use (defaults to HiveHub)
+
+        Returns:
+            str: The complete URL with the transaction ID inserted
+        """
+
+        if self.realm == OpRealm.REAL:
+            prefix = "tx/"
+            path = f"{self.trx_id}"
+            # if self.op_in_trx > 1:
+            #     path = f"{self.trx_id}/{self.op_in_trx}"
+            # else:
+
+        elif self.realm == OpRealm.VIRTUAL:
+            prefix = "tx/"
+            path = f"{self.block_num}/{self.trx_id}/{self.op_in_trx}"
+
+        if self.block_explorer == HiveExp.HiveScanInfo:
+            if prefix == "tx/":
+                prefix = "transaction/"
+            elif prefix == "b/":
+                prefix = "block/"
+
+        prefix_path = f"{prefix}{path}"
+
+        link_html = self.block_explorer.value.format(prefix_path=prefix_path)
+        if not markdown:
+            return link_html
+        markdown_link = f"[{self.block_explorer.name}]({link_html})"
+        return markdown_link

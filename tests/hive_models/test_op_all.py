@@ -1,9 +1,8 @@
 import httpx
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive.hive_extras import HiveExp
 from v4vapp_backend_v2.hive_models.op_all import op_any
-from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
+from v4vapp_backend_v2.hive_models.op_base import HiveExp
 
 
 def test_all_validate():
@@ -20,9 +19,7 @@ def test_all_validate():
                     assert response.status_code == 200
 
             except ValueError as e:
-                assert "Unknown operation type" in str(
-                    e
-                ) or "Invalid CustomJson data" in str(e)
+                assert "Unknown operation type" in str(e) or "Invalid CustomJson data" in str(e)
             except Exception as e:
                 print(e)
                 assert False
@@ -47,9 +44,9 @@ def test_all_block_exporer_links():
                         assert response.status_code == 200
 
                 except ValueError as e:
-                    assert "Unknown operation type" in str(
+                    assert "Unknown operation type" in str(e) or "Invalid CustomJson data" in str(
                         e
-                    ) or "Invalid CustomJson data" in str(e)
+                    )
                 except Exception as e:
                     print(e)
                     assert False

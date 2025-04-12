@@ -7,8 +7,8 @@ from pydantic import ConfigDict, Field
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_hive_block_explorer_link
-from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.hive.hive_extras import decode_memo
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 from .amount_pyd import AmountPyd
 
@@ -158,7 +158,6 @@ class Transfer(TransferRaw):
 
     @property
     def log_str(self) -> str:
-        log_link = get_hive_block_explorer_link(self.trx_id, markdown=False)
         time_diff = seconds_only_time_diff(self.timestamp)
         log_str = (
             f"{self.from_account:<17} "
@@ -166,16 +165,15 @@ class Transfer(TransferRaw):
             f"to {self.to_account:<17} "
             f" - {self.d_memo[:30]:>30} "
             f"{time_diff} ago "
-            f"{log_link} {self.op_in_trx:>3}"
+            f"{self.link} {self.op_in_trx:>3}"
         )
         return log_str
 
     @property
     def notification_str(self) -> str:
-        markdown_link = get_hive_block_explorer_link(self.trx_id, markdown=True) + " no_preview"
         ans = (
             f"{self.from_account} sent {self.amount_str} to {self.to_account} "
-            f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {markdown_link}"
+            f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {self.markdown_link}"
         )
         return ans
 
