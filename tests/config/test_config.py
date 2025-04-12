@@ -12,7 +12,7 @@ from v4vapp_backend_v2.config.setup import (
 )
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr(

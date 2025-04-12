@@ -143,6 +143,8 @@ class OpBase(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
+        if self.timestamp.tzinfo is None or self.timestamp.tzinfo.utcoffset(self.timestamp) is None:
+            self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
         if data.get("type", None) is not None:
             if data["type"] in HIVE_VIRTUAL_OPS:
                 self.realm = OpRealm.VIRTUAL
