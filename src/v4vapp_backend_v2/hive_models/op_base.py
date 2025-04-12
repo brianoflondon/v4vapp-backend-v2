@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from enum import StrEnum, auto
 from typing import Any, Dict
 
@@ -132,6 +133,7 @@ class OpBase(BaseModel):
     type: str = Field(description="Type of the event")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
+    timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
 
     block_explorer: HiveExp = Field(
         default=HiveExp.HiveHub,
@@ -159,11 +161,22 @@ class OpBase(BaseModel):
 
     @property
     def log_str(self) -> str:
-        return f"{self.block_num:,} | {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
         return f"{self.type} | {self.op_in_trx} | {self.markdown_link}"
+
+    @property
+    def age(self) -> float:
+        """
+        Calculates the age of the transaction based on the current time and the transaction timestamp.
+        in seconds
+
+        Returns:
+            age: The time difference between the current time and the transaction timestamp in seconds.
+        """
+        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
 
     @property
     def logs(self) -> OpLogData:
