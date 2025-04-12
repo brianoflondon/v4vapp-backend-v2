@@ -3,14 +3,10 @@ from typing import AsyncGenerator
 
 from nectar import Hive
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.hive.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_blockchain_instance,
-    get_hive_client,
-)
-from v4vapp_backend_v2.hive_models.op_all import OpAny
-from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 
@@ -18,7 +14,7 @@ async def block_stream(
     start: int = None,
     stop: int = None,
     hive: Hive = None,
-    max_batch_size: int = MAX_HIVE_BATCH_SIZE,
+    opNames: list[str] = None,
 ) -> AsyncGenerator[OpAny, None]:
     """
     An async generator that yields numbers up to max_value with a delay.
@@ -45,14 +41,11 @@ async def block_stream(
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
                 blockchain.stream(
-                    start=start_block,
-                    stop=stop_block,
-                    # max_batch_size=max_batch_size,
-                    only_virtual_ops=False,  # Uncommented this line
+                    start=start_block, stop=stop_block, only_virtual_ops=False, opNames=opNames
                 )
             )
             async for hive_event in async_stream_real:
-                op_base = OpBase.model_validate(hive_event)
+                op_base = op_any_or_base(hive_event)
                 op_in_trx_counter.inc2(op_base)
                 if op_base.block_num > start_block:
                     start_block = op_base.block_num
@@ -62,20 +55,30 @@ async def block_stream(
                             stop=start_block - 1,
                             raw_ops=False,
                             only_virtual_ops=True,
+                            opNames=opNames,
                         )
                     ):
-                        op_base = OpBase.model_validate(virtual_event)
-                        op_in_trx_counter.inc2(op_base)
-                        yield op_base
+                        op_virtual_base = op_any_or_base(virtual_event)
+                        op_in_trx_counter.inc2(op_virtual_base)
+                        yield op_virtual_base
                 yield op_base
         except Exception as e:
-            print(f"Error in block_stream: {e}")
+            logger.warning(f"{start_block:,} | Error in block_stream: {e} restarting")
 
 
 # Example usage
 async def main() -> None:
-    async for value in block_stream():
-        print(f"Received: {value.log_str}")
+    opNames = [
+        "custom_json",
+        "transfer",
+        "account_witness_vote",
+        "producer_reward",
+        "fill_order",
+        "limit_order_create",
+    ]
+    opNames = []
+    async for op in block_stream(opNames=opNames):
+        logger.info(op.log_str)
 
 
 # Run the example

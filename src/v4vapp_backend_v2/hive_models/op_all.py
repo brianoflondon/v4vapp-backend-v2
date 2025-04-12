@@ -25,7 +25,8 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         hive_event: A dictionary containing Hive event data
 
     Returns:
-        An instance of the appropriate OpBase subclass
+        An instance of the appropriate OpBase subclass or raises a ValueError if the operation
+        type is unknown.
     """
     op_type = hive_event.get("type", None)
     if op_type is None:
@@ -55,3 +56,26 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
 
     else:
         raise ValueError(f"Unknown operation type: {op_type}")
+
+
+def op_any_or_base(hive_event: dict) -> OpAny:
+    """
+    Factory function to create the appropriate OpBase subclass instance based on the
+    provided Hive event data.
+
+    Args:
+        hive_event: A dictionary containing Hive event data
+
+    Returns:
+        An instance of the appropriate OpBase subclass or raises a ValueError if the operation
+        type is unknown.
+    """
+    try:
+        op_answer = op_any(hive_event)
+        return op_answer
+    except ValueError:
+        try:
+            op_answer = OpBase.model_validate(hive_event)
+            return op_answer
+        except ValueError as e:
+            raise ValueError(f"Unknown operation type: {e}") from e

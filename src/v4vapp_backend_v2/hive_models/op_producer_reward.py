@@ -28,12 +28,14 @@ class ProducerReward(ProducerRewardRaw):
 
     @property
     def log_str(self):
-        log_str = (
-            f"{self.block_num:,.0f} | "
-            f"Missed: {self.witness.missed_blocks} | "
-            f"Rank: {self.witness.rank} | {self.producer}"
-        )
-        return log_str
+        if self.witness:
+            log_str = (
+                f"{self.block_num:,} | {self.age:.2f} | "
+                f"Missed: {self.witness.missed_blocks} | "
+                f"Rank: {self.witness.rank} | {self.producer}"
+            )
+            return log_str
+        return f"{self.block_num:,} | {self.age:.2f} | {self.producer} | {self.link}"
 
     async def get_witness_details(self):
         """
