@@ -26,7 +26,7 @@ from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import op_any
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter, OpInTrxCounter
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson, keepsats_ids
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -803,7 +803,7 @@ async def real_ops_loop(
                             db_client=db_client,
                         )
 
-                    if op.type == "custom_json":
+                    if op.type == "custom_json" and op.cj_id in keepsats_ids:
                         custom_json: CustomJson = op
                         logger.info(
                             f"{custom_json.log_str}",

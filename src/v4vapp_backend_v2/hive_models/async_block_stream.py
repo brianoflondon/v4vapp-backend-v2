@@ -80,7 +80,7 @@ async def main() -> None:
         "limit_order_create",
     ]
     async for op in block_stream(opNames=opNames):
-        logger.info(f"{op.block_num} | {op.log_str}", extra={op.name(): op.model_dump(exclude={"raw_op"})})
+        logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})
 
 
 # Run the example

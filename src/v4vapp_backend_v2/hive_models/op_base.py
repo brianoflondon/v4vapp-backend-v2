@@ -177,7 +177,7 @@ class OpBase(BaseModel):
 
     @property
     def log_extra(self) -> Dict[str, Any]:
-        return {self.name(): self.model_dump()}
+        return {self.name(): self.model_dump(exclude={"raw_op"})}
 
     @property
     def log_str(self) -> str:
