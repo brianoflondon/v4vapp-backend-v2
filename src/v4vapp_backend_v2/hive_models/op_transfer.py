@@ -8,7 +8,8 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConver
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
-from v4vapp_backend_v2.hive_models.op_base import AccNameType, OpBase
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 from .amount_pyd import AmountPyd
 

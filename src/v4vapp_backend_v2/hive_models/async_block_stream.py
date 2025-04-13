@@ -7,6 +7,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 
@@ -71,16 +72,12 @@ async def block_stream(
 
 # Example usage
 async def main() -> None:
-    opNames = [
-        "custom_json",
-        "transfer",
-        "account_witness_vote",
-        "producer_reward",
-        "fill_order",
-        "limit_order_create",
-    ]
+    opNames = OP_TRACKED
     async for op in block_stream(opNames=opNames):
-        logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})
+        if op.tracked:
+            logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})
+        else:
+            print(op.log_str)
 
 
 # Run the example

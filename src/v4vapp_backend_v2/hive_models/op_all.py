@@ -15,6 +15,21 @@ OpVirtual = Union[ProducerReward, FillOrder]
 OpReal = Union[Transfer, AccountWitnessVote, CustomJson]
 OpRealOpsLoop = Union[OpAny, OpMarket]
 
+OP_MAP: dict[str, OpAny] = {
+    "custom_json": CustomJson,
+    "transfer": Transfer,
+    "account_witness_vote": AccountWitnessVote,
+    "producer_reward": ProducerReward,
+    "fill_order": FillOrder,
+    "limit_order_create": LimitOrderCreate,
+}
+
+
+def op_tracked(op_type: str) -> bool:
+    if op_type in OP_MAP:
+        return True
+    return False
+
 
 def op_any(hive_event: dict[str, Any]) -> OpAny:
     """
@@ -28,18 +43,15 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         An instance of the appropriate OpBase subclass or raises a ValueError if the operation
         type is unknown.
     """
-    op_type = hive_event.get("type", None)
-    if op_type is None:
+    op_type_value = hive_event.get("type", None)
+    if op_type_value is None:
         raise ValueError("Operation type not found in the event data")
-    if op_type not in [
-        "custom_json",
-        "transfer",
-        "account_witness_vote",
-        "producer_reward",
-        "fill_order",
-        "limit_order_create",
-    ]:
-        raise ValueError(f"Unknown operation type: {op_type}")
+
+    op_type = OP_MAP.get(op_type_value, None)
+    if op_type is None:
+        raise ValueError(f"Unknown operation type: {op_type_value}")
+
+    return op_type.model_validate(hive_event)
 
     if op_type == "custom_json":
         return CustomJson(**hive_event)

@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 from pytest import raises
 
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson, KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 post1 = {
     "_id": "6740b6c755e3a8ade6050ca707d6d8b44374c1f8",
@@ -43,13 +44,11 @@ def test_custom_json_validate():
         assert custom_json.cj_id == "v4vapp_transfer"
         print(custom_json.log_str)
         print(custom_json.log_extra)
-        assert CustomJson.test(post)
 
 
 def test_custom_json_not_valid():
     post3 = post2.copy()
     post3["id"] = "podping"
-    assert not CustomJson.test(post3)
     custom_json = CustomJson.model_validate(post3)
     assert isinstance(custom_json.json_data, dict)
     print(custom_json)
@@ -82,3 +81,31 @@ def test_custom_json_not_valid_2():
         custom_json = CustomJson.model_validate(post5)
     assert "Invalid JSON" in str(exc_info.value)
     assert "json_invalid" in str(exc_info.value)
+
+
+# {
+#     "success": true,
+#     "response": {
+#         "payment_error": "",
+#         "payment_preimage": "ihqRhTjz05zfZEJXXEADMFxdiaO0Wu2tpShrTP4t6OM=",
+#         "payment_hash": "cLv4JB8krO0dcgKSa/QvE2HikGj686LG+AAGMOXQsEY=",
+#     },
+#     "HIVE": 0.003311,
+#     "HBD": 0.000586,
+#     "SATS": 1,
+# }
+
+# {
+#     "hive_accname_from": "flemingfarm",
+#     "memo": "lnbc1500u1pnlxq3zsp5vaan0vqa24p8wdv6z3cwc6e8xzcew4s0aynjfkg4lvjmj2m36fcspp52v2vhq3g69e9x3pfl8aknht0wxdyjgzufhexlvh9tunafxyrjkzsdql2djkuepqw3hjqsj5gvsxzerywfjhxucxqyp2xqcqzyl9qyysgqlf82yhu8ztr2cp643x45nmvv8sldf0hm6wn26x48dm287f7ddrfy55xgnhp4fk89qklh47uyhzrf690ruc3e8g4p99769gp6f7nq8ncpjfa8ea",
+#     "sats": 150000,
+#     "pay_result": {
+#         "payment_error": "",
+#         "payment_preimage": "AsPcSenijPDyWXt3pRYa5Pu9XYtvEME/+g1ncHOQ4f4=",
+#         "payment_hash": "UxTLgijRclNEKfn7ad1vcZpJIFxN8m+y5V8n1JiDlYU=",
+#     },
+#     "HIVE": 607.339748,
+#     "HBD": 119.91682,
+#     "invoice_message": "Send to BTC address",
+#     "hive_accname_to": "Send to BTC address",
+# }

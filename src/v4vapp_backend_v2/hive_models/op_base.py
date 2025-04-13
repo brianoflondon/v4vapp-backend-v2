@@ -1,11 +1,21 @@
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Annotated, Any, Dict
+from typing import Any, Dict
 
-from pydantic import AfterValidator, BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
+
+OP_TRACKED = [
+    "custom_json",
+    "transfer",
+    "account_witness_vote",
+    "producer_reward",
+    "fill_order",
+    "limit_order_create",
+]
 
 
 class OpRealm(StrEnum):
@@ -91,23 +101,6 @@ class OpLogData(BaseModel):
     log_extra: Dict[str, Any]
 
 
-# Custom string class for Hive account names
-class AccName(str):
-    @property
-    def link(self) -> str:
-        # Replace this with your specific URL pattern (the "mussel")
-        return f"https://hivehub.dev/@{self}"
-
-    @property
-    def markdown_link(self) -> str:
-        # Replace this with your specific URL pattern (the "mussel")
-        return f"[{self}](https://hivehub.dev/@{self})"
-
-
-# Annotated type with validator to cast to HiveAccName
-AccNameType = Annotated[str, AfterValidator(lambda x: AccName(x))]
-
-
 class OpBase(BaseModel):
     """
     OpBase is a base model representing a Hive blockchain operation. It provides attributes
@@ -155,7 +148,6 @@ class OpBase(BaseModel):
         default={},
         description="Raw operation data from the blockchain",
     )
-
     block_explorer: HiveExp = Field(
         default=HiveExp.HiveHub,
         exclude=True,
@@ -193,7 +185,37 @@ class OpBase(BaseModel):
         return snake_case(cls.__name__)
 
     @property
+    def known_custom_json(self) -> bool:
+        """
+        Determines if the operation is a special custom JSON operation.
+
+        Returns:
+            bool: True if the operation is a special custom JSON operation, False otherwise.
+        """
+        if hasattr(self, "cj_id"):
+            if custom_json_test_id(self.cj_id):
+                return True
+        return False
+
+    @property
+    def tracked(self) -> bool:
+        if self.type == "custom_json":
+            return self.known_custom_json
+        else:
+            return self.type in OP_TRACKED
+
+    @property
     def log_extra(self) -> Dict[str, Any]:
+        """
+        Generates a dictionary containing additional logging information.
+        Usage: in a log entry use as an unpacked dictionary like this:
+        `logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})`
+
+        Returns:
+            Dict[str, Any]: A dictionary where the key is the name of the current instance
+            and the value is the serialized representation of the instance, excluding the
+            "raw_op" field.
+        """
         return {self.name(): self.model_dump(exclude={"raw_op"})}
 
     @property
@@ -217,6 +239,13 @@ class OpBase(BaseModel):
 
     @property
     def logs(self) -> OpLogData:
+        """
+        Retrieves the operation log data.
+
+        Returns:
+            OpLogData: An object containing the log string, notification string,
+            and additional log information.
+        """
         return OpLogData(
             log=self.log_str,
             notification=self.notification_str,

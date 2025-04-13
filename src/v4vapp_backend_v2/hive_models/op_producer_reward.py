@@ -6,6 +6,7 @@ from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.witness_details import Witness
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
 class VestingShares(AmountPyd):
@@ -13,7 +14,7 @@ class VestingShares(AmountPyd):
 
 
 class ProducerRewardRaw(OpBase):
-    producer: str = Field(description="Producer of the reward")
+    producer: AccNameType = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")
     timestamp: datetime = Field(description="Timestamp of the reward")
 
