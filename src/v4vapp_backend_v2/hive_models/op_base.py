@@ -145,8 +145,7 @@ class OpBase(BaseModel):
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
     raw_op: dict[str, Any] = Field(
-        default={},
-        description="Raw operation data from the blockchain",
+        default={}, description="Raw operation data from the blockchain", exclude=True
     )
     block_explorer: HiveExp = Field(
         default=HiveExp.HiveHub,
