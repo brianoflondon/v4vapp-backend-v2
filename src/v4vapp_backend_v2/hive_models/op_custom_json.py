@@ -1,8 +1,8 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Type, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Json
 
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
@@ -29,7 +29,7 @@ class KeepsatsTransfer(BaseModel):
         )
 
 
-CustomJsonData = Union[Dict[str, Any], KeepsatsTransfer]
+CustomJsonData = Union[Json, KeepsatsTransfer]
 
 
 def custom_json_filter(data: Dict[str, Any]) -> CustomJsonData:
@@ -59,7 +59,7 @@ def custom_json_filter(data: Dict[str, Any]) -> CustomJsonData:
     raise ValueError(f"Unknown operation ID: {data['id']}")
 
 
-def custom_json_test(data: Dict[str, Any]) -> bool:
+def custom_json_test(data: Dict[str, Any]) -> Type[BaseModel] | None:
     """
     Checks if the given data dictionary meets specific conditions.
 
@@ -75,9 +75,8 @@ def custom_json_test(data: Dict[str, Any]) -> bool:
               otherwise False.
     """
     if data["id"] in keepsats_ids:
-        if isinstance(data["json"], str):
-            return True
-    return False
+        return KeepsatsTransfer
+    return None
 
 
 class CustomJson(OpBase):
@@ -91,14 +90,15 @@ class CustomJson(OpBase):
     trx_num: int
 
     def __init__(self, **data):
-        if not custom_json_test(data):
-            raise ValueError("Invalid CustomJson data")
-        try:
-            json_object = custom_json_filter(data)
-            data["json"] = json_object
-        except ValueError:
-            raise
-
+        SpecialJsonType = custom_json_test(data)
+        if SpecialJsonType is not None:
+            try:
+                json_object = SpecialJsonType.model_validate(json.loads(data["json"]))
+                data["json"] = json_object
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
+                )
         super().__init__(**data)
 
     @property
@@ -106,17 +106,16 @@ class CustomJson(OpBase):
         # check if self.json_data has method log_str
         if hasattr(self.json_data, "log_str"):
             return f"{self.json_data.log_str} {self.link}"
-        return json.dumps(self.json_data)
+        return self.cj_id
 
     @property
     def notification_str(self) -> str:
-        # check if self.json_data has method log_str
-        if hasattr(self.json_data, "log_str"):
-            return f"{self.json_data.log_str} {self.markdown_link}"
-        return json.dumps(self.json_data)
+        if hasattr(self.json_data, "notification_str"):
+            return f"{self.json_data.notification_str} {self.markdown_link}"
+        return self.cj_id
 
     @classmethod
-    def test(cls, data: Dict[str, Any]) -> bool:
+    def test(cls, data: Dict[str, Any]) -> Type[BaseModel] | None:
         if data.get("json", None) is None:
-            return False
+            return None
         return custom_json_test(data)

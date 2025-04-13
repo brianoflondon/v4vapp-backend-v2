@@ -72,7 +72,7 @@ async def block_stream(
 # Example usage
 async def main() -> None:
     opNames = [
-        # "custom_json",
+        "custom_json",
         "transfer",
         "account_witness_vote",
         "producer_reward",

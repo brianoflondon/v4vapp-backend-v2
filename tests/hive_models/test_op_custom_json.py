@@ -1,10 +1,10 @@
 import json
 from datetime import datetime, timezone
 
-import pytest
-import pytz
+from pydantic import ValidationError
+from pytest import raises
 
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson, KeepsatsTransfer
 
 post1 = {
     "_id": "6740b6c755e3a8ade6050ca707d6d8b44374c1f8",
@@ -50,5 +50,35 @@ def test_custom_json_not_valid():
     post3 = post2.copy()
     post3["id"] = "podping"
     assert not CustomJson.test(post3)
-    with pytest.raises(ValueError):
-        CustomJson.model_validate(post3)
+    custom_json = CustomJson.model_validate(post3)
+    assert isinstance(custom_json.json_data, dict)
+    print(custom_json)
+
+
+# Baddly formed json in a v4vapp_transfer custom_json
+post4 = {
+    "realm": "real",
+    "trx_id": "3acf3683db021a4ac2e7d300d669908d436a4e58",
+    "op_in_trx": 1,
+    "type": "custom_json",
+    "block_num": 94989334,
+    "trx_num": 17,
+    "timestamp": "2025-04-13 10:55:27+00:00",
+    "id": "ssc-mainnet-hive",
+    "json": '[{"contractName": "tokens", "contractAction": "transfer", "contractPayload": {"symbol": "HBR", "to": "gwajnberg", "quantity": "0.125", "memo": "Obrigado por ajudar delegando HIVE para o projeto Hive-BR"}}]',
+    "required_auths": ["hive-br.voter"],
+    "required_posting_auths": [],
+    "link": "https://hivehub.dev/tx/3acf3683db021a4ac2e7d300d669908d436a4e58",
+}
+
+
+def test_custom_json_not_valid_2():
+    custom_json = CustomJson.model_validate(post4)
+    print(custom_json)
+    assert not isinstance(custom_json.json_data, KeepsatsTransfer)
+    post5 = post4.copy()
+    post5["json"] = "this is bad data"
+    with raises(ValidationError) as exc_info:
+        custom_json = CustomJson.model_validate(post5)
+    assert "Invalid JSON" in str(exc_info.value)
+    assert "json_invalid" in str(exc_info.value)
