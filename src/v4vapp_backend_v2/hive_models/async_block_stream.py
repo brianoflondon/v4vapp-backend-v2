@@ -29,7 +29,7 @@ async def block_stream(
         hive = get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive, mode="head")
     if not start:
-        start_block = hive.get_dynamic_global_properties().get("head_block_number")
+        start_block = hive.get_dynamic_global_properties().get("head_block_number") - 1
     else:
         start_block = start
     if not stop:
@@ -62,6 +62,9 @@ async def block_stream(
                         op_in_trx_counter.inc2(op_virtual_base)
                         yield op_virtual_base
                 yield op_base
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            logger.info("Async streamer received signal to stop. Exiting...")
+            return
         except Exception as e:
             logger.warning(f"{start_block:,} | Error in block_stream: {e} restarting")
 
@@ -69,16 +72,15 @@ async def block_stream(
 # Example usage
 async def main() -> None:
     opNames = [
-        "custom_json",
+        # "custom_json",
         "transfer",
         "account_witness_vote",
         "producer_reward",
         "fill_order",
         "limit_order_create",
     ]
-    opNames = []
     async for op in block_stream(opNames=opNames):
-        logger.info(op.log_str)
+        logger.info(f"{op.block_num} | {op.log_str}", extra={op.name(): op.model_dump(exclude={"raw_op"})})
 
 
 # Run the example

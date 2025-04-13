@@ -12,7 +12,7 @@ def test_all_validate():
         for hive_event in load_hive_events():
             try:
                 op = op_any(hive_event)
-                assert op.type == op.op_name()
+                assert op.type == op.name()
                 # print(op.markdown_link)
                 # print(hive_event.get("type"), op.type, op.link)
                 assert op.markdown_link
@@ -57,7 +57,7 @@ def test_all_block_exporer_links():
                     tested_type.append(hive_event.get("type"))
                     op = op_any(hive_event)
                     op.block_explorer = block_explorer
-                    assert op.type == op.op_name()
+                    assert op.type == op.name()
                     print(hive_event.get("type"), op.type, op.link)
                     if op.link:
                         response = httpx_client.head(op.link)

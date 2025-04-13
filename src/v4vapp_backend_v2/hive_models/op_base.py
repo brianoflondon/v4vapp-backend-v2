@@ -134,6 +134,10 @@ class OpBase(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+    raw_op: dict[str, Any] = Field(
+        default={},
+        description="Raw operation data from the blockchain",
+    )
 
     block_explorer: HiveExp = Field(
         default=HiveExp.HiveHub,
@@ -143,7 +147,11 @@ class OpBase(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        if self.timestamp.tzinfo is None or self.timestamp.tzinfo.utcoffset(self.timestamp) is None:
+        self.raw_op = data.copy()
+        if (
+            self.timestamp.tzinfo is None
+            or self.timestamp.tzinfo.utcoffset(self.timestamp) is None
+        ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
         if data.get("type", None) is not None:
             if data["type"] in HIVE_VIRTUAL_OPS:
@@ -154,12 +162,22 @@ class OpBase(BaseModel):
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @classmethod
-    def op_name(cls) -> str:
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+
+        This method converts the class name to a snake_case string
+        representation, which is typically used for naming operations
+        or identifiers in a consistent and readable format.
+
+        Returns:
+            str: The snake_case representation of the class name.
+        """
         return snake_case(cls.__name__)
 
     @property
     def log_extra(self) -> Dict[str, Any]:
-        return {self.op_name(): self.model_dump()}
+        return {self.name(): self.model_dump()}
 
     @property
     def log_str(self) -> str:

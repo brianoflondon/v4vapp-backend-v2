@@ -8,6 +8,7 @@ import pytest
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase, get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
+
 @pytest.fixture(autouse=True)
 def configure_and_reset_config(monkeypatch: pytest.MonkeyPatch):
     # Set up base config paths
@@ -40,7 +41,7 @@ def test_log_extra_real():
     )
     assert op_base.log_extra.get("op_base")["trx_id"] == trx_id
 
-    assert op_base.op_name() == "op_base"
+    assert op_base.name() == "op_base"
 
 
 def test_log_extra_virtual():
@@ -56,7 +57,7 @@ def test_log_extra_virtual():
         timestamp="2023-10-01T00:00:00",
     )
     assert op_base.log_extra.get("op_base")["trx_id"] == trx_id
-    assert op_base.op_name() == "op_base"
+    assert op_base.name() == "op_base"
 
 
 def test_op_base_model_dump():

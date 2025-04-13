@@ -4,7 +4,6 @@ from typing import Any, ClassVar, Dict, List
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -46,13 +45,9 @@ class LimitOrderCreate(OpBase):
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
 
-    @classmethod
-    def op_name(cls) -> str:
-        return snake_case(cls.__name__)
-
     @property
     def log_extra(self) -> Dict[str, Any]:
-        return {self.op_name(): self.model_dump()}
+        return {self.name(): self.model_dump()}
 
     @classmethod
     def expire_orders(self) -> None:
