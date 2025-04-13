@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, Dict
+from typing import Annotated, Any, Dict
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import AfterValidator, BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
@@ -89,6 +89,23 @@ class OpLogData(BaseModel):
     log: str
     notification: str
     log_extra: Dict[str, Any]
+
+
+# Custom string class for Hive account names
+class AccName(str):
+    @property
+    def link(self) -> str:
+        # Replace this with your specific URL pattern (the "mussel")
+        return f"https://hivehub.dev/@{self}"
+
+    @property
+    def markdown_link(self) -> str:
+        # Replace this with your specific URL pattern (the "mussel")
+        return f"[{self}](https://hivehub.dev/@{self})"
+
+
+# Annotated type with validator to cast to HiveAccName
+AccNameType = Annotated[str, AfterValidator(lambda x: AccName(x))]
 
 
 class OpBase(BaseModel):

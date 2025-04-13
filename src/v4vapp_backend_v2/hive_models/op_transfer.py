@@ -8,17 +8,17 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConver
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base import AccNameType, OpBase
 
 from .amount_pyd import AmountPyd
 
 
 class TransferRaw(OpBase):
+    from_account: AccNameType = Field(alias="from")
+    to_account: AccNameType = Field(alias="to")
     amount: AmountPyd
-    from_account: str = Field(alias="from")
     memo: str
     timestamp: datetime
-    to_account: str = Field(alias="to")
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -172,7 +172,7 @@ class Transfer(TransferRaw):
     @property
     def notification_str(self) -> str:
         ans = (
-            f"{self.from_account} sent {self.amount_str} to {self.to_account} "
+            f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
             f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {self.markdown_link}"
         )
         return ans
