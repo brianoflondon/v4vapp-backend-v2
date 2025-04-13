@@ -187,7 +187,7 @@ async def db_store_block_marker(
         _ = await db_client.update_one(
             HIVE_TRX_COLLECTION_V2,
             query=query,
-            update=block_marker.model_dump(),
+            update=block_marker.model_dump(exclude={"raw_op"}),
             upsert=True,
         )
     except DuplicateKeyError:
@@ -236,7 +236,7 @@ async def db_store_op(
         _ = await db_client.update_one(
             HIVE_TRX_COLLECTION_V2,
             query={"trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
-            update=op.model_dump(by_alias=True),
+            update=op.model_dump(by_alias=True, exclude={"raw_op"}),
             upsert=True,
         )
 
@@ -273,7 +273,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
                 f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
                 extra={
                     "notification": False,
-                    "quote": Transfer.last_quote.model_dump(exclude={"raw_response"}),
+                    "quote": Transfer.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
                 },
             )
         await transfer_report(op)
@@ -366,7 +366,7 @@ async def db_store_witness_vote(
             _ = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
                 query=query,
-                update=vote.model_dump(),
+                update=vote.model_dump(exclude={"raw_op"}),
                 upsert=True,
             )
     except DuplicateKeyError:
@@ -476,7 +476,8 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
                 producer_reward = ProducerReward.model_validate(hive_event)
                 await producer_reward.get_witness_details()
                 _ = await db_client.insert_one(
-                    HIVE_WITNESS_PRODUCER_COLLECTION, producer_reward.model_dump()
+                    HIVE_WITNESS_PRODUCER_COLLECTION,
+                    producer_reward.model_dump(exclude={"raw_op"}),
                 )
                 logger.info(
                     f"{icon} {producer_reward.witness} block: {producer_reward.block_num:,} ",
@@ -656,7 +657,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                         try:
                             _ = await db_client.insert_one(
                                 HIVE_WITNESS_PRODUCER_COLLECTION,
-                                producer_reward.model_dump(),
+                                producer_reward.model_dump(exclude={"raw_op"}),
                             )
                         except DuplicateKeyError:
                             pass
@@ -870,7 +871,7 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
         f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
         extra={
             "notification": False,
-            "quote": Transfer.last_quote.model_dump(exclude={"raw_response"}),
+            "quote": Transfer.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
         },
     )
 
