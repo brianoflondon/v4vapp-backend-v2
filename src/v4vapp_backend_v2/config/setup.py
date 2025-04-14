@@ -525,6 +525,11 @@ class InternalConfig:
                 time.sleep(0.5)
         return
 
+    def shutdown_logging(self):
+        for handler in logging.root.handlers[:]:
+            handler.close()
+            logging.root.removeHandler(handler)
+
     def shutdown(self):
         """
         Gracefully shuts down the notification loop and ensures all pending tasks are completed.
@@ -548,6 +553,7 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        self.shutdown_logging()
         logger.info("InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
@@ -593,6 +599,7 @@ class InternalConfig:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+
 
 
 """
