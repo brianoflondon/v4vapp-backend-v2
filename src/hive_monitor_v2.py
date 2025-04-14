@@ -641,6 +641,19 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
+                        log_str = f"{icon} 🧱 Delta {time_diff} | Mean {mean_time_diff} | "
+                        notification_str = (
+                            f"{log_str}"
+                            f"{producer_reward.notification_str} | "
+                            f"{check_time_diff(producer_reward.timestamp)}"
+                        )
+                        log_str = (
+                            f"{log_str}"
+                            f"{producer_reward.log_str} | "
+                            f"{check_time_diff(producer_reward.timestamp)}"
+                        )
+
+                        notification_str
                         logger.info(
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
@@ -649,6 +662,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             f"{check_time_diff(producer_reward.timestamp)}",
                             extra={
                                 "notification": True,
+                                "notification_str" : notification_str,
                                 "error_code_clear": "Hive Witness delay",
                                 **producer_reward.log_extra,
                             },

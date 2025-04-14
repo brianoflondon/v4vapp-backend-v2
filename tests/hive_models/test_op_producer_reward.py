@@ -8,7 +8,7 @@ from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
 
-#TODO: #61 replace the set_base_config_path reset_internal_config pair everywhere with this
+# TODO: #61 replace the set_base_config_path reset_internal_config pair everywhere with this
 @pytest.fixture(autouse=True)
 def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
@@ -20,7 +20,9 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     yield
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)  # Resetting InternalConfig instance
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
 
 
 @pytest.mark.asyncio
@@ -60,6 +62,8 @@ async def test_model_validate_producer_reward():
                 assert producer_reward.witness.witness_name == "threespeak"
                 pprint(producer_reward.witness, indent=2)
                 pprint(producer_reward.model_dump(), indent=2)
+            print(producer_reward.log_str)
+            print(producer_reward.notification_str)
     assert count == 28
 
 
