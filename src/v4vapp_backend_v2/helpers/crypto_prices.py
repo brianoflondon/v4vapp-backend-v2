@@ -8,7 +8,7 @@ from typing import Annotated, Any, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -79,7 +79,11 @@ class QuoteResponse(BaseModel):
     hbd_usd: float = 0
     btc_usd: float = 0
     hive_hbd: float = 0
-    raw_response: RawResponseType = {}
+    raw_response: RawResponseType = Field(
+        default_factory=dict,
+        description="The raw response to queries for this quote as received from the source",
+        exclude=True,
+    )
     source: str = ""
     fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc)
     error: str = ""

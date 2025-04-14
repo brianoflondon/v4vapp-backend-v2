@@ -1,7 +1,6 @@
 import json
 import random
 import struct
-from enum import StrEnum
 from typing import Any, Dict, List
 
 import httpx
@@ -250,56 +249,6 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
         return HiveInternalQuote(error=message)
-
-
-class HiveExp(StrEnum):
-    HiveHub = "https://hivehub.dev/{prefix_path}"
-    HiveBlockExplorer = "https://hiveblockexplorer.com/{prefix_path}"
-    HiveExplorer = "https://hivexplorer.com/{prefix_path}"
-    HiveScanInfo = "https://hivescan.info/{prefix_path}"
-
-
-def get_hive_block_explorer_link(
-    trx_id: str,
-    block_explorer: HiveExp = HiveExp.HiveHub,
-    markdown: bool = False,
-    block_num: int = 0,
-    op_in_trx: int = 0,
-    # any_op: OpBase | None = None,
-) -> str:
-    """
-    Generate a Hive blockchain explorer URL for a given transaction ID.
-
-    Args:
-        trx_id (str): The transaction ID to include in the URL
-        block_explorer (HiveExp): The blockchain explorer to use (defaults to HiveHub)
-
-    Returns:
-        str: The complete URL with the transaction ID inserted
-    """
-    if trx_id and not (block_num and op_in_trx):
-        path = f"{trx_id}"
-        prefix = "tx/"
-    elif trx_id and block_num and op_in_trx:
-        path = f"{block_num}/{trx_id}/{op_in_trx}"
-        prefix = "tx/"
-    elif not trx_id and block_num:
-        path = f"{block_num}"
-        prefix = "b/"
-
-    if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
-        if prefix == "tx/":
-            prefix = "transaction/"
-        elif prefix == "b/":
-            prefix = "block/"
-
-    prefix_path = f"{prefix}{path}"
-
-    link_html = block_explorer.value.format(prefix_path=prefix_path)
-    if not markdown:
-        return link_html
-    markdown_link = f"[{block_explorer.name}]({link_html})"
-    return markdown_link
 
 
 def get_event_id(hive_event: Any) -> str:

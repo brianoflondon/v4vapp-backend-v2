@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+
 
 class Witness(BaseModel):
     """
@@ -27,7 +29,7 @@ class Witness(BaseModel):
         account_creation_fee (int): The account creation fee set by the witness.
     """
 
-    witness_name: str
+    witness_name: AccNameType
     rank: int
     url: str = ""
     vests: str

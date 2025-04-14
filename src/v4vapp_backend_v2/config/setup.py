@@ -45,6 +45,7 @@ class LoggingConfig(BaseConfig):
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
     log_notification_silent: List[str] = []
+    default_notification_bot_name: str = ""
 
 
 class LndConnectionConfig(BaseConfig):
@@ -262,6 +263,7 @@ class Config(BaseModel):
     default_lnd_connection: str = ""
     default_db_connection: str = ""
     default_db_name: str = ""
+    default_db_user: str = ""
 
     # Connections and DB configs
     lnd_connections: Dict[str, LndConnectionConfig] = {}
@@ -396,11 +398,11 @@ class InternalConfig:
             cls._instance = super(InternalConfig, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, bot_name: str = "", *args, **kwargs):
         if not hasattr(self, "_initialized"):
             super().__init__()
-            self.notification_loop = None  # Initialize notification_loop
-            self.notification_lock = False
+            InternalConfig.notification_loop = None  # Initialize notification_loop
+            InternalConfig.notification_lock = False
             self.setup_config()
             self.setup_logging()
             self._initialized = True
@@ -523,6 +525,11 @@ class InternalConfig:
                 time.sleep(0.5)
         return
 
+    def shutdown_logging(self):
+        for handler in logging.root.handlers[:]:
+            handler.close()
+            logging.root.removeHandler(handler)
+
     def shutdown(self):
         """
         Gracefully shuts down the notification loop and ensures all pending tasks are completed.
@@ -546,6 +553,7 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        self.shutdown_logging()
         logger.info("InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
@@ -591,6 +599,7 @@ class InternalConfig:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+
 
 
 """

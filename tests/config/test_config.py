@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,12 +11,10 @@ from v4vapp_backend_v2.config.setup import (
 )
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -68,9 +65,10 @@ def test_internal_config(set_base_config_path: None):
         int_config.lnd_connections["example"].address
         == raw_config["lnd_connections"]["example"]["address"]
     )
-    assert int_config.logging.log_notification_silent == raw_config["logging"][
-        "log_notification_silent"
-    ]
+    assert (
+        int_config.logging.log_notification_silent
+        == raw_config["logging"]["log_notification_silent"]
+    )
     with pytest.raises(KeyError):
         int_config.lnd_connections["bad_example"]
 
@@ -83,9 +81,7 @@ def test_singleton_config(set_base_config_path: None):
 
 def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
     test_config_path_bad = Path("tests/data/config-bad")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path_bad)
     # detect sys.exit(1) call
 
     with pytest.raises(StartupFailure):
@@ -129,8 +125,7 @@ def test_update_config(set_base_config_path: None):
     insert = {sample_telegram_bot.name: sample_telegram_bot}
     internal_config.update_config(setting="notification_bots", insert=insert)
     assert (
-        internal_config.config.notification_bots[sample_telegram_bot.name]
-        == sample_telegram_bot
+        internal_config.config.notification_bots[sample_telegram_bot.name] == sample_telegram_bot
     )
 
 

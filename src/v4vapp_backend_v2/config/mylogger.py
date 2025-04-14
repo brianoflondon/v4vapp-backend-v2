@@ -76,11 +76,6 @@ class MyJSONFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
-        if not hasattr(record, "levelno"):
-            logger.warning(
-                f"No levelno: {record}", extra={"notification": False, "record": record}
-            )
-            record.levelno = logging.INFO
         message = self._prepare_log_dict(record)
         return json.dumps(message, default=str)
 
@@ -166,11 +161,11 @@ class CustomNotificationHandler(logging.Handler):
 
     @override
     def emit(self, record: logging.LogRecord):
-        if not hasattr(record, "levelno"):
-            logger.warning(
-                f"No levelno: {record}", extra={"notification": False, "record": record}
-            )
-            record.levelno = logging.INFO
+        if hasattr(record, "bot_name"):
+            bot_name = record.bot_name
+        else:
+            bot_name = InternalConfig().config.logging.default_notification_bot_name
+
         log_message = record.getMessage()
         if self.error_codes:
             logger.debug(f"Error codes: {self.error_codes}")
@@ -184,24 +179,24 @@ class CustomNotificationHandler(logging.Handler):
             )
             if record.error_code_clear in self.error_codes:
                 self.error_codes.pop(record.error_code_clear)
+                logger.info(log_message_clear, extra={"notification": True, "record": record})
             else:
                 logger.warning(
                     f"Error code not found in error_codes {record.error_code_clear}",
                     extra={"notification": False},
                 )
-            logger.info(log_message_clear, extra={"notification": True, "record": record})
             self.sender.send_notification(log_message, record)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                self.sender.send_notification(log_message, record, alert_level=5)
+                self.sender.send_notification(log_message, record, bot_name=bot_name)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Notification
                 pass
         # Default case
         else:
-            self.sender.send_notification(log_message, record, alert_level=10)
+            self.sender.send_notification(log_message, record, bot_name=bot_name)
 
 
 class NotificationFilter(logging.Filter):
@@ -220,12 +215,6 @@ class NotificationFilter(logging.Filter):
                                       'notification' attribute and it is True.
                                       Otherwise, returns False.
         """
-        if not hasattr(record, "levelno"):
-            logger.warning(
-                f"No levelno: {record}", extra={"notification": False, "record": record}
-            )
-            record.levelno = logging.INFO
-
         if hasattr(record, "name"):
             package_name = record.name.split(".")[0]
             if package_name in InternalConfig().config.logging.log_notification_silent:
@@ -259,12 +248,6 @@ class NonErrorFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        if not hasattr(record, "levelno"):
-            logger.warning(
-                f"No levelno: {record}", extra={"notification": False, "record": record}
-            )
-            record.levelno = logging.INFO
-
         return record.levelno <= logging.INFO
 
 
@@ -282,9 +265,4 @@ class NotDebugFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        if not hasattr(record, "levelno"):
-            logger.warning(
-                f"No levelno: {record}", extra={"notification": False, "record": record}
-            )
-            record.levelno = logging.INFO
         return record.levelno > logging.DEBUG

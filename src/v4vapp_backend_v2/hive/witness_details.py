@@ -1,4 +1,5 @@
 import json
+from random import shuffle
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -6,6 +7,11 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
+
+API_ENDPOINTS = [
+    "https://api.syncad.com/hafbe-api/witnesses",
+    "https://techcoderx.com/hafbe-api/witnesses",
+]
 
 
 @retry(
@@ -38,25 +44,27 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     Returns:
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
-    base_url = "https://api.syncad.com/hafbe-api/witnesses"
-    url = f"{base_url}/{hive_accname}" if hive_accname else base_url
-    cache_key = f"witness_{hive_accname}"
 
+    cache_key = f"witness_{hive_accname}"
     # Attempt to fetch from API
     try:
-        async with httpx.AsyncClient() as client:
-            response = await fetch_witness_details(client, url)
-            response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
+        shuffled_endpoints = API_ENDPOINTS[:]
+        shuffle(shuffled_endpoints)
+        for api_url in shuffled_endpoints:
+            url = f"{api_url}/{hive_accname}" if hive_accname else api_url
+            async with httpx.AsyncClient() as client:
+                response = await fetch_witness_details(client, url)
+                response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
 
-            answer = response.json()
-            # Cache the result in Redis
-            try:
-                async with V4VAsyncRedis() as redis_client:
-                    await redis_client.set(name=cache_key, value=json.dumps(answer))
-            except Exception as redis_error:
-                logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
+                answer = response.json()
+                # Cache the result in Redis
+                try:
+                    async with V4VAsyncRedis() as redis_client:
+                        await redis_client.set(name=cache_key, value=json.dumps(answer))
+                except Exception as redis_error:
+                    logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
 
-            return WitnessDetails.model_validate(answer)
+                return WitnessDetails.model_validate(answer)
 
     except httpx.ConnectError as e:
         logger.error(f"Connection failed to {url}: {e}", extra={"notification": False, "error": e})

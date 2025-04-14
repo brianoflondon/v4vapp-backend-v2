@@ -3,8 +3,7 @@ from datetime import datetime
 from nectar.amount import Amount
 from pydantic import Field
 
-from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link
-from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 from .amount_pyd import AmountPyd
@@ -58,27 +57,12 @@ class FillOrder(OpBase):
     @property
     def log_str(self) -> str:
         ans = self._log_internal()
-        # link = get_hive_block_explorer_link(
-        #     trx_id=self.trx_id, markdown=False, any_op=self
-        # )
-        link = get_hive_block_explorer_link(
-            self.trx_id,
-            markdown=False,
-            block_num=self.block_num,
-            op_in_trx=self.op_in_trx,
-        )
-        return f"{ans} {link}"
+        return f"{ans} {self.link}"
 
     @property
     def notification_str(self) -> str:
         ans = self._log_internal()
-        link = get_hive_block_explorer_link(
-            self.trx_id,
-            markdown=True,
-            block_num=self.block_num,
-            op_in_trx=self.op_in_trx,
-        )
-        return f"{ans} {link}"
+        return f"{ans} {self.markdown_link}"
 
     def check_open_orders(self) -> str:
         """
@@ -109,9 +93,7 @@ class FillOrder(OpBase):
             open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
         if open_order is not None:
             print(f"amount_remaining: {open_order.amount_remaining}")
-            if (
-                self.open_owner == open_order.owner
-            ):  # This is when we fill someone else's order
+            if self.open_owner == open_order.owner:  # This is when we fill someone else's order
                 amount_remaining = Amount(str(open_order.amount_remaining))
                 amount_remaining -= Amount(self.current_pays.model_dump())
             else:
@@ -124,8 +106,5 @@ class FillOrder(OpBase):
             else:
                 LimitOrderCreate.open_order_ids.pop(open_order.orderid)
                 self.completed_order = True
-                return (
-                    f"✅ Order {open_order.orderid} has been filled "
-                    f"(xs {amount_remaining})"
-                )
+                return f"✅ Order {open_order.orderid} has been filled (xs {amount_remaining})"
         return f"id {self.open_orderid}"

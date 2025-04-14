@@ -9,7 +9,8 @@ from nectar.price import Price
 from nectarapi.exceptions import UnhandledRPCError
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
-from v4vapp_backend_v2.hive.hive_extras import get_hive_block_explorer_link, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive_models.op_base import get_hive_block_explorer_link
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
 icon = "📈"

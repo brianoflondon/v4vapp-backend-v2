@@ -24,8 +24,6 @@ class NotificationBot:
     bot: Bot
     config: NotificationBotConfig
 
-    model_config = {"arbitrary_types_allowed": True}
-
     def __init__(
         self,
         token: str = "",
@@ -41,7 +39,10 @@ class NotificationBot:
             self.bot = Bot(token=self.config.token)
             return
         if self.names_list():
-            self.name = self.names_list()[0]
+            if InternalConfig().config.default_notification_bot_name:
+                self.name = InternalConfig().config.default_notification_bot_name
+            else:
+                self.name = self.names_list()[0]
             self.load_config()
             self.bot = Bot(token=self.config.token)
             return
@@ -260,5 +261,6 @@ class NotificationBot:
         """
         if not self.config.name:
             raise NotificationNotSetupError("No name set for bot.")
+        self.name = self.config.name
         with open(self.n_bot_config_file, "w") as f:
             json.dump(self.config.model_dump(), f)

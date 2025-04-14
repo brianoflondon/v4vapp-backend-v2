@@ -1,5 +1,4 @@
 import json
-from pprint import pprint
 
 from nectar.amount import Amount
 
@@ -16,15 +15,9 @@ def test_model_validate_op_fill_order():
         if hive_event["type"] == "fill_order":
             op_fill_order = FillOrder.model_validate(hive_event)
             assert op_fill_order.trx_id == hive_event["trx_id"]
-            assert (
-                op_fill_order.current_pays.amount
-                == hive_event["current_pays"]["amount"]
-            )
+            assert op_fill_order.current_pays.amount == hive_event["current_pays"]["amount"]
             assert op_fill_order.open_pays.amount == hive_event["open_pays"]["amount"]
-            assert (
-                op_fill_order.current_pays.symbol
-                == Amount(hive_event["current_pays"]).symbol
-            )
+            assert op_fill_order.current_pays.symbol == Amount(hive_event["current_pays"]).symbol
             print(op_fill_order.log_str)
 
 
@@ -71,6 +64,7 @@ def test_create_order_fill_order():
     - The `LimitOrderCreate.watch_users` is set to `["v4vapp"]` for the test.
     """
     filename = "tests/data/hive_models/complete_sell_fill.jsonl"
+    LimitOrderCreate.open_order_ids = {}
     LimitOrderCreate.watch_users = ["v4vapp"]
     all_logs = []
     with open(filename, "r") as f:
@@ -93,7 +87,7 @@ def test_create_order_fill_order():
     for log in all_logs:
         print(log)
     # count text "|has been filled" in all_logs
-    assert len([log for log in all_logs if "has been filled" in log]) > 1
+    assert len([log for log in all_logs if "has been filled" in log]) == 2
 
 
 def test_expire_orders():

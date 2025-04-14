@@ -19,12 +19,9 @@ from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
-from v4vapp_backend_v2.hive.hive_extras import (
-    MAX_HIVE_BATCH_SIZE,
-    get_hive_client,
-)
-from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
+from v4vapp_backend_v2.hive.hive_extras import MAX_HIVE_BATCH_SIZE, get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import op_any
@@ -41,13 +38,12 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
     VirtualOpTypes,
     WitnessOpTypes,
 )
-from v4vapp_backend_v2.models.hive_transfer_model import HiveTransaction
 
-INTERNAL_CONFIG = InternalConfig()
-CONFIG = INTERNAL_CONFIG.config
-HIVE_DATABASE_CONNECTION = "local_connection"
-HIVE_DATABASE = "lnd_monitor_v2_voltage"
-HIVE_DATABASE_USER = "lnd_monitor"
+# INTERNAL_CONFIG = InternalConfig()
+# CONFIG = INTERNAL_CONFIG.config
+HIVE_DATABASE_CONNECTION = ""
+HIVE_DATABASE = ""
+HIVE_DATABASE_USER = ""
 HIVE_TRX_COLLECTION_V2 = "hive_ops"
 HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness_ops"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
@@ -240,7 +236,9 @@ async def db_store_op(
         _ = await db_client.update_one(
             HIVE_TRX_COLLECTION_V2,
             query={"trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
-            update=op.model_dump(by_alias=True),
+            update=op.model_dump(
+                by_alias=True,
+            ),
             upsert=True,
         )
 
@@ -268,6 +266,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
     - Initiates server balance adjustments if the transfer involves specific server and treasury accounts.
     """
     global COMMAND_LINE_WATCH_USERS
+    CONFIG = InternalConfig().config
     if watch_users_notification(transfer=op, watch_users=COMMAND_LINE_WATCH_USERS):
         if not Transfer.last_quote or (Transfer.last_quote and Transfer.last_quote.age > 60):
             await Transfer.update_quote()
@@ -276,7 +275,7 @@ async def db_process_transfer(op: Transfer) -> Transfer | None:
                 f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
                 extra={
                     "notification": False,
-                    "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
+                    "quote": Transfer.last_quote.model_dump(exclude={"raw_response"}),
                 },
             )
         await transfer_report(op)
@@ -309,6 +308,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     Returns:
         None: The function does not return any value.
     """
+    CONFIG = InternalConfig().config
     await asyncio.sleep(3)  # Sleeps to make sure we only balance HBD after time for a return
     try:
         if transfer.from_account in CONFIG.hive.server_account_names:
@@ -462,10 +462,11 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         hive_client = get_hive_client()
         hive_blockchain = Blockchain(hive=hive_client)
         end_block = hive_client.get_dynamic_global_properties().get("head_block_number")
+        op_in_trx_counter = OpInTrxCounter(realm="virtual")
         async_stream = sync_to_async_iterable(
             hive_blockchain.stream(
                 opNames=["producer_reward"],
-                start=end_block - int(140 * 60 / 3),  # go back 140 minutes of 3 second blocks
+                start=end_block - int(24 * 60 * 60 / 3),  # go back 24 hours of 3 second blocks
                 stop=end_block,
                 only_virtual_ops=True,
                 max_batch_size=MAX_HIVE_BATCH_SIZE,
@@ -473,10 +474,12 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         )
         async for hive_event in async_stream:
             if hive_event.get("producer") == watch_witness:
+                hive_event["op_in_trx"] = op_in_trx_counter.inc(hive_event["trx_id"])
                 producer_reward = ProducerReward.model_validate(hive_event)
                 await producer_reward.get_witness_details()
                 _ = await db_client.insert_one(
-                    HIVE_WITNESS_PRODUCER_COLLECTION, producer_reward.model_dump()
+                    HIVE_WITNESS_PRODUCER_COLLECTION,
+                    producer_reward.model_dump(),
                 )
                 logger.info(
                     f"{icon} {producer_reward.witness} block: {producer_reward.block_num:,} ",
@@ -638,6 +641,19 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
+                        log_str = f"{icon} 🧱 Delta {time_diff} | Mean {mean_time_diff} | "
+                        notification_str = (
+                            f"{log_str}"
+                            f"{producer_reward.notification_str} | "
+                            f"{check_time_diff(producer_reward.timestamp)}"
+                        )
+                        log_str = (
+                            f"{log_str}"
+                            f"{producer_reward.log_str} | "
+                            f"{check_time_diff(producer_reward.timestamp)}"
+                        )
+
+                        notification_str
                         logger.info(
                             f"{icon} 🧱 "
                             f"Delta {time_diff} | "
@@ -646,6 +662,7 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             f"{check_time_diff(producer_reward.timestamp)}",
                             extra={
                                 "notification": True,
+                                "notification_str" : notification_str,
                                 "error_code_clear": "Hive Witness delay",
                                 **producer_reward.log_extra,
                             },
@@ -724,6 +741,7 @@ async def real_ops_loop(
         Events.HIVE_TRANSFER_NOTIFY: When a transfer or recurrent transfer transaction
         involving a watched user is detected.
     """
+    CONFIG = InternalConfig().config
     logger.info(f"{icon} Real Loop Watching users: {watch_users}")
     LimitOrderCreate.watch_users = watch_users
     op_names = RealOpsLoopTypes
@@ -802,7 +820,7 @@ async def real_ops_loop(
                             db_client=db_client,
                         )
 
-                    if op.type == "custom_json":
+                    if op.known_custom_json:
                         custom_json: CustomJson = op
                         logger.info(
                             f"{custom_json.log_str}",
@@ -863,13 +881,13 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
             raise e
         logger.info(f"{icon} Redis connection established")
 
-    await HiveTransaction.update_quote()
-    quote = HiveTransaction.last_quote
+    await Transfer.update_quote()
+    quote = Transfer.last_quote
     logger.info(
         f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
         extra={
             "notification": False,
-            "quote": HiveTransaction.last_quote.model_dump(exclude={"raw_response"}),
+            "quote": Transfer.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
         },
     )
 
@@ -927,6 +945,18 @@ def main(
             show_default=True,
         ),
     ] = "brianoflondon",
+    database: Annotated[
+        str,
+        typer.Argument(help=("The database to monitor.")),
+    ] = "",
+    database_connection: Annotated[
+        str,
+        typer.Argument(help=("The database connection to use.")),
+    ] = "",
+    database_user: Annotated[
+        str,
+        typer.Argument(help=("The database user to use.")),
+    ] = "",
 ):
     """
     Watch the Hive blockchain for transactions.
@@ -941,8 +971,19 @@ def main(
     Returns:
         None
     """
+    CONFIG = InternalConfig().config
     global COMMAND_LINE_WATCH_USERS
     global COMMAND_LINE_WATCH_ONLY
+    global HIVE_DATABASE
+    global HIVE_DATABASE_CONNECTION
+    global HIVE_DATABASE_USER
+
+    if not database:
+        HIVE_DATABASE = CONFIG.default_db_name
+    if not database_connection:
+        HIVE_DATABASE_CONNECTION = CONFIG.default_db_connection
+    if not database_user:
+        HIVE_DATABASE_USER = CONFIG.default_db_user
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",

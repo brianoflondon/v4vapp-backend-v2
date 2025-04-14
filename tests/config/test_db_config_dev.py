@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
 import os
 from pathlib import Path
+
 import pytest
-from v4vapp_backend_v2.database.db import DbErrorCode, MongoDBClient
-from pymongo.errors import OperationFailure, ConnectionFailure
+
+from v4vapp_backend_v2.database.db import MongoDBClient
 
 
 @pytest.fixture(autouse=True)
@@ -18,9 +18,7 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture()
 def set_base_config_path_dev(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("config/")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
