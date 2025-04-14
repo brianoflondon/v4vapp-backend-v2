@@ -272,6 +272,54 @@ def sanitize_markdown_v1(text: str) -> str:
     return "".join(parts)
 
 
+def sanitize_markdown_v2(text: str) -> str:
+    """
+    Sanitizes a string for Telegram's MarkdownV2 format by escaping reserved characters,
+    while preserving URLs in [text](url) links.
+
+    Args:
+        text (str): The input text to sanitize.
+
+    Returns:
+        str: The sanitized text ready for MarkdownV2 parsing.
+    """
+    # MarkdownV2 reserved characters that need escaping
+    reserved_chars = r"([_*[\]()~`#+-.!|{}>])"
+
+    # Step 1: Extract and preserve URLs in [text](url) links
+    link_pattern = r"\[([^\]]*)\]\(([^)]+)\)"
+    links = []
+
+    def store_link(match):
+        links.append((match.group(1), match.group(2)))  # Store link text and URL
+        return f"__LINK_{len(links) - 1}__"
+
+    text = re.sub(link_pattern, store_link, text)
+
+    # Step 2: Escape reserved characters in the remaining text
+    text = re.sub(reserved_chars, r"\\\1", text)
+
+    # Step 3: Restore links
+    for i, (link_text, url) in enumerate(links):
+        # Escape reserved characters in link_text
+        link_text_escaped = re.sub(reserved_chars, r"\\\1", link_text)
+        # URLs generally don't need escaping, but ensure no unescaped ) breaks the link
+        placeholder = f"__LINK_{i}__"
+        # Escape underscores in placeholder to match escaped text
+        placeholder_escaped = placeholder.replace("_", r"\_")
+        text = text.replace(placeholder_escaped, f"[{link_text_escaped}]({url})")
+
+    return text
+
+
+# Test with your message
+if __name__ == "__main__":
+    message = "🐝 🧱 Delta 0:55:33 | Mean 0:55:43 | producer_reward | 1 | [HiveHub](https://hivehub.dev/tx/95024715/0000000000000000000000000000000000000000/1) | 0:00:02"
+    sanitized = sanitize_markdown_v2(message)
+    print("Original:", message)
+    print("Sanitized:", sanitized)
+
+
 def draw_percentage_meter(percentage, max_percent=200, width=20):
     """
     Draws a fine-grained percentage meter using fractional block characters

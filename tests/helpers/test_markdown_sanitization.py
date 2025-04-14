@@ -97,6 +97,17 @@ def test_sanitize_markdown_v1_real_example():
         == "🐝 flemingfarm sent 13.000 HIVE to v4vapp ($3.17) flemingfarm Deposit to #SATS [HiveHub](https://hivehub.dev/tx/8eb1e0dd4259bfce72d5cbe3a6ce347fba777d8e) no_preview"
     )
 
+def test_sanitize_markdown_v1_real_example_2():
+    """Test the specific notification text."""
+    text = "🐝 🧱 Delta 0:55:33 | Mean 0:55:43 | producer_reward | 1 | [HiveHub](https://hivehub.dev/tx/95024715/0000000000000000000000000000000000000000/1) | 0:00:02"
+
+    result = sanitize_markdown_v1(text)
+    assert (
+        result
+        == "🐝 🧱 Delta 0:55:33 | Mean 0:55:43 | producer_reward | 1 | [HiveHub](https://hivehub.dev/tx/95024715/0000000000000000000000000000000000000000/1) | 0:00:02"
+
+    )
+
 
 def test_sanitize_markdown_v1_empty():
     """Test empty string."""

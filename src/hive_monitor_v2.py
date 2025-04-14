@@ -504,6 +504,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     Returns:
         timedelta: The average block time for the specified witness.
     """
+    count_back = 10
     async with MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -520,7 +521,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
         async for block in cursor:
             block_timestamps.append((block["timestamp"]))
             counter += 1
-            if counter > 10:
+            if counter > count_back:
                 break
 
     # Calculate the time differences between consecutive timestamps
@@ -641,17 +642,10 @@ async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
                             - last_good_timestamp
                         )
                         mean_time_diff = await witness_average_block_time(watch_witness)
-                        log_str = f"{icon} 🧱 Delta {time_diff} | Mean {mean_time_diff} | "
-                        notification_str = (
-                            f"{log_str}"
-                            f"{producer_reward.notification_str} | "
-                            f"{check_time_diff(producer_reward.timestamp)}"
-                        )
-                        log_str = (
-                            f"{log_str}"
-                            f"{producer_reward.log_str} | "
-                            f"{check_time_diff(producer_reward.timestamp)}"
-                        )
+                        producer_reward.delta = time_diff
+                        producer_reward.mean = mean_time_diff
+                        log_str = f"{icon} {producer_reward.log_str}"
+                        notification_str = f"{icon} {producer_reward.notification_str}"
                         logger.info(
                             log_str,
                             extra={

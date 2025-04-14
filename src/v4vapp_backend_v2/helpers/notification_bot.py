@@ -4,10 +4,14 @@ from pathlib import Path
 from typing import Any
 
 from telegram import Bot
-from telegram.error import InvalidToken, TimedOut
+from telegram.error import BadRequest, InvalidToken, TimedOut
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown, sanitize_markdown_v1
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    is_markdown,
+    sanitize_markdown_v1,
+    sanitize_markdown_v2,
+)
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
@@ -166,6 +170,7 @@ class NotificationBot:
             )
 
         text = self.truncate_text(text)
+        text_original = text
         if is_markdown(text):
             kwargs["parse_mode"] = "Markdown"
             if text.endswith("no_preview"):
@@ -190,9 +195,47 @@ class NotificationBot:
                     extra={"notification": False},
                 )
                 await asyncio.sleep(2**attempt)  # Exponential backoff
+            except BadRequest:
+                attempt += 1
+                try:
+                    text_v2 = sanitize_markdown_v2(text_original)
+                    await self.bot.send_message(
+                        chat_id=self.config.chat_id, text=text_v2, parse_mode="MarkdownV2"
+                    )
+                    logger.info(
+                        "Using Markdown v2 for message",
+                        extra={
+                            "text_original": text_original,
+                            "sanitized_v2": text_v2,
+                            "notification_text": text,
+                        },
+                    )
+                    return
+                except Exception as e:
+                    logger.exception(
+                        f"Second Error sending [ {text} ]: {e} with Markdown v2",
+                        extra={
+                            "error": e,
+                            "notification_text": text,
+                            "notification": False,
+                            "text_original": text_original,
+                            "sanitized_v2": text_v2,
+                        },
+                    )
+                    print("Problem in Notification bot Markdwon V2")
+                    return
 
             except Exception as e:
-                print(f"Error sending [ {text} ]: {e}")
+                logger.exception(
+                    f"Error sending [ {text} ]: {e}",
+                    extra={
+                        "error": e,
+                        "notification_text": text,
+                        "notification": False,
+                        "text_original": text_original,
+                        "sanitized_v2": text_v2,
+                    },
+                )
                 print("Problem in Notification bot")
                 return
 
