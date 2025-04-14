@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_serializer
 
 from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -26,6 +26,13 @@ class ProducerReward(ProducerRewardRaw):
     delta: timedelta | None = Field(None, description="Time delta to the last produced block")
     mean: timedelta | None = Field(None, description="Mean time between the last (n) blocks")
 
+    # Serialize timedelta to seconds (float) for MongoDB
+    @field_serializer("delta", "mean", when_used="always")
+    def serialize_timedelta(self, value: timedelta | None) -> float | None:
+        if value is None:
+            return None
+        return value.total_seconds()
+
     def __init__(self, **data):
         super().__init__(**data)
 
@@ -39,10 +46,10 @@ class ProducerReward(ProducerRewardRaw):
                 f"{self.log_common()}"
                 f"{self.block_num:,} | {self.age:.2f} | "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.link}"
+                f"Rank: {self.witness.rank} | {self.producer.link} | {self.link}"
             )
             return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} | {self.link}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} {self.link}"
 
     @property
     def notification_str(self):
@@ -51,10 +58,10 @@ class ProducerReward(ProducerRewardRaw):
                 f"{self.log_common()}"
                 f"{self.block_num:,} | {self.age:.2f} | "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.markdown_link}"
+                f"Rank: {self.witness.rank} | {self.producer.markdown_link} {self.markdown_link}"
             )
             return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} | {self.link}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.markdown_link} | {self.markdown_link}"
 
     async def get_witness_details(self):
         """

@@ -1,4 +1,4 @@
-
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -15,30 +15,20 @@ from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
 
-@pytest.fixture()
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture(autouse=True)
+def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
-    yield
-
-    # Unpatch the monkeypatch
-    monkeypatch.undo()
-
-
-@pytest.fixture(autouse=True)
-def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
-    # Reset the singleton instance before each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     yield
-    # Reset the singleton instance after each test
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
 
 
 @pytest.mark.asyncio
@@ -75,7 +65,7 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
         "test_fill_order",
     ],
 )
-async def test_model_dump_mongodb(set_base_config_path, op_to_test):
+async def test_model_dump_mongodb(op_to_test):
     """
     Test the dumping of the model into MongoDB.
     This test performs the following steps:
@@ -106,13 +96,14 @@ async def test_model_dump_mongodb(set_base_config_path, op_to_test):
     ) as test_client:
         test_client.db[collection_name].drop()
         index_key = [["trx_id", 1], ["op_in_trx", 1], ["block_num", 1]]
-        test_client.db[collection_name].create_index(
-            keys=index_key, name="timestamp", unique=True
-        )
+        test_client.db[collection_name].create_index(keys=index_key, name="timestamp", unique=True)
         for hive_event in load_hive_events(op_type):
             if hive_event["type"] == op_type.value:
                 model_class = op_to_test["model"]
                 model_instance = model_class.model_validate(hive_event)
+                if op_type == OpTypes.PRODUCER_REWARD:
+                    model_instance.delta = timedelta(seconds=33)
+                    model_instance.mean = timedelta(seconds=33)
                 insert_op = model_instance.model_dump(by_alias=True)
                 insert_ans = await test_client.insert_one(
                     collection_name=collection_name,
