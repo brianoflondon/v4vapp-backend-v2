@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -23,6 +24,9 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions 429 errorrs"
+)
 @pytest.mark.asyncio
 async def test_get_hive_witness_details_simple():
     witness_details = await get_hive_witness_details("blocktrades")
@@ -182,7 +186,4 @@ async def test_get_hive_witness_details_mock_error(mocker):
     # Assertions
     assert witness_details is None
 
-    # Ensure the httpx get method was called with the correct URL
-    mock_httpx_get.assert_called_with(
-        "https://api.syncad.com/hafbe-api/witnesses/non_existent_witness", timeout=20
-    )
+    assert mock_httpx_get.call_count == 1

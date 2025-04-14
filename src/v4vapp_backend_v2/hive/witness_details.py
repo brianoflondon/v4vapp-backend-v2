@@ -45,9 +45,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
 
-    # TODO: #60 add https://techcoderx.com/hafbe-api/witnesses
     cache_key = f"witness_{hive_accname}"
-
     # Attempt to fetch from API
     try:
         shuffled_endpoints = API_ENDPOINTS[:]
