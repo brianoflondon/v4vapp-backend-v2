@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
+from v4vapp_backend_v2.hive.witness_details import API_ENDPOINTS, get_hive_witness_details
 
 
 @pytest.fixture(autouse=True)
@@ -112,9 +112,10 @@ async def test_get_hive_witness_details(mocker):
     assert witness_details.witness.rank > 0
 
     # Ensure the httpx get method was called with the correct URL
-    mock_httpx_get.assert_called_with(
-        "https://api.syncad.com/hafbe-api/witnesses/brianoflondon", timeout=20
-    )
+    assert any(
+        mock_httpx_get.call_args_list[i][0][0] == f"{api}/brianoflondon"
+        for i, api in enumerate(API_ENDPOINTS)
+    ), "None of the API calls succeeded with the expected URL"
 
     # Ensure the Redis set method was called with the correct parameters
     mock_redis_instance.set.assert_called_with(
