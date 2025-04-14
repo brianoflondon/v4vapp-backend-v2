@@ -33,10 +33,10 @@ class ProducerReward(ProducerRewardRaw):
             log_str = (
                 f"{self.block_num:,} | {self.age:.2f} | "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer}"
+                f"Rank: {self.witness.rank} | {self.producer.link}"
             )
             return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer} | {self.link}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} | {self.link}"
 
     async def get_witness_details(self):
         """

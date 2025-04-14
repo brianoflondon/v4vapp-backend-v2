@@ -236,7 +236,9 @@ async def db_store_op(
         _ = await db_client.update_one(
             HIVE_TRX_COLLECTION_V2,
             query={"trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
-            update=op.model_dump(by_alias=True, ),
+            update=op.model_dump(
+                by_alias=True,
+            ),
             upsert=True,
         )
 
