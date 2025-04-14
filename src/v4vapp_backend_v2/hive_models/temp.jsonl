@@ -1,0 +1,386 @@
+{
+    "level": "INFO",
+    "human_time": "12:09:44.984 Mon 14 Apr",
+    "message": "🧱     real 600 blocks processed. 0:00:02 Node: https://hive-api.3speak.tv -> https://api.c0ff33a.uk",
+    "timestamp": "2025-04-14T12:09:44.984830+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "op_base_counters",
+    "function": "inc",
+    "line": 135,
+    "thread_name": "MainThread",
+    "notification": false,
+    "time_diff": "0:00:02",
+    "block_count": 600
+}
+{
+    "level": "INFO",
+    "human_time": "12:09:45.700 Mon 14 Apr",
+    "message": "🧱  virtual 600 blocks processed. 0:00:03 Node: https://api.deathwing.me -> https://api.hive.blog",
+    "timestamp": "2025-04-14T12:09:45.700242+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "op_base_counters",
+    "function": "inc",
+    "line": 135,
+    "thread_name": "MainThread",
+    "notification": false,
+    "time_diff": "0:00:03",
+    "block_count": 600
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:00.727 Mon 14 Apr",
+    "message": "Fetching quotes with timeout of 60.0 seconds",
+    "timestamp": "2025-04-14T12:12:00.727466+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "crypto_prices",
+    "function": "get_all_quotes",
+    "line": 218,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.427 Mon 14 Apr",
+    "message": "Function 'HiveInternalMarket.get_quo' took 0.6955 seconds to execute",
+    "timestamp": "2025-04-14T12:12:01.427573+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "setup",
+    "function": "wrapper",
+    "line": 632,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.442 Mon 14 Apr",
+    "message": "Function 'Binance.get_quote' took 0.7115 seconds to execute",
+    "timestamp": "2025-04-14T12:12:01.442008+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "setup",
+    "function": "wrapper",
+    "line": 632,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.659 Mon 14 Apr",
+    "message": "Function 'CoinMarketCap.get_quote' took 0.9282 seconds to execute",
+    "timestamp": "2025-04-14T12:12:01.659617+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "setup",
+    "function": "wrapper",
+    "line": 632,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.865 Mon 14 Apr",
+    "message": "Function 'CoinGecko.get_quote' took 1.1366 seconds to execute",
+    "timestamp": "2025-04-14T12:12:01.865882+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "setup",
+    "function": "wrapper",
+    "line": 632,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.866 Mon 14 Apr",
+    "message": "Quotes fetched successfully in 1.14 seconds",
+    "timestamp": "2025-04-14T12:12:01.866833+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "crypto_prices",
+    "function": "get_all_quotes",
+    "line": 243,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.867 Mon 14 Apr",
+    "message": "🐝 Updating Quotes: 0.2281 268.5846",
+    "timestamp": "2025-04-14T12:12:01.867774+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "db_process_transfer",
+    "line": 274,
+    "thread_name": "MainThread",
+    "notification": false,
+    "quote": {
+        "hive_usd": 0.2281,
+        "hbd_usd": 1,
+        "btc_usd": 84926.7,
+        "hive_hbd": 0.2283,
+        "source": "Binance",
+        "fetch_date": "2025-04-14 12:12:01.162651+00:00",
+        "error": "",
+        "error_details": {},
+        "sats_hive": 268.5846,
+        "sats_hbd": 1177.486,
+        "age": 0.705075
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:01.869 Mon 14 Apr",
+    "message": "🐝 meno              sent     1.790  HBD to v4vapp             -          meno Deposit to #SATS 0:00:04 ago https://hivehub.dev/tx/d49bc343149c6a57562bdef89ea489bed42d9f45   1",
+    "timestamp": "2025-04-14T12:12:01.869498+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "transfer_report",
+    "line": 93,
+    "thread_name": "MainThread",
+    "notification": true,
+    "notification_str": "🐝 [meno](https://hivehub.dev/@meno) sent 1.790 HBD to [v4vapp](https://hivehub.dev/@v4vapp) ($1.79 2,109 sats) meno Deposit to #SATS [HiveHub](https://hivehub.dev/tx/d49bc343149c6a57562bdef89ea489bed42d9f45) #no_prview",
+    "transfer": {
+        "realm": "real",
+        "trx_id": "d49bc343149c6a57562bdef89ea489bed42d9f45",
+        "op_in_trx": 1,
+        "type": "transfer",
+        "block_num": 95019626,
+        "trx_num": 1,
+        "timestamp": "2025-04-14 12:11:57+00:00",
+        "from_account": "meno",
+        "to_account": "v4vapp",
+        "amount": {
+            "amount": "1790",
+            "nai": "@@000000013",
+            "precision": 3
+        },
+        "memo": "meno Deposit to #SATS",
+        "d_memo": "meno Deposit to #SATS",
+        "conv": {
+            "hive": 7.88199,
+            "hbd": 1.79,
+            "usd": 1.79,
+            "sats": 2109,
+            "msats": 2108596,
+            "btc": 0.00002108596,
+            "sats_hive": 267.5208,
+            "sats_hbd": 1177.9867,
+            "conv_from": "hbd",
+            "value": 1.79,
+            "source": "Binance",
+            "fetch_date": "2025-04-14 12:04:52.185033+00:00"
+        },
+        "link": "https://hivehub.dev/tx/d49bc343149c6a57562bdef89ea489bed42d9f45"
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:08.510 Mon 14 Apr",
+    "message": "🐝 v4vapp            sent     0.001 HIVE to meno               - You received 2,013 sats which  0:00:02 ago https://hivehub.dev/tx/2b882890c6c4ee1b628d4dff4f153cdcdda37bba   1",
+    "timestamp": "2025-04-14T12:12:08.510287+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "transfer_report",
+    "line": 93,
+    "thread_name": "MainThread",
+    "notification": true,
+    "notification_str": "🐝 [v4vapp](https://hivehub.dev/@v4vapp) sent 0.001 HIVE to [meno](https://hivehub.dev/@meno) ($0.00 0 sats) You received 2,013 sats which will be held on V4V.app. | meno Deposit to #SATS [HiveHub](https://hivehub.dev/tx/2b882890c6c4ee1b628d4dff4f153cdcdda37bba) #no_prview",
+    "transfer": {
+        "realm": "real",
+        "trx_id": "2b882890c6c4ee1b628d4dff4f153cdcdda37bba",
+        "op_in_trx": 1,
+        "type": "transfer",
+        "block_num": 95019629,
+        "trx_num": 7,
+        "timestamp": "2025-04-14 12:12:06+00:00",
+        "from_account": "v4vapp",
+        "to_account": "meno",
+        "amount": {
+            "amount": "1",
+            "nai": "@@000000021",
+            "precision": 3
+        },
+        "memo": "You received 2,013 sats which will be held on V4V.app. | meno Deposit to #SATS",
+        "d_memo": "You received 2,013 sats which will be held on V4V.app. | meno Deposit to #SATS",
+        "conv": {
+            "hive": 0.001,
+            "hbd": 0.000228,
+            "usd": 0.000228,
+            "sats": 0,
+            "msats": 268,
+            "btc": 2.68e-9,
+            "sats_hive": 268.5846,
+            "sats_hbd": 1177.486,
+            "conv_from": "hive",
+            "value": 0.001,
+            "source": "Binance",
+            "fetch_date": "2025-04-14 12:12:01.162651+00:00"
+        },
+        "link": "https://hivehub.dev/tx/2b882890c6c4ee1b628d4dff4f153cdcdda37bba"
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:11.756 Mon 14 Apr",
+    "message": "📈 Account v4vapp has balance: 801.790 HBD and will trade 1.790 HBD to reach 800.000 HBD",
+    "timestamp": "2025-04-14T12:12:11.756022+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "internal_market_trade",
+    "function": "account_trade",
+    "line": 66,
+    "thread_name": "MainThread"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:13.084 Mon 14 Apr",
+    "message": "📈   0.228 v4vapp sold 1.790 HBD https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2",
+    "timestamp": "2025-04-14T12:12:13.084306+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "internal_market_trade",
+    "function": "market_trade",
+    "line": 140,
+    "thread_name": "MainThread",
+    "notification": true,
+    "trx": {
+        "expiration": "2025-04-14T12:12:42",
+        "ref_block_num": 57967,
+        "ref_block_prefix": 2043511199,
+        "operations": [
+            [
+                "limit_order_create",
+                {
+                    "owner": "v4vapp",
+                    "orderid": 3210270568,
+                    "amount_to_sell": "1.790 HBD",
+                    "min_to_receive": "7.839 HIVE",
+                    "fill_or_kill": false,
+                    "expiration": "2025-04-21T12:12:12"
+                }
+            ]
+        ],
+        "extensions": [],
+        "signatures": [
+            "202a01be033c32bff8fcc451a692e25999be5fe81b8fe069329c94211f4374ac850d17adb799f42a6569aac1ff3427934ab1b9134b99c00c01d6bd5adb6f675367"
+        ],
+        "trx_id": "dc991cfe833810992a73b7b8273b7dfc1f3ea0e2"
+    },
+    "notification_str": "📈   0.228 v4vapp sold 1.790 HBD [HiveHub](https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2)"
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:13.085 Mon 14 Apr",
+    "message": "Transaction broadcast: dc991cfe833810992a73b7b8273b7dfc1f3ea0e2",
+    "timestamp": "2025-04-14T12:12:13.085047+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "balance_server_hbd_level",
+    "line": 329,
+    "thread_name": "MainThread",
+    "trx": {
+        "expiration": "2025-04-14T12:12:42",
+        "ref_block_num": 57967,
+        "ref_block_prefix": 2043511199,
+        "operations": [
+            [
+                "limit_order_create",
+                {
+                    "owner": "v4vapp",
+                    "orderid": 3210270568,
+                    "amount_to_sell": "1.790 HBD",
+                    "min_to_receive": "7.839 HIVE",
+                    "fill_or_kill": false,
+                    "expiration": "2025-04-21T12:12:12"
+                }
+            ]
+        ],
+        "extensions": [],
+        "signatures": [
+            "202a01be033c32bff8fcc451a692e25999be5fe81b8fe069329c94211f4374ac850d17adb799f42a6569aac1ff3427934ab1b9134b99c00c01d6bd5adb6f675367"
+        ],
+        "trx_id": "dc991cfe833810992a73b7b8273b7dfc1f3ea0e2"
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:17.104 Mon 14 Apr",
+    "message": "📈 Open orders: 1",
+    "timestamp": "2025-04-14T12:12:17.104453+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "op_limit_order_create",
+    "function": "__init__",
+    "line": 43,
+    "thread_name": "MainThread",
+    "open_order_ids": {
+        "3210270568": "realm=<OpRealm.REAL: 'real'> trx_id='dc991cfe833810992a73b7b8273b7dfc1f3ea0e2' op_in_trx=1 type='limit_order_create' block_num=95019632 trx_num=11 timestamp=datetime.datetime(2025, 4, 14, 12, 12, 15, tzinfo=datetime.timezone.utc) raw_op={'type': 'limit_order_create', 'amount_to_sell': {'amount': '1790', 'nai': '@@000000013', 'precision': 3}, 'expiration': '2025-04-21T12:12:12', 'fill_or_kill': False, 'min_to_receive': {'amount': '7839', 'nai': '@@000000021', 'precision': 3}, 'orderid': 3210270568, 'owner': 'v4vapp', '_id': 'cd25218285d8b817eecbbcdd6b03a1ab843c8365', 'timestamp': datetime.datetime(2025, 4, 14, 12, 12, 15, tzinfo=datetime.timezone.utc), 'block_num': 95019632, 'trx_num': 11, 'trx_id': 'dc991cfe833810992a73b7b8273b7dfc1f3ea0e2', 'op_in_trx': 1} block_explorer=<HiveExp.HiveHub: 'https://hivehub.dev/{prefix_path}'> amount_to_sell=AmountPyd(amount='1790', nai='@@000000013', precision=3) expiration=datetime.datetime(2025, 4, 21, 12, 12, 12, tzinfo=datetime.timezone.utc) fill_or_kill=False min_to_receive=AmountPyd(amount='7839', nai='@@000000021', precision=3) orderid=3210270568 owner='v4vapp' amount_remaining=AmountPyd(amount='7839', nai='@@000000021', precision=3) link='https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2'"
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:17.106 Mon 14 Apr",
+    "message": "📈   0.228 -      1.790  HBD for      7.839 HIVE v4vapp created order 3210270568 https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2",
+    "timestamp": "2025-04-14T12:12:17.106633+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "market_report",
+    "line": 146,
+    "thread_name": "MainThread",
+    "notification": true,
+    "notification_str": "📈   0.228 -      1.790  HBD for      7.839 HIVE v4vapp created order 3210270568 [HiveHub](https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2)",
+    "limit_order_create": {
+        "realm": "real",
+        "trx_id": "dc991cfe833810992a73b7b8273b7dfc1f3ea0e2",
+        "op_in_trx": 1,
+        "type": "limit_order_create",
+        "block_num": 95019632,
+        "trx_num": 11,
+        "timestamp": "2025-04-14 12:12:15+00:00",
+        "amount_to_sell": {
+            "amount": "1790",
+            "nai": "@@000000013",
+            "precision": 3
+        },
+        "expiration": "2025-04-21 12:12:12+00:00",
+        "fill_or_kill": false,
+        "min_to_receive": {
+            "amount": "7839",
+            "nai": "@@000000021",
+            "precision": 3
+        },
+        "orderid": 3210270568,
+        "owner": "v4vapp",
+        "amount_remaining": {
+            "amount": "7839",
+            "nai": "@@000000021",
+            "precision": 3
+        },
+        "link": "https://hivehub.dev/tx/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2"
+    }
+}
+{
+    "level": "INFO",
+    "human_time": "12:12:21.213 Mon 14 Apr",
+    "message": "📈   0.228 -      1.790  HBD -->      7.839 HIVE quicktrades filled order for v4vapp ✅ Order 3210270568 has been filled (xs 0.000 HIVE) https://hivehub.dev/tx/95019632/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2/1",
+    "timestamp": "2025-04-14T12:12:21.213468+00:00",
+    "logger": "hive_monitor_v2",
+    "module": "hive_monitor_v2",
+    "function": "market_report",
+    "line": 146,
+    "thread_name": "MainThread",
+    "notification": true,
+    "notification_str": "📈   0.228 -      1.790  HBD -->      7.839 HIVE quicktrades filled order for v4vapp ✅ Order 3210270568 has been filled (xs 0.000 HIVE) [HiveHub](https://hivehub.dev/tx/95019632/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2/1)",
+    "fill_order": {
+        "realm": "virtual",
+        "trx_id": "dc991cfe833810992a73b7b8273b7dfc1f3ea0e2",
+        "op_in_trx": 1,
+        "type": "fill_order",
+        "block_num": 95019632,
+        "trx_num": 0,
+        "timestamp": "2025-04-14 12:12:15+00:00",
+        "current_orderid": 3210270568,
+        "current_owner": "v4vapp",
+        "current_pays": {
+            "amount": "1790",
+            "nai": "@@000000013",
+            "precision": 3
+        },
+        "open_orderid": 1425830861,
+        "open_owner": "quicktrades",
+        "open_pays": {
+            "amount": "7839",
+            "nai": "@@000000021",
+            "precision": 3
+        },
+        "completed_order": true,
+        "link": "https://hivehub.dev/tx/95019632/dc991cfe833810992a73b7b8273b7dfc1f3ea0e2/1"
+    }
+}

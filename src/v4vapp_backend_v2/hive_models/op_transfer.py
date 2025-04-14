@@ -188,7 +188,7 @@ class Transfer(TransferRaw):
         """
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
-            f"{self.conv.notification_str} {self.d_memo} {self.markdown_link} #no_prview"
+            f"{self.conv.notification_str} {self.d_memo} {self.markdown_link} no_preview"
         )
         return ans
 
