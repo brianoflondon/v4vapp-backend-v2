@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field, computed_field
 
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
@@ -235,6 +235,12 @@ class OpBase(BaseModel):
             age: The time difference between the current time and the transaction timestamp in seconds.
         """
         return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+
+
+    @property
+    def age_str(self) -> str:
+        age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
+        return age_text
 
     @property
     def logs(self) -> OpLogData:

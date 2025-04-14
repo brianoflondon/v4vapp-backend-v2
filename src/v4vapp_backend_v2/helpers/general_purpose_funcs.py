@@ -52,7 +52,7 @@ def seconds_only(delta: timedelta) -> timedelta:
     return timedelta(days=delta.days, seconds=delta.seconds)
 
 
-def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
+def format_time_delta(delta: timedelta | float | int, fractions: bool = False) -> str:
     """
     Formats a timedelta object as a string.
     If Days are present, the format is "X days, Y hours".
@@ -63,13 +63,16 @@ def format_time_delta(delta: timedelta, fractions: bool = False) -> str:
     Returns:
         str: The formatted string.
     """
+    if isinstance(delta, (int, float)):
+        delta = timedelta(seconds=delta)
     if delta.days:
         return f"{delta.days} days, {delta.seconds // 3600} hours"
     hours, remainder = divmod(delta.seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
+    hours_text = f"{hours:02}:" if hours > 0 else ""
     if fractions:
-        return f"{hours:02}:{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
+        return f"{hours_text}{minutes:02}:{seconds:02}.{delta.microseconds // 1000:03}"
+    return f"{hours_text}{minutes:02}:{seconds:02}"
 
 
 def get_in_flight_time(creation_date: datetime) -> str:

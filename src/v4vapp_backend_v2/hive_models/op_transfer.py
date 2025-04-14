@@ -165,7 +165,7 @@ class Transfer(TransferRaw):
             f"sent {self.amount.fixed_width_str(14)} "
             f"to {self.to_account:<17} "
             f" - {self.d_memo[:30]:>30} "
-            f"{time_diff} ago "
+            f"{time_diff} ago {self.age_str}"
             f"{self.link} {self.op_in_trx:>3}"
         )
         return log_str
@@ -188,7 +188,7 @@ class Transfer(TransferRaw):
         """
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
-            f"{self.conv.notification_str} {self.d_memo} {self.markdown_link} no_preview"
+            f"{self.conv.notification_str} {self.d_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
 
