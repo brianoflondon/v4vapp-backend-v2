@@ -80,7 +80,7 @@ class QuoteResponse(BaseModel):
     btc_usd: float = 0
     hive_hbd: float = 0
     raw_response: RawResponseType = Field(
-        default_factory=dict,
+        default={},
         description="The raw response to queries for this quote as received from the source",
         exclude=True,
     )
