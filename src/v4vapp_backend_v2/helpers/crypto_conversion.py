@@ -41,7 +41,7 @@ class CryptoConv(BaseModel):
                  - <USD amount> is the conversion value in USD, formatted to two decimal places.
                  - <Satoshi amount> is the conversion value in Satoshis, formatted with commas as thousand separators.
         """
-        return f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats)"
+        return f"(${self.usd:>.2f} {self.sats:,.0f} sats)"
 
     @property
     def notification_str(self) -> str:
