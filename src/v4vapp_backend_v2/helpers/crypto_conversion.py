@@ -33,10 +33,26 @@ class CryptoConv(BaseModel):
 
     @property
     def log_str(self) -> str:
+        """
+        Generates a formatted string representation of the cryptocurrency conversion.
+
+        Returns:
+            str: A string in the format "($<USD amount> <Satoshi amount> sats)", where:
+                 - <USD amount> is the conversion value in USD, formatted to two decimal places.
+                 - <Satoshi amount> is the conversion value in Satoshis, formatted with commas as thousand separators.
+        """
         return f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats)"
 
     @property
     def notification_str(self) -> str:
+        """
+        Generates a formatted string representation of the cryptocurrency conversion.
+
+        Returns:
+            str: A string in the format "($<USD amount> <Satoshi amount> sats)", where:
+                 - <USD amount> is the conversion value in USD, formatted to two decimal places.
+                 - <Satoshi amount> is the conversion value in Satoshis, formatted with commas as thousand separators.
+        """
         return self.log_str
 
 
