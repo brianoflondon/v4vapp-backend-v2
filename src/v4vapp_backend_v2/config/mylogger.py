@@ -161,6 +161,11 @@ class CustomNotificationHandler(logging.Handler):
 
     @override
     def emit(self, record: logging.LogRecord):
+        if hasattr(record, "bot_name"):
+            bot_name = record.bot_name
+        else:
+            bot_name = InternalConfig().config.logging.default_notification_bot_name
+
         log_message = record.getMessage()
         if self.error_codes:
             logger.debug(f"Error codes: {self.error_codes}")
@@ -174,24 +179,24 @@ class CustomNotificationHandler(logging.Handler):
             )
             if record.error_code_clear in self.error_codes:
                 self.error_codes.pop(record.error_code_clear)
+                logger.info(log_message_clear, extra={"notification": True, "record": record})
             else:
                 logger.warning(
                     f"Error code not found in error_codes {record.error_code_clear}",
                     extra={"notification": False},
                 )
-            logger.info(log_message_clear, extra={"notification": True, "record": record})
             self.sender.send_notification(log_message, record)
             return
         if hasattr(record, "error_code"):
             if record.error_code not in self.error_codes:
-                self.sender.send_notification(log_message, record, bot_name="")
+                self.sender.send_notification(log_message, record, bot_name=bot_name)
                 self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
             else:
                 # Do not send the same error code to Notification
                 pass
         # Default case
         else:
-            self.sender.send_notification(log_message, record, bot_name="")
+            self.sender.send_notification(log_message, record, bot_name=bot_name)
 
 
 class NotificationFilter(logging.Filter):

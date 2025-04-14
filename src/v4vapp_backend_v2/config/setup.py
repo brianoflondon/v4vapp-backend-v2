@@ -45,6 +45,7 @@ class LoggingConfig(BaseConfig):
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
     log_notification_silent: List[str] = []
+    default_notification_bot_name: str = ""
 
 
 class LndConnectionConfig(BaseConfig):
@@ -397,11 +398,11 @@ class InternalConfig:
             cls._instance = super(InternalConfig, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, bot_name: str = "", *args, **kwargs):
         if not hasattr(self, "_initialized"):
             super().__init__()
-            self.notification_loop = None  # Initialize notification_loop
-            self.notification_lock = False
+            InternalConfig.notification_loop = None  # Initialize notification_loop
+            InternalConfig.notification_lock = False
             self.setup_config()
             self.setup_logging()
             self._initialized = True

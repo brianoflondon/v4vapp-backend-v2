@@ -39,6 +39,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
     base_url = "https://api.syncad.com/hafbe-api/witnesses"
+    # TODO: #60 add https://techcoderx.com/hafbe-api/witnesses
     url = f"{base_url}/{hive_accname}" if hive_accname else base_url
     cache_key = f"witness_{hive_accname}"
 

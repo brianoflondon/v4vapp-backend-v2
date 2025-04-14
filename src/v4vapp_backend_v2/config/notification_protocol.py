@@ -28,17 +28,15 @@ from v4vapp_backend_v2.helpers.notification_bot import NotificationBot
 
 
 class NotificationProtocol(Protocol):
-    def send_notification(
-        self, message: str, record: LogRecord, alert_level: int = 1
-    ) -> None:
+    def send_notification(self, message: str, record: LogRecord, bot_name: str = "") -> None:
         internal_config = InternalConfig()
-        internal_config.notification_lock = True
+        InternalConfig.notification_lock = True
         loop = internal_config.notification_loop
         if not loop or loop.is_closed() or not loop.is_running():
             # Recreate the event loop if it is closed
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            internal_config.notification_loop = loop  # Update the stored loop
+            InternalConfig.notification_loop = loop  # Update the stored loop
 
         if "levelno" not in record.__dict__:
             record.__dict__["levelno"] = logging.INFO
@@ -51,15 +49,13 @@ class NotificationProtocol(Protocol):
                         f"✉️ Notification Thread: {threading.get_ident()} loop already running"
                     )
                     asyncio.run_coroutine_threadsafe(
-                        self._send_notification(message, record, alert_level), loop
+                        self._send_notification(message, record, bot_name), loop
                     )
                 except Exception as ex:
                     logger.exception(ex, extra={"notification": False})
             else:
                 # Run the task in the loop and handle shutdown gracefully
-                loop.run_until_complete(
-                    self._run_with_resilience(message, record, alert_level)
-                )
+                loop.run_until_complete(self._run_with_resilience(message, record, bot_name))
         except Exception as ex:
             logger.exception(ex, extra={"notification": False})
             logger.warning(
@@ -71,31 +67,31 @@ class NotificationProtocol(Protocol):
             )
 
         finally:
-            internal_config.notification_lock = False
+            InternalConfig.notification_lock = False
 
-    async def _run_with_resilience(
-        self, message: str, record: LogRecord, alert_level: int
-    ):
+    async def _run_with_resilience(self, message: str, record: LogRecord, bot_name: str = ""):
         try:
             logger.debug(
                 f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
             )
-            await self._send_notification(message, record, alert_level)
+            await self._send_notification(
+                message,
+                record,
+                bot_name,
+            )
 
         except asyncio.CancelledError:
             logger.warning("Notification task was cancelled.")
         except Exception as ex:
-            logger.exception(
-                f"Error in notification task: {ex}", extra={"notification": False}
-            )
+            logger.exception(f"Error in notification task: {ex}", extra={"notification": False})
         finally:
-            InternalConfig().notification_lock = False
+            InternalConfig.notification_lock = False
 
     async def _send_notification(
         self,
         message: str,
         record: LogRecord,
-        alert_level: int = 1,
+        bot_name: str = "",
     ) -> None:
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -105,7 +101,7 @@ class BotNotification(NotificationProtocol):
         self,
         message: str,
         record: LogRecord,
-        alert_level: int = 1,
+        bot_name: str = "",
     ) -> None:
         """
         Asynchronously sends a notification message using the NotificationBot.
@@ -119,7 +115,7 @@ class BotNotification(NotificationProtocol):
         Returns:
             None
         """
-        bot = NotificationBot()
+        bot = NotificationBot(name=bot_name)
         # Using Silent as the attribute name to avoid conflicts with the logging module
         if hasattr(record, "notification_str"):
             message = record.notification_str
@@ -135,6 +131,6 @@ class EmailNotification(NotificationProtocol):
         # _config: Config,
         message: str,
         record: LogRecord,
-        alert_level: int = 1,
+        bot_name: str = "",
     ) -> None:
         raise NotImplementedError("Email notification is not implemented yet.")

@@ -10,7 +10,7 @@ from v4vapp_backend_v2.config.notification_protocol import (
     EmailNotification,
     NotificationProtocol,
 )
-from v4vapp_backend_v2.config.setup import Config, InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig
 
 # Test data from JSON
 TEST_JSON = {
@@ -93,18 +93,14 @@ async def test_notification_protocol_not_implemented():
         pass
 
     notifier = IncompleteNotification()
-    with pytest.raises(
-        NotImplementedError, match="Subclasses must implement this method"
-    ):
+    with pytest.raises(NotImplementedError, match="Subclasses must implement this method"):
         await notifier._send_notification(None, "test", None)
 
 
 @pytest.mark.asyncio
 async def test_bot_notification_send_message(mock_log_record):
     """Test BotNotification sends a message from JSON data."""
-    with patch(
-        "v4vapp_backend_v2.config.notification_protocol.NotificationBot"
-    ) as mock_bot:
+    with patch("v4vapp_backend_v2.config.notification_protocol.NotificationBot") as mock_bot:
         bot_instance = mock_bot.return_value
         bot_instance.send_message = AsyncMock()
 
@@ -118,9 +114,7 @@ async def test_bot_notification_send_message(mock_log_record):
 async def test_bot_notification_silent_mode(mock_log_record):
     """Test BotNotification respects silent mode with JSON data."""
     mock_log_record.silent = True
-    with patch(
-        "v4vapp_backend_v2.config.notification_protocol.NotificationBot"
-    ) as mock_bot:
+    with patch("v4vapp_backend_v2.config.notification_protocol.NotificationBot") as mock_bot:
         bot_instance = mock_bot.return_value
         bot_instance.send_message = AsyncMock()
 
@@ -136,9 +130,7 @@ async def test_bot_notification_silent_mode(mock_log_record):
 async def test_bot_notification_different_notification_str(mock_log_record):
     """Test BotNotification respects silent mode with JSON data."""
     mock_log_record.notification_str = "Completely different notification message"
-    with patch(
-        "v4vapp_backend_v2.config.notification_protocol.NotificationBot"
-    ) as mock_bot:
+    with patch("v4vapp_backend_v2.config.notification_protocol.NotificationBot") as mock_bot:
         bot_instance = mock_bot.return_value
         bot_instance.send_message = AsyncMock()
 
@@ -154,9 +146,7 @@ async def test_bot_notification_different_notification_str(mock_log_record):
 async def test_email_notification_not_implemented(mock_log_record):
     """Test EmailNotification raises NotImplementedError."""
     notifier = EmailNotification()
-    with pytest.raises(
-        NotImplementedError, match="Email notification is not implemented yet"
-    ):
+    with pytest.raises(NotImplementedError, match="Email notification is not implemented yet"):
         await notifier._send_notification(TEST_JSON["message"], mock_log_record)
 
 
@@ -182,9 +172,7 @@ def test_send_notification_loop_not_running(mock_internal_config, mock_log_recor
         notifier._send_notification.assert_called_once()
 
 
-def test_send_notification_error_handling(
-    mock_internal_config, mock_log_record, caplog
-):
+def test_send_notification_error_handling(mock_internal_config, mock_log_record, caplog):
     """Test send_notification logs an error if _send_notification fails."""
     mock_internal_config.notification_loop.is_running = MagicMock(return_value=False)
     notifier = BotNotification()
