@@ -3,7 +3,7 @@ from datetime import datetime
 from nectar.amount import Amount
 from pydantic import Field
 
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
 from .amount_pyd import AmountPyd
@@ -99,8 +99,8 @@ class FillOrder(OpBase):
             else:
                 amount_remaining = Amount(str(open_order.amount_remaining))
                 amount_remaining -= Amount(self.open_pays.model_dump())
-            open_order.amount_remaining = amount_remaining
-            if amount_remaining > 0:
+            open_order.amount_remaining = AmountPyd.model_validate(amount_remaining)
+            if amount_remaining.amount > 0:
                 self.completed_order = False
                 return f"Remaining {open_order.amount_remaining} {open_order.orderid}"
             else:
