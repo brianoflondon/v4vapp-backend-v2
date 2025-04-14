@@ -31,6 +31,14 @@ class CryptoConv(BaseModel):
         use_enum_values=True,  # Serializes enum as its value
     )
 
+    @property
+    def log_str(self) -> str:
+        return f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats)"
+
+    @property
+    def notification_str(self) -> str:
+        return self.log_str
+
 
 class CryptoConversion(BaseModel):
     conv_from: Currency = Currency.HIVE
@@ -47,9 +55,9 @@ class CryptoConversion(BaseModel):
     msats: int = 0
     btc: float = 0.0
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
-    )
+    # model_config = ConfigDict(
+    #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
+    # )
 
     def __init__(
         self,

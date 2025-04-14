@@ -172,9 +172,23 @@ class Transfer(TransferRaw):
 
     @property
     def notification_str(self) -> str:
+        """
+        Generates a notification string summarizing a transfer operation. Adds a flag
+        to prevent a link preview.
+
+        Returns:
+            str: A formatted string containing details about the transfer, including:
+                 - Sender's account as a markdown link.
+                 - Amount transferred as a string.
+                 - Recipient's account as a markdown link.
+                 - Converted USD value and equivalent in satoshis.
+                 - Memo associated with the transfer.
+                 - A markdown link for additional context.
+                 - A hashtag indicating no preview.
+        """
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
-            f"(${self.conv.usd:>.2f} {self.conv.sats:,.0f} sats) {self.d_memo} {self.markdown_link}"
+            f"{self.conv.notification_str} {self.d_memo} {self.markdown_link} #no_prview"
         )
         return ans
 
