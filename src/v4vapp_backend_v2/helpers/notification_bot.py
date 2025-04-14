@@ -39,8 +39,8 @@ class NotificationBot:
             self.bot = Bot(token=self.config.token)
             return
         if self.names_list():
-            if InternalConfig().config.default_notification_bot_name:
-                self.name = InternalConfig().config.default_notification_bot_name
+            if InternalConfig().config.logging.default_notification_bot_name:
+                self.name = InternalConfig().config.logging.default_notification_bot_name
             else:
                 self.name = self.names_list()[0]
             self.load_config()
