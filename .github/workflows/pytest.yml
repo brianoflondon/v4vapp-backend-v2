@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - database-connection
     tags:
       - "v*"
   pull_request:
@@ -95,4 +94,3 @@ jobs:
           docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
           echo "Redis logs:"
           docker logs $(docker ps -q --filter "ancestor=redis:latest")
-          
