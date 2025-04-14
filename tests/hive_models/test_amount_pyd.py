@@ -13,7 +13,7 @@ def test_amount_pyd():
 
 
 def test_amount_hive():
-    beam_amount = Amount("42.333 HIVE")
-    amount_pyd = AmountPyd.model_validate(beam_amount)
+    nectar_amount = Amount("42.333 HIVE")
+    amount_pyd = AmountPyd.model_validate(nectar_amount)
     str(amount_pyd) == "42.333 HIVE"
-    assert amount_pyd.amount_decimal == float(beam_amount.amount_decimal)
+    assert amount_pyd.amount_decimal == float(nectar_amount.amount_decimal)
