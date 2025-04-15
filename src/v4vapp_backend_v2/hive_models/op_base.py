@@ -71,11 +71,11 @@ def get_hive_block_explorer_link(
         path = f"{block_num}"
         prefix = "b/"
 
-    # if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
-    #     if prefix == "tx/":
-    #         prefix = "transaction/"
-    #     elif prefix == "b/":
-    #         prefix = "block/"
+    if block_explorer == HiveExp.HiveScanInfo:
+        if prefix == "tx/":
+            prefix = "transaction/"
+        elif prefix == "b/":
+            prefix = "block/"
 
     prefix_path = f"{prefix}{path}"
 

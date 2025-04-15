@@ -82,9 +82,9 @@ def get_blockchain_instance(*args, **kwargs) -> Blockchain:
     """
     if "hive_instance" not in kwargs:
         hive = get_hive_client(*args, **kwargs)
-        blockchain = Blockchain(hive_instance=hive, *args, **kwargs)
+        blockchain = Blockchain(hive_instance=hive, mode="head" * args, **kwargs)
     else:
-        blockchain = Blockchain(*args, **kwargs)
+        blockchain = Blockchain(mode="head", *args, **kwargs)
 
     return blockchain
 

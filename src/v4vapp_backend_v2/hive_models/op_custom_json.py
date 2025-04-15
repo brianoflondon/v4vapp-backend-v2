@@ -35,10 +35,10 @@ class CustomJson(OpBase):
         # check if self.json_data has method log_str
         if hasattr(self.json_data, "log_str"):
             return f"{self.json_data.log_str} {self.link}"
-        return self.cj_id
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
         if hasattr(self.json_data, "notification_str"):
             return f"{self.json_data.notification_str} {self.markdown_link}"
-        return self.cj_id
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.markdown_link}"

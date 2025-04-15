@@ -76,7 +76,7 @@ def test_all_block_exporer_links():
                     assert op.type == op.name()
                     print(hive_event.get("type"), op.type, op.link)
                     if op.link:
-                        response = httpx_client.head(op.link)
+                        response = httpx_client.get(op.link)
                         assert response.status_code == 200
 
                 except ValueError as e:

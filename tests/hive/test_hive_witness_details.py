@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from v4vapp_backend_v2.hive.witness_details import API_ENDPOINTS, get_hive_witness_details
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 
 
 @pytest.fixture(autouse=True)
