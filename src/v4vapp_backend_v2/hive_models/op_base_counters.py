@@ -134,11 +134,16 @@ class BlockCounter:
                 self.log_time_difference_errors(timestamp=timestamp)
                 old_node = self.hive_client.rpc.url
                 self.hive_client.rpc.next()
-                last_marker_time = format_time_delta(timer() - self.last_marker)
+                last_marker_time = timer() - self.last_marker
+                last_marker_time_str = format_time_delta(last_marker_time)
+                catch_up_in = format_time_delta(
+                    self.time_diff.total_seconds() / ((self.marker_point * 3) / last_marker_time)
+                )
+                self.time_diff = check_time_diff(timestamp)
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
-                    f"blocks processed in: {last_marker_time} "
-                    f"delta: {self.time_diff} "
+                    f"blocks processed in: {last_marker_time_str} "
+                    f"delta: {self.time_diff} catch up: {catch_up_in} "
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
                         "notification": notification,

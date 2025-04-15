@@ -8,6 +8,7 @@ from nectar.blockchain import Blockchain
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
@@ -20,6 +21,7 @@ async def stream_ops_async(
     look_back: timedelta = None,
     hive: Hive = None,
     opNames: list[str] = OP_TRACKED,
+    filter_custom_json: bool = True,
 ) -> AsyncGenerator[OpAny, None]:
     """
     An async generator that yields numbers up to max_value with a delay.
@@ -45,7 +47,6 @@ async def stream_ops_async(
         stop_block = current_block
     else:
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
-    logger.info(f"Starting Hive scanning at {start_block:,} Ending at {stop_block:,}")
     last_block = start_block
     while last_block < stop_block:
         try:
@@ -58,10 +59,13 @@ async def stream_ops_async(
                     opNames=opNames,
                 )
             )
+            logger.info(f"Starting Hive scanning at {start_block:,} Ending at {stop_block:,}")
             async for hive_event in async_stream_real:
-                op_base = op_any_or_base(hive_event)
-                op_in_trx_counter.inc2(op_base)
-                if op_base.block_num > last_block and op_base.block_num <= stop_block:
+                if (
+                    hive_event.get("block_num") > last_block
+                    and hive_event.get("block_num") <= stop_block
+                ):
+                    start_block = last_block
                     for virtual_event in blockchain.stream(
                         start=last_block - 1,
                         stop=last_block - 1,
@@ -69,10 +73,14 @@ async def stream_ops_async(
                         only_virtual_ops=True,
                         opNames=opNames,
                     ):
-                        last_block = op_base.block_num
+                        last_block = hive_event.get("block_num")
                         op_virtual_base = op_any_or_base(virtual_event)
                         op_in_trx_counter.inc2(op_virtual_base)
                         yield op_virtual_base
+                if not filter_custom_json and not custom_json_test_data(hive_event):
+                    continue
+                op_base = op_any_or_base(hive_event)
+                op_in_trx_counter.inc2(op_base)
                 yield op_base
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")

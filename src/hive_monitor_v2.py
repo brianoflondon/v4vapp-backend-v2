@@ -258,13 +258,21 @@ async def db_store_op(
             db_user=HIVE_DATABASE_USER,
         ) as db_client:
             # Update Database for CustomJson and Transfer
+            if isinstance(op, ProducerReward):
+                query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx, "block_num": op.block_num}
+            else:
+                query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx}
             db_ans = await db_client.update_one(
                 HIVE_TRX_COLLECTION_V2,
-                query={"block_num": op.block_num, "trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
+                query=query,
                 update=op.model_dump(
                     by_alias=True,
                 ),
                 upsert=True,
+            )
+            logger.info(
+                f"Db {op.type} did_upsert: {db_ans.did_upsert} modified_count: {db_ans.modified_count}",
+                extra={"db_ans": db_ans.raw_result},
             )
             return db_ans
     except DuplicateKeyError:
@@ -756,20 +764,23 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
     start = timer()
     while True:
         try:
-            await Transfer.update_quote()
             async for op in stream_ops_async(
-                opNames=opNames, start=last_good_block, stop_now=False
+                opNames=opNames, start=last_good_block, stop_now=False, hive=hive_client
             ):
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 new_block, marker = block_counter.inc(op.raw_op)
                 # Allow switch to other block loop
                 if new_block:
+                    last_good_block = op.block_num - 1
                     await asyncio.sleep(0.01)
                 # Real ops. #########################
                 if isinstance(op, AccountWitnessVote):
+                    notification = False
                     op.get_voter_details()
-                    notification = True if op.witness == watch_witness else False
+                    if op.witness == watch_witness:
+                        asyncio.create_task(db_store_op(op))
+                        notification = True
                     logger.info(
                         f"{icon} {op.log_str}",
                         extra={
@@ -778,42 +789,47 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                             **op.log_extra,
                         },
                     )
-                    if op.witness == watch_witness:
-                        asyncio.create_task(db_store_op(op))
 
-                if isinstance(op, Transfer) and watch_user_test(op, watch_users):
-                    await Transfer.update_quote()
-                    op.update_conv()
+                if isinstance(op, Transfer):
+                    notification = False
+                    if watch_user_test(op, watch_users):
+                        await Transfer.update_quote()
+                        op.update_conv()
+                        asyncio.create_task(balance_server_hbd_level(op))
+                        asyncio.create_task(db_store_op(op))
+                        notification = True
                     # Log ever transaction (even if not in watch list)
                     logger.info(
                         f"{icon} {op.log_str}",
+                        extra={
+                            "notification": notification,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+
+                if op.known_custom_json:
+                    op: CustomJson
+                    asyncio.create_task(db_store_op(op))
+                    logger.info(
+                        f"{op.log_str}",
                         extra={
                             "notification": True,
                             "notification_str": f"{icon} {op.notification_str}",
                             **op.log_extra,
                         },
                     )
-                    asyncio.create_task(db_store_op(op))
-
-                if op.known_custom_json:
-                    custom_json: CustomJson = op
-                    logger.info(
-                        f"{custom_json.log_str}",
-                        extra={
-                            "notification": True,
-                            "notification_str": f"{icon} {custom_json.notification_str}",
-                            **custom_json.log_extra,
-                        },
-                    )
-                    asyncio.create_task(db_store_op(op))
 
                 if (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
+                    notification = (
+                        False if isinstance(op, FillOrder) and not op.completed_order else True
+                    )
                     logger.info(
                         f"{icon} {op.log_str}",
                         extra={
-                            "notification": True,
+                            "notification": notification,
                             "notification_str": f"{icon} {op.notification_str}",
                             **op.log_extra,
                         },

@@ -46,7 +46,7 @@ class ProducerReward(ProducerRewardRaw):
                 f"{self.log_common()}"
                 f"{self.block_num:,} "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.link} | {self.link} "
+                f"Rank: {self.witness.rank} | {self.producer} "
                 f"{self.age_str}"
             )
             return log_str
