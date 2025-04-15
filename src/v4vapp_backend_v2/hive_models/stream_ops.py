@@ -52,10 +52,14 @@ async def stream_ops_async(
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
                 blockchain.stream(
-                    start=start_block, stop=stop_block, only_virtual_ops=False, opNames=opNames
+                    start=start_block,
+                    stop=stop_block,
+                    only_virtual_ops=False,
+                    opNames=opNames,
                 )
             )
             async for hive_event in async_stream_real:
+                logger.info("", extra={"hive_event": hive_event})
                 op_base = op_any_or_base(hive_event)
                 op_in_trx_counter.inc2(op_base)
                 if op_base.block_num > last_block and op_base.block_num <= stop_block:
@@ -67,6 +71,7 @@ async def stream_ops_async(
                         opNames=opNames,
                     ):
                         last_block = op_base.block_num
+                        logger.info("", extra={"virtual_event": virtual_event})
                         op_virtual_base = op_any_or_base(virtual_event)
                         op_in_trx_counter.inc2(op_virtual_base)
                         yield op_virtual_base
@@ -104,7 +109,7 @@ def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
 async def main() -> None:
     opNames = OP_TRACKED
     async for op in stream_ops_async(
-        opNames=opNames, look_back=timedelta(seconds=10), stop_now=True
+        opNames=opNames, look_back=timedelta(seconds=120), stop_now=False
     ):
         logger.info(f"{op.log_str}", extra={**op.log_extra})
 
