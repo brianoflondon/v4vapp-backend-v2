@@ -1,12 +1,8 @@
 from datetime import timedelta
 from pathlib import Path
-from typing import Generator, List
 
 import pytest
-from unittest.mock import patch
 
-from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
 
 
