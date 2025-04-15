@@ -44,12 +44,13 @@ class ProducerReward(ProducerRewardRaw):
         if self.witness:
             log_str = (
                 f"{self.log_common()}"
-                f"{self.block_num:,} | {self.age:.2f} | "
+                f"{self.block_num:,} "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.link} | {self.link}"
+                f"Rank: {self.witness.rank} | {self.producer.link} | {self.link} "
+                f"{self.age_str}"
             )
             return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} {self.link}"
+        return f"{self.block_num:,} {self.producer.link} {self.link} {self.age_str}"
 
     @property
     def notification_str(self):
