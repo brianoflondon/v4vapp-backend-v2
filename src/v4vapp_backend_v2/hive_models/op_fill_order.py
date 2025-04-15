@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar, List
 
 from nectar.amount import Amount
 from pydantic import Field
@@ -28,6 +29,8 @@ class FillOrder(OpBase):
         description="Holds the internal log string for the log and notification log operations",
     )
 
+    watch_users: ClassVar[List[str]] = []
+
     def __init__(self, **data: dict):
         super().__init__(**data)
         # Set the log_internal string to None to force it to be generated
@@ -53,6 +56,22 @@ class FillOrder(OpBase):
             f"{check_str}"
         )
         return self.log_internal
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Check if the order is watched.
+
+        Returns:
+            bool: True if the order is watched, False otherwise.
+        """
+        if FillOrder.watch_users:
+            if (
+                self.current_owner in FillOrder.watch_users
+                or self.open_owner in FillOrder.watch_users
+            ):
+                return True
+        return False
 
     @property
     def log_str(self) -> str:

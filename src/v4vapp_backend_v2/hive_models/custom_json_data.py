@@ -46,8 +46,22 @@ class KeepsatsTransfer(BaseModel):
 
     @property
     def log_str(self) -> str:
+        message_memo = self.invoice_message or self.memo
         if self.to_account == "":
-            return f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {self.memo}"
+            return (
+                f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
+            )
+        return (
+            f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
+        )
+
+    @property
+    def notification_str(self) -> str:
+        message_memo = self.invoice_message or self.memo
+        if self.to_account == "":
+            return (
+                f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
+            )
         return (
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )

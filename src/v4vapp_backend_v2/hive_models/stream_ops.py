@@ -59,7 +59,6 @@ async def stream_ops_async(
                 )
             )
             async for hive_event in async_stream_real:
-                logger.info("", extra={"hive_event": hive_event})
                 op_base = op_any_or_base(hive_event)
                 op_in_trx_counter.inc2(op_base)
                 if op_base.block_num > last_block and op_base.block_num <= stop_block:
@@ -71,7 +70,6 @@ async def stream_ops_async(
                         opNames=opNames,
                     ):
                         last_block = op_base.block_num
-                        logger.info("", extra={"virtual_event": virtual_event})
                         op_virtual_base = op_any_or_base(virtual_event)
                         op_in_trx_counter.inc2(op_virtual_base)
                         yield op_virtual_base

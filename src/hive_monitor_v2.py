@@ -3,7 +3,7 @@ import signal
 import sys
 from datetime import timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, List, Union
+from typing import Annotated, Any, List
 
 import typer
 from nectar.amount import Amount
@@ -11,11 +11,12 @@ from nectar.blockchain import Blockchain
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
+from pymongo.results import UpdateResult
 
 from lnd_monitor_v2 import InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
+from v4vapp_backend_v2.events.async_event import async_publish
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
@@ -24,7 +25,8 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
-from v4vapp_backend_v2.hive_models.op_all import op_any
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any
+from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter, OpInTrxCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -38,6 +40,7 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
     VirtualOpTypes,
     WitnessOpTypes,
 )
+from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
 
 # INTERNAL_CONFIG = InternalConfig()
 # CONFIG = INTERNAL_CONFIG.config
@@ -70,6 +73,23 @@ def handle_shutdown_signal():
     """
     logger.info("Received shutdown signal. Setting shutdown event.")
     shutdown_event.set()
+
+
+def watch_user_test(op: Transfer, watch_users: List[str]) -> bool:
+    """
+    Check if the user is in the watch list.
+    Args:
+        op (dict): The transaction transfer.
+        watch_user (List[str]): The list of users to watch.
+    Returns:
+        bool: True if the user is in the watch list.
+    """
+    global COMMAND_LINE_WATCH_USERS
+    if not watch_users:
+        watch_users = COMMAND_LINE_WATCH_USERS
+    if op.from_account in watch_users or op.to_account in watch_users:
+        return True
+    return False
 
 
 def watch_users_notification(transfer: Transfer, watch_users: List[str]) -> bool:
@@ -197,11 +217,11 @@ async def db_store_block_marker(
 
 
 async def db_store_op(
-    op: Union[Transfer, CustomJson],
-    db_client: MongoDBClient,
+    op: OpAny,
+    db_collection: str | None = None,
     *args: Any,
     **kwargs: Any,
-) -> None:
+) -> UpdateResult | None:
     """
     Stores a Hive transaction in the database.
 
@@ -212,41 +232,47 @@ async def db_store_op(
     transaction details.
 
     Args:
-        hive_event (dict): The Hive event data.
-        db_client (MongoDBClient): The MongoDB client instance.
-        quote (AllQuotes, optional): The quote for currency conversion.
-            Defaults to None.
+        op (OpAny): The Hive event to process. Can be a
+            Transfer or CustomJson operation.
+        db_client (MongoDBClient | None): The MongoDB client instance to use for
+            database operations. If None, a new client will be created.
+        db_collection (str | None): The name of the MongoDB collection to use for
+            storing the transaction. If None, the default collection will be used.
         *args (Any): Additional positional arguments.
         **kwargs (Any): Additional keyword arguments.
 
     Returns:
-        None
+        UpdateResult: The result of the database update operation.
 
     Raises:
         DuplicateKeyError: If a duplicate key error occurs during the database update.
         Exception: For any other exceptions, logs the error with additional context.
     """
-    global COMMAND_LINE_WATCH_USERS
-    try:
-        if isinstance(op, Transfer):
-            op = await db_process_transfer(op)
-        if not op:
-            return
-        # Update Database for CustomJson and Transfer
-        _ = await db_client.update_one(
-            HIVE_TRX_COLLECTION_V2,
-            query={"trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
-            update=op.model_dump(
-                by_alias=True,
-            ),
-            upsert=True,
-        )
+    global COMMAND_LINE_WATCH_USERS, HIVE_DATABASE_CONNECTION, HIVE_DATABASE, HIVE_DATABASE_USER
+    db_collection = HIVE_TRX_COLLECTION_V2 if not db_collection else db_collection
 
+    try:
+        async with MongoDBClient(
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
+        ) as db_client:
+            # Update Database for CustomJson and Transfer
+            db_ans = await db_client.update_one(
+                HIVE_TRX_COLLECTION_V2,
+                query={"block_num": op.block_num, "trx_id": op.trx_id, "op_in_trx": op.op_in_trx},
+                update=op.model_dump(
+                    by_alias=True,
+                ),
+                upsert=True,
+            )
+            return db_ans
     except DuplicateKeyError:
-        pass
+        return None
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
+        return None
 
 
 async def db_process_transfer(op: Transfer) -> Transfer | None:
@@ -697,6 +723,140 @@ async def slow_publish_fill_event(hive_event: dict, watch_users: List[str]):
     async_publish(Events.HIVE_MARKET, hive_event=hive_event, watch_users=watch_users)
 
 
+async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND_LINE_WATCH_USERS):
+    """
+    Asynchronously loops through transactions and processes them.
+
+    This function sets up an event listener for specific transaction types on the Hive
+    blockchain, processes each transaction, logs relevant information, and publishes
+    events for further handling. It also periodically updates cryptocurrency quotes and
+    stores block markers in a database.
+
+    Args:
+        watch_users (List[str]): A list of user accounts to monitor for transactions.
+
+    Raises:
+        KeyboardInterrupt: If the process is interrupted by a keyboard signal.
+        asyncio.CancelledError: If the asyncio task is cancelled.
+        Exception: For any other exceptions that occur during processing.
+    """
+    logger.info(f"{icon} Combined Loop Watching users: {watch_users} and witness {watch_witness}")
+    opNames = OP_TRACKED
+    LimitOrderCreate.watch_users = watch_users
+    FillOrder.watch_users = watch_users
+
+    producer_reward = await witness_first_run(watch_witness)
+    last_good_timestamp = producer_reward.timestamp
+
+    hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
+    last_good_block = await get_last_good_block() + 1
+    block_counter = BlockCounter(
+        last_good_block=last_good_block, hive_client=hive_client, id="combined"
+    )
+    start = timer()
+    while True:
+        try:
+            await Transfer.update_quote()
+            async for op in stream_ops_async(
+                opNames=opNames, start=last_good_block, stop_now=False
+            ):
+                if shutdown_event.is_set():
+                    raise asyncio.CancelledError("Docker Shutdown")
+                new_block, marker = block_counter.inc(op.raw_op)
+                # Allow switch to other block loop
+                if new_block:
+                    await asyncio.sleep(0.01)
+                # Real ops. #########################
+                if isinstance(op, AccountWitnessVote):
+                    op.get_voter_details()
+                    notification = True if op.witness == watch_witness else False
+                    logger.info(
+                        f"{icon} {op.log_str}",
+                        extra={
+                            "notification": notification,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+                    if op.witness == watch_witness:
+                        asyncio.create_task(db_store_op(op))
+
+                if isinstance(op, Transfer) and watch_user_test(op, watch_users):
+                    await Transfer.update_quote()
+                    op.update_conv()
+                    # Log ever transaction (even if not in watch list)
+                    logger.info(
+                        f"{icon} {op.log_str}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+                    asyncio.create_task(db_store_op(op))
+
+                if op.known_custom_json:
+                    custom_json: CustomJson = op
+                    logger.info(
+                        f"{custom_json.log_str}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{icon} {custom_json.notification_str}",
+                            **custom_json.log_extra,
+                        },
+                    )
+                    asyncio.create_task(db_store_op(op))
+
+                if (
+                    isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
+                ) and op.is_watched:
+                    logger.info(
+                        f"{icon} {op.log_str}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+                    asyncio.create_task(db_store_op(op))
+
+                if isinstance(op, ProducerReward) and op.producer == watch_witness:
+                    await op.get_witness_details()
+                    op.mean = await witness_average_block_time(watch_witness)
+                    op.delta = op.timestamp - last_good_timestamp
+                    logger.info(
+                        f"{icon} {op.log_str}",
+                        extra={
+                            "notification": True,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+                    asyncio.create_task(
+                        db_store_op(op, collection=HIVE_WITNESS_PRODUCER_COLLECTION)
+                    )
+                    last_good_timestamp = op.timestamp
+
+                if timer() - start > 55:
+                    block_marker = BlockMarker(op.block_num, op.timestamp)
+                    await db_store_op(block_marker)
+                    start = timer()
+
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+            logger.info(f"{icon} {e}: Stopping event listener.")
+            raise e
+
+        except Exception as e:
+            logger.exception(f"{icon} {e}", extra={"error": e})
+            raise e
+
+        finally:
+            logger.warning(
+                f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url}",
+            )
+            hive_client.rpc.next()
+
+
 async def real_ops_loop(
     watch_witness: str = "", watch_users: List[str] = COMMAND_LINE_WATCH_USERS
 ):
@@ -750,6 +910,7 @@ async def real_ops_loop(
     ) as db_client:
         while True:
             logger.info(f"{icon} Real Loop")
+            await Transfer.update_quote()
             async_stream = sync_to_async_iterable(
                 hive_blockchain.stream(
                     opNames=op_names,
@@ -880,14 +1041,15 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     )
 
     try:
-        async_subscribe(Events.HIVE_TRANSFER, db_store_op)
-        async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
-        async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_witness_vote)
+        # async_subscribe(Events.HIVE_TRANSFER, db_store_op)
+        # async_subscribe(Events.HIVE_WITNESS_VOTE, witness_vote_report)
+        # async_subscribe(Events.HIVE_WITNESS_VOTE, db_store_witness_vote)
 
-        async_subscribe(Events.HIVE_MARKET, market_report)
+        # async_subscribe(Events.HIVE_MARKET, market_report)
         tasks = [
-            real_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
-            virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
+            # real_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
+            # virtual_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
+            all_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):

@@ -119,10 +119,10 @@ class BlockCounter:
         Increment the block count and update the current block number.
         """
         self.current_block = hive_event.get("block_num", 0)
-        timestamp = hive_event.get("timestamp", datetime.now(tz=timezone.utc))
         new_block = False
         marker = False
         if self.last_good_block < self.current_block:
+            timestamp = hive_event.get("timestamp", datetime.now(tz=timezone.utc))
             self.block_count += self.current_block - self.last_good_block
             self.last_good_block = self.current_block
             new_block = True

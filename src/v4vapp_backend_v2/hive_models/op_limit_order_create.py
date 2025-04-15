@@ -49,6 +49,18 @@ class LimitOrderCreate(OpBase):
     def log_extra(self) -> Dict[str, Any]:
         return {self.name(): self.model_dump()}
 
+    @property
+    def is_watched(self) -> bool:
+        """
+        Check if the order is watched.
+
+        Returns:
+            bool: True if the order is watched, False otherwise.
+        """
+        if LimitOrderCreate.watch_users and (self.owner in LimitOrderCreate.watch_users):
+            return True
+        return False
+
     @classmethod
     def expire_orders(self) -> None:
         """

@@ -56,6 +56,20 @@ class AccountWitnessVote(OpBase):
         super().__init__(**data)
 
     def get_voter_details(self):
+        """
+        Retrieves and sets the voter details for the account.
+
+        This method calculates the voting power of the account using the `VotingPower` class
+        and validates the resulting data against the `VoterDetails` model. The validated
+        voter details are then assigned to the `voter_details` attribute of the instance.
+
+        Attributes:
+            voter_details (VoterDetails): The validated voter details for the account.
+
+        Raises:
+            ValidationError: If the data from `VotingPower` does not conform to the
+                             `VoterDetails` model schema.
+        """
         voter_power = VotingPower(self.account)
         self.voter_details = VoterDetails.model_validate(asdict(voter_power))
 

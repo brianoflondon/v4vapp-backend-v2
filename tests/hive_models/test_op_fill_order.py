@@ -63,6 +63,8 @@ def test_create_order_fill_order():
     - The file `tests/data/hive_models/complete_sell_fill.jsonl` is used as input.
     - The `LimitOrderCreate.watch_users` is set to `["v4vapp"]` for the test.
     """
+    LimitOrderCreate.watch_users = ["v4vapp"]
+    FillOrder.watch_users = ["v4vapp"]
     filename = "tests/data/hive_models/complete_sell_fill.jsonl"
     LimitOrderCreate.open_order_ids = {}
     LimitOrderCreate.watch_users = ["v4vapp"]
@@ -82,6 +84,7 @@ def test_create_order_fill_order():
                 del op_data["log_str"]
 
             op = op_any(op_data)
+            assert op.is_watched
             all_logs.append(op.notification_str)
     assert len(all_logs) > 0
     for log in all_logs:

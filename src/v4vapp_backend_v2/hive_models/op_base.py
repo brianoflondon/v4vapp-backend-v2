@@ -166,6 +166,8 @@ class OpBase(BaseModel):
                 self.realm = OpRealm.VIRTUAL
             elif data["type"] in HIVE_REAL_OPS:
                 self.realm = OpRealm.REAL
+            elif data["type"] == "block_marker":
+                self.realm = OpRealm.MARKER
             else:
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
@@ -235,7 +237,6 @@ class OpBase(BaseModel):
             age: The time difference between the current time and the transaction timestamp in seconds.
         """
         return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
-
 
     @property
     def age_str(self) -> str:
