@@ -86,6 +86,33 @@ def get_hive_block_explorer_link(
     return markdown_link
 
 
+def op_realm(op_type: str):
+    """
+    Determines the operational realm based on the provided operation type.
+
+    Args:
+        op_type (str): The type of operation to evaluate. Can be one of the
+                       predefined operation types or None.
+
+    Returns:
+        OpRealm: The corresponding operational realm, which can be one of the
+                 following:
+                 - OpRealm.VIRTUAL: If the operation type is in HIVE_VIRTUAL_OPS.
+                 - OpRealm.REAL: If the operation type is in HIVE_REAL_OPS.
+                 - OpRealm.MARKER: If the operation type is "block_marker".
+                 - None: If the operation type is None or does not match any
+                         predefined types.
+    """
+    if op_type is not None:
+        if op_type in HIVE_VIRTUAL_OPS:
+            return OpRealm.VIRTUAL
+        elif op_type in HIVE_REAL_OPS:
+            return OpRealm.REAL
+        elif op_type == "block_marker":
+            return OpRealm.MARKER
+    return None
+
+
 class OpLogData(BaseModel):
     """
     OpLogData is a Pydantic model that represents the structure of log data.
@@ -161,13 +188,8 @@ class OpBase(BaseModel):
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
         if data.get("type", None) is not None:
-            if data["type"] in HIVE_VIRTUAL_OPS:
-                self.realm = OpRealm.VIRTUAL
-            elif data["type"] in HIVE_REAL_OPS:
-                self.realm = OpRealm.REAL
-            elif data["type"] == "block_marker":
-                self.realm = OpRealm.MARKER
-            else:
+            self.realm = op_realm(data["type"])
+            if not self.realm:
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @classmethod
