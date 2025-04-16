@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -149,6 +149,8 @@ class OpBase(BaseModel):
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
+    op_tracked: ClassVar[List[str]] = OP_TRACKED
+    watch_users: ClassVar[List[str]] = []
 
     def __init__(self, **data):
         super().__init__(**data)

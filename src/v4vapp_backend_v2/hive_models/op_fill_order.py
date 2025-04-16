@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import ClassVar, List
 
 from nectar.amount import Amount
 from pydantic import Field
@@ -28,8 +27,6 @@ class FillOrder(OpBase):
         exclude=True,
         description="Holds the internal log string for the log and notification log operations",
     )
-
-    watch_users: ClassVar[List[str]] = []
 
     def __init__(self, **data: dict):
         super().__init__(**data)

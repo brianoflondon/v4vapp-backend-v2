@@ -59,12 +59,14 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/v4vapp_backend_v2"]
 
-[tool.flake8]
-max-line-length = 99
-
 [tool.ruff]
 line-length = 99
-
+exclude = [
+  "**/*_grpc.py",  # Excludes all files ending with _grpc.py
+  "**/*_pb2.py",    # Excludes all files ending with _pb2.py
+  "**/*.pyc",       # Excludes all compiled Python files
+  "**/__pycache__/*" # Excludes all files in __pycache__ directories
+]
 
 [tool.pytest.ini_options]
 log_cli = true

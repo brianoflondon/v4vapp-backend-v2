@@ -7,33 +7,29 @@ from nectar.amount import Amount
 
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
 
-@pytest.fixture()
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture(autouse=True)
+def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
-    yield
-    # Unpatch the monkeypatch
-    monkeypatch.undo()
-
-
-@pytest.fixture(autouse=True)
-def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
-    # Reset the singleton instance before each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     yield
-    # Reset the singleton instance after each test
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
+
+
+HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 
 
 def test_model_validate_transfer():
@@ -44,11 +40,20 @@ def test_model_validate_transfer():
             assert transfer.amount.amount == hive_event["amount"]["amount"]
 
 
-HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
+def test_op_transfer_watch_list():
+    OpBase.watch_list = ["john", "paul", "george", "ringo"]
+    for hive_event in load_hive_events(OpTypes.TRANSFER):
+        if hive_event["type"] == "transfer":
+            transfer = TransferRaw.model_validate(hive_event)
+            assert transfer.trx_id == hive_event["trx_id"]
+            assert transfer.amount.amount == hive_event["amount"]["amount"]
+            assert transfer.from_account not in Transfer.watch_list
+            assert transfer.to_account not in Transfer.watch_list
+            print(transfer.to_account)
 
 
-def test_model_validate_transfer_enhanced(set_base_config_path):
+
+def test_model_validate_transfer_enhanced():
     """
     Test the validation of the TransferEnhanced model with enhanced transfer events.
 
@@ -88,7 +93,7 @@ def test_model_validate_transfer_enhanced(set_base_config_path):
 
 
 @pytest.mark.asyncio
-async def test_model_dump_transfer_enhanced(set_base_config_path):
+async def test_model_dump_transfer_enhanced():
     await Transfer.update_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
@@ -100,7 +105,4 @@ async def test_model_dump_transfer_enhanced(set_base_config_path):
             assert hive_event_model["memo"] == transfer.memo
             assert transfer.log_str
             assert transfer.notification_str
-            assert (
-                transfer.conv.conv_from
-                == Amount(hive_event_model["amount"]).symbol.lower()
-            )
+            assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()

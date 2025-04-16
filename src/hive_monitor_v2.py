@@ -1,9 +1,9 @@
 import asyncio
 import signal
 import sys
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, List
+from typing import Annotated, Any, List, Tuple
 
 import typer
 from nectar.amount import Amount
@@ -42,13 +42,12 @@ from v4vapp_backend_v2.hive_models.op_types_enums import (
 )
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
 
-# INTERNAL_CONFIG = InternalConfig()
-# CONFIG = INTERNAL_CONFIG.config
+
 HIVE_DATABASE_CONNECTION = ""
 HIVE_DATABASE = ""
 HIVE_DATABASE_USER = ""
-HIVE_TRX_COLLECTION_V2 = "hive_ops"
-HIVE_WITNESS_PRODUCER_COLLECTION = "hive_witness_ops"
+HIVE_OPS_COLLECTION = "hive_ops"
+HIVE_WITNESS_PRODUCER_COLLECTION = "hive_ops"
 HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 
 AUTO_BALANCE_SERVER = True
@@ -205,7 +204,7 @@ async def db_store_block_marker(
             block_num=hive_event["block_num"], timestamp=hive_event["timestamp"]
         )
         _ = await db_client.update_one(
-            HIVE_TRX_COLLECTION_V2,
+            HIVE_OPS_COLLECTION,
             query=query,
             update=block_marker.model_dump(),
             upsert=True,
@@ -249,7 +248,7 @@ async def db_store_op(
         Exception: For any other exceptions, logs the error with additional context.
     """
     global COMMAND_LINE_WATCH_USERS, HIVE_DATABASE_CONNECTION, HIVE_DATABASE, HIVE_DATABASE_USER
-    db_collection = HIVE_TRX_COLLECTION_V2 if not db_collection else db_collection
+    db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
         async with MongoDBClient(
@@ -263,7 +262,7 @@ async def db_store_op(
             else:
                 query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx}
             db_ans = await db_client.update_one(
-                HIVE_TRX_COLLECTION_V2,
+                db_collection,
                 query=query,
                 update=op.model_dump(
                     by_alias=True,
@@ -400,7 +399,7 @@ async def db_store_witness_vote(
         query = {"trx_id": trx_id, "op_in_trx": op_in_trx}
         if vote.type == "account_witness_vote" and vote.witness == watch_witness:
             _ = await db_client.update_one(
-                HIVE_TRX_COLLECTION_V2,
+                HIVE_OPS_COLLECTION,
                 query=query,
                 update=vote.model_dump(),
                 upsert=True,
@@ -412,7 +411,7 @@ async def db_store_witness_vote(
         logger.exception(e, extra={"error": e, "notification": False})
 
 
-async def get_last_good_block(collection: str = HIVE_TRX_COLLECTION_V2) -> int:
+async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
     """
     Asynchronously retrieves the last good block.
 
@@ -524,7 +523,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
     return None
 
 
-async def witness_average_block_time(watch_witness: str) -> timedelta:
+async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, datetime]:
     """
     Asynchronously calculates the average block time for a specified witness.
 
@@ -550,7 +549,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
             sort=[("block_num", -1)],
         )
         # loop through the blocks and calculate the average block time
-        block_timestamps = []
+        block_timestamps: List[datetime] = []
         counter = 0
         async for block in cursor:
             block_timestamps.append((block["timestamp"]))
@@ -569,7 +568,7 @@ async def witness_average_block_time(watch_witness: str) -> timedelta:
     # Convert the mean time difference back to a timedelta object
     mean_time_diff = seconds_only(timedelta(seconds=mean_time_diff_seconds))
 
-    return mean_time_diff
+    return mean_time_diff, block_timestamps[-1]
 
 
 async def virtual_ops_loop(watch_witness: str, watch_users: List[str] = []):
@@ -754,7 +753,8 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
     FillOrder.watch_users = watch_users
 
     producer_reward = await witness_first_run(watch_witness)
-    last_good_timestamp = producer_reward.timestamp
+    last_witness_timestamp = producer_reward.timestamp
+
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
     last_good_block = await get_last_good_block() + 1
@@ -767,6 +767,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
             async for op in stream_ops_async(
                 opNames=opNames, start=last_good_block, stop_now=False, hive=hive_client
             ):
+                notification = True
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 new_block, marker = block_counter.inc(op.raw_op)
@@ -798,15 +799,15 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                         asyncio.create_task(balance_server_hbd_level(op))
                         asyncio.create_task(db_store_op(op))
                         notification = True
-                    # Log ever transaction (even if not in watch list)
-                    logger.info(
-                        f"{icon} {op.log_str}",
-                        extra={
-                            "notification": notification,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            **op.log_extra,
-                        },
-                    )
+                        # Log ever transaction (even if not in watch list)
+                        logger.info(
+                            f"{icon} {op.log_str}",
+                            extra={
+                                "notification": notification,
+                                "notification_str": f"{icon} {op.notification_str}",
+                                **op.log_extra,
+                            },
+                        )
 
                 if op.known_custom_json:
                     op: CustomJson
@@ -837,21 +838,21 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     asyncio.create_task(db_store_op(op))
 
                 if isinstance(op, ProducerReward) and op.producer == watch_witness:
+                    notification = True
                     await op.get_witness_details()
-                    op.mean = await witness_average_block_time(watch_witness)
-                    op.delta = op.timestamp - last_good_timestamp
+                    op.mean, last_witness_timestamp = await witness_average_block_time(
+                        watch_witness
+                    )
+                    op.delta = op.timestamp - last_witness_timestamp
                     logger.info(
                         f"{icon} {op.log_str}",
                         extra={
-                            "notification": True,
+                            "notification": notification,
                             "notification_str": f"{icon} {op.notification_str}",
                             **op.log_extra,
                         },
                     )
-                    asyncio.create_task(
-                        db_store_op(op, collection=HIVE_WITNESS_PRODUCER_COLLECTION)
-                    )
-                    last_good_timestamp = op.timestamp
+                    asyncio.create_task(db_store_op(op))
 
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)

@@ -25,7 +25,6 @@ class LimitOrderCreate(OpBase):
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
-    watch_users: ClassVar[List[str]] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

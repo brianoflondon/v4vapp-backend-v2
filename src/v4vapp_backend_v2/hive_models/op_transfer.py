@@ -146,7 +146,24 @@ class Transfer(TransferRaw):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        self.conv = CryptoConversion(amount=self.amount.beam, quote=self.last_quote).conversion
+        quote = quote or self.last_quote
+        self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Check if the transfer is to a watched user.
+
+        Returns:
+            bool: True if the transfer is to a watched user, False otherwise.
+        """
+        if Transfer.watch_users:
+            if (
+                self.to_account in Transfer.watch_users
+                or self.from_account in Transfer.watch_users
+            ):
+                return True
+        return False
 
     @property
     def amount_decimal(self) -> float:
