@@ -21,7 +21,7 @@ from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAny
-from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -137,7 +137,10 @@ async def db_store_op(
             db_name=HIVE_DATABASE,
             db_user=HIVE_DATABASE_USER,
         ) as db_client:
-            query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx, "block_num": op.block_num}
+            if op.realm == OpRealm.MARKER:
+                query = {"realm": OpRealm.MARKER, "trx_id": op.trx_id}
+            else:
+                query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx, "block_num": op.block_num}
             db_ans = await db_client.update_one(
                 db_collection,
                 query=query,
