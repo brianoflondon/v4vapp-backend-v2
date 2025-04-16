@@ -1,4 +1,3 @@
-
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
@@ -31,4 +30,6 @@ def test_op_account_witness_vote():
             assert account_witness_vote.voter_details.voter == hive_event["account"]
             print(account_witness_vote.log_str)
             print(account_witness_vote.notification_str)
+            assert isinstance(account_witness_vote.log_str, str)
+            assert isinstance(account_witness_vote.notification_str, str)
     assert count == 14
