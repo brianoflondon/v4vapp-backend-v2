@@ -10,12 +10,17 @@ logging:
     asyncio: WARNING
     httpcore: WARNING
     httpx: WARNING
-    lighthive: DEBUG
+    lighthive: CRITICAL
+    nectar: CRITICAL
+    nectarapi: CRITICAL
+    nectarapi.node: CRITICAL
+    nectarapi.graphenerpc: CRITICAL
+    urllib3.connectionpool: CRITICAL
   log_notification_silent:
     - beemapi
     - lighthive
     - nectarapi
-
+    - nectar
 ########### TEST CONFIG NO SECRETS #################
 default_lnd_connection: example
 

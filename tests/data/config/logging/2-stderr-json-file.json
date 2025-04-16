@@ -32,8 +32,8 @@
       "level": "DEBUG",
       "formatter": "json",
       "filename": "logs/v4vapp-backend-v2.log.jsonl",
-      "maxBytes": 10000,
-      "backupCount": 3
+      "maxBytes": 10000000,
+      "backupCount": 5
     }
   },
   "loggers": {
