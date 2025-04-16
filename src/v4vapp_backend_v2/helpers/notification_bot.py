@@ -212,6 +212,8 @@ class NotificationBot:
                     )
                     return
                 except Exception as e:
+                    text_v2 = text_v2 or "text_v2 not created"
+                    text_original = text_original or "text_original not available"
                     logger.exception(
                         f"Second Error sending [ {text} ]: {e} with Markdown v2",
                         extra={
@@ -226,6 +228,8 @@ class NotificationBot:
                     return
 
             except Exception as e:
+                text_v2 = text_v2 or "text_v2 not created"
+                text_original = text_original or "text_original not available"
                 logger.exception(
                     f"Error sending [ {text} ]: {e}",
                     extra={
