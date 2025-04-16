@@ -169,6 +169,7 @@ class NotificationBot:
                 "No chat ID set. Please start the bot first by sending /start"
             )
 
+        text_v2 = None  # Initialize text_v2 to avoid NameError
         text = self.truncate_text(text)
         text_original = text
         if is_markdown(text):
