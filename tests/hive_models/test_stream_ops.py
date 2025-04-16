@@ -27,10 +27,26 @@ async def test_stream_ops_async_live_from_hive():
     """
     Test the stream_ops_async function to ensure it yields operations correctly.
     """
-
-    # Mock the stream method of the blockchain instance
     opNames = []
     look_back = timedelta(seconds=10)
+
+    # Call the async generator function and collect results
+    results = []
+    async for op in stream_ops_async(look_back=look_back, stop_now=True, opNames=opNames):
+        print(op.log_str)
+        results.append(op)
+
+    # Check that the results are as expected
+    assert len(results) > 0
+
+
+@pytest.mark.asyncio
+async def test_stream_ops_async_live_from_hive_stop_now():
+    """
+    Test the stream_ops_async function to ensure it yields operations correctly.
+    """
+    opNames = ["producer_reward"]
+    look_back = timedelta(minutes=1)
 
     # Call the async generator function and collect results
     results = []
