@@ -15,6 +15,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: test-admin-password
     ports:
       - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
+      - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
     healthcheck:
       test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
       interval: 10s
