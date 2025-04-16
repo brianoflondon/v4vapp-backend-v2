@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, Dict
+from typing import Any, ClassVar, Dict
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -144,14 +144,11 @@ class OpBase(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
-    block_explorer: HiveExp = Field(
-        default=HiveExp.HiveHub,
-        exclude=True,
-        description="Hive Block explorer to use for links",
-    )
+    block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -297,15 +294,12 @@ class OpBase(BaseModel):
         if self.realm == OpRealm.REAL:
             prefix = "tx/"
             path = f"{self.trx_id}"
-            # if self.op_in_trx > 1:
-            #     path = f"{self.trx_id}/{self.op_in_trx}"
-            # else:
 
         elif self.realm == OpRealm.VIRTUAL:
             prefix = "tx/"
             path = f"{self.block_num}/{self.trx_id}/{self.op_in_trx}"
 
-        if self.block_explorer == HiveExp.HiveScanInfo:
+        if OpBase.block_explorer == HiveExp.HiveScanInfo:
             if prefix == "tx/":
                 prefix = "transaction/"
             elif prefix == "b/":
@@ -313,8 +307,7 @@ class OpBase(BaseModel):
 
         prefix_path = f"{prefix}{path}"
 
-        link_html = self.block_explorer.value.format(prefix_path=prefix_path)
+        link_html = OpBase.block_explorer.value.format(prefix_path=prefix_path)
         if not markdown:
             return link_html
-        markdown_link = f"[{self.block_explorer.name}]({link_html})"
-        return markdown_link
+        return f"[{OpBase.block_explorer.name}]({link_html})"

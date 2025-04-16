@@ -65,6 +65,7 @@ def test_op_any_or_base():
 def test_all_block_exporer_links():
     for block_explorer in HiveExp:
         tested_type = []
+        OpBase.block_explorer = block_explorer
         with httpx.Client() as httpx_client:
             for hive_event in load_hive_events():
                 if hive_event.get("type") in tested_type:
@@ -72,7 +73,6 @@ def test_all_block_exporer_links():
                 try:
                     tested_type.append(hive_event.get("type"))
                     op = op_any(hive_event)
-                    op.block_explorer = block_explorer
                     assert op.type == op.name()
                     print(hive_event.get("type"), op.type, op.link)
                     if op.link:
