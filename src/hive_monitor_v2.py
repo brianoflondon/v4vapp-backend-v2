@@ -274,7 +274,8 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
                 f"{producer_reward.block_num:,} "
                 f"for {producer_reward.producer} "
                 f"{producer_reward.timestamp} "
-                f"{time_diff}",
+                f"{time_diff} "
+                f"{producer_reward.log_str}",
                 extra={"notification": True, **producer_reward.log_extra},
             )
             return producer_reward
