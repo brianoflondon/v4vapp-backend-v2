@@ -29,4 +29,6 @@ def test_op_account_witness_vote():
             assert account_witness_vote.trx_id == hive_event["trx_id"]
             account_witness_vote.get_voter_details()
             assert account_witness_vote.voter_details.voter == hive_event["account"]
+            print(account_witness_vote.log_str)
+            print(account_witness_vote.notification_str)
     assert count == 14
