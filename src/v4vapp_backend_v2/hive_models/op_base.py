@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, Dict
+from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -71,11 +71,11 @@ def get_hive_block_explorer_link(
         path = f"{block_num}"
         prefix = "b/"
 
-    # if block_explorer == HiveExp.HiveScanInfo or block_explorer == HiveExp.HiveExplorer:
-    #     if prefix == "tx/":
-    #         prefix = "transaction/"
-    #     elif prefix == "b/":
-    #         prefix = "block/"
+    if block_explorer == HiveExp.HiveScanInfo:
+        if prefix == "tx/":
+            prefix = "transaction/"
+        elif prefix == "b/":
+            prefix = "block/"
 
     prefix_path = f"{prefix}{path}"
 
@@ -84,6 +84,33 @@ def get_hive_block_explorer_link(
         return link_html
     markdown_link = f"[{block_explorer.name}]({link_html})"
     return markdown_link
+
+
+def op_realm(op_type: str):
+    """
+    Determines the operational realm based on the provided operation type.
+
+    Args:
+        op_type (str): The type of operation to evaluate. Can be one of the
+                       predefined operation types or None.
+
+    Returns:
+        OpRealm: The corresponding operational realm, which can be one of the
+                 following:
+                 - OpRealm.VIRTUAL: If the operation type is in HIVE_VIRTUAL_OPS.
+                 - OpRealm.REAL: If the operation type is in HIVE_REAL_OPS.
+                 - OpRealm.MARKER: If the operation type is "block_marker".
+                 - None: If the operation type is None or does not match any
+                         predefined types.
+    """
+    if op_type is not None:
+        if op_type in HIVE_VIRTUAL_OPS:
+            return OpRealm.VIRTUAL
+        elif op_type in HIVE_REAL_OPS:
+            return OpRealm.REAL
+        elif op_type == "block_marker":
+            return OpRealm.MARKER
+    return None
 
 
 class OpLogData(BaseModel):
@@ -144,14 +171,13 @@ class OpBase(BaseModel):
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
-    block_explorer: HiveExp = Field(
-        default=HiveExp.HiveHub,
-        exclude=True,
-        description="Hive Block explorer to use for links",
-    )
+    block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
+    op_tracked: ClassVar[List[str]] = OP_TRACKED
+    watch_users: ClassVar[List[str]] = []
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -162,11 +188,8 @@ class OpBase(BaseModel):
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
         if data.get("type", None) is not None:
-            if data["type"] in HIVE_VIRTUAL_OPS:
-                self.realm = OpRealm.VIRTUAL
-            elif data["type"] in HIVE_REAL_OPS:
-                self.realm = OpRealm.REAL
-            else:
+            self.realm = op_realm(data["type"])
+            if not self.realm:
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @classmethod
@@ -236,7 +259,6 @@ class OpBase(BaseModel):
         """
         return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
 
-
     @property
     def age_str(self) -> str:
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
@@ -296,15 +318,12 @@ class OpBase(BaseModel):
         if self.realm == OpRealm.REAL:
             prefix = "tx/"
             path = f"{self.trx_id}"
-            # if self.op_in_trx > 1:
-            #     path = f"{self.trx_id}/{self.op_in_trx}"
-            # else:
 
         elif self.realm == OpRealm.VIRTUAL:
             prefix = "tx/"
             path = f"{self.block_num}/{self.trx_id}/{self.op_in_trx}"
 
-        if self.block_explorer == HiveExp.HiveScanInfo:
+        if OpBase.block_explorer == HiveExp.HiveScanInfo:
             if prefix == "tx/":
                 prefix = "transaction/"
             elif prefix == "b/":
@@ -312,8 +331,7 @@ class OpBase(BaseModel):
 
         prefix_path = f"{prefix}{path}"
 
-        link_html = self.block_explorer.value.format(prefix_path=prefix_path)
+        link_html = OpBase.block_explorer.value.format(prefix_path=prefix_path)
         if not markdown:
             return link_html
-        markdown_link = f"[{self.block_explorer.name}]({link_html})"
-        return markdown_link
+        return f"[{OpBase.block_explorer.name}]({link_html})"

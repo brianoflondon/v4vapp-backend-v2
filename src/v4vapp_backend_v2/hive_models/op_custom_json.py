@@ -4,7 +4,11 @@ from typing import List
 
 from pydantic import Field
 
-from v4vapp_backend_v2.hive_models.custom_json_data import CustomJsonData, custom_json_test_data
+from v4vapp_backend_v2.hive_models.custom_json_data import (
+    CustomJsonData,
+    custom_json_test_data,
+    custom_json_test_id
+)
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 
@@ -31,14 +35,32 @@ class CustomJson(OpBase):
         super().__init__(**data)
 
     @property
+    def is_watched(self) -> bool:
+        """
+        Check if the transfer is to a watched user.
+
+        Returns:
+            bool: True if the transfer is to a watched user, False otherwise.
+        """
+        if OpBase.watch_users:
+            if custom_json_test_id(self.cj_id):
+                # Check if the transfer is to a watched user
+                if self.json_data.to_account in OpBase.watch_users:
+                    return True
+                # Check if the transfer is from a watched user
+                if self.json_data.from_account in OpBase.watch_users:
+                    return True
+        return False
+
+    @property
     def log_str(self) -> str:
         # check if self.json_data has method log_str
         if hasattr(self.json_data, "log_str"):
             return f"{self.json_data.log_str} {self.link}"
-        return self.cj_id
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
         if hasattr(self.json_data, "notification_str"):
             return f"{self.json_data.notification_str} {self.markdown_link}"
-        return self.cj_id
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.markdown_link}"

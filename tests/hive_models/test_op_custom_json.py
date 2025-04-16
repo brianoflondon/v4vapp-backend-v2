@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from pytest import raises
 
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 post1 = {
@@ -35,6 +36,7 @@ post2 = {
 
 
 def test_custom_json_validate():
+    OpBase.watch_users = ["v4vapp.dev"]
     for post in [post1, post2]:
         custom_json = CustomJson.model_validate(post)
         json_data = json.loads(post["json"])
@@ -44,6 +46,13 @@ def test_custom_json_validate():
         assert custom_json.cj_id == "v4vapp_transfer"
         print(custom_json.log_str)
         print(custom_json.log_extra)
+        if (
+            custom_json.json_data.to_account in OpBase.watch_users
+            or custom_json.json_data.from_account in OpBase.watch_users
+        ):
+            assert custom_json.is_watched
+        else:
+            assert not custom_json.is_watched
 
 
 def test_custom_json_not_valid():

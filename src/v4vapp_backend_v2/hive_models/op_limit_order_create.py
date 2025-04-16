@@ -25,7 +25,6 @@ class LimitOrderCreate(OpBase):
 
     # Class variable shared by all instances
     open_order_ids: ClassVar[Dict[int, "LimitOrderCreate"]] = {}
-    watch_users: ClassVar[List[str]] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -48,6 +47,18 @@ class LimitOrderCreate(OpBase):
     @property
     def log_extra(self) -> Dict[str, Any]:
         return {self.name(): self.model_dump()}
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Check if the order is watched.
+
+        Returns:
+            bool: True if the order is watched, False otherwise.
+        """
+        if LimitOrderCreate.watch_users and (self.owner in LimitOrderCreate.watch_users):
+            return True
+        return False
 
     @classmethod
     def expire_orders(self) -> None:

@@ -37,31 +37,31 @@ class ProducerReward(ProducerRewardRaw):
         super().__init__(**data)
 
     def log_common(self):
-        return f"🧱 Delta {self.delta} | Mean {self.mean} | "
+        return f"🧱 Delta {self.delta} | Mean {self.mean} | {self.block_num:,} | "
 
     @property
     def log_str(self):
         if self.witness:
             log_str = (
                 f"{self.log_common()}"
-                f"{self.block_num:,} | {self.age:.2f} | "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.link} | {self.link}"
+                f"Rank: {self.witness.rank} | {self.producer} "
+                f"{self.age_str}"
             )
             return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.link} {self.link}"
+        return f"{self.block_num:,} {self.producer} {self.link} {self.age_str}"
 
     @property
     def notification_str(self):
         if self.witness:
-            log_str = (
+            notification_str = (
                 f"{self.log_common()}"
-                f"{self.block_num:,} | {self.age:.2f} | "
                 f"Missed: {self.witness.missed_blocks} | "
-                f"Rank: {self.witness.rank} | {self.producer.markdown_link} {self.markdown_link}"
+                f"Rank: {self.witness.rank} | {self.producer.markdown_link} {self.markdown_link} "
+                f"{self.age_str}"
             )
-            return log_str
-        return f"{self.block_num:,} | {self.age:.2f} | {self.producer.markdown_link} | {self.markdown_link}"
+            return notification_str
+        return f"{self.block_num:,} {self.producer.markdown_link} | {self.markdown_link} {self.age_str}"
 
     async def get_witness_details(self):
         """

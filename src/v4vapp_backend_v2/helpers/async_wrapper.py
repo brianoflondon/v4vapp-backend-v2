@@ -82,6 +82,12 @@ def _next(it: Iterator[T]) -> T:
         )
         raise StopAsyncIteration
 
+    except TypeError as e:
+        logger.warning(
+            f"_next {e}", extra={"notification": False, "error": e}
+        )
+        raise StopAsyncIteration
+
     except ValueError as e:
         if "last_irreversible_block_num is not in" in str(e):
             logger.warning(

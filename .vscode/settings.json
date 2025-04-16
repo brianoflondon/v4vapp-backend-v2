@@ -25,7 +25,7 @@
         "--capture=no",
         "--verbose",
         // "--disable-warnings",
-        "--log-level=DEBUG",
+        "--log-level=INFO",
         "--log-cli-level=INFO"
     ],
     "python.testing.unittestEnabled": false,

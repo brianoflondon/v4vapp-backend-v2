@@ -1,9 +1,10 @@
 from dataclasses import asdict
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.hive.voting_power import VotingPower
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 from .op_base import OpBase
 
@@ -46,7 +47,8 @@ class AccountWitnessVote(OpBase):
         log_str:
             A property that generates a human-readable log string summarizing the vote operation.
     """
-    account: str
+
+    account: AccNameType = Field(description="Voting account")
     approve: bool
     timestamp: datetime
     voter_details: VoterDetails | None = None
@@ -56,22 +58,52 @@ class AccountWitnessVote(OpBase):
         super().__init__(**data)
 
     def get_voter_details(self):
+        """
+        Retrieves and sets the voter details for the account.
+
+        This method calculates the voting power of the account using the `VotingPower` class
+        and validates the resulting data against the `VoterDetails` model. The validated
+        voter details are then assigned to the `voter_details` attribute of the instance.
+
+        Attributes:
+            voter_details (VoterDetails): The validated voter details for the account.
+
+        Raises:
+            ValidationError: If the data from `VotingPower` does not conform to the
+                             `VoterDetails` model schema.
+        """
         voter_power = VotingPower(self.account)
         self.voter_details = VoterDetails.model_validate(asdict(voter_power))
 
     @property
-    def log_str(self) -> str:
+    def log_common(self):
+        """
+        Generates a common log string for the operation.
+
+        This method provides a common log string format that includes the block number
+        and the account name.
+
+        Returns:
+            str: The common log string.
+        """
         voted_for = "voted for" if self.approve else "unvoted"
         if self.voter_details:
             total_value = self.voter_details.total_value
         else:
             total_value = 0
-        log_str = (
-            f"👁️ {self.account} "
+        return (
+            f"👁️ {self.block_num:,} {self.account} "
             f"{voted_for} {self.witness} "
             f"with {total_value:,.0f} HP"
         )
-        return log_str
+
+    @property
+    def log_str(self) -> str:
+        return f"{self.log_common} {self.link}"
+
+    @property
+    def notification_str(self) -> str:
+        return f"{self.log_common} {self.markdown_link} {self.account.markdown_link}"
 
 
 # Example usage

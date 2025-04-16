@@ -1,12 +1,13 @@
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timer
 from typing import ClassVar, Deque, Tuple
 
 from nectar import Hive
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff
+from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, format_time_delta
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
@@ -108,6 +109,7 @@ class BlockCounter:
     next_marker: int = 0
     marker_point: int = 100  # 100 blocks is 300s 5 minutes
     icon: str = "🧱"
+    last_marker = timer()
 
     def __post_init__(self):
         if self.current_block == 0:
@@ -119,10 +121,10 @@ class BlockCounter:
         Increment the block count and update the current block number.
         """
         self.current_block = hive_event.get("block_num", 0)
-        timestamp = hive_event.get("timestamp", datetime.now(tz=timezone.utc))
         new_block = False
         marker = False
         if self.last_good_block < self.current_block:
+            timestamp = hive_event.get("timestamp", datetime.now(tz=timezone.utc))
             self.block_count += self.current_block - self.last_good_block
             self.last_good_block = self.current_block
             new_block = True
@@ -132,8 +134,16 @@ class BlockCounter:
                 self.log_time_difference_errors(timestamp=timestamp)
                 old_node = self.hive_client.rpc.url
                 self.hive_client.rpc.next()
+                last_marker_time = timer() - self.last_marker
+                last_marker_time_str = format_time_delta(last_marker_time)
+                catch_up_in = format_time_delta(
+                    self.time_diff.total_seconds() / ((self.marker_point * 3) / last_marker_time)
+                )
+                self.time_diff = check_time_diff(timestamp)
                 logger.info(
-                    f"{self.icon} {self.id:>9}{self.block_count:,} blocks processed. {self.time_diff} "
+                    f"{self.icon} {self.id:>9}{self.block_count:,} "
+                    f"blocks processed in: {last_marker_time_str} "
+                    f"delta: {self.time_diff} catch up: {catch_up_in} "
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
                         "notification": notification,
@@ -141,6 +151,7 @@ class BlockCounter:
                         "block_count": self.block_count,
                     },
                 )
+                self.last_marker = timer()
         return new_block, marker
 
     def log_time_difference_errors(

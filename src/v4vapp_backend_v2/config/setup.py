@@ -601,7 +601,6 @@ class InternalConfig:
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
 
 
-
 """
 General purpose functions
 """
@@ -629,16 +628,17 @@ def async_time_decorator(func):
             result = await func(*args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.info(
+            logger.debug(
                 f"Function '{func.__qualname__[:26]}' took {execution_time:.4f} seconds to execute"
             )
             return result
         except Exception as e:
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.info(
+            logger.warning(
                 f"Function '{func.__qualname__[:26]}' "
-                f"failed after {execution_time:.4f} seconds with error: {str(e)}"
+                f"failed after {execution_time:.4f} seconds with error: {str(e)}",
+                extra={"notification": False, "error": e},
             )
             raise
 

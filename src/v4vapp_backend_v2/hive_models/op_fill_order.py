@@ -55,6 +55,22 @@ class FillOrder(OpBase):
         return self.log_internal
 
     @property
+    def is_watched(self) -> bool:
+        """
+        Check if the order is watched.
+
+        Returns:
+            bool: True if the order is watched, False otherwise.
+        """
+        if FillOrder.watch_users:
+            if (
+                self.current_owner in FillOrder.watch_users
+                or self.open_owner in FillOrder.watch_users
+            ):
+                return True
+        return False
+
+    @property
     def log_str(self) -> str:
         ans = self._log_internal()
         return f"{ans} {self.link}"

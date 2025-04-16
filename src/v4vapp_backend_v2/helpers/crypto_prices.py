@@ -215,7 +215,7 @@ class AllQuotes(BaseModel):
         start = timer()
         try:
             async with asyncio.timeout(timeout):
-                logger.info(f"Fetching quotes with timeout of {timeout} seconds")
+                logger.debug(f"Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
                     tasks = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
