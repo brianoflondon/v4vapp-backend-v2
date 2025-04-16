@@ -44,8 +44,16 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     Returns:
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
-
-    cache_key = f"witness_{hive_accname}"
+    try:
+        cache_key = f"witness_{hive_accname}"
+        async with V4VAsyncRedis() as redis_client:
+            ttl = await redis_client.ttl(cache_key)
+            if ttl and ttl > 0 and (1800 - ttl) < 300:
+                cached_data = await redis_client.get(cache_key)
+                answer = json.loads(cached_data)
+                return WitnessDetails.model_validate(answer)
+    except Exception:
+        pass
     # Attempt to fetch from API
     try:
         shuffled_endpoints = API_ENDPOINTS[:]
@@ -60,7 +68,9 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                 # Cache the result in Redis
                 try:
                     async with V4VAsyncRedis() as redis_client:
-                        await redis_client.set(name=cache_key, value=json.dumps(answer))
+                        await redis_client.setex(
+                            name=cache_key, value=json.dumps(answer), time=1800
+                        )
                 except Exception as redis_error:
                     logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
 

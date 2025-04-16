@@ -103,8 +103,10 @@ async def test_get_hive_witness_details(mocker):
     mock_httpx_get.return_value.json = Mock(return_value=sample_response)
 
     # Mock Redis get and set methods
+
     mock_redis_instance.get = AsyncMock(return_value=json.dumps(sample_response))
-    mock_redis_instance.set = AsyncMock(return_value=None)
+    mock_redis_instance.setex = AsyncMock(return_value=None)
+    mock_redis_instance.ttl = AsyncMock(return_value=None)
 
     # Call the function
     witness_details = await get_hive_witness_details("brianoflondon")
@@ -122,8 +124,8 @@ async def test_get_hive_witness_details(mocker):
     # ), "None of the API calls succeeded with the expected URL"
 
     # Ensure the Redis set method was called with the correct parameters
-    mock_redis_instance.set.assert_called_with(
-        name="witness_brianoflondon", value=json.dumps(sample_response)
+    mock_redis_instance.setex.assert_called_with(
+        name="witness_brianoflondon", value=json.dumps(sample_response), time=1800
     )
 
 
