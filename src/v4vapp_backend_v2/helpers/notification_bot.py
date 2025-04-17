@@ -172,11 +172,11 @@ class NotificationBot:
         text_v2 = None  # Initialize text_v2 to avoid NameError
         text = self.truncate_text(text)
         text_original = text
+        if text.endswith("no_preview"):
+            kwargs["disable_web_page_preview"] = True
+            text = text.rstrip("no_preview").strip()
         if is_markdown(text):
             kwargs["parse_mode"] = "Markdown"
-            if text.endswith("no_preview"):
-                kwargs["disable_web_page_preview"] = True
-                text = text.rstrip("no_preview").strip()
             text = sanitize_markdown_v1(text)
         attempt = 0
         while attempt < retries:
@@ -245,8 +245,7 @@ class NotificationBot:
                 )
                 print("Problem in Notification bot")
                 return
-            finally:
-                return
+        return
 
     async def handle_update(self, update):
         if update.message:
