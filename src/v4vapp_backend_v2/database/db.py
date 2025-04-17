@@ -5,11 +5,7 @@ from timeit import default_timer as timer
 from typing import Any
 
 from bson import ObjectId
-from motor.motor_asyncio import (
-    AsyncIOMotorClient,
-    AsyncIOMotorCollection,
-    AsyncIOMotorCursor,
-)
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
 from pymongo.results import DeleteResult, UpdateResult
 
@@ -34,7 +30,8 @@ class DbErrorCode(Enum):
 
 DATABASE_ICON = "📁"
 
-#TODO: #56 Consider replacing this decorator with the tenacity module
+
+# TODO: #56 Consider replacing this decorator with the tenacity module
 def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
     def decorator(func):
         """
@@ -58,11 +55,18 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
         """
 
         async def wrapper(*args, **kwargs):
+            error_code = None
             retries = 0
             delay = initial_delay
             while retries < max_retries:
                 try:
-                    return await func(*args, **kwargs)
+                    ans = await func(*args, **kwargs)
+                    if error_code:
+                        logger.info(
+                            f"Retry successful: {func.__name__}",
+                            extra={"error_code_clear": error_code},
+                        )
+                    return ans
                 except DuplicateKeyError as e:
                     extra = {
                         "error": str(e),
@@ -75,7 +79,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     raise e
                 except (ConnectionFailure, OperationFailure) as e:
                     retries += 1
-                    error_code = e.code if hasattr(e, "code") else type(e).__name__
+                    error_code = "mongodb_error"
                     extra = {
                         "error": str(e),
                         "error_code": error_code,
@@ -83,8 +87,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     }
                     if retries >= max_retries:
                         logger.error(
-                            f"Failed to execute {func.__name__} after {retries} "
-                            f"attempts: {e}",
+                            f"Failed to execute {func.__name__} after {retries} attempts: {e}",
                             extra=extra,
                         )
                         raise e
@@ -163,8 +166,7 @@ class MongoDBClient:
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
         logger.debug(
-            f"Validating user {self.db_user} in database {self.db_name} "
-            f"{elapsed_time:.3f}s"
+            f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
         )
         if self.db_name not in self.dbs:
             raise OperationFailure(
@@ -224,9 +226,7 @@ class MongoDBClient:
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
         if db_name == "admin":
-            db_password = (
-                self.db_connection.admin_dbs["admin"].db_users["admin"].password
-            )
+            db_password = self.db_connection.admin_dbs["admin"].db_users["admin"].password
         else:
             db_password = self.db_password
 
@@ -235,10 +235,7 @@ class MongoDBClient:
         else:
             replica_set = ""
         auth_source = f"?authSource={db_name}"
-        return (
-            f"mongodb://{db_user}:{db_password}@{self.hosts}/"
-            f"{auth_source}{replica_set}"
-        )
+        return f"mongodb://{db_user}:{db_password}@{self.hosts}/{auth_source}{replica_set}"
 
     async def _check_create_db(self):
         """
@@ -319,17 +316,10 @@ class MongoDBClient:
         """
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
-        if (
-            self.dbs[self.db_name].collections is None
-            or not self.dbs[self.db_name].collections
-        ):
+        if self.dbs[self.db_name].collections is None or not self.dbs[self.db_name].collections:
             return
-        for collection_name, collection_config in self.dbs[
-            self.db_name
-        ].collections.items():
-            list_indexes = (
-                await self.db[collection_name].list_indexes().to_list(length=None)
-            )
+        for collection_name, collection_config in self.dbs[self.db_name].collections.items():
+            list_indexes = await self.db[collection_name].list_indexes().to_list(length=None)
             if collection_config and collection_config.indexes:
                 for index_name, index_value in collection_config.indexes.items():
                     if not self._check_index_exists(list_indexes, index_name):
@@ -340,8 +330,7 @@ class MongoDBClient:
                                 name=index_name,
                             )
                             logger.info(
-                                f"{DATABASE_ICON} Created index {index_name} "
-                                f"in {collection_name}"
+                                f"{DATABASE_ICON} Created index {index_name} in {collection_name}"
                             )
                         except Exception as ex:
                             logger.error(ex)
@@ -379,10 +368,7 @@ class MongoDBClient:
                 self.db = self.client[self.db_name]
                 database_names = await self.admin_client.list_database_names()
                 database_users = await self.list_users()
-                if (
-                    self.db_name not in database_names
-                    or self.db_user not in database_users
-                ):
+                if self.db_name not in database_names or self.db_user not in database_users:
                     await self._check_create_db()
                 await self._check_indexes()
                 logger.debug(
@@ -449,11 +435,7 @@ class MongoDBClient:
             self.client.close()
 
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
-        if (
-            self.client is None
-            or self.db is None
-            or self.health_check != MongoDBStatus.CONNECTED
-        ):
+        if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
             await self.connect()
         if self.db is None:
             raise ConnectionFailure("Not connected to MongoDB")
@@ -466,9 +448,7 @@ class MongoDBClient:
         return result.inserted_id
 
     @retry_on_failure()
-    async def insert_many(
-        self, collection_name: str, documents: list
-    ) -> list[ObjectId]:
+    async def insert_many(self, collection_name: str, documents: list) -> list[ObjectId]:
         """
         Insert multiple documents into a specified collection.
             ordered=False is used to continue inserting documents even if one fails.
@@ -500,9 +480,7 @@ class MongoDBClient:
         return document
 
     @retry_on_failure()
-    async def find(
-        self, collection_name: str, query: dict, *args, **kwargs
-    ) -> AsyncIOMotorCursor:
+    async def find(self, collection_name: str, query: dict, *args, **kwargs) -> AsyncIOMotorCursor:
         """
         Asynchronously find multiple documents in a specified collection
         based on a query.
@@ -527,9 +505,7 @@ class MongoDBClient:
         return result
 
     @retry_on_failure()
-    async def update_many(
-        self, collection_name: str, query: dict, update: dict
-    ) -> UpdateResult:
+    async def update_many(self, collection_name: str, query: dict, update: dict) -> UpdateResult:
         collection = await self.get_collection(collection_name)
         result = await collection.update_many(query, {"$set": update}, upsert=True)
         return result
