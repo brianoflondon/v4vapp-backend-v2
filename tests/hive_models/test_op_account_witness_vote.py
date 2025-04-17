@@ -1,6 +1,24 @@
+from pathlib import Path
+
+import pytest
+
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import \
+    AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
+
+
+@pytest.fixture(autouse=True)
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    yield
+    # No need to restore the original value, monkeypatch will handle it
 
 
 def test_op_account_witness_vote():

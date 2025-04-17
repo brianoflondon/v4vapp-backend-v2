@@ -1,26 +1,12 @@
 from dataclasses import asdict
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from v4vapp_backend_v2.hive.voting_power import VotingPower
+from v4vapp_backend_v2.hive.voting_power import VoterDetails, VotingPower
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 from .op_base import OpBase
-
-
-class VoterDetails(BaseModel):
-    voter: str
-    proposal: int
-    proposal_total_votes: float
-    vesting_power: float
-    delegated_vesting_power: float
-    received_vesting_power: float
-    vote_value: float
-    proxy_value: float
-    prop_percent: float
-    total_value: float
-    total_percent: float
 
 
 class AccountWitnessVote(OpBase):
@@ -107,29 +93,29 @@ class AccountWitnessVote(OpBase):
 
 
 # Example usage
-data = {
-    "_id": "5eaa46458b2fa7b776eaaeb6c1c437027777ae8e",
-    "op_in_trx": 0,
-    "trx_id": "5eaa46458b2fa7b776eaaeb6c1c437027777ae8e",
-    "account": "ladyaryastark",
-    "approve": True,
-    "block_num": 94188656,
-    "timestamp": {"$date": "2025-03-16T14:55:45.000Z"},
-    "trx_num": 16,
-    "type": "account_witness_vote",
-    "vote_value": 241.55820571089652,
-    "voter_details": {
-        "voter": "ladyaryastark",
-        "proposal": 0,
-        "proposal_total_votes": 36456484.28235988,
-        "vesting_power": 241.55820571089652,
-        "delegated_vesting_power": 27.022683551570367,
-        "received_vesting_power": 44.024000911248805,
-        "vote_value": 241.55820571089652,
-        "proxy_value": 0,
-        "prop_percent": 0.0006625932545771528,
-        "total_value": 241.55820571089652,
-        "total_percent": 0.0006625932545771528,
-    },
-    "witness": "enginewitty",
-}
+# data = {
+#     "_id": "5eaa46458b2fa7b776eaaeb6c1c437027777ae8e",
+#     "op_in_trx": 0,
+#     "trx_id": "5eaa46458b2fa7b776eaaeb6c1c437027777ae8e",
+#     "account": "ladyaryastark",
+#     "approve": True,
+#     "block_num": 94188656,
+#     "timestamp": {"$date": "2025-03-16T14:55:45.000Z"},
+#     "trx_num": 16,
+#     "type": "account_witness_vote",
+#     "vote_value": 241.55820571089652,
+#     "voter_details": {
+#         "voter": "ladyaryastark",
+#         "proposal": 0,
+#         "proposal_total_votes": 36456484.28235988,
+#         "vesting_power": 241.55820571089652,
+#         "delegated_vesting_power": 27.022683551570367,
+#         "received_vesting_power": 44.024000911248805,
+#         "vote_value": 241.55820571089652,
+#         "proxy_value": 0,
+#         "prop_percent": 0.0006625932545771528,
+#         "total_value": 241.55820571089652,
+#         "total_percent": 0.0006625932545771528,
+#     },
+#     "witness": "enginewitty",
+# }

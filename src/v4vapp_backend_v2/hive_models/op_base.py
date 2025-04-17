@@ -183,6 +183,7 @@ class OpBase(BaseModel):
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
+    proposals_tracked: ClassVar[List[int]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **data):

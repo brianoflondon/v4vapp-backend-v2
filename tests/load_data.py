@@ -9,6 +9,7 @@ files_names: Dict[OpTypes, str] = {
     OpTypes.TRANSFER: "tests/data/hive_models/logs_with_transfer_hive_events.jsonl",
     OpTypes.LIMIT_ORDER_CREATE: "tests/data/hive_models/all_ops_log.jsonl",
     OpTypes.FILL_ORDER: "tests/data/hive_models/all_ops_log.jsonl",
+    OpTypes.UPDATE_PROPOSAL_VOTES: "tests/data/hive_models/all_ops_log.jsonl",
 }
 
 
