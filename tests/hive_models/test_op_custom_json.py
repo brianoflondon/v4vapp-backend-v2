@@ -37,6 +37,7 @@ post2 = {
 
 def test_custom_json_validate():
     OpBase.watch_users = ["v4vapp.dev"]
+    OpBase.update_quote_sync()
     for post in [post1, post2]:
         custom_json = CustomJson.model_validate(post)
         json_data = json.loads(post["json"])
@@ -44,6 +45,7 @@ def test_custom_json_validate():
         assert custom_json.json_data.to_account == json_data["hive_accname_to"]
         assert custom_json.json_data.sats == json_data["sats"]
         assert custom_json.cj_id == "v4vapp_transfer"
+        assert custom_json.conv.sats == json_data["sats"]
         print(custom_json.log_str)
         print(custom_json.log_extra)
         if (

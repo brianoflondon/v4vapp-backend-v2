@@ -103,6 +103,7 @@ async def test_model_dump_transfer_enhanced():
             assert hive_event_model["from"] == transfer.from_account
             assert hive_event_model["to"] == transfer.to_account
             assert hive_event_model["memo"] == transfer.memo
+            assert transfer.conv.hive == hive_event_model["conv"]["hive"]
             assert transfer.log_str
             assert transfer.notification_str
             assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
