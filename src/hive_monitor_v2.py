@@ -384,6 +384,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
     """
     logger.info(f"{icon} Combined Loop Watching users: {watch_users} and witness {watch_witness}")
     OpBase.watch_users = watch_users
+    OpBase.proposals_tracked = [303, 342]
 
     producer_reward = await witness_first_run(watch_witness)
     last_witness_timestamp = producer_reward.timestamp

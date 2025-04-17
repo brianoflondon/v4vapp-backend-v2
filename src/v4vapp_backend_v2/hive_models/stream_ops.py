@@ -10,7 +10,7 @@ from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
-from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, op_realm
+from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 
@@ -80,6 +80,7 @@ async def stream_ops_async(
 
     last_block = start_block
     while last_block < stop_block and last_block < blockchain.get_current_block_num():
+        OpBase.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -128,7 +129,7 @@ async def stream_ops_async(
         except StopAsyncIteration:
             return
         except Exception as e:
-            logger.warning(
+            logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
                 extra={"notification": False},
             )
