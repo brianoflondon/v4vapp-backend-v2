@@ -300,7 +300,7 @@ class NotificationBot:
             with open(config_file, "r") as f:
                 self.config = NotificationBotConfig.model_validate(json.load(f))
         else:
-            raise NotificationNotSetupError("No configuration file found.")
+            raise NotificationNotSetupError(f"No configuration file found. {config_file} missing")
 
     def save_config(self) -> None:
         """
