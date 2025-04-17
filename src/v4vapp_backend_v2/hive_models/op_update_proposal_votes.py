@@ -97,6 +97,12 @@ class UpdateProposalVotes(OpBase):
         )
 
     @property
+    def is_tracked(self):
+        if any(prop_id in self.proposals_tracked for prop_id in self.proposal_ids):
+            return True
+        return False
+
+    @property
     def log_str(self) -> str:
         return f"{self.log_common} {self.link}"
 

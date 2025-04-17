@@ -29,6 +29,7 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_types_enums import MarketOpTypes
+from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
 
 HIVE_DATABASE_CONNECTION = ""
@@ -475,6 +476,19 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                         watch_witness
                     )
                     op.delta = op.timestamp - last_witness_timestamp
+                    logger.info(
+                        f"{icon} {op.log_str}",
+                        extra={
+                            "notification": notification,
+                            "notification_str": f"{icon} {op.notification_str}",
+                            **op.log_extra,
+                        },
+                    )
+                    asyncio.create_task(db_store_op(op))
+
+                if isinstance(op, UpdateProposalVotes):
+                    notification = True if op.is_tracked else False
+                    op.get_voter_details()
                     logger.info(
                         f"{icon} {op.log_str}",
                         extra={
