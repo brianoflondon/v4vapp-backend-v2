@@ -45,17 +45,20 @@ def get_hive_client(*args, **kwargs) -> Hive:
     """
     if "node" not in kwargs:
         # shuffle good nodes
-        with V4VAsyncRedis().sync_redis as redis_sync_client:
-            good_nodes_json = redis_sync_client.get("good_nodes")
-        if good_nodes_json and isinstance(good_nodes_json, str):
-            ttl = redis_sync_client.ttl("good_nodes")
-            if isinstance(ttl, int) and ttl < 3000:
-                good_nodes = get_good_nodes()
-            else:
-                good_nodes = json.loads(good_nodes_json)
-        else:
+        good_nodes: List[str] = []
+        try:
+            with V4VAsyncRedis().sync_redis as redis_sync_client:
+                good_nodes_json = redis_sync_client.get("good_nodes")
+            if good_nodes_json and isinstance(good_nodes_json, str):
+                ttl = redis_sync_client.ttl("good_nodes")
+                if isinstance(ttl, int) and ttl < 3000:
+                    good_nodes = get_good_nodes()
+                else:
+                    good_nodes = json.loads(good_nodes_json)
+        except Exception as e:
+            logger.warning(f"Redis not available {e}", extra={"notification": False})
+        if not good_nodes:
             good_nodes = get_good_nodes()
-        redis_sync_client.close()
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
 
@@ -111,8 +114,13 @@ def get_good_nodes() -> List[str]:
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
-        with V4VAsyncRedis().sync_redis as redis_sync_client:
-            redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+        try:
+            with V4VAsyncRedis().sync_redis as redis_sync_client:
+                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+        except Exception as e:
+            logger.warning(
+                f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
+            )
     except Exception as e:
         with V4VAsyncRedis().sync_redis as redis_sync_client:
             good_nodes_json = redis_sync_client.get("good_nodes")

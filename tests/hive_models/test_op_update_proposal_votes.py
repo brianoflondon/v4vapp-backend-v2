@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
 
 
@@ -24,12 +23,16 @@ def test_op_update_proposal_votes():
     count = 0
     for hive_event in load_hive_events():
         if hive_event["type"] == "update_proposal_votes":
-            count += 1
             update_proposal_votes = UpdateProposalVotes.model_validate(hive_event)
             assert update_proposal_votes.trx_id == hive_event["trx_id"]
-            update_proposal_votes.get_voter_details()
-            assert update_proposal_votes.voter_details.voter == hive_event["voter"]
-            print(update_proposal_votes.log_str)
-            assert isinstance(update_proposal_votes.log_str, str)
-            assert isinstance(update_proposal_votes.notification_str, str)
+            for proposal_id in hive_event["proposal_ids"]:
+                count += 1
+                update_proposal_votes.get_voter_details()
+                assert (
+                    update_proposal_votes.prop_voter_details[proposal_id].voter
+                    == hive_event["voter"]
+                )
+                print(update_proposal_votes.log_str)
+                assert isinstance(update_proposal_votes.log_str, str)
+                assert isinstance(update_proposal_votes.notification_str, str)
     print(f"count: {count}")

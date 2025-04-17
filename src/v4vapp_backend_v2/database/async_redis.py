@@ -125,6 +125,10 @@ class V4VAsyncRedis:
             logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
+        except Exception as e:
+            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(e)
+            raise e
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.redis.aclose()
@@ -137,9 +141,14 @@ class V4VAsyncRedis:
             logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
+        except Exception as e:
+            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(e)
+            raise e
 
     def __exit__(self, exc_type, exc, tb):
-        self.sync_redis.close()
+        if self.sync_redis:
+            self.sync_redis.close()
 
     def __del__(self):
         logger.debug(f"Redis connection closed {self.host}:{self.port}")
