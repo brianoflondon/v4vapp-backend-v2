@@ -500,18 +500,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
 
         finally:
             logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url}",
-            )
-            hive_client.rpc.next()
-
-
-        except Exception as e:
-            logger.exception(f"{icon} {e}", extra={"error": e})
-            raise e
-
-        finally:
-            logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {str(hive_client.rpc.url)}",
+                f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url} no_preview",
                 extra={"notification": False},
             )
             hive_client.rpc.next()
