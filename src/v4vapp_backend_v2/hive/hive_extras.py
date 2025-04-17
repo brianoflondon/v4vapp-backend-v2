@@ -335,7 +335,7 @@ def decode_memo(
         logger.info(f"Memo is not encrypted: {e}")
         return memo
     except (MissingKeyError, MalformedPointError) as e:
-        logger.info(f"MissingKeyError: {e}")
+        logger.debug(f"MissingKeyError: {e}")
         return memo
 
     except Exception as e:
