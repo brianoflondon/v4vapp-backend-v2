@@ -190,10 +190,56 @@ class NotificationBot:
                     extra={"notification": False},
                 )
                 await asyncio.sleep(2**attempt)  # Exponential backoff
+            except BadRequest:
+                attempt += 1
+                try:
+                    text_v2 = sanitize_markdown_v2(text_original)
+                    await self.bot.send_message(
+                        chat_id=self.config.chat_id, text=text_v2, parse_mode="MarkdownV2"
+                    )
+                    logger.info(
+                        "Using Markdown v2 for message",
+                        extra={
+                            "text_original": text_original,
+                            "sanitized_v2": text_v2,
+                            "notification_text": text,
+                        },
+                    )
+                    return
+                except Exception as e:
+                    attempt += 1
+                    text_v2 = text_v2 or "text_v2 not created"
+                    text_original = text_original or "text_original not available"
+                    logger.exception(
+                        f"Second Error sending [ {text} ]: {e} with Markdown v2",
+                        extra={
+                            "error": e,
+                            "notification_text": text,
+                            "notification": False,
+                            "text_original": text_original,
+                            "sanitized_v2": text_v2,
+                        },
+                    )
+                    print("Problem in Notification bot Markdwon V2")
+                    return
 
             except Exception as e:
-                print(f"Error sending [ {text} ]: {e}")
+                attempt += 1
+                text_v2 = text_v2 or "text_v2 not created"
+                text_original = text_original or "text_original not available"
+                logger.exception(
+                    f"Error sending [ {text} ]: {e}",
+                    extra={
+                        "error": e,
+                        "notification_text": text,
+                        "notification": False,
+                        "text_original": text_original,
+                        "sanitized_v2": text_v2,
+                    },
+                )
                 print("Problem in Notification bot")
+                return
+            finally:
                 return
 
     async def handle_update(self, update):
