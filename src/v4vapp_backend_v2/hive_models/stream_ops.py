@@ -57,6 +57,8 @@ async def stream_ops_async(
     """
     hive = hive or get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive)
+    # This ensures the Transaction class has a hive instance with memo keys
+    OpBase.hive_inst = hive
 
     if opNames:
         op_realms = [op_realm(op) for op in opNames]

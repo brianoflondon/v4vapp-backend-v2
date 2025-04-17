@@ -86,13 +86,13 @@ class Transfer(TransferRaw):
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
-        hive_inst: Hive | None = hive_event.get("hive_inst", None)
+        hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
         if self.last_quote.get_age() > 600.0:
             self.update_quote_sync(AllQuotes().get_binance_quote())
         self.update_conv()
 
-    def post_process(self, hive_inst: Hive | None = None) -> None:
+    def post_process(self, hive_inst: Hive) -> None:
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
