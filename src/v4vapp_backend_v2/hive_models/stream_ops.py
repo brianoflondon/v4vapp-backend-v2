@@ -10,7 +10,7 @@ from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
-from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, op_realm
+from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 
@@ -57,6 +57,8 @@ async def stream_ops_async(
     """
     hive = hive or get_hive_client()
     blockchain = get_blockchain_instance(hive_instance=hive)
+    # This ensures the Transaction class has a hive instance with memo keys
+    OpBase.hive_inst = hive
 
     if opNames:
         op_realms = [op_realm(op) for op in opNames]

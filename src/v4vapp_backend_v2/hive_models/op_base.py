@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from enum import StrEnum, auto
 from typing import Any, ClassVar, Dict, List
 
+from nectar import Hive
 from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -184,6 +185,7 @@ class OpBase(BaseModel):
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
+    hive_inst: ClassVar[Hive] = None
 
     def __init__(self, **data):
         super().__init__(**data)

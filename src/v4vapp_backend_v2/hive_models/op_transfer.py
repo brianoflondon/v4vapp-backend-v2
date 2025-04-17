@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -84,16 +84,15 @@ class Transfer(TransferRaw):
     model_config = ConfigDict(populate_by_name=True)
     # Defined as a CLASS VARIABLE outside the
 
-
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
-        hive_inst: Hive | None = hive_event.get("hive_inst", None)
+        hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
         if self.last_quote.get_age() > 600.0:
             self.update_quote_sync(AllQuotes().get_binance_quote())
         self.update_conv()
 
-    def post_process(self, hive_inst: Hive | None = None) -> None:
+    def post_process(self, hive_inst: Hive) -> None:
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
