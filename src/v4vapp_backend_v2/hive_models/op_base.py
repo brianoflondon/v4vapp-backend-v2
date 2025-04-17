@@ -160,6 +160,30 @@ class OpBase(BaseModel):
             block explorer.
         logs() -> OpLogData: A property that returns an OpLogData object containing the log
             string, notification string, and additional log data.
+        age() -> float: A property that calculates the age of the transaction in seconds
+            based on the current time and the transaction timestamp.
+        age_str() -> str: A property that returns a formatted string representing the age of
+
+            the transaction, including a human-readable time delta if the age is greater than
+            120 seconds.
+        update_quote_sync(quote: QuoteResponse | None = None) -> None: A class method that
+            synchronously updates the last quote for the class.
+        update_quote(quote: QuoteResponse | None = None) -> None: A class method that
+            asynchronously updates the last quote for the class. If no quote is provided,
+            it fetches all quotes and sets the last quote to the fetched quote.
+        update_conv(quote: QuoteResponse | None = None) -> None: Updates the conversion for
+            the transaction. If the subclass has a `conv` object, it updates it with the
+            latest quote. If a quote is provided, it sets the conversion to the provided
+            quote. If no quote is provided, it uses the last quote to set the conversion.
+        link() -> str: A computed property that generates a link to the Hive block explorer
+            for the transaction ID. If the realm is OpRealm.MARKER, it returns a marker string.
+        markdown_link() -> str: A property that generates a markdown link to the Hive block
+            explorer for the transaction ID. If the realm is OpRealm.MARKER, it returns a
+            marker string.
+        _get_hive_block_explorer_link(markdown: bool = False) -> str: A private method that
+            generates a Hive blockchain explorer URL for the transaction ID. It takes into
+            account the realm and other parameters to construct the URL. It can return either
+            an HTML link or a markdown link based on the `markdown` parameter.
     """
 
     realm: OpRealm = Field(

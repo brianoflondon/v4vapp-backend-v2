@@ -42,6 +42,8 @@ class CustomJson(OpBase):
                 )
         super().__init__(**data)
         if getattr(self.json_data, "sats", None) is not None:
+            if self.last_quote is None:
+                self.update_quote_sync()
             self.conv = CryptoConversion(
                 value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
             ).conversion
