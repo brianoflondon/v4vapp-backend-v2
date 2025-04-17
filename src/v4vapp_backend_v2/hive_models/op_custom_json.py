@@ -4,10 +4,12 @@ from typing import List
 
 from pydantic import Field
 
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
     custom_json_test_data,
-    custom_json_test_id
+    custom_json_test_id,
 )
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
@@ -22,6 +24,12 @@ class CustomJson(OpBase):
     block_num: int
     trx_num: int
 
+    # Extra Fields
+    conv: CryptoConv | None = Field(
+        default=None,
+        description="If the custom_json relates to an amount, store a conversion object.",
+    )
+
     def __init__(self, **data):
         SpecialJsonType = custom_json_test_data(data)
         if SpecialJsonType is not None:
@@ -33,6 +41,10 @@ class CustomJson(OpBase):
                     f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
                 )
         super().__init__(**data)
+        if getattr(self.json_data, "sats", None) is not None:
+            self.conv = CryptoConversion(
+                value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
+            ).conversion
 
     @property
     def is_watched(self) -> bool:

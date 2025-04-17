@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 
@@ -14,18 +14,24 @@ class CryptoConv(BaseModel):
     Simple dictionary to store the conversion values.
     """
 
-    hive: float = 0.0
-    hbd: float = 0.0
-    usd: float = 0.0
-    sats: int = 0
-    msats: int = 0
-    btc: float = 0.0
-    sats_hive: float = 0.0
-    sats_hbd: float = 0.0
-    conv_from: Currency = Currency.HIVE
-    value: float = 0.0
-    source: str = "CryptoConv"
-    fetch_date: datetime | None = None
+    hive: float = Field(0.0, description="Converted value in HIVE")
+    hbd: float = Field(0.0, description="Converted value in HBD")
+    usd: float = Field(0.0, description="Converted value in USD")
+    sats: int = Field(0, description="Converted value in Sats")
+    msats: int = Field(0, description="Converted value in milliSats")
+    btc: float = Field(0.0, description="Converted value in Bitcoin")
+    sats_hive: float = Field(0.0, description="Sats per HIVE")
+    sats_hbd: float = Field(0.0, description="Sats per HBD")
+    conv_from: Currency = Field(
+        Currency.HIVE, description="The currency from which the conversion is made"
+    )
+    value: float = Field(0.0, description="The original value before conversion")
+    source: str = Field(
+        "CryptoConv", description="The source of the quote used for this conversion"
+    )
+    fetch_date: datetime | None = Field(
+        None, description="The date when the conversion was fetched"
+    )
 
     model_config = ConfigDict(
         use_enum_values=True,  # Serializes enum as its value
@@ -39,7 +45,7 @@ class CryptoConv(BaseModel):
         Returns:
             str: A string in the format "($<USD amount> <Satoshi amount> sats)", where:
                  - <USD amount> is the conversion value in USD, formatted to two decimal places.
-                 - <Satoshi amount> is the conversion value in Satoshis, formatted with commas as thousand separators.
+                 - <Satoshi amount> is the conversion value in Sats, formatted with commas as thousand separators.
         """
         return f"(${self.usd:>.2f} {self.sats:,.0f} sats)"
 
@@ -51,7 +57,7 @@ class CryptoConv(BaseModel):
         Returns:
             str: A string in the format "($<USD amount> <Satoshi amount> sats)", where:
                  - <USD amount> is the conversion value in USD, formatted to two decimal places.
-                 - <Satoshi amount> is the conversion value in Satoshis, formatted with commas as thousand separators.
+                 - <Satoshi amount> is the conversion value in Sats, formatted with commas as thousand separators.
         """
         return self.log_str
 
@@ -77,7 +83,7 @@ class CryptoConversion(BaseModel):
 
     def __init__(
         self,
-        amount: Amount = Amount("0.0 HIVE"),
+        amount: Amount | None = None,
         value: float | int = 0.0,
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,

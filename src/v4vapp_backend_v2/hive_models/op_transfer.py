@@ -83,7 +83,7 @@ class Transfer(TransferRaw):
 
     model_config = ConfigDict(populate_by_name=True)
     # Defined as a CLASS VARIABLE outside the
-    last_quote: ClassVar[QuoteResponse] = QuoteResponse()
+
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
@@ -99,55 +99,55 @@ class Transfer(TransferRaw):
         else:
             self.d_memo = self.memo
 
-    @classmethod
-    def update_quote_sync(cls, quote: QuoteResponse) -> None:
-        """
-        Synchronously updates the last quote for the class.
+    # @classmethod
+    # def update_quote_sync(cls, quote: QuoteResponse) -> None:
+    #     """
+    #     Synchronously updates the last quote for the class.
 
-        Args:
-            quote (QuoteResponse | None): The quote to update.
+    #     Args:
+    #         quote (QuoteResponse | None): The quote to update.
 
-        Returns:
-            None
-        """
-        cls.last_quote = quote
+    #     Returns:
+    #         None
+    #     """
+    #     cls.last_quote = quote
 
-    @classmethod
-    async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
-        """
-        Asynchronously updates the last quote for the class.
+    # @classmethod
+    # async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
+    #     """
+    #     Asynchronously updates the last quote for the class.
 
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
+    #     If a quote is provided, it sets the last quote to the provided quote.
+    #     If no quote is provided, it fetches all quotes and sets the last quote
+    #     to the fetched quote.
 
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
+    #     Args:
+    #         quote (QuoteResponse | None): The quote to update.
+    #             If None, fetches all quotes.
 
-        Returns:
-            None
-        """
-        if quote:
-            cls.last_quote = quote
-        else:
-            all_quotes = AllQuotes()
-            await all_quotes.get_all_quotes()
-            cls.last_quote = all_quotes.quote
+    #     Returns:
+    #         None
+    #     """
+    #     if quote:
+    #         cls.last_quote = quote
+    #     else:
+    #         all_quotes = AllQuotes()
+    #         await all_quotes.get_all_quotes()
+    #         cls.last_quote = all_quotes.quote
 
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Updates the conversion for the transaction.
+    # def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    #     """
+    #     Updates the conversion for the transaction.
 
-        If a quote is provided, it sets the conversion to the provided quote.
-        If no quote is provided, it uses the last quote to set the conversion.
+    #     If a quote is provided, it sets the conversion to the provided quote.
+    #     If no quote is provided, it uses the last quote to set the conversion.
 
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, uses the last quote.
-        """
-        quote = quote or self.last_quote
-        self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
+    #     Args:
+    #         quote (QuoteResponse | None): The quote to update.
+    #             If None, uses the last quote.
+    #     """
+    #     quote = quote or self.last_quote
+    #     self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
 
     @property
     def is_watched(self) -> bool:

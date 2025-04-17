@@ -1,9 +1,12 @@
+from asyncio import get_event_loop
 from datetime import datetime, timezone
 from enum import StrEnum, auto
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field, computed_field
 
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
@@ -175,9 +178,12 @@ class OpBase(BaseModel):
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
+
+    # Class variables
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
+    last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -278,6 +284,64 @@ class OpBase(BaseModel):
             notification=self.notification_str,
             log_extra=self.log_extra,
         )
+
+    @classmethod
+    def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:
+        """
+        Synchronously updates the last quote for the class.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+
+        Returns:
+            None
+        """
+        if quote:
+            cls.last_quote = quote
+            return
+        loop = get_event_loop()
+        loop.run_until_complete(OpBase.update_quote())
+
+    @classmethod
+    async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
+        """
+        Asynchronously updates the last quote for the class.
+
+        If a quote is provided, it sets the last quote to the provided quote.
+        If no quote is provided, it fetches all quotes and sets the last quote
+        to the fetched quote.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
+
+        Returns:
+            None
+        """
+        if quote:
+            cls.last_quote = quote
+        else:
+            all_quotes = AllQuotes()
+            await all_quotes.get_all_quotes()
+            cls.last_quote = all_quotes.quote
+
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the lastest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        if getattr(self, "conv", None) is not None:
+            quote = quote or self.last_quote
+            self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
+        else:
+            return
 
     @computed_field
     def link(self) -> str:
