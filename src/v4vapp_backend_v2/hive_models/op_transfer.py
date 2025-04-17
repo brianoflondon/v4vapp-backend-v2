@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -83,7 +83,6 @@ class Transfer(TransferRaw):
 
     model_config = ConfigDict(populate_by_name=True)
     # Defined as a CLASS VARIABLE outside the
-
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)

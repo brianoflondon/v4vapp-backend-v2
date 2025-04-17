@@ -444,6 +444,8 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
 
                 if op.known_custom_json:
                     op: CustomJson
+                    if not op.conv:
+                        await op.update_quote_conv()
                     asyncio.create_task(db_store_op(op))
                     logger.info(
                         f"{op.log_str}",

@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field, computed_field
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
@@ -324,8 +325,20 @@ class OpBase(BaseModel):
         if quote:
             cls.last_quote = quote
             return
-        loop = get_event_loop()
-        loop.run_until_complete(OpBase.update_quote())
+
+        try:
+            loop = get_event_loop()
+            if loop.is_running():
+                # If the event loop is already running, schedule the coroutine
+                raise RuntimeError(
+                    "update_quote_sync cannot be called in an async context. Use update_quote instead."
+                )
+            else:
+                loop.run_until_complete(cls.update_quote())
+        except RuntimeError as e:
+            # Handle cases where the event loop is already running
+            logger.error(f"Error in update_quote_sync: {e}")
+            raise e
 
     @classmethod
     async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
@@ -349,6 +362,25 @@ class OpBase(BaseModel):
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes()
             cls.last_quote = all_quotes.quote
+
+    async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Asynchronously updates the last quote for the class.
+
+        If a quote is provided, it sets the last quote to the provided quote.
+        If no quote is provided, it fetches all quotes and sets the last quote
+        to the fetched quote.
+        Uses the new quote to update a `conv` object.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
+
+        Returns:
+            None
+        """
+        await OpBase.update_quote(quote)
+        self.update_conv()
 
     def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

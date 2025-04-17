@@ -118,25 +118,36 @@ class CryptoConversion(BaseModel):
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
         # Step 1: Convert the input value to msats
-        if self.conv_from == Currency.HIVE:
-            self.msats = int(self.value * self.quote.sats_hive * 1000)
-        elif self.conv_from == Currency.HBD:
-            self.msats = int(self.value * self.quote.sats_hbd * 1000)
-        elif self.conv_from == Currency.USD:
-            self.msats = int(self.value * self.quote.sats_usd * 1000)
-        elif self.conv_from == Currency.SATS:
-            self.msats = int(self.value * 1000)
-        else:
-            raise ValueError("Unsupported conversion currency")
+        if self.quote is None or self.quote.hive_hbd == 0:
+            raise ValueError("Quote is not available or invalid")
+        try:
+            if self.conv_from == Currency.HIVE:
+                self.msats = int(self.value * self.quote.sats_hive * 1000)
+            elif self.conv_from == Currency.HBD:
+                self.msats = int(self.value * self.quote.sats_hbd * 1000)
+            elif self.conv_from == Currency.USD:
+                self.msats = int(self.value * self.quote.sats_usd * 1000)
+            elif self.conv_from == Currency.SATS:
+                self.msats = int(self.value * 1000)
+            else:
+                raise ValueError("Unsupported conversion currency")
 
-        # Step 2: Derive sats from msats
-        self.sats = round(self.msats / 1000, 0)
+            # Step 2: Derive sats from msats
+            self.sats = round(self.msats / 1000, 0)
 
-        # Step 3: Derive all other values from msats
-        self.btc = self.msats / 100_000_000_000  # msats to BTC (1 BTC = 10^11 msats)
-        self.usd = round(self.msats / (self.quote.sats_usd * 1000), 6)
-        self.hbd = round(self.msats / (self.quote.sats_hbd * 1000), 6)
-        self.hive = round(self.msats / (self.quote.sats_hive * 1000), 5)
+            # Step 3: Derive all other values from msats
+            self.btc = self.msats / 100_000_000_000  # msats to BTC (1 BTC = 10^11 msats)
+            self.usd = round(self.msats / (self.quote.sats_usd * 1000), 6)
+            self.hbd = round(self.msats / (self.quote.sats_hbd * 1000), 6)
+            self.hive = round(self.msats / (self.quote.sats_hive * 1000), 5)
+        except ZeroDivisionError:
+            # Handle division by zero if the quote is not available
+            self.msats = 0
+            self.sats = 0
+            self.btc = 0.0
+            self.usd = 0.0
+            self.hbd = 0.0
+            self.hive = 0.0
 
     @property
     def conversion(self) -> CryptoConv:
