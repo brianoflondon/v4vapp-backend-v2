@@ -505,6 +505,18 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
             hive_client.rpc.next()
 
 
+        except Exception as e:
+            logger.exception(f"{icon} {e}", extra={"error": e})
+            raise e
+
+        finally:
+            logger.warning(
+                f"{icon} Restarting real_ops_loop after error from {str(hive_client.rpc.url)}",
+                extra={"notification": False},
+            )
+            hive_client.rpc.next()
+
+
 async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
     """
     Main function to run the Hive Watcher client.

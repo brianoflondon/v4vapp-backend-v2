@@ -213,6 +213,7 @@ class NotificationBot:
                     )
                     return
                 except Exception as e:
+                    attempt += 1
                     text_v2 = text_v2 or "text_v2 not created"
                     text_original = text_original or "text_original not available"
                     logger.exception(
@@ -229,6 +230,7 @@ class NotificationBot:
                     return
 
             except Exception as e:
+                attempt += 1
                 text_v2 = text_v2 or "text_v2 not created"
                 text_original = text_original or "text_original not available"
                 logger.exception(
@@ -242,6 +244,8 @@ class NotificationBot:
                     },
                 )
                 print("Problem in Notification bot")
+                return
+            finally:
                 return
 
     async def handle_update(self, update):
