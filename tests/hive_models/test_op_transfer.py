@@ -76,9 +76,10 @@ def test_model_validate_transfer_enhanced():
     if not HIVE_MEMO_TEST_KEY:
         pytest.skip("HIVE_MEMO_TEST_KEY is not available in environment variables")
     hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
+    OpBase.hive_inst = hive_inst
     for hive_event in load_hive_events(op_type=OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
-            hive_event["hive_inst"] = hive_inst
+            # hive_event["hive_inst"] = hive_inst
             transfer = Transfer.model_validate(hive_event)
             assert transfer.trx_id == hive_event["trx_id"]
             assert transfer.amount.amount == hive_event["amount"]["amount"]
