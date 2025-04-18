@@ -33,10 +33,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --replSet rs0
-          --bind_ip_all
         volumes:
-          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
 
       mongo2:
         image: mongo:8.0
@@ -50,10 +49,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --replSet rs0
-          --bind_ip_all
         volumes:
-          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
 
       mongo3:
         image: mongo:8.0
@@ -67,10 +65,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --replSet rs0
-          --bind_ip_all
         volumes:
-          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
 
       redis:
         image: redis:latest
