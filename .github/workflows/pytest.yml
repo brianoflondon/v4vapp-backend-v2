@@ -140,7 +140,7 @@ jobs:
       - name: Print service container logs
         if: failure()
         run: |
-          echo "MongoDB logs:"
-          docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
+          echo "MongoDB logs for mongo1:"
+          docker logs mongo1
           echo "Redis logs:"
-          docker logs $(docker ps -q --filter "ancestor=redis:latest")
+          docker logs redis
