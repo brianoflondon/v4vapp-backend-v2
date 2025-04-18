@@ -110,6 +110,11 @@ dbs:
             unique: false
       test_collection2:
       test_collection3:
+      currency_rates:
+        timeseries:
+          timeField: "timestamp"
+          metaField: "pair"
+          granularity: "minutes"
 
   test_db2:
     db_users:

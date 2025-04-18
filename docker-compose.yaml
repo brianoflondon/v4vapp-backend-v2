@@ -8,24 +8,24 @@ services:
       # - ./.certs:/app/.certs
       - ./config:/app/config
 
-  mongo-pytest-local:
-    image: mongo:8.0
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-    # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
-    ports:
-      - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
-      - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
-    healthcheck:
-      test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    # volumes:
-    #   - mongo_data:/data/db
-    #   - mongo_config:/data/configdb
+  # mongo-pytest-local:
+  #   image: mongo:8.0
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: admin
+  #     MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+  #   # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
+  #   ports:
+  #     - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
+  #     - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
+  #   healthcheck:
+  #     test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+  #   # volumes:
+  #   #   - mongo_data:/data/db
+  #   #   - mongo_config:/data/configdb
 
   redis-pytest-local:
     image: redis:latest
@@ -89,6 +89,81 @@ services:
     networks:
       - v4vapp-backend
 
+  mongo1:
+    image: mongo:8.0
+    container_name: mongo1
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
+    ports:
+      - "29017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    volumes:
+      - mongo1_data:/data/db
+      - mongo1_config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+  mongo2:
+    image: mongo:8.0
+    container_name: mongo2
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
+    ports:
+      - "29018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    volumes:
+      - mongo2_data:/data/db
+      - mongo2_config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+  mongo3:
+    image: mongo:8.0
+    container_name: mongo3
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
+    ports:
+      - "29019:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    volumes:
+      - mongo3_data:/data/db
+      - mongo3_config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+  mongo-setup:
+    image: mongo:8.0
+    container_name: mongo-setup
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    entrypoint: >
+      bash -c "
+      sleep 5 &&
+      mongosh --host mongo1 --eval '
+        rs.initiate({
+          _id: \"rs0\",
+          members: [
+            { _id: 0, host: \"mongo1:27017\" },
+            { _id: 1, host: \"mongo2:27017\" },
+            { _id: 2, host: \"mongo3:27017\" }
+          ]
+        });
+      ' &&
+      echo 'Replica set initialized.'"
+    volumes:
+      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+volumes:
+  mongo1_data:
+  mongo1_config:
+  mongo2_data:
+  mongo2_config:
+  mongo3_data:
+  mongo3_config:
+
+
   # binance-monitor:
   #   depends_on:
   #     - node-monitor
@@ -99,11 +174,6 @@ services:
   #   restart: unless-stopped
   #   stop_grace_period: 20s
   #   command: ["python", "src/binance_monitor.py"]
-
-
-volumes:
-  mongo_data:
-  mongo_config:
 
 networks:
   repl-mongo_repl-set:

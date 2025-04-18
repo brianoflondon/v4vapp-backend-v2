@@ -89,6 +89,7 @@ class IndexConfig(BaseConfig):
 
 class CollectionConfig(BaseConfig):
     indexes: Dict[str, IndexConfig] | None = None
+    timeseries: Dict[str, Any] | None = None
 
 
 class DatabaseUserConfig(BaseConfig):
