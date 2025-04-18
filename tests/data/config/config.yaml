@@ -73,10 +73,10 @@ db_connections:
 
   conn_1:
     hosts:
-      - localhost:29017
-      - localhost:29018
-      - localhost:29019
-    replica_set: rs0 
+      - localhost:27017
+      # - localhost:29018
+      # - localhost:29019
+    replica_set: rs0
     admin_dbs:
       admin: # The Database name
         db_users:

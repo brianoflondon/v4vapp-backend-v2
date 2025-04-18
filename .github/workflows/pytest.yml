@@ -46,14 +46,14 @@ jobs:
 
       - name: Initialize MongoDB Replica Set
         run: |
-          until mongosh --host localhost:27017 --eval 'db.runCommand({ ping: 1 })'; do
+          until docker exec mongodb mongosh --eval 'db.runCommand({ ping: 1 })'; do
             echo "Waiting for MongoDB..."
             sleep 2
           done
-          mongosh --host localhost:27017 --eval '
+          docker exec mongodb mongosh --eval '
           rs.initiate({
             _id: "rs0",
-            members: [{ _id: 0, host: "localhost:27017" }]
+            members: [{ _id: 0, host: "mongodb:27017" }]
           });
           '
 
