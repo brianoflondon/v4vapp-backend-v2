@@ -31,6 +31,24 @@ class CustomJson(OpBase):
     )
 
     def __init__(self, **data):
+        """
+        Initializes an instance of the class with the provided data.
+
+        Args:
+            **data: Arbitrary keyword arguments containing the data to initialize the instance.
+
+        Raises:
+            ValueError: If the provided JSON data is invalid or cannot be parsed.
+
+        Notes:
+            - If `custom_json_test_data` returns a `SpecialJsonType`, the `json` field in the data
+              is validated and parsed using the `model_validate` method of `SpecialJsonType`.
+            - If the `json_data` attribute contains a `sats` field and `last_quote` is available,
+              a cryptocurrency conversion is performed using the `CryptoConversion` class.
+              ONLY if `last_quote` is not None and `last_quote.hive_hbd` is not 0.
+            - The `super().__init__(**data)` call initializes the base class with the provided data.
+            - The `conv` attribute is set to `None` by default.
+        """
         SpecialJsonType = custom_json_test_data(data)
         if SpecialJsonType is not None:
             try:
@@ -42,9 +60,10 @@ class CustomJson(OpBase):
                 )
         super().__init__(**data)
         if getattr(self.json_data, "sats", None) is not None:
-            self.conv = CryptoConversion(
-                value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
-            ).conversion
+            if self.last_quote and not self.last_quote.hive_hbd == 0:
+                self.conv = CryptoConversion(
+                    value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
+                ).conversion
 
     @property
     def is_watched(self) -> bool:

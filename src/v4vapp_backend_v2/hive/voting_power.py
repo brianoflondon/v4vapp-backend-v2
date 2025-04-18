@@ -1,10 +1,25 @@
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from nectar import Hive
 from nectar.account import Account
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+
+
+class VoterDetails(BaseModel):
+    voter: str
+    proposal: int
+    proposal_total_votes: float
+    vesting_power: float
+    delegated_vesting_power: float
+    received_vesting_power: float
+    vote_value: float
+    proxy_value: float
+    prop_percent: float
+    total_value: float
+    total_percent: float
 
 
 @dataclass
@@ -82,15 +97,9 @@ class VotingPower:
         self.proposal = proposal
         self.voter = acc.name
         self.vesting_power = hive.vests_to_token_power(acc["vesting_shares"])
-        self.delegated_vesting_power = hive.vests_to_token_power(
-            acc["delegated_vesting_shares"]
-        )
-        self.received_vesting_power = hive.vests_to_token_power(
-            acc["received_vesting_shares"]
-        )
-        self.proxy_value = hive.vests_to_token_power(
-            acc["proxied_vsf_votes"][0] / 1000000
-        )
+        self.delegated_vesting_power = hive.vests_to_token_power(acc["delegated_vesting_shares"])
+        self.received_vesting_power = hive.vests_to_token_power(acc["received_vesting_shares"])
+        self.proxy_value = hive.vests_to_token_power(acc["proxied_vsf_votes"][0] / 1000000)
         self.vote_value = self.vesting_power
         self.total_value = self.vote_value + self.proxy_value
         # Proposal 233 is the Stabiliser proposal until May 2023

@@ -54,6 +54,7 @@ class MarketOpTypes(StrEnum):
 
 class OtherOpTypes(StrEnum):
     CUSTOM_JSON = auto()
+    UPDATE_PROPOSAL_VOTES = auto()
 
 
 class WitnessOpTypes(StrEnum):
@@ -79,8 +80,6 @@ class VirtualOpTypes(StrEnum):
     #     return [member.value for member in cls]
 
 
-
-
 def create_master_enum(*enums):
     members = {}
     for enum in enums:
@@ -88,16 +87,12 @@ def create_master_enum(*enums):
     return StrEnum("HiveTypes", members)
 
 
-HiveOpTypes = create_master_enum(
-    TransferOpTypes, MarketOpTypes, OtherOpTypes, VirtualOpTypes
-)
+HiveOpTypes = create_master_enum(TransferOpTypes, MarketOpTypes, OtherOpTypes, VirtualOpTypes)
 # Used in real_ops_loop in hive_monitor_v2.py
-RealOpsLoopTypes = create_master_enum(
-    TransferOpTypes, MarketOpTypes, WitnessOpTypes, OtherOpTypes
-)
+RealOpsLoopTypes = create_master_enum(TransferOpTypes, MarketOpTypes, WitnessOpTypes, OtherOpTypes)
 
 OpTypes = create_master_enum(
-    TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes
+    TransferOpTypes, MarketOpTypes, WitnessOpTypes, VirtualOpTypes, OtherOpTypes
 )
 
 

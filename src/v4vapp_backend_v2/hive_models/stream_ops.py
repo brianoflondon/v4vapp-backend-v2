@@ -67,9 +67,11 @@ async def stream_ops_async(
         only_virtual_ops = False
 
     current_block = blockchain.get_current_block_num()
+    time_now = datetime.now(tz=timezone.utc)
+    start_time = time_now
     if look_back:
-        time_now = datetime.now(tz=timezone.utc)
-        start_block = blockchain.get_estimated_block_num(time_now - look_back)
+        start_time = time_now - look_back
+        start_block = blockchain.get_estimated_block_num(start_time)
         max_batch_size = 25
     else:
         start_block = start or current_block
@@ -82,6 +84,7 @@ async def stream_ops_async(
 
     last_block = start_block
     while last_block < stop_block and last_block < blockchain.get_current_block_num():
+        await OpBase.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -93,7 +96,9 @@ async def stream_ops_async(
                     max_batch_size=max_batch_size,
                 )
             )
-            logger.info(f"Starting Hive scanning at {start_block:,} Ending at {stop_block:,}")
+            logger.info(
+                f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,}"
+            )
             async for hive_event in async_stream_real:
                 if (
                     not only_virtual_ops
@@ -129,8 +134,10 @@ async def stream_ops_async(
             return
         except StopAsyncIteration:
             return
+        except TypeError as e:
+            logger.warning(f"{start_block:,} Error in block_stream: {e} restarting")
         except Exception as e:
-            logger.warning(
+            logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
                 extra={"notification": False},
             )

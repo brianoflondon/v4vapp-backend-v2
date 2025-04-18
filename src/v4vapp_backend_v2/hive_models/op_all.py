@@ -1,5 +1,7 @@
 from typing import Any, Union
 
+from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
+
 from .op_account_witness_vote import AccountWitnessVote
 from .op_base import OpBase
 from .op_custom_json import CustomJson
@@ -22,6 +24,7 @@ OP_MAP: dict[str, OpAny] = {
     "producer_reward": ProducerReward,
     "fill_order": FillOrder,
     "limit_order_create": LimitOrderCreate,
+    "update_proposal_votes": UpdateProposalVotes,
 }
 
 
@@ -52,23 +55,6 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         raise ValueError(f"Unknown operation type: {op_type_value}")
 
     return op_type.model_validate(hive_event)
-
-    if op_type == "custom_json":
-        return CustomJson(**hive_event)
-    elif op_type == "transfer":
-        return Transfer(**hive_event)
-    elif op_type == "account_witness_vote":
-        return AccountWitnessVote(**hive_event)
-    elif op_type == "producer_reward":
-        return ProducerReward(**hive_event)
-    elif op_type == "fill_order":
-        return FillOrder(**hive_event)
-    elif op_type == "limit_order_create":
-        return LimitOrderCreate(**hive_event)
-
-    else:
-        raise ValueError(f"Unknown operation type: {op_type}")
-
 
 def op_any_or_base(hive_event: dict) -> OpAny:
     """
