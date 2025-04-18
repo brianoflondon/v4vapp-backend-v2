@@ -20,8 +20,9 @@ class UpdateProposalVotes(OpBase):
     extensions: List[str] = []
     proposal_ids: List[int] = []
     voter: AccNameType = Field("", description="The account name of the voter")
-    prop_voter_details: dict[int, VoterDetails] = Field(
-        default_factory=dict, description="Voter details for each proposal"
+    prop_voter_details: dict[str, VoterDetails] = Field(
+        default_factory=dict,
+        description="Voter details for each proposal (dict key is str for mongodb)",
     )
 
     def __init__(self, **data):
@@ -48,17 +49,19 @@ class UpdateProposalVotes(OpBase):
                 with V4VAsyncRedis().sync_redis as redis_client:
                     cached_data = redis_client.get(cache_key)
                     if cached_data:
-                        self.prop_voter_details[prop_id] = VoterDetails.model_validate(
+                        self.prop_voter_details[str(prop_id)] = VoterDetails.model_validate(
                             json.loads(cached_data)
                         )
                         continue
             except Exception as e:
                 logger.info(f"Error getting cache for {cache_key}: {e}")
             voter_power = VotingPower(self.voter, proposal=prop_id)
-            self.prop_voter_details[prop_id] = VoterDetails.model_validate(asdict(voter_power))
+            self.prop_voter_details[str(prop_id)] = VoterDetails.model_validate(
+                asdict(voter_power)
+            )
             try:
                 with V4VAsyncRedis().sync_redis as redis_client:
-                    cache_value = self.prop_voter_details[prop_id].model_dump_json()
+                    cache_value = self.prop_voter_details[str(prop_id)].model_dump_json()
                     redis_client.setex(
                         cache_key,
                         time=300,

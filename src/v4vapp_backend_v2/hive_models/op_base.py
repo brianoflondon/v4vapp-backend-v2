@@ -20,6 +20,7 @@ OP_TRACKED = [
     "producer_reward",
     "fill_order",
     "limit_order_create",
+    "update_proposal_votes",
 ]
 
 

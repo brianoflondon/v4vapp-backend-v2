@@ -134,6 +134,8 @@ async def stream_ops_async(
             return
         except StopAsyncIteration:
             return
+        except TypeError as e:
+            logger.warning(f"{start_block:,} Error in block_stream: {e} restarting")
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
