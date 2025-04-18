@@ -10,7 +10,6 @@ from nectarapi.exceptions import UnhandledRPCError
 
 from v4vapp_backend_v2.config.setup import HiveAccountConfig, InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
-from v4vapp_backend_v2.hive_models.op_base import get_hive_block_explorer_link
 
 ORDER_BOOK_CACHE: Dict[str, Any] = {}
 icon = "📈"
@@ -132,19 +131,6 @@ def market_trade(
                 account=hive_acc.name,
                 killfill=killfill,
             )
-        link = get_hive_block_explorer_link(trx.get("trx_id"), markdown=False)
-        link_markdwon = get_hive_block_explorer_link(trx.get("trx_id"), markdown=True)
-        rate_str = f"{rate:.3f}"
-        log_str = f"{icon}{rate_str:>8} {hive_acc.name} sold {amount} {link}"
-        notification_str = f"{icon}{rate_str:>8} {hive_acc.name} sold {amount} {link_markdwon}"
-        logger.info(
-            log_str,
-            extra={
-                "notification": True,
-                "trx": trx,
-                "notification_str": notification_str,
-            },
-        )
         return trx
     except UnhandledRPCError as e:
         logger.warning(

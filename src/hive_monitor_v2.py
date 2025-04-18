@@ -178,7 +178,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         None: The function does not return any value.
     """
     CONFIG = InternalConfig().config
-    await asyncio.sleep(3)  # Sleeps to make sure we only balance HBD after time for a return
+    await asyncio.sleep(10)  # Sleeps to make sure we only balance HBD after time for a return
     try:
         if transfer.from_account in CONFIG.hive.server_account_names:
             use_account = transfer.from_account
