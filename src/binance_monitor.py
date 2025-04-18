@@ -17,7 +17,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_mete
 ICON = "🅑"
 app = typer.Typer()
 
-BINANACE_HIVE_ALERT_LEVEL_SATS = 500_000
+BINANCE_HIVE_ALERT_LEVEL_SATS = 500_000
 BINANACE_BTC_ALERT_LEVEL = 0.02
 
 # Define a global flag to track shutdown
@@ -162,7 +162,7 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     saved_balances = balances
 
     current_price_sats = float(current_price["current_price"]) * 1e8
-    hive_target = BINANACE_HIVE_ALERT_LEVEL_SATS / current_price_sats
+    hive_target = BINANCE_HIVE_ALERT_LEVEL_SATS / current_price_sats
     percentage = hive_balance / hive_target * 100
     percentage_meter = draw_percentage_meter(percentage=percentage, max_percent=300, width=9)
     notification_str = (
