@@ -21,53 +21,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mongo1:
+      mongodb:
         image: mongo:8.0
         ports:
-          - "29017:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+          - "27017:27017"
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        volumes:
-          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
-          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
-
-      mongo2:
-        image: mongo:8.0
-        ports:
-          - "29018:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        volumes:
-          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
-          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
-
-      mongo3:
-        image: mongo:8.0
-        ports:
-          - "29019:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        volumes:
-          - ./tests/config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
-          - ./tests/config/mongod.conf:/etc/mongo/mongod.conf:ro
 
       redis:
         image: redis:latest
@@ -75,21 +37,23 @@ jobs:
           - "6379:6379"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Clean working directory
+        run: |
+          sudo rm -rf /home/runner/work/v4vapp-backend-v2/v4vapp-backend-v2/tests/config
+          sudo chown -R runner:runner /home/runner/work/v4vapp-backend-v2/v4vapp-backend-v2
 
-      - name: Wait for MongoDB to start
-        run: sleep 10
+      - uses: actions/checkout@v4
 
       - name: Initialize MongoDB Replica Set
         run: |
-          mongosh --host localhost:29017 --username admin --password test-admin-password --eval '
+          until mongosh --host localhost:27017 --eval 'db.runCommand({ ping: 1 })'; do
+            echo "Waiting for MongoDB..."
+            sleep 2
+          done
+          mongosh --host localhost:27017 --eval '
           rs.initiate({
             _id: "rs0",
-            members: [
-              { _id: 0, host: "localhost:29017" },
-              { _id: 1, host: "localhost:29018" },
-              { _id: 2, host: "localhost:29019" }
-            ]
+            members: [{ _id: 0, host: "localhost:27017" }]
           });
           '
 
@@ -138,11 +102,7 @@ jobs:
       - name: Print service container logs
         if: failure()
         run: |
-          echo "MongoDB logs for mongo1:"
-          docker logs mongo1
-          echo "MongoDB logs for mongo2:"
-          docker logs mongo2
-          echo "MongoDB logs for mongo3:"
-          docker logs mongo3
+          echo "MongoDB logs:"
+          docker logs mongodb
           echo "Redis logs:"
           docker logs redis
