@@ -21,13 +21,47 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mongo:
+      mongo1:
         image: mongo:8.0
         ports:
-          - "37017:27017"
+          - "29017:27017"
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+        options: >-
+          --replSet rs0
+          --bind_ip_all
+          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        volumes:
+          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+      mongo2:
+        image: mongo:8.0
+        ports:
+          - "29018:27017"
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+        options: >-
+          --replSet rs0
+          --bind_ip_all
+          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        volumes:
+          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+
+      mongo3:
+        image: mongo:8.0
+        ports:
+          - "29019:27017"
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+        options: >-
+          --replSet rs0
+          --bind_ip_all
+          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        volumes:
+          - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
       redis:
         image: redis:latest
@@ -36,6 +70,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Wait for MongoDB to start
+        run: sleep 10
+
+      - name: Initialize MongoDB Replica Set
+        run: |
+          mongosh --host localhost:29017 --username admin --password test-admin-password --eval '
+          rs.initiate({
+            _id: "rs0",
+            members: [
+              { _id: 0, host: "localhost:29017" },
+              { _id: 1, host: "localhost:29018" },
+              { _id: 2, host: "localhost:29019" }
+            ]
+          });
+          '
 
       - uses: actions/setup-python@v5
         with:
