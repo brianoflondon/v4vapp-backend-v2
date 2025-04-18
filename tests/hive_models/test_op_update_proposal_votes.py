@@ -29,7 +29,7 @@ def test_op_update_proposal_votes():
                 count += 1
                 update_proposal_votes.get_voter_details()
                 assert (
-                    update_proposal_votes.prop_voter_details[proposal_id].voter
+                    update_proposal_votes.prop_voter_details[str(proposal_id)].voter
                     == hive_event["voter"]
                 )
                 print(update_proposal_votes.log_str)

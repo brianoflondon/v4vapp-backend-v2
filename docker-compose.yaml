@@ -13,6 +13,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
     ports:
       - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
       - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
