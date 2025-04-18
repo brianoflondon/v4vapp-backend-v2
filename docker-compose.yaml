@@ -8,24 +8,24 @@ services:
       # - ./.certs:/app/.certs
       - ./config:/app/config
 
-  # mongo-pytest-local:
-  #   image: mongo:8.0
-  #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: admin
-  #     MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-  #   # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
-  #   ports:
-  #     - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
-  #     - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
-  #   healthcheck:
-  #     test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped
-  #   # volumes:
-  #   #   - mongo_data:/data/db
-  #   #   - mongo_config:/data/configdb
+  mongo-pytest-local:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+    # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
+    ports:
+      - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
+      - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
+    healthcheck:
+      test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # volumes:
+    #   - mongo_data:/data/db
+    #   - mongo_config:/data/configdb
 
   redis-pytest-local:
     image: redis:latest
@@ -67,27 +67,27 @@ services:
     stop_grace_period: 20s
 
 
-  hive-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/hive:/app/logs
-    command: [
-      "python", "src/hive_monitor_v2.py",
-      "--user", "v4vapp",
-      "--user", "v4vapp.tre",
-      "--user", "v4vapp.dhf",
-      "--user", "brianoflondon",
-      "--user", "v4vapp-test",
-      "--witness", "brianoflondon",
-    ]
-    restart: unless-stopped
-    stop_grace_period: 20s
-    networks:
-      - v4vapp-backend
+  # hive-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/hive:/app/logs
+  #   command: [
+  #     "python", "src/hive_monitor_v2.py",
+  #     "--user", "v4vapp",
+  #     "--user", "v4vapp.tre",
+  #     "--user", "v4vapp.dhf",
+  #     "--user", "brianoflondon",
+  #     "--user", "v4vapp-test",
+  #     "--witness", "brianoflondon",
+  #   ]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
+  #   networks:
+  #     - v4vapp-backend
 
   mongo1:
     image: mongo:8.0
@@ -112,7 +112,7 @@ services:
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
     ports:
       - "127.0.0.1:29018:27017"
-      - "${LOCAL_TAILSCALE_IP}:29019:27017"   # Needed on home-imac
+      - "${LOCAL_TAILSCALE_IP}:29018:27017"   # Needed on home-imac
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: test-admin-password
@@ -154,15 +154,17 @@ services:
         rs.initiate({
           _id: \"rs0\",
           members: [
-            { _id: 0, host: \"mongo1:27017\" },
-            { _id: 1, host: \"mongo2:27017\" },
-            { _id: 2, host: \"mongo3:27017\" }
+            { _id: 0, host: \"${LOCAL_TAILSCALE_IP}:29017\" },
+            { _id: 1, host: \"${LOCAL_TAILSCALE_IP}:29018\" },
+            { _id: 2, host: \"${LOCAL_TAILSCALE_IP}:29019\" }
           ]
         });
       ' &&
       echo 'Replica set initialized.'"
     volumes:
       - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+    networks:
+      - v4vapp-backend
 
 volumes:
   mongo1_data:
