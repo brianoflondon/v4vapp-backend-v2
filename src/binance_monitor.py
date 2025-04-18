@@ -18,7 +18,7 @@ ICON = "🅑"
 app = typer.Typer()
 
 BINANCE_HIVE_ALERT_LEVEL_SATS = 500_000
-BINANACE_BTC_ALERT_LEVEL = 0.02
+BINANCE_BTC_ALERT_LEVEL = 0.02
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
@@ -82,7 +82,7 @@ async def check_binance_balances():
         try:
             if shutdown_event.is_set():
                 raise asyncio.CancelledError("Docker Shutdown")
-            new_balances, hive_target, notficiation_str, log_str = generate_message(
+            new_balances, hive_target, notification_str, log_str = generate_message(
                 saved_balances,
                 testnet,
             )
@@ -96,7 +96,7 @@ async def check_binance_balances():
                         "notification": True,
                         "binance-balances": new_balances,
                         "silent": silent,
-                        "notification_str": notficiation_str,
+                        "notification_str": notification_str,
                         "error_code_clear": "binance_api_error",
                     },
                 )
