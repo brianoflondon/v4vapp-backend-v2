@@ -101,7 +101,7 @@ services:
     volumes:
       - mongo1_data:/data/db
       - mongo1_config:/data/configdb
-      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+      - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
   mongo2:
     image: mongo:8.0
@@ -115,7 +115,7 @@ services:
     volumes:
       - mongo2_data:/data/db
       - mongo2_config:/data/configdb
-      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+      - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
   mongo3:
     image: mongo:8.0
@@ -129,7 +129,7 @@ services:
     volumes:
       - mongo3_data:/data/db
       - mongo3_config:/data/configdb
-      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+      - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
   mongo-setup:
     image: mongo:8.0
@@ -141,7 +141,7 @@ services:
     entrypoint: >
       bash -c "
       sleep 5 &&
-      mongosh --host mongo1 --eval '
+      mongosh --host mongo1 --username admin --password test-admin-password --eval '
         rs.initiate({
           _id: \"rs0\",
           members: [
@@ -153,7 +153,7 @@ services:
       ' &&
       echo 'Replica set initialized.'"
     volumes:
-      - ./mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
+      - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
 volumes:
   mongo1_data:
