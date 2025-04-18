@@ -28,10 +28,7 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --replSet rs0
-          --bind_ip_all
-          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
         volumes:
           - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
@@ -42,10 +39,7 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --replSet rs0
-          --bind_ip_all
-          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
         volumes:
           - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
@@ -56,10 +50,7 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --replSet rs0
-          --bind_ip_all
-          --keyFile /etc/mongo-keyfile/mongo-keyfile
+        command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile/mongo-keyfile"]
         volumes:
           - ./config/mongo-keyfile:/etc/mongo-keyfile/mongo-keyfile:ro
 
@@ -142,5 +133,9 @@ jobs:
         run: |
           echo "MongoDB logs for mongo1:"
           docker logs mongo1
+          echo "MongoDB logs for mongo2:"
+          docker logs mongo2
+          echo "MongoDB logs for mongo3:"
+          docker logs mongo3
           echo "Redis logs:"
           docker logs redis
