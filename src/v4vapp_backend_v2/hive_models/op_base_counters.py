@@ -110,8 +110,10 @@ class BlockCounter:
     marker_point: int = 100  # 100 blocks is 300s 5 minutes
     icon: str = "🧱"
     last_marker = timer()
+    start: float = 0
 
     def __post_init__(self):
+        self.start = timer()
         if self.current_block == 0:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""
@@ -140,13 +142,16 @@ class BlockCounter:
                     self.time_diff.total_seconds() / ((self.marker_point * 3) / last_marker_time)
                 )
                 self.time_diff = check_time_diff(timestamp)
+                running_time = timer() - self.start
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"blocks processed in: {last_marker_time_str} "
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
+                    f"running time: {format_time_delta(running_time)}",
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
                         "notification": notification,
+                        "running_time": running_time,
                         "time_diff": self.time_diff,
                         "block_count": self.block_count,
                     },
