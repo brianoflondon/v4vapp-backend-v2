@@ -92,7 +92,7 @@ class UpdateProposalVotes(OpBase):
         else:
             total_value = 0
 
-        voter = f"{self.voter}" if mardown else f"{self.voter.markdown_link:<20}"
+        voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
         return (
             f"👁️ {self.block_num:,} {voter} "
             f"{voted_for} {self.proposal_ids} "
