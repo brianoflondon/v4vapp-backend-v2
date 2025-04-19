@@ -98,7 +98,12 @@ async def stream_ops_async(
             )
             logger.info(
                 f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,} "
-                f"using {hive.rpc.url} {opNames=}"
+                f"using {hive.rpc.url}",
+                extra={
+                    "error_code_clear": "stream_restart",
+                    "notification": True,
+                    "opNames": opNames,
+                },
             )
             async for hive_event in async_stream_real:
                 if (
@@ -152,7 +157,8 @@ async def stream_ops_async(
                 )
                 break
             logger.warning(
-                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview"
+                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
+                extra={"notification": True, "error_code": "stream_restart"},
             )
             hive.rpc.next()
             await asyncio.sleep(2)
