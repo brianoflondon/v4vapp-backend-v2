@@ -94,6 +94,7 @@ async def stream_ops_async(
                     only_virtual_ops=only_virtual_ops,
                     opNames=opNames,
                     max_batch_size=max_batch_size,
+                    threading=False,
                 )
             )
             logger.info(
@@ -118,6 +119,7 @@ async def stream_ops_async(
                         raw_ops=False,
                         only_virtual_ops=True,
                         opNames=opNames,
+                        threading=False,
                     ):
                         last_block = hive_event.get("block_num")
                         op_virtual_base = op_any_or_base(virtual_event)
