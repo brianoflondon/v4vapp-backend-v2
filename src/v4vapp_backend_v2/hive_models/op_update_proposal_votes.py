@@ -10,7 +10,7 @@ from v4vapp_backend_v2.hive.voting_power import VoterDetails, VotingPower
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
-
+# TODO: this needs a complete rething for multiple prop ids
 class UpdateProposalVotes(OpBase):
     """
     Class to handle the update of proposal votes in the Hive blockchain.
