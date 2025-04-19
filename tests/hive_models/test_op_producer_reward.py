@@ -62,6 +62,8 @@ async def test_model_validate_producer_reward():
                 assert producer_reward.witness.witness_name == "threespeak"
                 pprint(producer_reward.witness, indent=2)
                 pprint(producer_reward.model_dump(), indent=2)
+                print(producer_reward.notification_str)
+                print(producer_reward.log_str)
             print(producer_reward.log_str)
             print(producer_reward.notification_str)
     assert count == 28
