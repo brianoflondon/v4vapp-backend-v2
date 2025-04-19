@@ -58,29 +58,18 @@ async def test_stream_ops_async_live_from_hive_stop_now():
     assert len(results) > 0
 
 
-# @pytest.mark.asyncio
-# async def test_stream_ops_async():
-#     """
-#     Test the stream_ops_async function to ensure it yields operations correctly.
-#     """
+@pytest.mark.asyncio
+async def test_stream_ops_block_range():
+    """
+    Test the stream_ops_async function to ensure it yields operations correctly.
+    """
+    opNames = ["update_proposal_votes"]
 
-#     def mock_blockchain_stream(*args, **kwargs) -> Generator:
-#         # Mock the blockchain stream method to yield test events
-#         for hive_event in load_hive_events():
-#             yield hive_event
+    # Call the async generator function and collect results
+    results = []
+    async for op in stream_ops_async(start=95_157_371, stop=95_157_382, opNames=opNames):
+        print(op.log_str)
+        results.append(op)
 
-#     # Patch blockchain.stream globally for all calls
-#     with patch(
-#         "v4vapp_backend_v2.hive_models.stream_ops.Blockchain.stream",
-#     ) as mock_stream:
-#         mock_stream.side_effect = mock_blockchain_stream
-
-#         # Call the async generator function and collect results
-#         results: List[OpAny] = []
-#         async for op in stream_ops_async(
-#             look_back=timedelta(seconds=10),
-#             opNames=["transfer", "fill_vesting_withdraw", "comment"],
-#             stop_now=True,
-#         ):
-#             results.append(op)
-#             print(op)
+    # Check that the results are as expected
+    assert len(results) > 0
