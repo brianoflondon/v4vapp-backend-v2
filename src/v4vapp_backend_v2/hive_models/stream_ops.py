@@ -97,7 +97,8 @@ async def stream_ops_async(
                 )
             )
             logger.info(
-                f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,}"
+                f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,} "
+                f"using {hive.rpc.url} {opNames=}"
             )
             async for hive_event in async_stream_real:
                 if (
@@ -151,8 +152,9 @@ async def stream_ops_async(
                 )
                 break
             logger.warning(
-                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,}"
+                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview"
             )
+            hive.rpc.next()
             await asyncio.sleep(2)
 
 
@@ -174,11 +176,14 @@ def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
 
 # Example usage
 async def main() -> None:
-    opNames = OP_TRACKED
-    async for op in stream_ops_async(
-        opNames=opNames, look_back=timedelta(seconds=120), stop_now=False
-    ):
-        logger.info(f"{op.log_str}", extra={**op.log_extra})
+    opNames = []
+    count = 0
+    async for op in stream_ops_async(opNames=opNames, look_back=timedelta(days=5), stop_now=True):
+        # logger.info(f"{op.log_str}", extra={**op.log_extra})
+        # print(op.log_str)
+        count += 1
+        if count % 10_000 == 0:
+            logger.info(f"{op.block_num:,} Processed {count:,} operations")
 
 
 # Run the example

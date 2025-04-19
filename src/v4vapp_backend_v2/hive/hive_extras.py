@@ -30,6 +30,16 @@ DEFAULT_GOOD_NODES = [
 
 EXCLUDE_NODES = [
     "https://rpc.mahdiyari.info",
+    # "https://api.hive.blog",
+    # "https://api.deathwing.me",
+    # "https://hive-api.arcange.eu",
+    # "https://api.openhive.network",
+    # "https://techcoderx.com",
+    # "https://api.c0ff33a.uk",
+    # "https://hiveapi.actifit.io",
+    # "https://api.syncad.com",
+    # "https://hive-api.dlux.io",
+    # "https://hive-api.3speak.tv",
 ]
 
 MAX_HIVE_BATCH_SIZE = 25
