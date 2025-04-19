@@ -81,4 +81,4 @@ asyncio_default_fixture_loop_scope = "function"
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
 
 [tool.uv.sources]
-hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch = "brianoflondon/issue4" }
+hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch = "main" }

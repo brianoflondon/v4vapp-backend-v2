@@ -349,7 +349,7 @@ wheels = [
 [[package]]
 name = "hive-nectar"
 version = "0.0.6"
-source = { git = "https://github.com/brianoflondon/hive-nectar.git?branch=brianoflondon%2Fissue4#499e32d4bf4fdb4b0ceb060512998a3a9b451c54" }
+source = { git = "https://github.com/brianoflondon/hive-nectar.git?branch=main#bdec0614724472d22a1014018355a34e7713876f" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -362,6 +362,7 @@ dependencies = [
     { name = "requests" },
     { name = "ruamel-yaml" },
     { name = "scrypt" },
+    { name = "types-requests" },
     { name = "websocket-client" },
 ]
 
@@ -1033,6 +1034,18 @@ wheels = [
 ]
 
 [[package]]
+name = "types-requests"
+version = "2.32.0.20250328"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/7d/eb174f74e3f5634eaacb38031bbe467dfe2e545bc255e5c90096ec46bc46/types_requests-2.32.0.20250328.tar.gz", hash = "sha256:c9e67228ea103bd811c96984fac36ed2ae8da87a36a633964a21f199d60baf32", size = 22995 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/15/3700282a9d4ea3b37044264d3e4d1b1f0095a4ebf860a99914fd544e3be3/types_requests-2.32.0.20250328-py3-none-any.whl", hash = "sha256:72ff80f84b15eb3aa7a8e2625fffb6a93f2ad5a0c20215fc1dcfa61117bcb2a2", size = 20663 },
+]
+
+[[package]]
 name = "types-toml"
 version = "0.10.8.20240310"
 source = { registry = "https://pypi.org/simple" }
@@ -1129,7 +1142,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = "==1.62.0" },
     { name = "grpcio", specifier = ">=1.63.0,<2.0.0" },
     { name = "grpcio-tools", specifier = "==1.62.0" },
-    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?branch=brianoflondon%2Fissue4" },
+    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?branch=main" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "motor", specifier = ">=3.7.0,<4.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
@@ -1149,7 +1162,7 @@ requires-dist = [
 dev = [
     { name = "black", specifier = ">=25.1.0,<26.0.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0.0" },
-    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?branch=brianoflondon%2Fissue4" },
+    { name = "hive-nectar", git = "https://github.com/brianoflondon/hive-nectar.git?branch=main" },
     { name = "mongomock-motor", specifier = ">=0.0.35,<1.0.0" },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
     { name = "pytest", specifier = ">=8.3.4,<9.0.0" },
