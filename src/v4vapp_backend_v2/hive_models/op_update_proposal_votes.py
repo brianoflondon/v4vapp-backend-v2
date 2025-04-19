@@ -91,6 +91,8 @@ class UpdateProposalVotes(OpBase):
             )
         else:
             total_value = 0
+            total_percent = 0
+            total_prop_percent = 0
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
         return (
