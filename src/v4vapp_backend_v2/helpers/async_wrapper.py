@@ -18,9 +18,7 @@ def sync_to_async(
 ) -> Callable[..., Any]:
     executor = thread_pool if not thread_sensitive else None
     is_gen = inspect.isgeneratorfunction(sync_fn)
-    async_fn = _sync_to_async(
-        sync_fn, thread_sensitive=thread_sensitive, executor=executor
-    )
+    async_fn = _sync_to_async(sync_fn, thread_sensitive=thread_sensitive, executor=executor)
 
     if is_gen:
 
@@ -76,23 +74,19 @@ def _next(it: Iterator[T]) -> T:
     except StopIteration:
         raise StopAsyncIteration
     except AttributeError as e:
-        logger.error(
+        logger.exception(
             f"Logging error: {e} - problem with str in log level",
-            extra={"notification": False},
+            extra={"notification": False, "error": e},
         )
         raise StopAsyncIteration
 
     except TypeError as e:
-        logger.warning(
-            f"_next {e}", extra={"notification": False, "error": e}
-        )
+        logger.warning(f"_next {e}", extra={"notification": False, "error": e})
         raise StopAsyncIteration
 
     except ValueError as e:
         if "last_irreversible_block_num is not in" in str(e):
-            logger.warning(
-                "Recurrent Transfer list error", extra={"notification": False}
-            )
+            logger.warning("Recurrent Transfer list error", extra={"notification": False})
             raise StopAsyncIteration
         else:
             logger.warning(f"_next {e}", extra={"notification": False, "error": e})
