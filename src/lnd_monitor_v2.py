@@ -33,6 +33,7 @@ from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Paymen
 INTERNAL_CONFIG = InternalConfig()
 CONFIG = INTERNAL_CONFIG.config
 DATABASE_NAME = "lnd_monitor_v2"
+DATABASE_CONNECTION = CONFIG.default_db_connection
 
 app = typer.Typer()
 
@@ -207,7 +208,7 @@ async def db_store_invoice(
         None
     """
     async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+        db_conn="DATABASE_CONNECTION", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
@@ -241,7 +242,7 @@ async def db_store_payment(
         None
     """
     async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+        db_conn="DATABASE_CONNECTION", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         try:
             payment_pyd = Payment(htlc_event)
@@ -503,7 +504,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
     """
     try:
         async with MongoDBClient(
-            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+            db_conn="DATABASE_CONNECTION", db_name=DATABASE_NAME, db_user="lnd_monitor"
         ) as db_client:
             index_offset = 0
             num_max_invoices = 1000
@@ -574,7 +575,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
     """
     try:
         async with MongoDBClient(
-            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+            db_conn="DATABASE_CONNECTION", db_name=DATABASE_NAME, db_user="lnd_monitor"
         ) as db_client:
             index_offset = 0
             num_max_payments = 1000
@@ -639,7 +640,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
 
 async def get_most_recent_invoice() -> Invoice:
     async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
+        db_conn="DATABASE_CONNECTION", db_name=DATABASE_NAME, db_user="lnd_monitor"
     ) as db_client:
         query = {}
         sort = [("creation_date", -1)]
@@ -737,7 +738,6 @@ async def main_async_start(connection_name: str) -> None:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
         f"Monitoring node: {connection_name}. Version: {CONFIG.version}",
@@ -756,7 +756,6 @@ async def check_for_shutdown():
     # Perform any necessary cleanup here
     # await check_notifications()
     raise asyncio.CancelledError("Docker Shutdown")
-
 
 
 @app.command()

@@ -21,13 +21,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mongo:
+      mongodb:
         image: mongo:8.0
         ports:
-          - "37017:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+          - "27017:27017"
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       redis:
         image: redis:latest
@@ -35,19 +37,35 @@ jobs:
           - "6379:6379"
 
     steps:
+      - name: Clean working directory
+        run: |
+          sudo rm -rf /home/runner/work/v4vapp-backend-v2/v4vapp-backend-v2/tests/config
+          sudo chown -R runner:runner /home/runner/work/v4vapp-backend-v2/v4vapp-backend-v2
+
       - uses: actions/checkout@v4
+
+      - name: Initialize MongoDB Replica Set
+        run: |
+          until docker exec mongodb mongosh --eval 'db.runCommand({ ping: 1 })'; do
+            echo "Waiting for MongoDB..."
+            sleep 2
+          done
+          docker exec mongodb mongosh --eval '
+          rs.initiate({
+            _id: "rs0",
+            members: [{ _id: 0, host: "mongodb:27017" }]
+          });
+          '
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # Install UV
       - name: Install UV
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      # Cache virtual environment
       - name: Cache UV virtual environment
         id: cache-venv
         uses: actions/cache@v4
@@ -55,30 +73,25 @@ jobs:
           path: .venv
           key: uv-venv-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('uv.lock') }}
 
-      # Set up virtual environment and sync dependencies
       - name: Set up UV environment and install dependencies
         if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
           uv venv --python 3.12
           uv sync --group dev
 
-      # Ensure UV is available and sync if cache is hit (to handle minor updates)
       - name: Sync UV dependencies (post-cache)
         run: |
           uv sync --group dev
 
-      # Check UV version
       - name: Check UV version
         run: uv --version
 
-      # List installed packages
       - name: List installed packages
         run: uv pip list
 
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 
-      # Run tests
       - name: Test with pytest
         env:
           HIVE_ACC_TEST: ${{ secrets.HIVE_ACC_TEST }}
@@ -86,11 +99,10 @@ jobs:
         run: |
           uv run pytest
 
-      # Print service container logs only if tests fail
       - name: Print service container logs
         if: failure()
         run: |
           echo "MongoDB logs:"
-          docker logs $(docker ps -q --filter "ancestor=mongo:8.0")
+          docker logs mongodb
           echo "Redis logs:"
-          docker logs $(docker ps -q --filter "ancestor=redis:latest")
+          docker logs redis
