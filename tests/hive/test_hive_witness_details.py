@@ -188,4 +188,4 @@ async def test_get_hive_witness_details_mock_error(mocker):
     # Assertions
     assert witness_details is None
 
-    assert mock_httpx_get.call_count == 1
+    assert mock_httpx_get.call_count == 2

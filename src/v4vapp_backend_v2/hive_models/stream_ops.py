@@ -128,6 +128,7 @@ async def stream_ops_async(
                     last_block = op_base.block_num
 
                 op_in_trx_counter.inc2(op_base)
+                last_block = op_base.block_num
                 yield op_base
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")
@@ -144,9 +145,15 @@ async def stream_ops_async(
                 extra={"notification": False},
             )
         finally:
-            logger.warning(f"Need to restart stream, sleeping for 2 seconds {last_block=:,}")
+            if last_block >= stop_block:
+                logger.info(
+                    f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
+                )
+                break
+            logger.warning(
+                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,}"
+            )
             await asyncio.sleep(2)
-
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):

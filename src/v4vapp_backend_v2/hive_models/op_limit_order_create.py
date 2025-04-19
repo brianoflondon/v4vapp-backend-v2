@@ -108,9 +108,7 @@ class LimitOrderCreate(OpBase):
         receive = self.min_to_receive.fixed_width_str(15)
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
         icon = "📈"
-        return (
-            f"{icon}{rate_str:>8} - {sell} for {receive} {self.owner} created order {self.orderid}"
-        )
+        return f"{icon} {sell} for {receive} {self.owner} created order {self.orderid} {rate_str:>8}"
 
     @property
     def log_str(self) -> str:

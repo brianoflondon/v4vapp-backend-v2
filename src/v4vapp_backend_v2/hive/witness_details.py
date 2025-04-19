@@ -59,39 +59,42 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         shuffled_endpoints = API_ENDPOINTS[:]
         shuffle(shuffled_endpoints)
         for api_url in shuffled_endpoints:
-            url = f"{api_url}/{hive_accname}" if hive_accname else api_url
-            async with httpx.AsyncClient() as client:
-                response = await fetch_witness_details(client, url)
-                response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
+            try:
+                url = f"{api_url}/{hive_accname}" if hive_accname else api_url
+                async with httpx.AsyncClient() as client:
+                    response = await fetch_witness_details(client, url)
+                    response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
 
-                answer = response.json()
-                # Cache the result in Redis
-                try:
-                    async with V4VAsyncRedis() as redis_client:
-                        await redis_client.setex(
-                            name=cache_key, value=json.dumps(answer), time=1800
-                        )
-                except Exception as redis_error:
-                    logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
+                    answer = response.json()
+                    # Cache the result in Redis
+                    try:
+                        async with V4VAsyncRedis() as redis_client:
+                            await redis_client.setex(
+                                name=cache_key, value=json.dumps(answer), time=1800
+                            )
+                    except Exception as redis_error:
+                        logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
 
-                return WitnessDetails.model_validate(answer)
+                    return WitnessDetails.model_validate(answer)
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    f"API returned status {e.response.status_code} for {url}",
+                    extra={"notification": False, "error": e},
+                )
+            except httpx.ConnectError as e:
+                logger.error(
+                    f"Connection failed to {url}: {e}", extra={"notification": False, "error": e}
+                )
+            except httpx.ConnectTimeout as e:
+                logger.warning(
+                    f"Connection timeout to {url}: {e}", extra={"notification": False, "error": e}
+                )
+            except ValueError as e:
+                logger.warning(
+                    f"Failed to parse JSON response from {url}",
+                    extra={"notification": False, "error": e},
+                )
 
-    except httpx.ConnectError as e:
-        logger.error(f"Connection failed to {url}: {e}", extra={"notification": False, "error": e})
-    except httpx.ConnectTimeout as e:
-        logger.warning(
-            f"Connection timeout to {url}: {e}", extra={"notification": False, "error": e}
-        )
-    except httpx.HTTPStatusError as e:
-        logger.warning(
-            f"API returned status {e.response.status_code} for {url}",
-            extra={"notification": False, "error": e},
-        )
-    except ValueError as e:
-        logger.warning(
-            f"Failed to parse JSON response from {url}",
-            extra={"notification": False, "error": e},
-        )
     except Exception as e:
         logger.exception(
             f"Unexpected error fetching witness details from {url}: {e}",
