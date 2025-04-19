@@ -94,13 +94,13 @@ class UpdateProposalVotes(OpBase):
         prop_id_sections = ", ".join(prop_id_sections)
 
         voter_details = self.prop_voter_details.get(str(self.proposal_ids[0]), None)
+        if voter_details:
+            vote_value = f"{voter_details.vote_value:,.0f} HP"
+        else:
+            vote_value = "unknown"
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
-        return (
-            f"👁️ {self.block_num:,} {voter} "
-            f"{voted_for} {prop_id_sections} "
-            f"with {voter_details.vote_value:,.0f} HP "
-        )
+        return f"👁️ {self.block_num:,} {voter} {voted_for} {prop_id_sections} with {vote_value}"
 
     @property
     def is_tracked(self):
