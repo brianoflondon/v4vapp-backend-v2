@@ -144,7 +144,9 @@ async def stream_ops_async(
                 extra={"notification": False},
             )
         finally:
-            logger.warning(f"Need to restart stream, sleeping for 2 seconds {last_block=:,}")
+            logger.warning(
+                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,}"
+            )
             await asyncio.sleep(2)
 
 
