@@ -10,6 +10,7 @@ from v4vapp_backend_v2.hive.voting_power import VoterDetails, VotingPower
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
+
 # TODO: this needs a complete rething for multiple prop ids
 class UpdateProposalVotes(OpBase):
     """
@@ -81,25 +82,24 @@ class UpdateProposalVotes(OpBase):
             str: The common log string.
         """
         voted_for = "voted for" if self.approve else "unvoted"
-        if self.prop_voter_details:
-            total_value = sum(detail.total_value for detail in self.prop_voter_details.values())
-            total_percent = sum(
-                detail.total_percent for detail in self.prop_voter_details.values()
-            )
-            total_prop_percent = sum(
-                detail.prop_percent for detail in self.prop_voter_details.values()
-            )
-        else:
-            total_value = 0
-            total_percent = 0
-            total_prop_percent = 0
+
+        prop_id_sections = []
+        for prop_id in self.proposal_ids:
+            details = self.prop_voter_details.get(str(prop_id), None)
+            if details:
+                total_percent = details.total_percent * 100
+                prop_percent = details.prop_percent * 100
+                prop_id_sections.append(f"{prop_id} {prop_percent:.2f}% ({total_percent:.1f}%)")
+
+        prop_id_sections = ", ".join(prop_id_sections)
+
+        voter_details = self.prop_voter_details.get(str(self.proposal_ids[0]), None)
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
         return (
             f"👁️ {self.block_num:,} {voter} "
-            f"{voted_for} {self.proposal_ids} "
-            f"with {total_value:,.0f} HP "
-            f"{total_percent:,.2f} % ({total_prop_percent:,.2f})"
+            f"{voted_for} {prop_id_sections} "
+            f"with {voter_details.vote_value:,.0f} HP "
         )
 
     @property
