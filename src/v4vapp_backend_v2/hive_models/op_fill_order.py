@@ -46,11 +46,11 @@ class FillOrder(OpBase):
         rate_str = f"{rate:.3f}"  # HIVE/HBD
         icon = "📈"
         self.log_internal = (
-            f"{icon}{rate_str:>8} - "
+            f"{icon} "
             f"{current_pays_str} --> {open_pays_str} "
             f"{self.open_owner} filled order for "
             f"{self.current_owner} "
-            f"{check_str}"
+            f"{check_str} {rate_str:>8}"
         )
         return self.log_internal
 
@@ -72,13 +72,11 @@ class FillOrder(OpBase):
 
     @property
     def log_str(self) -> str:
-        ans = self._log_internal()
-        return f"{ans} {self.link}"
+        return f"{self._log_internal()} {self.link}"
 
     @property
     def notification_str(self) -> str:
-        ans = self._log_internal()
-        return f"{ans} {self.markdown_link}"
+        return f"{self._log_internal()} {self.markdown_link}"
 
     def check_open_orders(self) -> str:
         """

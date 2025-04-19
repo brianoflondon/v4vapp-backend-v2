@@ -70,8 +70,7 @@ class UpdateProposalVotes(OpBase):
             except Exception as e:
                 logger.info(f"Error setting cache for {cache_key}: {e}")
 
-    @property
-    def log_common(self):
+    def _log_common(self, mardown: bool = False) -> str:
         """
         Generates a common log string for the operation.
 
@@ -92,8 +91,10 @@ class UpdateProposalVotes(OpBase):
             )
         else:
             total_value = 0
+
+        voter = f"{self.voter}" if mardown else f"{self.voter.markdown_link:<20}"
         return (
-            f"👁️ {self.block_num:,} {self.voter} "
+            f"👁️ {self.block_num:,} {voter} "
             f"{voted_for} {self.proposal_ids} "
             f"with {total_value:,.0f} HP "
             f"{total_percent:,.2f} % ({total_prop_percent:,.2f})"
@@ -107,8 +108,8 @@ class UpdateProposalVotes(OpBase):
 
     @property
     def log_str(self) -> str:
-        return f"{self.log_common} {self.link}"
+        return f"{self._log_common()} {self.link}"
 
     @property
     def notification_str(self) -> str:
-        return f"{self.log_common} {self.markdown_link} {self.voter.markdown_link}"
+        return f"{self._log_common(True)} {self.markdown_link} {self.voter.markdown_link}"
