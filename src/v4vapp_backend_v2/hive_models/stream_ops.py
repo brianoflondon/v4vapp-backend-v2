@@ -143,6 +143,10 @@ async def stream_ops_async(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
                 extra={"notification": False},
             )
+        finally:
+            logger.warning(f"Need to restart stream, sleeping for 2 seconds {last_block=:,}")
+            await asyncio.sleep(2)
+
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
@@ -174,7 +178,10 @@ async def main() -> None:
 if __name__ == "__main__":
     asyncio.run(main())
 
-
+# This was caused by the comparison in the While loop which was failing to get the current block.
+# that code was unecessary and was removed.
+#
+#
 # hive-monitor-1     | 2025-04-19T03:02:14+0000.631 INFO     crypto_prices             243 : Quotes fetched successfully in 0.55 seconds
 # hive-monitor-1     | 2025-04-19T03:02:14+0000.632 INFO     stream_ops                 99 : Starting Hive scanning at 95,152,388 2025-04-18 19:35:40.730920+00:00 Ending at 2,147,483,647
 # hive-monitor-1     | 2025-04-19T03:02:27+0000.118 WARNING  async_wrapper             101 : _next Already waited 9 s

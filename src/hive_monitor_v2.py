@@ -225,7 +225,7 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
             if ans:
                 time_diff = check_time_diff(ans["timestamp"])
                 logger.info(
-                    f"{icon} Last good block: {ans['block_num']} "
+                    f"{icon} Last good block: {ans['block_num']:,} "
                     f"{ans['timestamp']} {time_diff} ago",
                     extra={"db": ans},
                 )
