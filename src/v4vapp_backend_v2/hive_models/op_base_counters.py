@@ -147,7 +147,7 @@ class BlockCounter:
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"blocks processed in: {last_marker_time_str} "
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
-                    f"running time: {format_time_delta(running_time)}",
+                    f"running time: {format_time_delta(running_time)} "
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
                         "notification": notification,
