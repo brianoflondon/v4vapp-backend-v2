@@ -100,7 +100,7 @@ def _next(it: Iterator[T]) -> T:
     except Exception as e:
         logger.warning(f"_next {e}", extra={"notification": False, "error": e})
         logger.exception(e, extra={"notification": False})
-        raise StopAsyncIteration
+        raise e
 
 
 next_async = sync_to_async(_next, thread_sensitive=False)

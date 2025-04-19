@@ -78,12 +78,12 @@ async def stream_ops_async(
         max_batch_size = None
 
     if stop_now:
-        stop_block = current_block
+        stop_block = current_block + 10
     else:
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
     last_block = start_block
-    while last_block < stop_block and last_block < blockchain.get_current_block_num():
+    while last_block < stop_block:
         await OpBase.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
@@ -132,16 +132,17 @@ async def stream_ops_async(
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")
             return
-        except StopAsyncIteration:
-            return
+        except StopAsyncIteration as e:
+            logger.error(
+                f"{start_block:,} StopAsyncIteration in block_stream stopped unexpectedly: {e}"
+            )
         except TypeError as e:
-            logger.warning(f"{start_block:,} Error in block_stream: {e} restarting")
+            logger.warning(f"{start_block:,} TypeError in block_stream: {e} restarting")
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
                 extra={"notification": False},
             )
-    return
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
@@ -172,3 +173,36 @@ async def main() -> None:
 # Run the example
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+# hive-monitor-1     | 2025-04-19T03:02:14+0000.631 INFO     crypto_prices             243 : Quotes fetched successfully in 0.55 seconds
+# hive-monitor-1     | 2025-04-19T03:02:14+0000.632 INFO     stream_ops                 99 : Starting Hive scanning at 95,152,388 2025-04-18 19:35:40.730920+00:00 Ending at 2,147,483,647
+# hive-monitor-1     | 2025-04-19T03:02:27+0000.118 WARNING  async_wrapper             101 : _next Already waited 9 s
+# hive-monitor-1     | 2025-04-19T03:02:27+0000.118 ERROR    async_wrapper             102 : Already waited 9 s
+# hive-monitor-1     | Traceback (most recent call last):
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 730, in wait_for_and_get_block
+# hive-monitor-1     |     block = Block(
+# hive-monitor-1     |             ^^^^^^
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/block.py", line 73, in __init__
+# hive-monitor-1     |     super(Block, self).__init__(
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchainobject.py", line 132, in __init__
+# hive-monitor-1     |     self.refresh()
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/block.py", line 189, in refresh
+# hive-monitor-1     |     raise BlockDoesNotExistsException(
+# hive-monitor-1     | nectar.exceptions.BlockDoesNotExistsException: output: {} of identifier 95152390
+# hive-monitor-1     |
+# hive-monitor-1     | During handling of the above exception, another exception occurred:
+# hive-monitor-1     |
+# hive-monitor-1     | Traceback (most recent call last):
+# hive-monitor-1     |   File "/app/src/v4vapp_backend_v2/helpers/async_wrapper.py", line 75, in _next
+# hive-monitor-1     |     return next(it)
+# hive-monitor-1     |            ^^^^^^^^
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 856, in stream
+# hive-monitor-1     |     for block in self.blocks(**kwargs):
+# hive-monitor-1     |                  ^^^^^^^^^^^^^^^^^^^^^
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 659, in blocks
+# hive-monitor-1     |     block = self.wait_for_and_get_block(
+# hive-monitor-1     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 740, in wait_for_and_get_block
+# hive-monitor-1     |     raise BlockWaitTimeExceeded(
+# hive-monitor-1     | nectar.exceptions.BlockWaitTimeExceeded: Already waited 9 s
