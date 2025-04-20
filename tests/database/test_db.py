@@ -131,7 +131,21 @@ async def test_get_collection(set_base_config_path: None):
         collection = await test_client.get_collection("startup_collection")
         ans = await collection.find_one({"startup": "complete"})
         assert ans is not None
-    await drop_collection_and_user("conn_1", "test_db2", "test_user2")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_get_timeseries(set_base_config_path: None):
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        collection = await test_client.get_collection("rates")
+        ans = await collection.insert_one(
+            {"timestamp": datetime.now(tz=timezone.utc), "rate": "hive_sats", "value": 350}
+        )
+        assert ans is not None
+        ans2 = await collection.find_one({"rate": "hive_sats"})
+        assert ans2 is not None
+        assert ans2["value"] == 350
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
 @pytest.mark.asyncio

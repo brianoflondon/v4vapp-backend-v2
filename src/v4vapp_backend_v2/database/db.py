@@ -14,7 +14,7 @@ from pymongo.errors import (
 )
 from pymongo.results import DeleteResult, UpdateResult
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, TimeseriesConfig, logger
 
 
 class MongoDBStatus(StrEnum):
@@ -355,6 +355,17 @@ class MongoDBClient:
                             )
                         except Exception as ex:
                             logger.error(ex)
+            elif collection_config and isinstance(collection_config, TimeseriesConfig):
+                try:
+                    await self.db.create_collection(
+                        collection_name,
+                        timeseries=collection_config.model_dump(),
+                    )
+                    logger.info(
+                        f"{DATABASE_ICON} Created time series collection {collection_name}"
+                    )
+                except Exception as ex:
+                    logger.error(ex)
 
     def _check_index_exists(self, indexes, index_name):
         for index in indexes:
