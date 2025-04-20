@@ -29,7 +29,8 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        # Add options to enable replica set
+        # Add command to enable replica set
+        command: mongod --replSet rsPytest
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 10s
