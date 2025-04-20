@@ -21,19 +21,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mongo:
-        image: mongo:8.0
-        ports:
-          - "37017:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-        options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       redis:
         image: redis:latest
         ports:
@@ -80,28 +67,15 @@ jobs:
       - name: List installed packages
         run: uv pip list
 
-      # Initialize MongoDB as a replica set
-      - name: Initialize MongoDB Replica Set
-        run: |
-          # Wait for MongoDB to be ready
-          until docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh --eval "db.runCommand({ ping: 1 })"; do
-            echo "Waiting for MongoDB to be ready..."
-            sleep 2
-          done
-          # Stop the default mongod process
-          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") pkill mongod
-          # Start mongod with --replSet rsPytest
-          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongod --replSet rsPytest --bind_ip_all &
-          # Wait for mongod to restart
-          until docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh --eval "db.runCommand({ ping: 1 })"; do
-            echo "Waiting for MongoDB to restart with replica set..."
-            sleep 2
-          done
-          # Initialize replica set
-          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh -u admin -p test-admin-password --eval 'rs.initiate({
-            _id: "rsPytest",
-            members: [{ _id: 0, host: "localhost:27017" }]
-          })'
+      # Start MongoDB with replica set
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.12.0
+        with:
+          mongodb-version: '8.0'
+          mongodb-replica-set: rsPytest
+          mongodb-port: 37017
+          mongodb-username: admin
+          mongodb-password: test-admin-password
 
       # Set PYTHONPATH
       - name: Set PYTHONPATH
