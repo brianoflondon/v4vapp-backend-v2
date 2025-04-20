@@ -6,7 +6,12 @@ from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
-from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
+from pymongo.errors import (
+    ConnectionFailure,
+    DuplicateKeyError,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 from pymongo.results import DeleteResult, UpdateResult
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -130,6 +135,7 @@ class MongoDBClient:
         """
         self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
+        self.first_health_check = MongoDBStatus.UNKNOWN
         self.db = None
         self.client = None
         self.error = None
@@ -359,9 +365,19 @@ class MongoDBClient:
         while True:
             try:
                 count += 1
-                self.client = AsyncIOMotorClient(self.uri, tz_aware=True, **self.kwargs)
+                self.client = AsyncIOMotorClient(
+                    self.uri,
+                    tz_aware=True,
+                    serverSelectionTimeoutMS=500,  # 5 seconds timeout for server selection
+                    socketTimeoutMS=10000,  # 10 seconds timeout for socket operations
+                    **self.kwargs,
+                )
                 self.admin_client = AsyncIOMotorClient(
-                    self.admin_uri, tz_aware=True, **self.kwargs
+                    self.admin_uri,
+                    tz_aware=True,
+                    serverSelectionTimeoutMS=500,  # 5 seconds timeout for server selection
+                    socketTimeoutMS=10000,  # 10 seconds timeout for socket operations
+                    **self.kwargs,
                 )
                 ans = await self.admin_client["admin"].command("ping")
                 assert ans.get("ok") == 1
@@ -384,6 +400,9 @@ class MongoDBClient:
                         "id_self": self.hex_id,
                     },
                 )
+                if self.first_health_check == MongoDBStatus.UNKNOWN:
+                    self.first_health_check = MongoDBStatus.VALIDATED
+
                 self.health_check = MongoDBStatus.CONNECTED
                 if count > 1:
                     logger.warning(
@@ -396,7 +415,12 @@ class MongoDBClient:
                     )
                 return
 
-            except (ConnectionFailure, OperationFailure, Exception) as e:
+            except (
+                ConnectionFailure,
+                OperationFailure,
+                ServerSelectionTimeoutError,
+                Exception,
+            ) as e:
                 error_code = e.code if hasattr(e, "code") else type(e).__name__
                 logger.error(
                     f"Attempt {count} Failed to connect to MongoDB: {e}",
@@ -409,6 +433,9 @@ class MongoDBClient:
                 self.client = None
                 self.db = None
                 self.health_check = MongoDBStatus.ERROR
+                # Only retry if we have ever connected to stop retrys
+                if self.first_health_check != MongoDBStatus.VALIDATED:
+                    raise e
                 # give me a sleep time which is 1 + count * 2 or 30
                 if not self.retry or count > 20:
                     raise e
