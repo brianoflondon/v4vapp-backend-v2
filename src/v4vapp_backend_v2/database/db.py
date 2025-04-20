@@ -376,7 +376,7 @@ class MongoDBClient:
         count = 0
         while True:
             if "serverSelectionTimeoutMS" not in self.kwargs:
-                self.kwargs["serverSelectionTimeoutMS"] = 2000
+                self.kwargs["serverSelectionTimeoutMS"] = 10000
             if "socketTimeoutMS" not in self.kwargs:
                 self.kwargs["socketTimeoutMS"] = 10000
 
