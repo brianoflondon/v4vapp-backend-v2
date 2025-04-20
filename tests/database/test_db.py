@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,9 +15,7 @@ os.environ["TESTING"] = "True"
 @pytest.fixture()
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -70,9 +69,7 @@ async def test_mongodb_client_bad_uri(set_base_config_path: None):
         ConnectionFailure: If the connection to the MongoDB instance fails.
     """
     with pytest.raises(ConnectionFailure) as e:
-        async with MongoDBClient(
-            "conn_bad", serverSelectionTimeoutMS=50, retry=False
-        ) as _:
+        async with MongoDBClient("conn_bad", serverSelectionTimeoutMS=50, retry=False) as _:
             print("conn bad")
             pass
     assert e
@@ -101,19 +98,13 @@ async def test_mongodb_client_local(set_base_config_path: None):
         collections = []
         async for collection in cursor:
             collections.append(collection)
-        assert "startup_collection" in [
-            collection["name"] for collection in collections
-        ]
-        find_1 = await test_client.find_one(
-            "startup_collection", {"startup": "complete"}
-        )
+        assert "startup_collection" in [collection["name"] for collection in collections]
+        find_1 = await test_client.find_one("startup_collection", {"startup": "complete"})
 
     # Run a second time to check that the database and user already exist
     async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         assert test_client is not None
-        find_2 = await test_client.find_one(
-            "startup_collection", {"startup": "complete"}
-        )
+        find_2 = await test_client.find_one("startup_collection", {"startup": "complete"})
     # Second run doesn't change the startup
     assert find_1 == find_2
     await drop_collection_and_user("conn_1", "test_db", "test_user")
@@ -152,13 +143,9 @@ async def test_insert_one_find_one(set_base_config_path: None):
             {collection_name: "test", "timestamp": datetime.now(tz=timezone.utc)},
         )
         assert insert_ans is not None
-        find_one_ans = await test_client.find_one(
-            collection_name, {collection_name: "test"}
-        )
+        find_one_ans = await test_client.find_one(collection_name, {collection_name: "test"})
         assert find_one_ans is not None
-        find_one_fail_ans = await test_client.find_one(
-            collection_name, {collection_name: "fail"}
-        )
+        find_one_fail_ans = await test_client.find_one(collection_name, {collection_name: "fail"})
         assert find_one_fail_ans is None
     await drop_collection_and_user("conn_1", "test_db2", "test_user2")
 
@@ -176,13 +163,9 @@ async def test_update_one_delete_one(set_base_config_path: None):
             collection_name, {collection_name: "test"}, {collection_name: "updated"}
         )
         assert update_ans is not None
-        find_one_ans = await test_client.find_one(
-            collection_name, {collection_name: "updated"}
-        )
+        find_one_ans = await test_client.find_one(collection_name, {collection_name: "updated"})
         assert find_one_ans is not None
-        delete_ans = await test_client.delete_one(
-            collection_name, {collection_name: "updated"}
-        )
+        delete_ans = await test_client.delete_one(collection_name, {collection_name: "updated"})
         assert delete_ans is not None
     await drop_collection_and_user("conn_1", "test_db2", "test_user2")
 
@@ -193,9 +176,7 @@ async def test_fill_database_with_data_index_test(set_base_config_path: None):
     async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         collection_name = "index_test"
         index_key = [("timestamp", -1), ("field_1", 1)]
-        test_client.db[collection_name].create_index(
-            keys=index_key, name="timestamp", unique=True
-        )
+        test_client.db[collection_name].create_index(keys=index_key, name="timestamp", unique=True)
         for i in range(10):
             data = {
                 "field_1": f"test_{i}",
@@ -237,9 +218,7 @@ async def test_find(set_base_config_path: None):
     async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         collection_name = "index_test"
         index_key = [("timestamp", -1), ("field_1", 1)]
-        test_client.db[collection_name].create_index(
-            keys=index_key, name="timestamp", unique=True
-        )
+        test_client.db[collection_name].create_index(keys=index_key, name="timestamp", unique=True)
         insert_items = 10
         for i in range(insert_items):
             data = {
@@ -256,7 +235,12 @@ async def test_find(set_base_config_path: None):
         async for _ in cursor:
             count += 1
         assert count == insert_items
-    await drop_collection_and_user("conn_1", "test_db", "test_user")
+        await asyncio.sleep(1)
+        ans = await test_client.db.drop_collection(collection_name)
+        assert ans.get("ok") == 1
+        ans = await test_client.drop_user()
+        assert ans.get("ok") == 1
+        await test_client.drop_database("test_db")
 
 
 @pytest.mark.asyncio
@@ -301,9 +285,7 @@ async def test_interrupted_insert_one(set_base_config_path: None, mocker):
                     print(f"WriteConcernError: {e}")
                     retries += 1
                 if retries == 3:
-                    mocker.patch.object(
-                        test_client, "insert_one", side_effect=original_insert_one
-                    )
+                    mocker.patch.object(test_client, "insert_one", side_effect=original_insert_one)
 
         cursor = test_client.db[collection_name].find({})
         count = 0
