@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - feature/single-mongo-instance-which-acts-like-a-replica-set-for-pytest-and-local-testing
     tags:
       - "v*"
   pull_request:
