@@ -197,7 +197,6 @@ class MongoDBClient:
                 error=f"No password for user {self.db_user} in {self.db_name}",
                 code=DbErrorCode.NO_PASSWORD,
             )
-        logger.info(f"User {self.db_user} validated in database {self.db_name}.")
 
     @property
     def hex_id(self):
@@ -254,7 +253,6 @@ class MongoDBClient:
             replica_set = f"&replicaSet={self.db_connection.replica_set}"
         else:
             replica_set = ""
-        logger.info(f"Constructed MongoDB URI for user {db_user} and database {db_name}.")
         return f"mongodb://{db_user}{db_password}{self.hosts}/{auth_source}{replica_set}"
 
     async def _check_create_db(self):
@@ -378,7 +376,7 @@ class MongoDBClient:
         count = 0
         while True:
             if "serverSelectionTimeoutMS" not in self.kwargs:
-                self.kwargs["serverSelectionTimeoutMS"] = 500
+                self.kwargs["serverSelectionTimeoutMS"] = 2000
             if "socketTimeoutMS" not in self.kwargs:
                 self.kwargs["socketTimeoutMS"] = 10000
 
