@@ -377,20 +377,21 @@ class MongoDBClient:
         error_code = ""
         count = 0
         while True:
+            if "serverSelectionTimeoutMS" not in self.kwargs:
+                self.kwargs["serverSelectionTimeoutMS"] = 500
+            if "socketTimeoutMS" not in self.kwargs:
+                self.kwargs["socketTimeoutMS"] = 10000
+
             try:
                 count += 1
                 self.client = AsyncIOMotorClient(
                     self.uri,
                     tz_aware=True,
-                    serverSelectionTimeoutMS=500,  # 5 seconds timeout for server selection
-                    socketTimeoutMS=10000,  # 10 seconds timeout for socket operations
                     **self.kwargs,
                 )
                 self.admin_client = AsyncIOMotorClient(
                     self.admin_uri,
                     tz_aware=True,
-                    serverSelectionTimeoutMS=500,  # 5 seconds timeout for server selection
-                    socketTimeoutMS=10000,  # 10 seconds timeout for socket operations
                     **self.kwargs,
                 )
                 ans = await self.admin_client["admin"].command("ping")
