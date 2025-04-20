@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - develop
-      - feature/single-mongo-instance-which-acts-like-a-replica-set-for-pytest-and-local-testing
     tags:
       - "v*"
   pull_request:
@@ -34,9 +33,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --entrypoint mongod
-          --replSet rsPytest
-          # Enable replica set with rsPytest
 
       redis:
         image: redis:latest
@@ -90,6 +86,15 @@ jobs:
           # Wait for MongoDB to be ready
           until docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh --eval "db.runCommand({ ping: 1 })"; do
             echo "Waiting for MongoDB to be ready..."
+            sleep 2
+          done
+          # Stop the default mongod process
+          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") pkill mongod
+          # Start mongod with --replSet rsPytest
+          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongod --replSet rsPytest --bind_ip_all &
+          # Wait for mongod to restart
+          until docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh --eval "db.runCommand({ ping: 1 })"; do
+            echo "Waiting for MongoDB to restart with replica set..."
             sleep 2
           done
           # Initialize replica set
