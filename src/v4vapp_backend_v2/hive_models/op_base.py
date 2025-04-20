@@ -7,6 +7,7 @@ from nectar import Hive
 from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
@@ -213,6 +214,7 @@ class OpBase(BaseModel):
     proposals_tracked: ClassVar[List[int]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     hive_inst: ClassVar[Hive] = None
+    db_client: ClassVar[MongoDBClient] = None
 
     def __init__(self, **data):
         super().__init__(**data)
