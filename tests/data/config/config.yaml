@@ -79,7 +79,7 @@ db_connections:
       admin: # The Database name
         db_users:
           admin:
-            password: test-admin-password
+            password: test-admin-password     # This will be ignored if replica set is called rsPytest
             roles:
               - root
 

@@ -92,7 +92,7 @@ class CollectionConfig(BaseConfig):
 
 
 class DatabaseUserConfig(BaseConfig):
-    password: str
+    password: str = ""
     roles: List[str]
 
 
