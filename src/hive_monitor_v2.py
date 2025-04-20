@@ -133,11 +133,7 @@ async def db_store_op(
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
-        async with MongoDBClient(
-            db_conn=HIVE_DATABASE_CONNECTION,
-            db_name=HIVE_DATABASE,
-            db_user=HIVE_DATABASE_USER,
-        ) as db_client:
+        async with OpBase.db_client as db_client:
             if op.realm == OpRealm.MARKER:
                 query = {"realm": OpRealm.MARKER, "trx_id": op.trx_id}
             else:
@@ -215,11 +211,7 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
         int: The last good block.
     """
     try:
-        async with MongoDBClient(
-            db_conn=HIVE_DATABASE_CONNECTION,
-            db_name=HIVE_DATABASE,
-            db_user=HIVE_DATABASE_USER,
-        ) as db_client:
+        async with OpBase.db_client as db_client:
             ans = await db_client.find_one(
                 collection_name=collection, query={}, sort=[("block_num", -1)]
             )
@@ -260,11 +252,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
-    async with MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    ) as db_client:
+    async with OpBase.db_client as db_client:
         last_good_event = await db_client.find_one(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
@@ -326,11 +314,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         timedelta: The average block time for the specified witness.
     """
     count_back = 10
-    async with MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    ) as db_client:
+    async with OpBase.db_client as db_client:
         cursor = await db_client.find(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
@@ -386,6 +370,11 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
     logger.info(f"{icon} Combined Loop Watching users: {watch_users} and witness {watch_witness}")
     OpBase.watch_users = watch_users
     OpBase.proposals_tracked = [303, 342]
+    OpBase.db_client = MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    )
 
     producer_reward = await witness_first_run(watch_witness)
     last_witness_timestamp = producer_reward.timestamp
@@ -491,7 +480,9 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     asyncio.create_task(db_store_op(op))
 
                 if isinstance(op, UpdateProposalVotes):
-                    notification = True if op.is_tracked else False
+                    if op.is_tracked:
+                        notification = True
+                        asyncio.create_task(db_store_op(op))
                     op.get_voter_details()
                     logger.info(
                         f"{icon} {op.log_str}",
@@ -501,7 +492,6 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                             **op.log_extra,
                         },
                     )
-                    asyncio.create_task(db_store_op(op))
 
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)

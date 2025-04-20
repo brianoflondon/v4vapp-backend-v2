@@ -133,6 +133,7 @@ class MongoDBClient:
         Returns:
             None
         """
+        logger.info(f"{DATABASE_ICON} Initializing MongoDBClient {db_conn}")
         self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.first_health_check = MongoDBStatus.UNKNOWN
@@ -245,7 +246,9 @@ class MongoDBClient:
             db_user = ""
             auth_source = ""
         elif db_name == "admin":
-            db_password = ":" + self.db_connection.admin_dbs["admin"].db_users["admin"].password + "@"
+            db_password = (
+                ":" + self.db_connection.admin_dbs["admin"].db_users["admin"].password + "@"
+            )
         else:
             db_password = ":" + self.db_password + "@"
 
@@ -379,7 +382,14 @@ class MongoDBClient:
                 self.kwargs["serverSelectionTimeoutMS"] = 10000
             if "socketTimeoutMS" not in self.kwargs:
                 self.kwargs["socketTimeoutMS"] = 10000
-
+            if (
+                self.first_health_check == MongoDBStatus.UNKNOWN
+                and not self.client
+                and self.health_check != MongoDBStatus.CONNECTED
+            ):
+                logger.info(
+                    f"{DATABASE_ICON} Attempting to connect to MongoDB for the first time or after failure."
+                )
             try:
                 count += 1
                 self.client = AsyncIOMotorClient(
@@ -400,7 +410,7 @@ class MongoDBClient:
                 if self.db_name not in database_names or self.db_user not in database_users:
                     await self._check_create_db()
                 await self._check_indexes()
-                logger.debug(
+                logger.info(
                     f"{DATABASE_ICON} "
                     f"Connected to MongoDB {self.db_name} "
                     f"after {timer() - self.start_connection:.3f}s "
@@ -458,7 +468,7 @@ class MongoDBClient:
     async def disconnect(self):
         if self.client:
             time_connected = timer() - self.start_connection
-            logger.debug(
+            logger.info(
                 f"{DATABASE_ICON} "
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
                 f"{self.hex_id}",
@@ -568,7 +578,8 @@ class MongoDBClient:
         return ans
 
     async def __aenter__(self):
-        await self.connect()
+        if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
+            await self.connect()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
