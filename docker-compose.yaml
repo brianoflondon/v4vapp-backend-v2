@@ -9,23 +9,36 @@ services:
       - ./config:/app/config
 
   mongo-pytest-local:
+    # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
+    # to both be resolvable at the same time. This is a nightmare.
+    # That is why it is vital that the port 37017 be used internally in the docker container and
+    # externally on the host. This allows the same 127.0.0.1:37017 address to work both within the
+    # docker container and externally on the host.
     image: mongo:8.0
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-    # command: ["mongod", "--replSet", "rs0"]  # Enable replica set mode
+    command: >
+      bash -c "
+        mongod --replSet rsPytest --bind_ip_all --port 37017 &
+        sleep 10 &&
+        mongosh --port 37017 --eval 'rs.initiate({
+          _id: \"rsPytest\",
+          members: [{ _id: 0, host: \"127.0.0.1:37017\" }]
+        })' &&
+        wait
+      "
     ports:
-      - "127.0.0.1:37017:27017"  # Expose container's 27017 on host port 37017
-      - "${LOCAL_TAILSCALE_IP}:37017:27017"   # Needed on home-imac
+      - "127.0.0.1:37017:37017"
+      - "${LOCAL_TAILSCALE_IP}:37017:37017"
     healthcheck:
-      test: ["CMD", "mongosh", "--username", "admin", "--password", "test-admin-password", "--eval", "db.runCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    # volumes:
-    #   - mongo_data:/data/db
-    #   - mongo_config:/data/configdb
+    networks:
+      - v4vapp-backend
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
 
   redis-pytest-local:
     image: redis:latest
