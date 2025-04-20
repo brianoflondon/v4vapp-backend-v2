@@ -6,7 +6,12 @@ from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
-from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
+from pymongo.errors import (
+    ConnectionFailure,
+    DuplicateKeyError,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 from pymongo.results import DeleteResult, UpdateResult
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -130,6 +135,7 @@ class MongoDBClient:
         """
         self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
+        self.first_health_check = MongoDBStatus.UNKNOWN
         self.db = None
         self.client = None
         self.error = None
@@ -162,6 +168,11 @@ class MongoDBClient:
                 error=f"Database Connection {self.db_conn} not found",
                 code=DbErrorCode.NO_CONNECTION,
             )
+        except Exception as e:
+            raise OperationFailure(
+                error=f"Error in database connection {self.db_conn}: {e}",
+                code=DbErrorCode.NO_CONNECTION,
+            )
 
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
@@ -178,7 +189,10 @@ class MongoDBClient:
                 error=f"No database {self.db_name}",
                 code=DbErrorCode.NO_USER,
             )
-        if not bool(self.dbs[self.db_name].db_users[self.db_user].password):
+        if (
+            not bool(self.dbs[self.db_name].db_users[self.db_user].password)
+            and not self.db_connection.replica_set == "rsPytest"
+        ):
             raise OperationFailure(
                 error=f"No password for user {self.db_user} in {self.db_name}",
                 code=DbErrorCode.NO_PASSWORD,
@@ -225,17 +239,21 @@ class MongoDBClient:
         """
         db_name = self.db_name if not db_name else db_name
         db_user = self.db_user if not db_user else db_user
-        if db_name == "admin":
-            db_password = self.db_connection.admin_dbs["admin"].db_users["admin"].password
+        auth_source = f"?authSource={db_name}"
+        if self.db_connection.replica_set == "rsPytest":
+            db_password = ""
+            db_user = ""
+            auth_source = ""
+        elif db_name == "admin":
+            db_password = ":" + self.db_connection.admin_dbs["admin"].db_users["admin"].password + "@"
         else:
-            db_password = self.db_password
+            db_password = ":" + self.db_password + "@"
 
         if self.db_connection.replica_set:
             replica_set = f"&replicaSet={self.db_connection.replica_set}"
         else:
             replica_set = ""
-        auth_source = f"?authSource={db_name}"
-        return f"mongodb://{db_user}:{db_password}@{self.hosts}/{auth_source}{replica_set}"
+        return f"mongodb://{db_user}{db_password}{self.hosts}/{auth_source}{replica_set}"
 
     async def _check_create_db(self):
         """
@@ -357,11 +375,22 @@ class MongoDBClient:
         error_code = ""
         count = 0
         while True:
+            if "serverSelectionTimeoutMS" not in self.kwargs:
+                self.kwargs["serverSelectionTimeoutMS"] = 10000
+            if "socketTimeoutMS" not in self.kwargs:
+                self.kwargs["socketTimeoutMS"] = 10000
+
             try:
                 count += 1
-                self.client = AsyncIOMotorClient(self.uri, tz_aware=True, **self.kwargs)
+                self.client = AsyncIOMotorClient(
+                    self.uri,
+                    tz_aware=True,
+                    **self.kwargs,
+                )
                 self.admin_client = AsyncIOMotorClient(
-                    self.admin_uri, tz_aware=True, **self.kwargs
+                    self.admin_uri,
+                    tz_aware=True,
+                    **self.kwargs,
                 )
                 ans = await self.admin_client["admin"].command("ping")
                 assert ans.get("ok") == 1
@@ -384,6 +413,9 @@ class MongoDBClient:
                         "id_self": self.hex_id,
                     },
                 )
+                if self.first_health_check == MongoDBStatus.UNKNOWN:
+                    self.first_health_check = MongoDBStatus.VALIDATED
+
                 self.health_check = MongoDBStatus.CONNECTED
                 if count > 1:
                     logger.warning(
@@ -396,7 +428,12 @@ class MongoDBClient:
                     )
                 return
 
-            except (ConnectionFailure, OperationFailure, Exception) as e:
+            except (
+                ConnectionFailure,
+                OperationFailure,
+                ServerSelectionTimeoutError,
+                Exception,
+            ) as e:
                 error_code = e.code if hasattr(e, "code") else type(e).__name__
                 logger.error(
                     f"Attempt {count} Failed to connect to MongoDB: {e}",
@@ -409,6 +446,9 @@ class MongoDBClient:
                 self.client = None
                 self.db = None
                 self.health_check = MongoDBStatus.ERROR
+                # Only retry if we have ever connected to stop retrys
+                if self.first_health_check != MongoDBStatus.VALIDATED:
+                    raise e
                 # give me a sleep time which is 1 + count * 2 or 30
                 if not self.retry or count > 20:
                     raise e

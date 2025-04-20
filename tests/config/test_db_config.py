@@ -85,16 +85,19 @@ async def test_bad_config_data(set_base_config_path: None):
     Raises:
         OperationFailure: Expected exceptions for each bad configuration scenario.
     """
+
+    # Using conn_2 which doesn't not ahave replica_set set to pyTest becausse that gives
+    # a different error code
     with pytest.raises(OperationFailure) as e:
-        async with MongoDBClient("conn_1", "test_db", "test_no_user") as _:
+        async with MongoDBClient("conn_2", "test_db", "test_no_user") as _:
             pass
     assert e.value.code == DbErrorCode.NO_USER
     with pytest.raises(OperationFailure) as e2:
-        async with MongoDBClient("conn_1", "test_no_db", "test_user") as _:
+        async with MongoDBClient("conn_2", "test_no_db", "test_user") as _:
             pass
     assert e2.value.code == DbErrorCode.NO_DB
     with pytest.raises(OperationFailure) as e3:
-        async with MongoDBClient("conn_1", "test_db", "test_user_no_password") as _:
+        async with MongoDBClient("conn_2", "test_db", "test_user_no_password") as _:
             pass
     assert e3.value.code == DbErrorCode.NO_PASSWORD
     with pytest.raises(OperationFailure) as e4:

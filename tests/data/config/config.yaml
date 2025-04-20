@@ -74,12 +74,24 @@ db_connections:
   conn_1:
     hosts:
       - localhost:37017
-    replica_set:
+    replica_set: rsPytest
     admin_dbs:
       admin: # The Database name
         db_users:
           admin:
-            password: test-admin-password
+            password: test-admin-password     # This will be ignored if replica set is called rsPytest
+            roles:
+              - root
+
+  conn_2:
+    hosts:
+      - localhost:37017
+    replica_set: 
+    admin_dbs:
+      admin: # The Database name
+        db_users:
+          admin:
+            password: test-admin-password     # This will be ignored if replica set is called rsPytest
             roles:
               - root
 

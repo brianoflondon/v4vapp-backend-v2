@@ -21,14 +21,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
-      mongo:
-        image: mongo:8.0
-        ports:
-          - "37017:27017"
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: test-admin-password
-
       redis:
         image: redis:latest
         ports:
@@ -62,7 +54,7 @@ jobs:
           uv venv --python 3.12
           uv sync --group dev
 
-      # Ensure UV is available and sync if cache is hit (to handle minor updates)
+      # Ensure UV is available and sync if cache is hit
       - name: Sync UV dependencies (post-cache)
         run: |
           uv sync --group dev
@@ -75,6 +67,15 @@ jobs:
       - name: List installed packages
         run: uv pip list
 
+      # Start MongoDB with replica set
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.12.0
+        with:
+          mongodb-version: '8.0'
+          mongodb-replica-set: rsPytest
+          mongodb-port: 37017
+
+      # Set PYTHONPATH
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 

@@ -33,7 +33,6 @@ def set_base_config_path_dev(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
 )
-@pytest.mark.skip(reason="Skipping test when local db not running")
 @pytest.mark.asyncio
 async def test_mongodb_client_dev_config(set_base_config_path_dev: None):
     async with MongoDBClient("local_connection") as client:
