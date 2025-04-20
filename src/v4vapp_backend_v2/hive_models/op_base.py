@@ -213,8 +213,8 @@ class OpBase(BaseModel):
     watch_users: ClassVar[List[str]] = []
     proposals_tracked: ClassVar[List[int]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
-    hive_inst: ClassVar[Hive] = None
-    db_client: ClassVar[MongoDBClient] = None
+    hive_inst: ClassVar[Hive | None] = None
+    db_client: ClassVar[MongoDBClient | None] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -364,6 +364,8 @@ class OpBase(BaseModel):
         if quote:
             cls.last_quote = quote
         else:
+            if cls.db_client:
+                AllQuotes.db_client = cls.db_client
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes()
             cls.last_quote = all_quotes.quote

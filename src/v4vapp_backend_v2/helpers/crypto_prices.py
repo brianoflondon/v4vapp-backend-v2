@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import StrEnum
 from timeit import default_timer as timer
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -106,7 +107,7 @@ class QuoteResponse(BaseModel):
         self.hive_usd = round(hive_usd, 4)
         self.hbd_usd = round(hbd_usd, 4)
         self.hive_usd = round(hive_usd, 4)
-        self.btc_usd = round(btc_usd, 1)
+        self.btc_usd = round(btc_usd, 2)
         self.hive_hbd = round(hive_hbd, 4)
         self.raw_response = raw_response
         self.source = source
@@ -162,6 +163,11 @@ class AllQuotes(BaseModel):
     Attributes:
         quotes (Dict[str, QuoteResponse]): A dictionary to store quotes from different
         services.
+        fetch_date (datetime): The date and time when the quotes were fetched.
+        source (str): The source of the quotes.
+
+        Class Var:
+        db_client (MongoDBClient): A MongoDB client for database operations.
 
     Methods:
         get_all_quotes(use_cache: bool = True, timeout: float = 30.0):
@@ -190,6 +196,8 @@ class AllQuotes(BaseModel):
     quotes: Dict[str, QuoteResponse] = {}
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     source: str = ""
+
+    db_client: ClassVar[MongoDBClient | None] = None
 
     def get_binance_quote(self) -> QuoteResponse:
         """
@@ -242,6 +250,38 @@ class AllQuotes(BaseModel):
 
         logger.info(f"Quotes fetched successfully in {timer() - start:.2f} seconds")
         self.fetch_date = self.quote.fetch_date
+        await self.db_store_quote()
+
+    async def db_store_quote(self):
+        """
+        Store cryptocurrency quotes in the database.
+
+        This asynchronous method saves cryptocurrency exchange rates into the database.
+        It uses the MongoDB client to insert records into the "hive_rates" collection.
+        Each record includes a timestamp, a currency pair, and its corresponding value.
+
+        The following currency pairs are stored:
+        - "hive_usd": Hive to USD exchange rate.
+        - "btc_usd": Bitcoin to USD exchange rate.
+        - "sats_hive": Satoshi to Hive exchange rate.
+        - "hive_hbd": Hive to HBD exchange rate.
+
+        Logs debug messages for each successful insertion.
+
+        Returns:
+            None
+        """
+        if not self.db_client:
+            return
+        async with self.db_client as db_client:
+            records = [
+                {"timestamp": self.fetch_date, "pair": "hive_usd", "value": self.quote.hive_usd},
+                {"timestamp": self.fetch_date, "pair": "btc_usd", "value": self.quote.btc_usd},
+                {"timestamp": self.fetch_date, "pair": "sats_hive", "value": self.quote.sats_hive},
+                {"timestamp": self.fetch_date, "pair": "hive_hbd", "value": self.quote.hive_hbd},
+            ]
+            db_ans = await db_client.insert_many("hive_rates", records)
+            logger.debug(f"Inserted rates into database: {db_ans}")
 
     @property
     def quote(self) -> QuoteResponse:

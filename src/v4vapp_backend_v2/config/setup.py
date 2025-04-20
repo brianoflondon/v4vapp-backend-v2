@@ -82,6 +82,12 @@ class ApiKeys(BaseConfig):
     coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
 
 
+class TimeseriesConfig(BaseConfig):
+    timeField: str = ""
+    metaField: str = ""
+    granularity: str = "seconds"
+
+
 class IndexConfig(BaseConfig):
     index_key: _IndexKeyHint | None = None
     unique: Optional[bool] = None
@@ -89,6 +95,13 @@ class IndexConfig(BaseConfig):
 
 class CollectionConfig(BaseConfig):
     indexes: Dict[str, IndexConfig] | None = None
+    timeseries: TimeseriesConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_timeseries_and_indexes(self):
+        if self.timeseries and self.indexes:
+            raise ValueError("Indexes cannot be defined for a time-series collection.")
+        return self
 
 
 class DatabaseUserConfig(BaseConfig):
@@ -98,7 +111,7 @@ class DatabaseUserConfig(BaseConfig):
 
 class DatabaseDetailsConfig(BaseConfig):
     db_users: Dict[str, DatabaseUserConfig]
-    collections: Optional[Dict[str, CollectionConfig | None]] = None
+    collections: Optional[Dict[str, CollectionConfig | TimeseriesConfig | None]] = None
 
 
 class DatabaseConnectionConfig(BaseConfig):

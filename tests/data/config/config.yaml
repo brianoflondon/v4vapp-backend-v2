@@ -86,7 +86,7 @@ db_connections:
   conn_2:
     hosts:
       - localhost:37017
-    replica_set: 
+    replica_set:
     admin_dbs:
       admin: # The Database name
         db_users:
@@ -120,7 +120,11 @@ dbs:
           test_index2:
             index_key: [["test2", 1], ["test3", -1]]
             unique: false
-      test_collection2:
+      rates:
+        timeseries:
+          timeField: "timestamp"
+          metaField: "pair"
+          granularity: minutes
       test_collection3:
 
   test_db2:
