@@ -28,6 +28,12 @@ jobs:
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: test-admin-password
+        # Add options to enable replica set
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       redis:
         image: redis:latest
@@ -62,7 +68,7 @@ jobs:
           uv venv --python 3.12
           uv sync --group dev
 
-      # Ensure UV is available and sync if cache is hit (to handle minor updates)
+      # Ensure UV is available and sync if cache is hit
       - name: Sync UV dependencies (post-cache)
         run: |
           uv sync --group dev
@@ -75,6 +81,21 @@ jobs:
       - name: List installed packages
         run: uv pip list
 
+      # Initialize MongoDB as a replica set
+      - name: Initialize MongoDB Replica Set
+        run: |
+          # Wait for MongoDB to be ready
+          until docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh --eval "db.runCommand({ ping: 1 })"; do
+            echo "Waiting for MongoDB to be ready..."
+            sleep 2
+          done
+          # Initialize replica set
+          docker exec $(docker ps -q --filter "ancestor=mongo:8.0") mongosh -u admin -p test-admin-password --eval 'rs.initiate({
+            _id: "rsPytest",
+            members: [{ _id: 0, host: "localhost:27017" }]
+          })'
+
+      # Set PYTHONPATH
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 
