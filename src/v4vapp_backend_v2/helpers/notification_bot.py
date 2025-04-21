@@ -51,7 +51,7 @@ class NotificationBot:
             self.load_config()
             self.bot = Bot(token=self.config.token)
             return
-        raise NotificationNotSetupError("No token or name set for bot.")
+        raise NotificationNotSetupError(f"No token or name set for bot. {name} not found")
 
     @property
     def n_bot_config_file(self) -> Path:
@@ -388,7 +388,9 @@ class NotificationBot:
             with open(config_file, "r") as f:
                 self.config = NotificationBotConfig.model_validate(json.load(f))
         else:
-            raise NotificationNotSetupError(f"No configuration file found. {config_file} missing")
+            raise NotificationNotSetupError(
+                f"No configuration file found. {self.name=} {config_file=} missing"
+            )
 
     def save_config(self, new_config: NotificationBotConfig | None = None) -> None:
         """

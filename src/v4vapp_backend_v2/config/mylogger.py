@@ -141,6 +141,11 @@ class CustomNotificationHandler(logging.Handler):
     Custom logging handler to send log messages to Notification with special
     handling for error codes.
 
+    To add extra bots to the notification, use the `extra_bot_name` or
+    `extra_bot_names` attributes in the log record.
+    This handler processes log records and sends formatted log messages to Notification.
+
+
     Attributes:
         error_codes (dict[Any, ErrorCode]): A dictionary to keep track of error codes
         and their details.
@@ -198,7 +203,6 @@ class CustomNotificationHandler(logging.Handler):
         else:
             self.sender.send_notification(log_message, record, bot_name=bot_name)
             self._extra_bots(log_message, record)
-
 
     def _extra_bots(self, log_message: str, record: logging.LogRecord) -> None:
         """
