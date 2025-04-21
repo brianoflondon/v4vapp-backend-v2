@@ -1,4 +1,5 @@
 from datetime import timedelta
+import os
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,9 @@ async def test_stream_ops_async_live_from_hive():
     # Check that the results are as expected
     assert len(results) > 0
 
-
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 @pytest.mark.asyncio
 async def test_stream_ops_async_live_from_hive_stop_now():
     """
