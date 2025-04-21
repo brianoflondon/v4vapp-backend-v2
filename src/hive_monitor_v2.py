@@ -390,61 +390,37 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
             async for op in stream_ops_async(
                 opNames=OpBase.op_tracked, start=last_good_block, stop_now=False, hive=hive_client
             ):
-                notification = True
+                notification = False
+                log_it = False
+                extra_bots: List[str] = []
+                db_store = False
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 new_block, marker = block_counter.inc(op.raw_op)
-                # Allow switch to other block loop
-                if new_block:
-                    last_good_block = op.block_num - 1
-                    await asyncio.sleep(0.01)
-                # Real ops. #########################
+
                 if isinstance(op, AccountWitnessVote):
-                    notification = False
                     op.get_voter_details()
+                    log_it = True
                     if op.witness == watch_witness:
                         asyncio.create_task(db_store_op(op))
                         notification = True
-                    logger.info(
-                        f"{icon} {op.log_str}",
-                        extra={
-                            "notification": notification,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            **op.log_extra,
-                        },
-                    )
+                        db_store = True
 
                 if isinstance(op, Transfer):
-                    notification = False
                     if op.is_watched:
                         await Transfer.update_quote()
                         op.update_conv()
                         asyncio.create_task(balance_server_hbd_level(op))
-                        asyncio.create_task(db_store_op(op))
+                        log_it = True
+                        db_store = True
                         notification = True
-                        # Log ever transaction (even if not in watch list)
-                        logger.info(
-                            f"{icon} {op.log_str}",
-                            extra={
-                                "notification": notification,
-                                "notification_str": f"{icon} {op.notification_str}",
-                                **op.log_extra,
-                            },
-                        )
 
                 if op.known_custom_json:
                     op: CustomJson
                     if not op.conv:
                         await op.update_quote_conv()
-                    asyncio.create_task(db_store_op(op))
-                    logger.info(
-                        f"{op.log_str}",
-                        extra={
-                            "notification": True,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            **op.log_extra,
-                        },
-                    )
+                    log_it = True
+                    db_store = True
 
                 if (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
@@ -452,52 +428,37 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     notification = (
                         False if isinstance(op, FillOrder) and not op.completed_order else True
                     )
-                    logger.info(
-                        f"{icon} {op.log_str}",
-                        extra={
-                            "notification": notification,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            **op.log_extra,
-                        },
-                    )
-                    asyncio.create_task(db_store_op(op))
+                    log_it = True
+                    db_store = True
 
-                if isinstance(op, ProducerReward) and op.producer == watch_witness:
-                    notification = True
-                    await op.get_witness_details()
-                    op.mean, last_witness_timestamp = await witness_average_block_time(
-                        watch_witness
-                    )
-                    op.delta = op.timestamp - last_witness_timestamp
-                    logger.info(
-                        f"{icon} {op.log_str}",
-                        extra={
-                            "notification": notification,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            **op.log_extra,
-                        },
-                    )
-                    asyncio.create_task(db_store_op(op))
+                if isinstance(op, ProducerReward):
+                    if op.producer == watch_witness:
+                        notification = True
+                        await op.get_witness_details()
+                        op.mean, last_witness_timestamp = await witness_average_block_time(
+                            watch_witness
+                        )
+                        op.delta = op.timestamp - last_witness_timestamp
+                        log_it = True
+                        db_store = True
+                    if op.producer == "vsc.network":
+                        notification = True
+                        await op.get_witness_details()
+                        op.mean, last_witness_timestamp = await witness_average_block_time("vsc.network")
+                        log_it = True
+                        db_store = True
+                        extra_bots = ["VSC_Proposals"]
+
 
                 if isinstance(op, UpdateProposalVotes):
-                    notification = False
+                    op.get_voter_details()
+                    log_it = True
                     if op.is_tracked:
                         notification = True
-                        asyncio.create_task(db_store_op(op))
-                    op.get_voter_details()
-                    logger.info(
-                        f"{icon} {op.log_str}",
-                        extra={
-                            "notification": notification,
-                            "notification_str": f"{icon} {op.notification_str}",
-                            "extra_bot_name": "VSC_Proposals",
-                            **op.log_extra,
-                        },
-                    )
+                        db_store = True
+                        extra_bots = ["VSC_Proposals"]
 
-
-
-
+                await combined_logging(op, log_it, notification, db_store, extra_bots)
 
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
@@ -518,6 +479,46 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                 extra={"notification": False},
             )
             hive_client.rpc.next()
+
+
+async def combined_logging(
+    op: OpAny, log_it: bool, notification: bool, db_store: bool, extra_bots: List[str] | None
+) -> None:
+    """
+    Asynchronously logs and stores events.
+
+    This function handles the logging and storage of events based on the provided
+    parameters. It can log to a file, store in a database, or send notifications
+    based on the event type.
+
+    Args:
+        log_it (bool): Flag indicating whether to log the event.
+        db_store (bool): Flag indicating whether to store the event in the database.
+        extra_bots (List[str] | None): List of additional bot names for notifications.
+
+    Returns:
+        None
+    """
+
+    if db_store:
+        asyncio.create_task(db_store_op(op))
+
+    if log_it:
+        log_extras = {
+            "notification": notification,
+            "notification_str": f"{icon} {op.notification_str}",
+            **op.log_extra,
+        }
+        if extra_bots:
+            log_extras["extra_bot_names"] = extra_bots
+        logger.info(
+            f"{icon} {op.log_str}",
+            extra={
+                "notification": notification,
+                "notification_str": f"{icon} {op.notification_str}",
+                **op.log_extra,
+            },
+        )
 
 
 async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
