@@ -150,6 +150,7 @@ async def test_handle_update_sets_chat_id(notification_bot, tmp_path):
     notification_bot.config.chat_id = 0
     update = MagicMock()
     update.message.chat_id = 67890
+    update.message.chat.title = "New Test Chat"
     update.message.text = "random text"
 
     with patch(
@@ -157,7 +158,7 @@ async def test_handle_update_sets_chat_id(notification_bot, tmp_path):
     ) as mock_save:
         await notification_bot.handle_update(update)
         assert notification_bot.config.chat_id == 67890
-        mock_save.assert_called_once()
+        mock_save.call_count == 2
 
 
 # Test handle_update with /start
@@ -165,6 +166,7 @@ async def test_handle_update_sets_chat_id(notification_bot, tmp_path):
 async def test_handle_update_start(notification_bot):
     update = MagicMock()
     update.message.text = "/start"
+    update.message.chat.title = ""
     with patch(
         "v4vapp_backend_v2.helpers.notification_bot.NotificationBot.send_menu",
         AsyncMock(),
@@ -235,3 +237,10 @@ def test_names(mock_internal_config, tmp_path):
     with open(config_file, "w") as f:
         json.dump({"token": "valid_token"}, f)
     assert NotificationBot.names() == "testbot"
+
+
+def test_ids_list(mock_internal_config, tmp_path):
+    config_file = tmp_path / f"testbot{BOT_CONFIG_EXTENSION}"
+    with open(config_file, "w") as f:
+        json.dump({"token": "valid_token"}, f)
+    assert NotificationBot.ids_list() == []

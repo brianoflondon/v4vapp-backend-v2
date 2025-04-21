@@ -46,7 +46,7 @@ async def test_stream_ops_async_live_from_hive_stop_now():
     Test the stream_ops_async function to ensure it yields operations correctly.
     """
     opNames = ["producer_reward"]
-    look_back = timedelta(minutes=1)
+    look_back = timedelta(minutes=0.5)
 
     # Call the async generator function and collect results
     results = []

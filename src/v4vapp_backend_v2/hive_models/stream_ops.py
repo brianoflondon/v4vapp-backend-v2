@@ -78,7 +78,7 @@ async def stream_ops_async(
         max_batch_size = None
 
     if stop_now:
-        stop_block = current_block + 10
+        stop_block = current_block
     else:
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
@@ -123,7 +123,7 @@ async def stream_ops_async(
                     ):
                         last_block = hive_event.get("block_num")
                         op_virtual_base = op_any_or_base(virtual_event)
-                        op_in_trx_counter.inc2(op_virtual_base)
+                        op_in_trx_counter.op_in_trx_inc(op_virtual_base)
                         yield op_virtual_base
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue
@@ -135,7 +135,7 @@ async def stream_ops_async(
                     start_block = op_base.block_num
                     last_block = op_base.block_num
 
-                op_in_trx_counter.inc2(op_base)
+                op_in_trx_counter.op_in_trx_inc(op_base)
                 last_block = op_base.block_num
                 yield op_base
         except (asyncio.CancelledError, KeyboardInterrupt):

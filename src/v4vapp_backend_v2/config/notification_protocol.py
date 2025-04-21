@@ -83,7 +83,7 @@ class NotificationProtocol(Protocol):
         except asyncio.CancelledError:
             logger.warning("Notification task was cancelled.")
         except NotificationNotSetupError as e:
-            logger.warning(
+            logger.error(
                 f"Notification bot is not set up correctly. {e}", extra={"notification": False}
             )
         except Exception as ex:

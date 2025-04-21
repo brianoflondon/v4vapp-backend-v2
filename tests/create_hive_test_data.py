@@ -11,7 +11,11 @@ import httpx
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.hive.hive_extras import MAX_HIVE_BATCH_SIZE, get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import (
+    MAX_HIVE_BATCH_SIZE,
+    get_blockchain_instance,
+    get_hive_client,
+)
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
@@ -85,7 +89,7 @@ async def scan_hive(op_real_virtual: OpRealm):
                         )
                     ):
                         op_base = OpBase.model_validate(virtual_event)
-                        op_in_trx_counter_new.inc2(op_base)
+                        op_in_trx_counter_new.op_in_trx_inc(op_base)
                         print(op_base.log_str)
                         all_links.append(op_base.link)
                         all_tasks.append(asyncio.create_task(client.get(url=op_base.link)))
@@ -96,7 +100,7 @@ async def scan_hive(op_real_virtual: OpRealm):
                         found_ops[op_base.type] = 1
 
                 op_base = OpBase.model_validate(hive_event)
-                op_in_trx_counter_new.inc2(op_base)
+                op_in_trx_counter_new.op_in_trx_inc(op_base)
                 if found_ops.get(op_base.type):
                     found_ops[op_base.type] += 1
                 else:

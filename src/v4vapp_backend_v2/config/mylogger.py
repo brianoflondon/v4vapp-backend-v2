@@ -141,6 +141,11 @@ class CustomNotificationHandler(logging.Handler):
     Custom logging handler to send log messages to Notification with special
     handling for error codes.
 
+    To add extra bots to the notification, use the `extra_bot_name` or
+    `extra_bot_names` attributes in the log record.
+    This handler processes log records and sends formatted log messages to Notification.
+
+
     Attributes:
         error_codes (dict[Any, ErrorCode]): A dictionary to keep track of error codes
         and their details.
@@ -197,6 +202,35 @@ class CustomNotificationHandler(logging.Handler):
         # Default case
         else:
             self.sender.send_notification(log_message, record, bot_name=bot_name)
+            self._extra_bots(log_message, record)
+
+    def _extra_bots(self, log_message: str, record: logging.LogRecord) -> None:
+        """
+        Check if the log record has extra bot names and send notifications.
+
+        Args:
+            log_message (str): The log message to send.
+            record (logging.LogRecord): The log record to be checked.
+        """
+
+        def process_bot_names(bot_names: str | list[str]) -> None:
+            """Helper function to process bot names and send notifications."""
+            if isinstance(bot_names, str):
+                # Single bot name as a string
+                self.sender.send_notification(log_message, record, bot_name=bot_names)
+            elif isinstance(bot_names, list):
+                # Multiple bot names in a list
+                for bot_name in bot_names:
+                    if isinstance(bot_name, str):
+                        self.sender.send_notification(log_message, record, bot_name=bot_name)
+
+        # Check for extra_bot_name
+        if hasattr(record, "extra_bot_name") and record.extra_bot_name:
+            process_bot_names(record.extra_bot_name)
+
+        # Check for extra_bot_names
+        elif hasattr(record, "extra_bot_names") and record.extra_bot_names:
+            process_bot_names(record.extra_bot_names)
 
 
 class NotificationFilter(logging.Filter):
