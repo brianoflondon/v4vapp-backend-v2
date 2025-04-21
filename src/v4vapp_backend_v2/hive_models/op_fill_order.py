@@ -106,7 +106,6 @@ class FillOrder(OpBase):
         if not open_order:
             open_order = LimitOrderCreate.open_order_ids.get(self.open_orderid, None)
         if open_order is not None:
-            print(f"amount_remaining: {open_order.amount_remaining}")
             if self.open_owner == open_order.owner:  # This is when we fill someone else's order
                 amount_remaining = Amount(str(open_order.amount_remaining))
                 amount_remaining -= Amount(self.current_pays.model_dump())
