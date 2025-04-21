@@ -480,6 +480,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     asyncio.create_task(db_store_op(op))
 
                 if isinstance(op, UpdateProposalVotes):
+                    notification = False
                     if op.is_tracked:
                         notification = True
                         asyncio.create_task(db_store_op(op))
