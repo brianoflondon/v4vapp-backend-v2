@@ -3,6 +3,7 @@ from typing import Any, Dict, Type, Union
 from pydantic import BaseModel, Field, Json
 
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
 
 """
 This module defines a custom Pydantic model `KeepsatsTransfer` and related utilities for handling
@@ -67,9 +68,14 @@ class KeepsatsTransfer(BaseModel):
         )
 
 
-CustomJsonData = Union[Json, KeepsatsTransfer]
+CustomJsonData = Union[Json, KeepsatsTransfer, VSCTransfer]
 
-CUSTOM_JSON_IDS = {"v4vapp_transfer": KeepsatsTransfer}
+CUSTOM_JSON_IDS = {
+    "v4vapp_transfer": KeepsatsTransfer,
+    "vsc.transfer": VSCTransfer,
+    "vsc.withdraw": VSCTransfer,
+    "vsc.actions": VSCActions,
+}
 
 
 def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
@@ -89,7 +95,7 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
 
     """
     if data.get("id", "") in CUSTOM_JSON_IDS.keys():
-        return CUSTOM_JSON_IDS[data["id"]]
+        return CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
     return None
 
 

@@ -95,6 +95,7 @@ services:
       "--user", "v4vapp.dhf",
       "--user", "brianoflondon",
       "--user", "v4vapp-test",
+      "--user", "v4vapp.vsc",
       "--witness", "brianoflondon",
     ]
     restart: unless-stopped

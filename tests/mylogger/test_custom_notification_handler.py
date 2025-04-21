@@ -43,7 +43,7 @@ def test_emit_with_error_code_clear(handler, mock_sender, caplog):
     with patch("v4vapp_backend_v2.config.mylogger.logger.info") as mock_logger_info:
         with caplog.at_level(logging.DEBUG):
             handler.emit(record)
-            mock_logger_info.assert_called_once()
+            assert mock_logger_info.call_count == 2
             assert "Error code E123 cleared" in mock_logger_info.call_args[0][0]
 
 

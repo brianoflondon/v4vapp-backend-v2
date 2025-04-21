@@ -385,6 +385,8 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                         await op.update_quote_conv()
                     log_it = True
                     db_store = True
+                    if op.cj_id in ["vsc.transfer", "vsc.withdraw"]:
+                        extra_bots = ["VSC_Transfers"]
 
                 if (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
