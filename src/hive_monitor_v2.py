@@ -28,7 +28,6 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
-from v4vapp_backend_v2.hive_models.op_types_enums import MarketOpTypes
 from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
 
@@ -60,41 +59,6 @@ def handle_shutdown_signal():
     """
     logger.info("Received shutdown signal. Setting shutdown event.")
     shutdown_event.set()
-
-
-async def market_report(
-    hive_event: dict, watch_users: List[str], *args: Any, **kwargs: Any
-) -> None:
-    """
-    Asynchronously reports market events.
-
-    This function reports market events by logging the market event.
-
-    Args:
-        hive_event (dict): The Hive market event.
-    """
-    notification = True
-    if (
-        hive_event.get("current_owner", "") in watch_users
-        or hive_event.get("open_owner", "") in watch_users
-        or hive_event.get("owner", "") in watch_users
-    ):
-        if hive_event.get("type") == MarketOpTypes.LIMIT_ORDER_CREATE:
-            market_op = LimitOrderCreate.model_validate(hive_event)
-        elif hive_event.get("type") == MarketOpTypes.FILL_ORDER:
-            market_op = FillOrder.model_validate(hive_event)
-            if not market_op.completed_order:
-                notification = False
-        else:
-            return
-        logger.info(
-            f"{market_op.log_str}",
-            extra={
-                "notification": notification,
-                "notification_str": market_op.notification_str,
-                **market_op.log_extra,
-            },
-        )
 
 
 async def db_store_op(
@@ -432,23 +396,17 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     db_store = True
 
                 if isinstance(op, ProducerReward):
-                    if op.producer == watch_witness:
+                    if op.producer in [watch_witness, "vsc.network"]:
                         notification = True
                         await op.get_witness_details()
                         op.mean, last_witness_timestamp = await witness_average_block_time(
-                            watch_witness
+                            op.producer
                         )
                         op.delta = op.timestamp - last_witness_timestamp
                         log_it = True
                         db_store = True
-                    if op.producer == "vsc.network":
-                        notification = True
-                        await op.get_witness_details()
-                        op.mean, last_witness_timestamp = await witness_average_block_time("vsc.network")
-                        log_it = True
-                        db_store = True
-                        extra_bots = ["VSC_Proposals"]
-
+                        if op.producer == "vsc.network":
+                            extra_bots = ["VSC_Proposals"]
 
                 if isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
@@ -511,14 +469,7 @@ async def combined_logging(
         }
         if extra_bots:
             log_extras["extra_bot_names"] = extra_bots
-        logger.info(
-            f"{icon} {op.log_str}",
-            extra={
-                "notification": notification,
-                "notification_str": f"{icon} {op.notification_str}",
-                **op.log_extra,
-            },
-        )
+        logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
 
 async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
