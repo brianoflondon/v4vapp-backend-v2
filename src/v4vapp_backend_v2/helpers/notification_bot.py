@@ -9,6 +9,7 @@ from telegram.error import BadRequest, InvalidToken, TimedOut
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     is_markdown,
+    sanitize_filename,
     sanitize_markdown_v1,
     sanitize_markdown_v2,
 )
@@ -61,13 +62,49 @@ class NotificationBot:
         return ", ".join(cls.names_list())
 
     @classmethod
-    def names_list(cls) -> list:
+    def config_paths(cls) -> list[Path]:
+        """Get all config paths in the base config path.
+        Returns:
+            list[Path]: List of config paths.
+        """
         config_paths = [
             f
             for f in Path(InternalConfig.base_config_path).glob(f"*{BOT_CONFIG_EXTENSION}")
             if f.is_file()
         ]
-        return [config.name.replace(BOT_CONFIG_EXTENSION, "") for config in config_paths]
+        return config_paths
+
+    @classmethod
+    def names_list(cls) -> list:
+        return [config.name.replace(BOT_CONFIG_EXTENSION, "") for config in cls.config_paths()]
+
+    @classmethod
+    def ids_list(cls) -> list:
+        chat_ids: set = set()
+        for config in cls.config_paths():
+            try:
+                with open(config, "r") as f:
+                    config_data = json.load(f)
+                    if "chat_id" in config_data:
+                        chat_ids.add(config_data["chat_id"])
+            except (json.JSONDecodeError, KeyError):
+                logger.error(f"Error reading chat_id from {config}")
+                continue
+        return list(chat_ids)
+
+    @classmethod
+    def ids_names(cls) -> dict[int, str]:
+        chat_ids: dict[int, str] = {}
+        for config in cls.config_paths():
+            try:
+                with open(config, "r") as f:
+                    config_data = json.load(f)
+                    if "chat_id" in config_data and "name" in config_data:
+                        chat_ids[config_data["chat_id"]] = config_data["name"]
+            except (json.JSONDecodeError, KeyError):
+                logger.error(f"Error reading chat_id from {config}")
+                continue
+        return chat_ids
 
     async def get_bot_name(self):
         try:
@@ -226,7 +263,7 @@ class NotificationBot:
                             "sanitized_v2": text_v2,
                         },
                     )
-                    print("Problem in Notification bot Markdwon V2")
+                    logger.info("Problem in Notification bot Markdwon V2")
                     return
 
             except Exception as e:
@@ -243,15 +280,66 @@ class NotificationBot:
                         "sanitized_v2": text_v2,
                     },
                 )
-                print("Problem in Notification bot")
+                logger.info("Problem in Notification bot")
                 return
         return
 
     async def handle_update(self, update):
         if update.message:
+            # Log the chat ID
+            logger.info(f"Received message from chat ID: {update.message.chat_id}")
+            logger.info(f"Chat ID: {update.message.chat_id}")  # Print to console for debugging
+            logger.info(f"Message: {update.message.text}")  # Print the message text
+            # print the group chat name
+            new_config = None
+            if update.message.chat.title:
+                logger.info(f"Group chat name: {update.message.chat.title}")
+                # Check if chat name has changed
+                if update.message.chat_id in NotificationBot.ids_list():
+                    logger.info(
+                        f"Chat ID: {update.message.chat_id} already exists in config files"
+                    )
+                    old_name = NotificationBot.ids_names().get(update.message.chat_id)
+                    if old_name != update.message.chat.title:
+                        logger.info(
+                            f"Chat name has changed from {old_name} to {update.message.chat.title}"
+                        )
+                        # Update the config file with the new name
+                        new_config = NotificationBotConfig(
+                            token=self.config.token,
+                            chat_id=update.message.chat_id,
+                            name=update.message.chat.title,
+                        )
+                else:
+                    new_config = NotificationBotConfig(
+                        token=self.config.token,
+                        chat_id=update.message.chat_id,
+                        name=update.message.chat.title,
+                    )
+                    logger.info(f"Adding chat ID: {update.message.chat_id} to config files")
+
+                if new_config:
+                    self.save_config(new_config)
+                    new_bot_name = sanitize_filename(new_config.name)
+                    logger.info(
+                        f"Sending a notification to {update.message.chat.title} new bot name: {new_bot_name}",
+                        extra={"notification": True, "bot_name": new_bot_name},
+                    )
+                else:
+                    bot_name = sanitize_filename(update.message.chat.title)
+                    logger.info(
+                        f"Chat ID: {bot_name} already exists in config files",
+                        extra={"notification": True, "bot_name": bot_name},
+                    )
+            else:
+                logger.info("No group chat name available")
+            # pri   nt the group chat ID
+            # Save the chat ID if it's not already set
             if self.config.chat_id == 0:
                 self.config.chat_id = update.message.chat_id
                 self.save_config()
+
+            # Handle commands
             if update.message.text == "/start":
                 await self.send_menu()
             elif update.message.text == "/menu":
@@ -302,16 +390,29 @@ class NotificationBot:
         else:
             raise NotificationNotSetupError(f"No configuration file found. {config_file} missing")
 
-    def save_config(self) -> None:
+    def save_config(self, new_config: NotificationBotConfig | None = None) -> None:
         """
         Saves the given bot configuration to a file.
         Args:
             bot_config (NotificationBotConfig): The bot configuration to save.
         Returns:
-            NotificationBotConfig: The saved bot configuration.
+            Nothing
         """
+        if new_config:
+            # Saving a new config not this bot
+            new_config_file = f"{new_config.name}{BOT_CONFIG_EXTENSION}"
+            new_config_file = sanitize_filename(new_config_file)
+            new_config_path = Path(InternalConfig.base_config_path, new_config_file)
+            if new_config_path.exists():
+                logger.info(f"Config file {new_config_file} already exists.")
+                return
+            with open(new_config_path, "w") as f:
+                json.dump(new_config.model_dump(), f)
+            return
+
         if not self.config.name:
             raise NotificationNotSetupError("No name set for bot.")
         self.name = self.config.name
         with open(self.n_bot_config_file, "w") as f:
             json.dump(self.config.model_dump(), f)
+        return

@@ -78,7 +78,7 @@ async def stream_ops_async(
         max_batch_size = None
 
     if stop_now:
-        stop_block = current_block + 10
+        stop_block = current_block
     else:
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 

@@ -490,9 +490,14 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                         extra={
                             "notification": notification,
                             "notification_str": f"{icon} {op.notification_str}",
+                            "extra_bot_name": "VSC_Proposals",
                             **op.log_extra,
                         },
                     )
+
+
+
+
 
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
@@ -640,6 +645,10 @@ def main(
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
         extra={"notification": True},
+    )
+    logger.info(
+        "Testing extra notification",
+        extra={"notification": True, "bot_name": "Changing_the_name"},
     )
     if not watch_users:
         watch_users = ["v4vapp", "brianoflondon"]

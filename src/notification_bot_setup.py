@@ -31,7 +31,20 @@ def setup(
     token: str = typer.Argument(..., help="Notification Bot API token"),
     # name: str = typer.Option("telegram_bot", help="Name of the bot matching the token"),
 ):
-    """Setup the bot with a Notification API token"""
+    """
+    Setup the bot with a Notification API token, put the bot token in the command line.
+
+    After running this command, re-run with the Run command to start the bot.
+
+    Either just send a message to the bot (to get the private chat_id which will be a +ve int)
+    or add the bot to a group and send a message to the group, the bot will get the group chat_id
+    and will be able to send messages to the group if you create a new config with that
+    group chat_id.
+
+    This will create a new config file in the config directory with the name of the group
+    chat or the bot name.
+
+    """
     bot = NotificationBot(token=token)
     try:
         bot.config.name = asyncio.run(bot.get_bot_name())
@@ -81,9 +94,7 @@ def run(
         typer.echo(e)
         raise typer.Exit()
 
-    typer.echo(
-        f"Bot ({bot.config.name}) is running... Send /start to your bot in Notification"
-    )
+    typer.echo(f"Bot ({bot.config.name}) is running... Send /start to your bot in Notification")
     typer.echo("Press Ctrl+C to stop the bot")
     typer.echo(f"Chat ID: {bot.config.chat_id}")
 

@@ -197,6 +197,10 @@ class CustomNotificationHandler(logging.Handler):
         # Default case
         else:
             self.sender.send_notification(log_message, record, bot_name=bot_name)
+            if hasattr(record, "extra_bot_name"):
+                # If the record has an extra_bot_name attribute, use it
+                bot_name = record.extra_bot_name
+                self.sender.send_notification(log_message, record, bot_name=bot_name)
 
 
 class NotificationFilter(logging.Filter):

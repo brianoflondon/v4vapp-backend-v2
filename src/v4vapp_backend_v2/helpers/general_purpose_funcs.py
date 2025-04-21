@@ -396,3 +396,22 @@ def check_time_diff(timestamp: str | datetime) -> timedelta:
     except (ValueError, AttributeError, OverflowError, TypeError):
         time_diff = timedelta(seconds=0)
     return time_diff
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitizes a file name by replacing spaces with underscores and removing
+    or replacing invalid characters to make it compatible with Unix-based systems.
+
+    Args:
+        filename (str | Path): The original file name.
+
+    Returns:
+        Path: The sanitized file name.
+    """
+
+    # Replace spaces with underscores
+    sanitized = str(filename).replace(" ", "_")
+    # Remove invalid characters (anything other than alphanumeric, underscores, hyphens, or dots)
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "", sanitized)
+    return sanitized
