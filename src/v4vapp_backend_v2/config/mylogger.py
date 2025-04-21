@@ -197,10 +197,38 @@ class CustomNotificationHandler(logging.Handler):
         # Default case
         else:
             self.sender.send_notification(log_message, record, bot_name=bot_name)
-            if hasattr(record, "extra_bot_name"):
-                # If the record has an extra_bot_name attribute, use it
+            self._extra_bots(log_message, record)
+
+    def _extra_bots(self, log_message: str, record: logging.LogRecord) -> None:
+        """
+        Check if the log record has extra bot names.
+
+        Args:
+            record (logging.LogRecord): The log record to be checked.
+
+        Returns:
+            bool: True if the log record has extra bot names, False otherwise.
+        """
+        if hasattr(record, "extra_bot_name") and record.extra_bot_name:
+            # If the record has an extra_bot_name attribute, use it
+            if isinstance(record.extra_bot_name, str) and record.extra_bot_name:
+                # Check if extra_bot_name is a string
                 bot_name = record.extra_bot_name
                 self.sender.send_notification(log_message, record, bot_name=bot_name)
+            if isinstance(record.extra_bot_name, list) and record.extra_bot_name:
+                # If extra_bot_name is a list, iterate through it
+                for name in record.extra_bot_name:
+                    if isinstance(name, str):
+                        bot_name = name
+                        self.sender.send_notification(log_message, record, bot_name=bot_name)
+        elif hasattr(record, "extra_bot_names") and record.extra_bot_names:
+            if isinstance(record.extra_bot_names, list) and record.extra_bot_names:
+                # If extra_bot_names is a list, iterate through it
+                for name in record.extra_bot_names:
+                    if isinstance(name, str):
+                        bot_name = name
+                        self.sender.send_notification(log_message, record, bot_name=bot_name)
+        return
 
 
 class NotificationFilter(logging.Filter):
