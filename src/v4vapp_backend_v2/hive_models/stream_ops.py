@@ -123,7 +123,7 @@ async def stream_ops_async(
                     ):
                         last_block = hive_event.get("block_num")
                         op_virtual_base = op_any_or_base(virtual_event)
-                        op_in_trx_counter.inc2(op_virtual_base)
+                        op_in_trx_counter.op_in_trx_inc(op_virtual_base)
                         yield op_virtual_base
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue
@@ -135,7 +135,7 @@ async def stream_ops_async(
                     start_block = op_base.block_num
                     last_block = op_base.block_num
 
-                op_in_trx_counter.inc2(op_base)
+                op_in_trx_counter.op_in_trx_inc(op_base)
                 last_block = op_base.block_num
                 yield op_base
         except (asyncio.CancelledError, KeyboardInterrupt):

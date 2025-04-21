@@ -30,7 +30,21 @@ class OpInTrxCounter:
     real_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
     virtual_trx_id_stack: ClassVar[Deque[str]] = deque(maxlen=50)
 
-    def inc2(self, op: OpBase) -> int:
+    def op_in_trx_inc(self, op: OpBase) -> int:
+        """
+        Increment the operation counter based on the realm and transaction context.
+
+        This method updates the operation counter (`op_in_trx`) for a given operation (`op`)
+        depending on whether the operation belongs to the REAL or VIRTUAL realm. It also
+        updates the last transaction ID (`last_trx_id`) and, for virtual operations, the
+        last block number (`last_block_num`).
+
+        Args:
+            op (OpBase): The operation object containing realm, transaction ID, and block number.
+
+        Returns:
+            int: The updated operation counter (`op_in_trx`) for the current transaction.
+        """
         if op.realm == OpRealm.REAL:
             if self.last_trx_id == op.trx_id:
                 self.op_in_trx += 1
@@ -50,50 +64,6 @@ class OpInTrxCounter:
                 self.op_in_trx = 1
                 op.op_in_trx = 1
                 # self.virtual_trx_id_stack.append(op.trx_id)
-        return self.op_in_trx
-
-    def inc(self, trx_id: str) -> int:
-        """
-        Increment the operation count for a given transaction ID and return the count.
-        If the transaction ID is new, reset the instance's count and add it to the shared stack.
-        If it matches the instance's last transaction ID or is in the stack, increment the count.
-
-        NOTE: this assumes transactions are presented sequentially from the Hive blockchain in
-        sequence as they appear in blocks and that the same transaction ID will not be presented
-        in different blocks.
-
-        Args:
-            trx_id (str): The transaction ID to process.
-
-        Returns:
-            int: The current operation count for the transaction in this instance.
-        """
-        # Case 1: Same transaction as last time for this instance, just increment
-        if trx_id == "0000000000000000000000000000000000000000":
-            self.last_trx_id = trx_id
-            self.op_in_trx = 1
-            return self.op_in_trx
-
-        if self.realm == OpRealm.REAL and self.last_trx_id == trx_id:
-            self.op_in_trx += 1
-            return self.op_in_trx
-
-        # Case 2: Transaction exists in the shared stack,
-        # update instance's last_trx_id and increment
-        if self.realm == OpRealm.REAL:
-            use_stack = OpInTrxCounter.real_trx_id_stack
-        else:  # OpRealVirtual.VIRTUAL
-            use_stack = OpInTrxCounter.virtual_trx_id_stack
-
-        if trx_id in use_stack:
-            self.last_trx_id = trx_id
-            self.op_in_trx += 1
-            return self.op_in_trx
-
-        # Case 3: New transaction, reset instance count and add to shared stack
-        use_stack.append(trx_id)  # Access class variable
-        self.last_trx_id = trx_id
-        self.op_in_trx = 1  # Reset count for new transaction in this instance
         return self.op_in_trx
 
 
@@ -120,8 +90,23 @@ class BlockCounter:
 
     def inc(self, hive_event: dict, notification: bool = False) -> Tuple[bool, bool]:
         """
-        Increment the block count and update the current block number.
+        Increment the block counter and handle marker updates based on the provided hive event.
+
+        This method processes a hive event to update the current block, block count, and marker.
+        It also logs relevant information and switches to the next RPC node if a marker is reached.
+
+        Args:
+            hive_event (dict): A dictionary containing details of the hive event. Expected keys:
+                - "block_num" (int): The current block number.
+                - "timestamp" (datetime, optional): The timestamp of the event. Defaults to the current UTC time.
+            notification (bool, optional): Flag to indicate if a notification should be logged. Defaults to False.
+
+        Returns:
+            Tuple[bool, bool]: A tuple containing:
+                - new_block (bool): True if the current block is greater than the last good block.
+                - marker (bool): True if the block count has reached or exceeded the next marker.
         """
+
         self.current_block = hive_event.get("block_num", 0)
         new_block = False
         marker = False
