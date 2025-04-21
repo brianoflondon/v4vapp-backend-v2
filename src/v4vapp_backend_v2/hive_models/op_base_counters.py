@@ -72,8 +72,11 @@ class BlockCounter:
     last_good_block: int = 0
     current_block: int = 0
     block_count: int = 0
+    event_count: int = 0
+    last_event_count: int = 0
     hive_client: Hive = Hive()
     time_diff: timedelta = timedelta(seconds=0)
+    running_time: float = 0
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
@@ -87,6 +90,31 @@ class BlockCounter:
         if self.current_block == 0:
             self.current_block = self.last_good_block
         self.id = self.id + " " if self.id else ""
+
+    def log_extra(self) -> dict:
+        """
+        Returns a dictionary containing the current state of the BlockCounter instance.
+
+        This method is used for logging purposes to provide additional context about
+        the current state of the BlockCounter.
+
+        Returns:
+            dict: A dictionary containing the current state of the BlockCounter instance.
+        """
+        return {
+            "last_good_block": self.last_good_block,
+            "current_block": self.current_block,
+            "block_count": self.block_count,
+            "last_event_count": self.last_event_count,
+            "event_count": self.event_count,
+            "hive_client": self.hive_client.rpc.url,
+            "time_diff": str(self.time_diff),
+            "running_time": str(self.running_time),
+            "error_code": self.error_code,
+            "id": self.id,
+            "next_marker": self.next_marker,
+            "marker_point": self.marker_point,
+        }
 
     def inc(self, hive_event: dict, notification: bool = False) -> Tuple[bool, bool]:
         """
@@ -127,21 +155,22 @@ class BlockCounter:
                     self.time_diff.total_seconds() / ((self.marker_point * 3) / last_marker_time)
                 )
                 self.time_diff = check_time_diff(timestamp)
-                running_time = timer() - self.start
+                self.running_time = timer() - self.start
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"blocks processed in: {last_marker_time_str} "
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
-                    f"running time: {format_time_delta(running_time)} "
+                    f"running time: {format_time_delta(self.running_time)} "
+                    f"events: {self.event_count - self.last_event_count:,} "
                     f"Node: {old_node} -> {self.hive_client.rpc.url}",
                     extra={
                         "notification": notification,
-                        "running_time": running_time,
-                        "time_diff": self.time_diff,
-                        "block_count": self.block_count,
+                        "block_counter": self.log_extra(),
                     },
                 )
+                self.last_event_count = self.event_count
                 self.last_marker = timer()
+        self.event_count += 1
         return new_block, marker
 
     def log_time_difference_errors(
