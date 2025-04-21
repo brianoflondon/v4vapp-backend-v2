@@ -80,9 +80,9 @@ class BlockCounter:
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
-    marker_point: int = 100  # 100 blocks is 300s 5 minutes
+    marker_point: int = 500  # 500 blocks at 3s = 1500s = 25 min
     icon: str = "🧱"
-    last_marker = timer()
+    last_marker: float = timer()
     start: float = 0
 
     def __post_init__(self):
