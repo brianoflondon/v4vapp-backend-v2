@@ -9,6 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, Asyn
 from pymongo.errors import (
     ConnectionFailure,
     DuplicateKeyError,
+    InvalidOperation,
     OperationFailure,
     ServerSelectionTimeoutError,
 )
@@ -82,7 +83,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         extra=extra,
                     )
                     raise e
-                except (ConnectionFailure, OperationFailure) as e:
+                except (ConnectionFailure, OperationFailure, InvalidOperation, Exception) as e:
                     retries += 1
                     error_code = "mongodb_error"
                     extra = {

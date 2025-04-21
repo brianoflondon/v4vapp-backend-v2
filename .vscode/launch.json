@@ -64,6 +64,8 @@
                 "v4vapp.dhf",
                 "--user",
                 "v4vapp-test",
+                "--user",
+                "v4vapp.vsc",
                 "--witness",
                 "brianoflondon",
             ],
