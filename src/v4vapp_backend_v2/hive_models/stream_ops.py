@@ -85,6 +85,7 @@ async def stream_ops_async(
     last_block = start_block
     while last_block < stop_block:
         await OpBase.update_quote()
+        e = None
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -158,12 +159,13 @@ async def stream_ops_async(
                     f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
-            logger.warning(
-                f"{start_block:,} Need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
-                extra={"notification": True, "error_code": "stream_restart"},
-            )
+            if e is not None:
+                logger.warning(
+                    f"{start_block:,} Shutting down or need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
+                    extra={"notification": True, "error_code": "stream_restart"},
+                )
+                await asyncio.sleep(2)
             hive.rpc.next()
-            await asyncio.sleep(2)
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
