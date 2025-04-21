@@ -646,10 +646,6 @@ def main(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
         extra={"notification": True},
     )
-    logger.info(
-        "Testing extra notification",
-        extra={"notification": True, "bot_name": "Changing_the_name"},
-    )
     if not watch_users:
         watch_users = ["v4vapp", "brianoflondon"]
     COMMAND_LINE_WATCH_USERS = watch_users

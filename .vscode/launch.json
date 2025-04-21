@@ -65,7 +65,7 @@
                 "--user",
                 "v4vapp-test",
                 "--witness",
-                "brianoflondon"
+                "brianoflondon",
             ],
             "justMyCode": true,
         },
