@@ -467,7 +467,9 @@ async def combined_logging(
             "notification_str": f"{icon} {op.notification_str}",
             **op.log_extra,
         }
-        if extra_bots:
+        # Only send extra notifications if the bot is not in watch-only mode
+        # so we don't double notify.
+        if extra_bots and not COMMAND_LINE_WATCH_ONLY:
             log_extras["extra_bot_names"] = extra_bots
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
