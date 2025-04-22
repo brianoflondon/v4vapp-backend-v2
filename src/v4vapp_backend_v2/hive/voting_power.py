@@ -104,12 +104,20 @@ class VotingPower:
         self.total_value = self.vote_value + self.proxy_value
         # Proposal 233 is the Stabiliser proposal until May 2023
         # Change this to proposal 0 to get return proposal
-        try:
-            proposals = hive.rpc.find_proposals([proposal, 0])
-        except Exception as ex:
-            logging.error("Problem checking proposal votes")
-            logging.exception(ex)
-            return
+        rpc_node_count = len(hive.rpc.nodes)
+        while rpc_node_count > 0:
+            try:
+                proposals = hive.rpc.find_proposals([proposal, 0])
+                break
+            except Exception as ex:
+                logging.error(
+                    f"Problem checking proposal votes {ex} {hive.rpc.url}", exc_info=True
+                )
+                rpc_node_count -= 1
+                hive.rpc.next()
+            finally:
+                if rpc_node_count == 0:
+                    raise Exception("No RPC nodes available to check proposal votes")
         return_prop = float(proposals[1]["total_votes"]) / 1e6
         return_prop = hive.vests_to_token_power(return_prop)
         this_prop = float(proposals[0]["total_votes"]) / 1e6
@@ -142,3 +150,37 @@ class VotingPower:
             f"{self.proxy_value:>11,.0f} {self.total_value:>11,.0f} "
             f"{self.prop_percent:>4.1f} % {self.total_percent:>4.1f} %"
         )
+
+
+"""
+
+
+
+hive-monitor-1     | 2025-04-22T12:17:37+0000.032 ERROR    voting_power              110 : Problem checking proposal votes
+hive-monitor-1     | 2025-04-22T12:17:37+0000.033 ERROR    voting_power              111 : Unexpected response format: {'message': 'Internal Server Error'}
+hive-monitor-1     | Traceback (most recent call last):
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectarapi/noderpc.py", line 63, in rpcexec
+hive-monitor-1     |     reply = super(NodeRPC, self).rpcexec(payload)
+hive-monitor-1     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectarapi/graphenerpc.py", line 525, in rpcexec
+hive-monitor-1     |     raise RPCError(f"Unexpected response format: {ret}")
+hive-monitor-1     | nectarapi.exceptions.RPCError: Unexpected response format: {'message': 'Internal Server Error'}
+hive-monitor-1     |
+hive-monitor-1     | During handling of the above exception, another exception occurred:
+hive-monitor-1     |
+hive-monitor-1     | Traceback (most recent call last):
+hive-monitor-1     |   File "/app/src/v4vapp_backend_v2/hive/voting_power.py", line 108, in set_up
+hive-monitor-1     |     proposals = hive.rpc.find_proposals([proposal, 0])
+hive-monitor-1     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectarapi/graphenerpc.py", line 558, in method
+hive-monitor-1     |     r = self.rpcexec(query)
+hive-monitor-1     |         ^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectarapi/noderpc.py", line 89, in rpcexec
+hive-monitor-1     |     doRetry = self._check_error_message(e, self.error_cnt_call)
+hive-monitor-1     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectarapi/noderpc.py", line 183, in _check_error_message
+hive-monitor-1     |     raise exceptions.UnhandledRPCError(msg)
+hive-monitor-1     | nectarapi.exceptions.UnhandledRPCError: Unexpected response format: {'message': 'Internal Server Error'}
+
+
+"""
