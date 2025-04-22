@@ -22,6 +22,7 @@ logger = logging.getLogger("backend")  # __name__ is a common choice
 
 BASE_CONFIG_PATH = Path("config/")
 BASE_LOGGING_CONFIG_PATH = Path(BASE_CONFIG_PATH, "logging/")
+DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
@@ -411,12 +412,14 @@ class InternalConfig:
             cls._instance = super(InternalConfig, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, bot_name: str = "", *args, **kwargs):
+    def __init__(
+        self, bot_name: str = "", config_filename: str = DEFAULT_CONFIG_FILENAME, *args, **kwargs
+    ):
         if not hasattr(self, "_initialized"):
             super().__init__()
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False
-            self.setup_config()
+            self.setup_config(config_filename)
             self.setup_logging()
             self._initialized = True
             atexit.register(self.shutdown)
@@ -424,9 +427,9 @@ class InternalConfig:
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()
 
-    def setup_config(self) -> None:
+    def setup_config(self, config_filename: str = DEFAULT_CONFIG_FILENAME) -> None:
         try:
-            config_file = Path(BASE_CONFIG_PATH, "config.yaml")
+            config_file = Path(BASE_CONFIG_PATH, config_filename)
             with open(config_file) as f_in:
                 config = safe_load(f_in)
         except FileNotFoundError as ex:

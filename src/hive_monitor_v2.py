@@ -12,7 +12,7 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
-from lnd_monitor_v2 import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
@@ -549,6 +549,7 @@ def main(
         typer.Option(
             "--watch-only",
             help="Watch only mode, uses `nobroadcast` option for Hive so HBD will not be sold",
+            show_default=True,
         ),
     ] = False,
     watch_witness: Annotated[
@@ -571,6 +572,14 @@ def main(
         str,
         typer.Argument(help=("The database user to use.")),
     ] = "",
+    config_filename: Annotated[
+        str,
+        typer.Option(
+            "--config-filename",
+            help="The name of the config file (in a folder called ./config)",
+            show_default=True,
+        ),
+    ] = DEFAULT_CONFIG_FILENAME,
 ):
     """
     Watch the Hive blockchain for transactions.
@@ -585,7 +594,7 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig().config
+    CONFIG = InternalConfig(config_filename=config_filename).config
     global COMMAND_LINE_WATCH_USERS
     global COMMAND_LINE_WATCH_ONLY
     global HIVE_DATABASE
