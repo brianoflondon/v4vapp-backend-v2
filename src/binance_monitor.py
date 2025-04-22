@@ -231,6 +231,7 @@ def main(
         str,
         typer.Option(
             "-c",
+            "--config",
             "--config-filename",
             help="The name of the config file (in a folder called ./config)",
             show_default=True,
@@ -240,6 +241,8 @@ def main(
     """
     Monitors a Binance account
     Args:
+        testnet (bool): Use the Binance testnet. Defaults to False.
+        config_filename (str): The name of the config file (in a folder called ./config).
 
 
     Returns:

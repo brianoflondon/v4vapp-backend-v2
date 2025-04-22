@@ -12,6 +12,7 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
+from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -576,6 +577,7 @@ def main(
         str,
         typer.Option(
             "-c",
+            "--config",
             "--config-filename",
             help="The name of the config file (in a folder called ./config)",
             show_default=True,
@@ -602,15 +604,15 @@ def main(
     global HIVE_DATABASE_CONNECTION
     global HIVE_DATABASE_USER
 
-    if not database:
-        HIVE_DATABASE = CONFIG.default_db_name
     if not database_connection:
-        HIVE_DATABASE_CONNECTION = CONFIG.default_db_connection
+        HIVE_DATABASE_CONNECTION = CONFIG.dbs_config.default_connection
+    if not database:
+        HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
-        HIVE_DATABASE_USER = CONFIG.default_db_user
+        HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.min_version}",
+        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
         extra={"notification": True},
     )
     if not watch_users:

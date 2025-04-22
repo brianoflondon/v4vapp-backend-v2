@@ -21,7 +21,7 @@
             "program": "src/binance_monitor.py",
             "args": [
                 "-c",
-                "config/binance.config.yaml"
+                "binance.config.yaml"
             ],
             "console": "integratedTerminal"
         },
@@ -55,7 +55,7 @@
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "missing.config.yaml",
+                "config.yaml",
                 "--watch-only",
                 "--user",
                 "v4vapp",
