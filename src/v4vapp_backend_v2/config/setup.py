@@ -188,6 +188,9 @@ class HiveAccountConfig(BaseConfig):
 
 class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
+    watch_users: List[str] = []
+    proposals_tracked: List[str] = []
+    watch_witnesses: List[str] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -325,7 +328,9 @@ class Config(BaseModel):
                 f"Default database connection: {v.dbs_config.default_connection} not found in database"
             )
         if v.dbs_config.default_name and v.dbs_config.default_name not in v.dbs_config.dbs.keys():
-            raise ValueError(f"Default database name: {v.dbs_config.default_name} not found in dbs")
+            raise ValueError(
+                f"Default database name: {v.dbs_config.default_name} not found in dbs"
+            )
 
         # check if two notification bots have the same token
         tokens = [bot.token for bot in v.notification_bots.values()]

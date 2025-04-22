@@ -15,6 +15,16 @@ from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 
+class SwitchToLiveStream(Exception):
+    """
+    Exception to indicate that the stream should switch to live mode.
+    This is used when the stream has been running for a while and needs to
+    switch to live mode to avoid missing any operations.
+    """
+
+    pass
+
+
 async def stream_ops_async(
     start: int = None,
     stop: int = None,
@@ -81,10 +91,8 @@ async def stream_ops_async(
                 f"Error getting start block from time {start_time} using {look_back.total_seconds()} seconds, "
                 f"using estimated block number {start_block:,} instead: {e}"
             )
-        max_batch_size = 25
     else:
         start_block = start or current_block
-        max_batch_size = None
 
     if stop_now:
         stop_block = current_block
@@ -103,7 +111,6 @@ async def stream_ops_async(
                     stop=stop_block,
                     only_virtual_ops=only_virtual_ops,
                     opNames=opNames,
-                    max_batch_size=max_batch_size,
                     threading=False,
                 )
             )
@@ -148,6 +155,10 @@ async def stream_ops_async(
                 op_in_trx_counter.op_in_trx_inc(op_base)
                 last_block = op_base.block_num
                 yield op_base
+        except SwitchToLiveStream as e:
+            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url}")
+            continue
+
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")
             return
@@ -174,7 +185,7 @@ async def stream_ops_async(
                     f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
-            if e is None:
+            if not e:
                 logger.info(
                     f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
                 )
