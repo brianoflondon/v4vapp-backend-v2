@@ -610,7 +610,7 @@ def main(
         HIVE_DATABASE_USER = CONFIG.default_db_user
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
+        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.min_version}",
         extra={"notification": True},
     )
     if not watch_users:

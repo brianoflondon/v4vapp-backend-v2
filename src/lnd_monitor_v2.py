@@ -10,6 +10,7 @@ from pymongo.errors import BulkWriteError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
+from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
@@ -737,10 +738,9 @@ async def main_async_start(connection_name: str) -> None:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
-        f"Monitoring node: {connection_name}. Version: {CONFIG.version}",
+        f"Monitoring node: {connection_name}. Version: {CONFIG.min_version}",
         extra={"notification": True},
     )
     await asyncio.sleep(0.2)
@@ -758,7 +758,6 @@ async def check_for_shutdown():
     raise asyncio.CancelledError("Docker Shutdown")
 
 
-
 @app.command()
 def main(
     lnd_node: Annotated[
@@ -770,7 +769,7 @@ def main(
                 f"Choose from: {CONFIG.lnd_connections_names}"
             )
         ),
-    ] = CONFIG.default_lnd_connection,
+    ] = CONFIG.lnd_config.default,
     database: Annotated[
         str,
         typer.Argument(help=(f"The database to monitor.Choose from: {CONFIG.dbs_names}")),
@@ -789,7 +788,7 @@ def main(
     icon = CONFIG.lnd_connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
-        f"Monitoring node: {lnd_node} {icon}. Version: {CONFIG.version}"
+        f"Monitoring node: {lnd_node} {icon}. Version: {__version__}"
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")

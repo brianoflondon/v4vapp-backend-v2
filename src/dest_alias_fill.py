@@ -5,11 +5,8 @@ from typing import Annotated, Optional
 import typer
 from bson import ObjectId
 
-from v4vapp_backend_v2.config.setup import (
-    InternalConfig,
-    async_time_stats_decorator,
-    logger,
-)
+from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -81,18 +78,14 @@ async def main_worker(node: str, database: str):
             for tasks in task_blocks:
                 ans = await asyncio.gather(*tasks)
 
-            logger.info(
-                f"Payments Changed: {payments_changed} Updated {len(ans)} payments."
-            )
+            logger.info(f"Payments Changed: {payments_changed} Updated {len(ans)} payments.")
 
 
 @app.command()
 def main(
     database: Annotated[
         str,
-        typer.Argument(
-            help=(f"The database to monitor." f"Choose from: {CONFIG.dbs_names}")
-        ),
+        typer.Argument(help=(f"The database to monitor.Choose from: {CONFIG.dbs_names}")),
     ],
     lnd_node: Annotated[
         Optional[str],
@@ -119,7 +112,7 @@ def main(
     icon = CONFIG.lnd_connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. Monitoring node: "
-        f"{lnd_node} {icon}. Version: {CONFIG.version}"
+        f"{lnd_node} {icon}. Version: {__version__}"
     )
     logger.info(f"{icon} ✅ Database: {database}")
     asyncio.run(main_worker(lnd_node, database))
@@ -127,7 +120,6 @@ def main(
 
 
 if __name__ == "__main__":
-
     try:
         logger.name = "dest_alias_fill"
         app()

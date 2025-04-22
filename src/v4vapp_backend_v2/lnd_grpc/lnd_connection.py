@@ -29,7 +29,7 @@ class LNDConnectionSettings:
 
     def __init__(self, connection_name: str) -> None:
         try:
-            lnd_config = InternalConfig().config.lnd_connections[connection_name]
+            lnd_config = InternalConfig().config.lnd_config.connections[connection_name]
         except KeyError as e:
             message = f"Connection name {connection_name} not found: {e}"
             logger.error(message, exc_info=True)

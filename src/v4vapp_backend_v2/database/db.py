@@ -159,7 +159,7 @@ class MongoDBClient:
     def validate_connection(self):
         try:
             self.config = InternalConfig().config
-            self.db_connection = self.config.db_connections[self.db_conn]
+            self.db_connection = self.config.dbs_config.connections[self.db_conn]
 
             if self.db_name == "admin":
                 self.dbs = self.db_connection.admin_dbs

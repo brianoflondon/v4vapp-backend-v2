@@ -5,27 +5,6 @@ from yaml import safe_load
 
 from v4vapp_backend_v2.config.setup import Config, InternalConfig, StartupFailure
 
-# @pytest.fixture(autouse=True)
-# def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
-#     test_config_path = Path("tests/data/config")
-#     monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
-#     test_config_logging_path = Path(test_config_path, "logging/")
-#     monkeypatch.setattr(
-#         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
-#         test_config_logging_path,
-#     )
-#     yield
-#     # No need to restore the original value, monkeypatch will handle it
-
-
-# @pytest.fixture(autouse=True)
-# def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
-#     # Reset the singleton instance before each test
-#     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-#     yield
-#     # Reset the singleton instance after each test
-#     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-
 
 @pytest.fixture(autouse=True)
 def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
@@ -61,7 +40,6 @@ def test_internal_config():
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)
-
     try:
         internal_config = InternalConfig()
     except StartupFailure as e:
@@ -70,17 +48,17 @@ def test_internal_config():
     assert internal_config.config is not None
     int_config = internal_config.config
     assert int_config.version == raw_config["version"]
-    assert len(int_config.lnd_connections) == len(raw_config["lnd_connections"])
+    assert len(int_config.lnd_config.connections) == len(raw_config["lnd_config"]["connections"])
     assert (
-        int_config.lnd_connections["example"].address
-        == raw_config["lnd_connections"]["example"]["address"]
+        int_config.lnd_config.connections["example"].address
+        == raw_config["lnd_config"]["connections"]["example"]["address"]
     )
     assert (
         int_config.logging.log_notification_silent
         == raw_config["logging"]["log_notification_silent"]
     )
     with pytest.raises(KeyError):
-        int_config.lnd_connections["bad_example"]
+        int_config.lnd_config.connections["bad_example"]
 
 
 def test_singleton_config():
