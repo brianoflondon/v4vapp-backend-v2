@@ -188,7 +188,10 @@ def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
 async def main() -> None:
     opNames = []
     count = 0
-    async for op in stream_ops_async(opNames=opNames, look_back=timedelta(days=5), stop_now=True):
+    hive = get_hive_client(nodes=["https://rpc.podping.org"])
+    async for op in stream_ops_async(
+        opNames=opNames, look_back=timedelta(days=1), stop_now=True, hive=hive
+    ):
         # logger.info(f"{op.log_str}", extra={**op.log_extra})
         # print(op.log_str)
         count += 1
