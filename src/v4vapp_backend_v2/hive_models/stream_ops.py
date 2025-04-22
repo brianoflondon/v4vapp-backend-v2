@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from nectar import Hive
 from nectar.blockchain import Blockchain
+from nectarapi.exceptions import NumRetriesReached
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
@@ -59,7 +60,7 @@ async def stream_ops_async(
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
-
+    e = None
     if opNames:
         op_realms = [op_realm(op) for op in opNames]
         only_virtual_ops = all(realm == "virtual" for realm in op_realms)
@@ -148,6 +149,12 @@ async def stream_ops_async(
             )
         except TypeError as e:
             logger.warning(f"{start_block:,} TypeError in block_stream: {e} restarting")
+        except NumRetriesReached as e:
+            hive.rpc.next()
+            logger.warning(
+                f"{start_block:,} NumRetriesReached in block_stream: {e} restarting",
+                extra={"notification": True, "error_code": "stream_restart"},
+            )
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
@@ -159,13 +166,17 @@ async def stream_ops_async(
                     f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
-            if e is not None:
+            if e is None:
+                logger.info(
+                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
+                )
+            else:
                 logger.warning(
                     f"{start_block:,} Shutting down or need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
                     extra={"notification": True, "error_code": "stream_restart"},
                 )
                 await asyncio.sleep(2)
-            hive.rpc.next()
+                hive.rpc.next()
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
