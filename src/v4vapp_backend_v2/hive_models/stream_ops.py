@@ -72,7 +72,15 @@ async def stream_ops_async(
     start_time = time_now
     if look_back:
         start_time = time_now - look_back
-        start_block = blockchain.get_estimated_block_num(start_time)
+        try:
+            start_block = blockchain.get_estimated_block_num(start_time)
+        except Exception as e:
+            # work out the number of blocks using 3 seconds per block
+            start_block = current_block - int(look_back.total_seconds() / 3)
+            logger.warning(
+                f"Error getting start block from time {start_time} using {look_back.total_seconds()} seconds, "
+                f"using estimated block number {start_block:,} instead: {e}"
+            )
         max_batch_size = 25
     else:
         start_block = start or current_block
