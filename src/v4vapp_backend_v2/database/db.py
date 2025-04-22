@@ -164,7 +164,7 @@ class MongoDBClient:
             if self.db_name == "admin":
                 self.dbs = self.db_connection.admin_dbs
             else:
-                self.dbs = self.config.dbs
+                self.dbs = self.config.dbs_config.dbs
         except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
