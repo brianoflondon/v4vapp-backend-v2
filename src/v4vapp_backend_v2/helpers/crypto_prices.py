@@ -248,7 +248,10 @@ class AllQuotes(BaseModel):
                 logger.error(f"Error fetching quote from {service_name}: {e}")
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
-        logger.info(f"Quotes fetched successfully in {timer() - start:.2f} seconds")
+        logger.info(f"Quotes fetched successfully in {timer() - start:.2f} seconds", extra={
+            "quotes": self.quotes,
+            "fetch_date": self.fetch_date,
+        })
         self.fetch_date = self.quote.fetch_date
         await self.db_store_quote()
 
