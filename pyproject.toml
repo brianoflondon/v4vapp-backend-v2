@@ -47,6 +47,7 @@ dev = [
     "types-colorama>=0.4.15.20240311,<1.0.0",
     "dill>=0.3.9,<1.0.0",
     "hive-nectar>=0.0.3",
+    "pre-commit>=4.2.0",
 ]
 
 [build-system]
