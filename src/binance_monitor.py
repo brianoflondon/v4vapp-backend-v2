@@ -44,7 +44,7 @@ async def sleep_with_shutdown_check(duration: int, check_interval: float = 1.0):
     Returns:
         None
     """
-    elapsed = 0
+    elapsed = 0.0
     while elapsed < duration:
         if shutdown_event.is_set():
             logger.info(f"{ICON} Shutdown event detected during sleep.")
