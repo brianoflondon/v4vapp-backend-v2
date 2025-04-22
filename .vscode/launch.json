@@ -20,7 +20,8 @@
             "request": "launch",
             "program": "src/binance_monitor.py",
             "args": [
-                // "--help"
+                "-c",
+                "config/binance.config.yaml"
             ],
             "console": "integratedTerminal"
         },

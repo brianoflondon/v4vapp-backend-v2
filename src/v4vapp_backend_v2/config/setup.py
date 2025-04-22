@@ -402,6 +402,7 @@ class InternalConfig:
 
     _instance = None
     config: Config
+    config_filename: str = DEFAULT_CONFIG_FILENAME
     base_config_path: Path = BASE_CONFIG_PATH
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
     notification_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
@@ -429,9 +430,15 @@ class InternalConfig:
 
     def setup_config(self, config_filename: str = DEFAULT_CONFIG_FILENAME) -> None:
         try:
-            config_file = Path(BASE_CONFIG_PATH, config_filename)
+            # test if config_filename already has the default BASE_CONFIG_PATH
+            if config_filename.startswith(str(f"{BASE_CONFIG_PATH}/")):
+                config_file = str(Path(config_filename))
+            else:
+                # if not, prepend the base config path
+                config_file = str(Path(BASE_CONFIG_PATH, config_filename))
             with open(config_file) as f_in:
                 config = safe_load(f_in)
+            self.config_filename = config_filename
         except FileNotFoundError as ex:
             logger.error(f"Config file not found: {ex}")
             raise ex
