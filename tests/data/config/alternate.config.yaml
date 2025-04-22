@@ -1,0 +1,4 @@
+logging:
+  log_config_file: 2-stderr-json-file.json
+  default_log_level: DEBUG
+  log_folder: logs
