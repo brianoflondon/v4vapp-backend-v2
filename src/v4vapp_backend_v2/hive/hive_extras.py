@@ -28,6 +28,8 @@ DEFAULT_GOOD_NODES = [
     "https://api.syncad.com",
 ]
 
+BLOCK_STREAM_ONLY = ["https://rpc.podping.org"]
+
 EXCLUDE_NODES = [
     "https://rpc.mahdiyari.info",
     # "https://api.hive.blog",
@@ -46,7 +48,7 @@ MAX_HIVE_BATCH_SIZE = 25
 
 
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
-def get_hive_client(*args, **kwargs) -> Hive:
+def get_hive_client(stream_only: bool = False, *args, **kwargs) -> Hive:
     """
     Create a Hive client instance.
 
@@ -69,6 +71,8 @@ def get_hive_client(*args, **kwargs) -> Hive:
             logger.warning(f"Redis not available {e}", extra={"notification": False})
         if not good_nodes:
             good_nodes = get_good_nodes()
+        if stream_only:
+            good_nodes += BLOCK_STREAM_ONLY
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
 
