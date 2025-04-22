@@ -68,6 +68,8 @@
                 "v4vapp-test",
                 "--user",
                 "v4vapp.vsc",
+                "--user",
+                "vsc.gateway",
                 "--witness",
                 "brianoflondon",
             ],
