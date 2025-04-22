@@ -575,6 +575,7 @@ def main(
     config_filename: Annotated[
         str,
         typer.Option(
+            "-c",
             "--config-filename",
             help="The name of the config file (in a folder called ./config)",
             show_default=True,
