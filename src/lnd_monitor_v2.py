@@ -2,7 +2,7 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, List
 
 import typer
 from google.protobuf.json_format import MessageToDict
@@ -11,7 +11,7 @@ from pymongo.errors import BulkWriteError
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -30,10 +30,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
-
-INTERNAL_CONFIG = InternalConfig()
-CONFIG = INTERNAL_CONFIG.config
-DATABASE_NAME = "lnd_monitor_v2"
 
 app = typer.Typer()
 
@@ -195,6 +191,24 @@ async def remove_event_group(
     lnd_events_group.remove_group(htlc_event)
 
 
+def get_mongodb_client() -> MongoDBClient:
+    """
+    Returns a MongoDB client instance.
+
+    This function creates a MongoDB client instance using the default connection
+    and database name from the configuration.
+
+    Returns:
+        MongoDBClient: The MongoDB client instance.
+    """
+    dbs_config = InternalConfig().config.dbs_config
+    return MongoDBClient(
+        db_conn=dbs_config.default_connection,
+        db_name=dbs_config.default_name,
+        db_user=dbs_config.default_user,
+    )
+
+
 async def db_store_invoice(
     htlc_event: lnrpc.Invoice, lnd_client: LNDClient, *args: Any, **kwargs
 ) -> None:
@@ -207,9 +221,7 @@ async def db_store_invoice(
     Returns:
         None
     """
-    async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-    ) as db_client:
+    async with get_mongodb_client() as db_client:
         logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
             f"{db_client.hex_id}"
@@ -241,9 +253,7 @@ async def db_store_payment(
     Returns:
         None
     """
-    async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-    ) as db_client:
+    async with get_mongodb_client() as db_client:
         try:
             payment_pyd = Payment(htlc_event)
             await update_payment_route_with_alias(
@@ -503,9 +513,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         None
     """
     try:
-        async with MongoDBClient(
-            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-        ) as db_client:
+        async with get_mongodb_client() as db_client:
             index_offset = 0
             num_max_invoices = 1000
             total_invoices = 0
@@ -574,9 +582,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         None
     """
     try:
-        async with MongoDBClient(
-            db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-        ) as db_client:
+        async with get_mongodb_client() as db_client:
             index_offset = 0
             num_max_payments = 1000
             total_payments = 0
@@ -639,9 +645,27 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
 
 
 async def get_most_recent_invoice() -> Invoice:
-    async with MongoDBClient(
-        db_conn="local_connection", db_name=DATABASE_NAME, db_user="lnd_monitor"
-    ) as db_client:
+    """
+    Fetches the most recent invoice from the MongoDB collection.
+
+    This asynchronous function retrieves the most recent invoice document
+    from the "invoices" collection in the MongoDB database. The invoices
+    are sorted by the "creation_date" field in descending order to ensure
+    the latest invoice is selected.
+
+    Returns:
+        Invoice: An instance of the `Invoice` class representing the most
+        recent invoice.
+
+    Raises:
+        Exception: If there is an issue with database connectivity or data
+        parsing.
+
+    Logs:
+        Logs the `add_index` and `settle_index` of the most recent invoice
+        for debugging and monitoring purposes.
+    """
+    async with get_mongodb_client() as db_client:
         query = {}
         sort = [("creation_date", -1)]
         collection = db_client.db.get_collection("invoices")
@@ -673,12 +697,10 @@ async def main_async_start(connection_name: str) -> None:
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-        global DATABASE_NAME
-        DATABASE_NAME = f"lnd_monitor_v2_{connection_name}"
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
             logger.info(
-                f"{lnd_client.icon} 🔍 Monitoring node... {connection_name} {DATABASE_NAME}",
+                f"{lnd_client.icon} 🔍 Monitoring node... {connection_name}",
                 extra={"notification": True},
             )
             if lnd_client.get_info:
@@ -740,7 +762,7 @@ async def main_async_start(connection_name: str) -> None:
 
     logger.info(
         f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
-        f"Monitoring node: {connection_name}. Version: {CONFIG.min_version}",
+        f"Monitoring node: {connection_name}. Version: {__version__}",
         extra={"notification": True},
     )
     await asyncio.sleep(0.2)
@@ -760,32 +782,29 @@ async def check_for_shutdown():
 
 @app.command()
 def main(
-    lnd_node: Annotated[
-        Optional[str],
-        typer.Argument(
-            help=(
-                f"The LND node to monitor. If not provided, defaults to the value: "
-                f"{CONFIG.default_lnd_connection}.\n"
-                f"Choose from: {CONFIG.lnd_connections_names}"
-            )
-        ),
-    ] = CONFIG.lnd_config.default,
-    database: Annotated[
+    config_filename: Annotated[
         str,
-        typer.Argument(help=(f"The database to monitor.Choose from: {CONFIG.dbs_names}")),
-    ] = CONFIG.default_db_name,
+        typer.Option(
+            "-c",
+            "--config",
+            "--config-filename",
+            help="The name of the config file (in a folder called ./config)",
+            show_default=True,
+        ),
+    ] = DEFAULT_CONFIG_FILENAME,
 ):
-    f"""
+    """
     Main function to run the node monitor.
     Args:
-        lnd_node (Annotated[Optional[str], Argument]): The node to monitor.
-        Choose from:
-        {CONFIG.lnd_connections_names}
+        config_filename (str): The name of the config file (in a folder called ./config).
+
 
     Returns:
         None
     """
-    icon = CONFIG.lnd_connections[lnd_node].icon
+    CONFIG = InternalConfig(config_filename=config_filename).config
+    lnd_node = CONFIG.lnd_config.default
+    icon = CONFIG.lnd_config.connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {__version__}"
