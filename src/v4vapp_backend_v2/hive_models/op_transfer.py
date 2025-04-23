@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 from typing import Any
 
@@ -123,24 +122,6 @@ class Transfer(TransferRaw):
     @property
     def amount_str(self) -> str:
         return self.amount.__str__()
-
-    @property
-    def lightning_memo(self) -> str:
-        """
-        Removes and shortens a lightning invoice from a memo for outpu.
-
-        Returns:
-            str: The shortened memo string.
-        """
-        # Regex pattern to capture 'lnbc' followed by numbers and one letter
-        pattern = r"(lnbc\d+[a-zA-Z])"
-        match = re.search(pattern, self.d_memo)
-        if match:
-            # Replace the entire memo with the matched lnbc pattern
-            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
-        else:
-            memo = f"💬{self.d_memo}"
-        return memo
 
     @property
     def log_str(self) -> str:
