@@ -95,7 +95,7 @@ def main(
         None
     """
     icon = ICON
-    logger.info(f"{icon} ✅ Template App. Started. Version: {CONFIG.version}")
+    logger.info(f"{icon} ✅ Template App. Started. Version: {CONFIG.min_version}")
 
     asyncio.run(main_async_start(database_connection, db_name, lnd_connection))
 

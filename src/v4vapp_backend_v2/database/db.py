@@ -159,12 +159,12 @@ class MongoDBClient:
     def validate_connection(self):
         try:
             self.config = InternalConfig().config
-            self.db_connection = self.config.db_connections[self.db_conn]
+            self.db_connection = self.config.dbs_config.connections[self.db_conn]
 
             if self.db_name == "admin":
                 self.dbs = self.db_connection.admin_dbs
             else:
-                self.dbs = self.config.dbs
+                self.dbs = self.config.dbs_config.dbs
         except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",

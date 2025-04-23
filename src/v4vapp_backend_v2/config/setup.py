@@ -13,6 +13,7 @@ from statistics import mean, stdev
 from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
 import colorlog
+from packaging import version
 from pydantic import BaseModel, model_validator
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
@@ -57,6 +58,11 @@ class LndConnectionConfig(BaseConfig):
     macaroon_filename: str = ""
     cert_filename: str = ""
     use_proxy: str = ""
+
+
+class LndConfig(BaseConfig):
+    default: str = ""
+    connections: Dict[str, LndConnectionConfig] = {}
 
 
 class TailscaleConfig(BaseConfig):
@@ -122,6 +128,14 @@ class DatabaseConnectionConfig(BaseConfig):
     icon: str | None = None
 
 
+class DbsConfig(BaseConfig):
+    default_connection: str = ""
+    default_name: str = ""
+    default_user: str = ""
+    connections: Dict[str, DatabaseConnectionConfig] = {}
+    dbs: Dict[str, DatabaseDetailsConfig] = {}
+
+
 class RedisConnectionConfig(BaseConfig):
     host: str = "localhost"
     port: int = 6379
@@ -174,6 +188,10 @@ class HiveAccountConfig(BaseConfig):
 
 class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
+    watch_users: List[str] = []
+    proposals_tracked: List[str] = []
+    watch_witnesses: List[str] = []
+    custom_json_ids_tracked: List[str] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -243,67 +261,78 @@ class HiveConfig(BaseConfig):
 
 class Config(BaseModel):
     """
-    Config class for application configuration.
+    version (str): The version of the configuration. Default is an empty string.
+    lnd_config (LndConfig): Configuration for LND connections.
+    dbs_config (DbsConfig): Configuration for database connections.
+    redis (RedisConnectionConfig): Configuration for Redis connection.
+    notification_bots (Dict[str, NotificationBotConfig]): Dictionary of notification bot configurations.
+    api_keys (ApiKeys): Configuration for API keys.
+    hive (HiveConfig): Configuration for Hive.
+    min_config_version (ClassVar[str]): Minimum required configuration version.
 
-    Attributes:
-        version (str): The version of the configuration. Default is "1".
-        logging (LoggingConfig): Configuration for logging.
-        default_connection (str): The default connection name.
-        lnd_connections (List[LndConnectionConfig]):
-            List of LND connection configurations.
-        tailscale (TailscaleConfig): Configuration for Tailscale.
-        telegram (TelegramConfig): Configuration for Telegram.
+    check_all_defaults(cls, v: Config) -> Config:
+        Validates the configuration after initialization to ensure all defaults are properly set.
+        Raises ValueError if any validation fails.
 
-    Methods:
-        unique_names(cls, v):
-            Validates that all LND connections have unique names.
+    lnd_connections_names(self) -> str:
+        Retrieves a comma-separated list of LND connection names.
 
-        check_default_connection(cls, v):
-            Validates that the default connection is present in the
-            list of LND connections.
+    db_connections_names(self) -> str:
+        Retrieves a comma-separated list of database connection names.
 
-        list_lnd_connections(self) -> List[str]:
-            Returns a list of names of all LND connections.
+    dbs_names(self) -> str:
+        Retrieves a comma-separated list of database names.
 
-        connection(self, connection_name: str) -> LndConnectionConfig:
-            Returns the LND connection configuration for the given connection name.
-            Raises a ValueError if the connection name is not found.
+    find_notification_bot_name(self, token: str) -> str:
+        Finds the name of a notification bot based on its token.
+        Raises ValueError if the token is not found.
     """
 
-    version: str = "1"
+    version: str = ""
     logging: LoggingConfig
 
-    # Defaults
-    default_lnd_connection: str = ""
-    default_db_connection: str = ""
-    default_db_name: str = ""
-    default_db_user: str = ""
+    lnd_config: LndConfig = LndConfig()
+    dbs_config: DbsConfig = DbsConfig()
 
-    # Connections and DB configs
-    lnd_connections: Dict[str, LndConnectionConfig] = {}
-    db_connections: Dict[str, DatabaseConnectionConfig] = {}
-    dbs: Dict[str, DatabaseDetailsConfig] = {}
     redis: RedisConnectionConfig = RedisConnectionConfig()
 
     tailscale: TailscaleConfig = TailscaleConfig()
 
-    telegram: TelegramConfig = TelegramConfig()
     notification_bots: Dict[str, NotificationBotConfig] = {}
 
     api_keys: ApiKeys = ApiKeys()
     hive: HiveConfig = HiveConfig()
 
+    min_config_version: ClassVar[str] = "0.2.0"
+
     @model_validator(mode="after")
-    def check_all_defaults(cls, v: Any):
+    def check_all_defaults(cls, v: "Config") -> "Config":
         # Check that the default connection is in the list of connections
         # if it is given.
-        print("Checking all defaults")
-        if v.default_lnd_connection and v.default_lnd_connection not in v.lnd_connections.keys():
-            raise ValueError("Default connection not found in lnd_connections")
-        if v.default_db_connection and v.default_db_connection not in v.db_connections.keys():
-            raise ValueError("Default database connection not found in database")
-        if v.default_db_name and v.default_db_name not in v.dbs.keys():
-            raise ValueError("Default database name not found in databases")
+        logger.info("Validating the Config file and defaults....")
+        config_version = version.parse(v.version)
+        min_version = version.parse(cls.min_config_version)
+        if config_version < min_version:
+            raise ValueError(
+                f"Config version {v.version} is less than the minimum required version {cls.min_config_version}"
+            )
+
+        if v.lnd_config.default and v.lnd_config.default not in v.lnd_config.connections.keys():
+            raise ValueError(
+                f"Default lnd connection: {v.lnd_config.default} not found in lnd_connections"
+            )
+
+        if (
+            v.dbs_config.default_connection
+            and v.dbs_config.default_connection not in v.dbs_config.connections.keys()
+        ):
+            raise ValueError(
+                f"Default database connection: {v.dbs_config.default_connection} not found in database"
+            )
+        if v.dbs_config.default_name and v.dbs_config.default_name not in v.dbs_config.dbs.keys():
+            raise ValueError(
+                f"Default database name: {v.dbs_config.default_name} not found in dbs"
+            )
 
         # check if two notification bots have the same token
         tokens = [bot.token for bot in v.notification_bots.values()]
@@ -320,7 +349,7 @@ class Config(BaseModel):
         Returns:
             str: A list containing the names of all connections separated by ,.
         """
-        return ", ".join(self.lnd_connections.keys())
+        return ", ".join(self.lnd_config.connections.keys())
 
     @property
     def db_connections_names(self) -> str:
@@ -330,7 +359,7 @@ class Config(BaseModel):
         Returns:
             str: A list containing the names of all connections separated by ,.
         """
-        return ", ".join(self.db_connections.keys())
+        return ", ".join(self.dbs_config.connections.keys())
 
     @property
     def dbs_names(self) -> str:
@@ -340,19 +369,19 @@ class Config(BaseModel):
         Returns:
             str: A list containing the names of all databases separated by ,.
         """
-        return ", ".join(self.dbs.keys())
+        return ", ".join(self.dbs_config.dbs.keys())
 
     def find_notification_bot_name(self, token: str) -> str:
         """
-        Retrieve a list of bot tokens from the telegram_bots attribute.
+        Retrieve a list of bot tokens from the notification_bots attribute.
 
         Returns:
             str: A list containing the bot tokens separated by ,.
         """
-        [bot_name] = [name for name, bot in self.notification_bots.items() if bot.token == token]
-        if not bot_name:
+        bot_names = [name for name, bot in self.notification_bots.items() if bot.token == token]
+        if not bot_names:
             raise ValueError("Bot name not found in the configuration")
-        return bot_name
+        return bot_names[0]
 
 
 class ConsoleLogFilter(logging.Filter):
@@ -402,6 +431,7 @@ class InternalConfig:
 
     _instance = None
     config: Config
+    config_filename: str = DEFAULT_CONFIG_FILENAME
     base_config_path: Path = BASE_CONFIG_PATH
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
     notification_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
@@ -429,11 +459,18 @@ class InternalConfig:
 
     def setup_config(self, config_filename: str = DEFAULT_CONFIG_FILENAME) -> None:
         try:
-            config_file = Path(BASE_CONFIG_PATH, config_filename)
+            # test if config_filename already has the default BASE_CONFIG_PATH
+            if config_filename.startswith(str(f"{BASE_CONFIG_PATH}/")):
+                config_file = str(Path(config_filename))
+            else:
+                # if not, prepend the base config path
+                config_file = str(Path(BASE_CONFIG_PATH, config_filename))
             with open(config_file) as f_in:
                 config = safe_load(f_in)
+            self.config_filename = config_filename
+            print(f"Config file found: {config_file}")
         except FileNotFoundError as ex:
-            logger.error(f"Config file not found: {ex}")
+            print(f"Config file not found: {ex}")
             raise ex
 
         try:
@@ -450,7 +487,7 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = json.load(f_in)
         except FileNotFoundError as ex:
-            logger.error(f"Logging config file not found: {ex}")
+            print(f"Logging config file not found: {ex}")
             raise ex
 
         # Ensure log folder exists

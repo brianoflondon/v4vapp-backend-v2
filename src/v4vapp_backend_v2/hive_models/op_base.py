@@ -11,7 +11,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
-from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_id
+from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 OP_TRACKED = [
@@ -212,12 +212,30 @@ class OpBase(BaseModel):
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
     proposals_tracked: ClassVar[List[int]] = []
+    custom_json_ids_tracked: ClassVar[List[str]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     hive_inst: ClassVar[Hive | None] = None
     db_client: ClassVar[MongoDBClient | None] = None
 
     def __init__(self, **data):
+        """
+        Initializes an instance of the class with the provided data.
+
+        Args:
+            **data: Arbitrary keyword arguments containing the data to initialize the instance.
+
+        Raises:
+            ValueError: If the "type" field in the provided data is not recognized.
+
+        Attributes:
+            custom_json_ids_tracked (List[str]): Tracks custom JSON IDs, initialized if not already set.
+            raw_op (dict): A copy of the input data.
+            timestamp (datetime): Ensures the timestamp is timezone-aware, defaulting to UTC if not provided.
+            realm (str): The realm determined by the operation type, based on the "type" field in the input data.
+        """
         super().__init__(**data)
+        if not hasattr(self, "custom_json_ids_tracked") or self.custom_json_ids_tracked is None:
+            self.custom_json_ids_tracked = all_custom_json_ids()
         self.raw_op = data.copy()
         if (
             self.timestamp.tzinfo is None
@@ -252,8 +270,9 @@ class OpBase(BaseModel):
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
         if hasattr(self, "cj_id"):
-            if custom_json_test_id(self.cj_id):
-                return True
+            if self.cj_id in self.custom_json_ids_tracked:
+                if custom_json_test_id(self.cj_id):
+                    return True
         return False
 
     @property

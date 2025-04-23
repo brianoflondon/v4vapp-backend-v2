@@ -1,4 +1,4 @@
-from typing import Any, Dict, Type, Union
+from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, Field, Json
 
@@ -74,8 +74,26 @@ CUSTOM_JSON_IDS = {
     "v4vapp_transfer": KeepsatsTransfer,
     "vsc.transfer": VSCTransfer,
     "vsc.withdraw": VSCTransfer,
+    "vsc.withdraw_hbd": VSCTransfer,
+    "vsc.deposit": VSCTransfer,
+    "vsc.deposit_hbd": VSCTransfer,
+    "vsc.stake": VSCTransfer,
+    "vsc.stake_hbd": VSCTransfer,
+    "vsc.unstake": VSCTransfer,
+    "vsc.unstake_hbd": VSCTransfer,
     "vsc.actions": VSCActions,
 }
+
+
+def all_custom_json_ids() -> List[str]:
+    """
+    Returns a list of all custom JSON IDs defined in the CUSTOM_JSON_IDS dictionary.
+    This function is useful for retrieving all available custom JSON IDs for validation
+    or processing purposes.
+    Returns:
+        List[str]: A list of custom JSON IDs.
+    """
+    return list(CUSTOM_JSON_IDS.keys())
 
 
 def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
@@ -95,7 +113,9 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
 
     """
     if data.get("id", "") in CUSTOM_JSON_IDS.keys():
-        return CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
+        return (
+            CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
+        )
     return None
 
 

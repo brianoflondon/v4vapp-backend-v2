@@ -20,7 +20,8 @@
             "request": "launch",
             "program": "src/binance_monitor.py",
             "args": [
-                // "--help"
+                "-c",
+                "binance.config.yaml"
             ],
             "console": "integratedTerminal"
         },
@@ -54,24 +55,21 @@
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "missing.config.yaml",
+                "hive.config.yaml",
                 "--watch-only",
-                "--user",
-                "v4vapp",
-                "--user",
-                "brianoflondon",
-                "--user",
-                "v4vapp.tre",
-                "--user",
-                "v4vapp.dhf",
-                "--user",
-                "v4vapp-test",
-                "--user",
-                "v4vapp.vsc",
-                "--user",
-                "vsc.gateway",
-                "--witness",
-                "brianoflondon",
+            ],
+            "justMyCode": true,
+        },
+        {
+            "name": "VSC Hive Monitor HBD No SALE",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "--config-filename",
+                "hive.vsc.config.yaml",
+                "--watch-only",
             ],
             "justMyCode": true,
         },
@@ -159,7 +157,8 @@
             "request": "launch",
             "program": "src/lnd_monitor_v2.py",
             "args": [
-                "voltage"
+                "--config",
+                "voltage.config.yaml"
             ],
             "console": "integratedTerminal"
         },

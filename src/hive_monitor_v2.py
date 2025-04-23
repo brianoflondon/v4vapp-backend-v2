@@ -12,6 +12,7 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
+from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -314,7 +315,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
     return mean_time_diff, block_timestamps[0]
 
 
-async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND_LINE_WATCH_USERS):
+async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] = []):
     """
     Asynchronously loops through transactions and processes them.
 
@@ -324,6 +325,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
     stores block markers in a database.
 
     Args:
+        watch_witnesses (List[str]): A list of witness accounts to monitor for transactions.
         watch_users (List[str]): A list of user accounts to monitor for transactions.
 
     Raises:
@@ -331,17 +333,20 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
         asyncio.CancelledError: If the asyncio task is cancelled.
         Exception: For any other exceptions that occur during processing.
     """
-    logger.info(f"{icon} Combined Loop Watching users: {watch_users} and witness {watch_witness}")
+    logger.info(
+        f"{icon} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
+    )
     OpBase.watch_users = watch_users
-    OpBase.proposals_tracked = [303, 342]
+    OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
+    OpBase.custom_json_ids_tracked = InternalConfig().config.hive.custom_json_ids_tracked
     OpBase.db_client = MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,
     )
-
-    producer_reward = await witness_first_run(watch_witness)
-    last_witness_timestamp = producer_reward.timestamp
+    async with asyncio.TaskGroup() as tg:
+        for witness in watch_witnesses:
+            tg.create_task(witness_first_run(witness))
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
     last_good_block = await get_last_good_block() + 1
@@ -365,7 +370,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                 if isinstance(op, AccountWitnessVote):
                     op.get_voter_details()
                     log_it = True
-                    if op.witness == watch_witness:
+                    if op.witness in watch_witnesses:
                         asyncio.create_task(db_store_op(op))
                         notification = True
                         db_store = True
@@ -374,7 +379,8 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     if op.is_watched:
                         await Transfer.update_quote()
                         op.update_conv()
-                        asyncio.create_task(balance_server_hbd_level(op))
+                        if not COMMAND_LINE_WATCH_ONLY:
+                            asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
                         notification = True
@@ -386,7 +392,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                         await op.update_quote_conv()
                     log_it = True
                     db_store = True
-                    if op.cj_id in ["vsc.transfer", "vsc.withdraw"]:
+                    if "vsc." in op.custom_json_ids_tracked:
                         extra_bots = ["VSC_Proposals"]
 
                 if (
@@ -399,7 +405,7 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     db_store = True
 
                 if isinstance(op, ProducerReward):
-                    if op.producer in [watch_witness, "vsc.network"]:
+                    if op.producer in watch_witnesses:
                         notification = True
                         await op.get_witness_details()
                         op.mean, last_witness_timestamp = await witness_average_block_time(
@@ -417,7 +423,6 @@ async def all_ops_loop(watch_witness: str = "", watch_users: List[str] = COMMAND
                     if op.is_tracked:
                         notification = True
                         db_store = True
-                        extra_bots = ["VSC_Proposals"]
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
@@ -472,12 +477,12 @@ async def combined_logging(
         }
         # Only send extra notifications if the bot is not in watch-only mode
         # so we don't double notify.
-        if extra_bots and not COMMAND_LINE_WATCH_ONLY:
+        if extra_bots:
             log_extras["extra_bot_names"] = extra_bots
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
 
-async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
+async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -> None:
     """
     Main function to run the Hive Watcher client.
     Args:
@@ -513,7 +518,7 @@ async def main_async_start(watch_users: List[str], watch_witness: str) -> None:
 
     try:
         tasks = [
-            all_ops_loop(watch_witness=watch_witness, watch_users=watch_users),
+            all_ops_loop(watch_witnesses=watch_witnesses, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -543,7 +548,7 @@ def main(
             help="Hive User(s) to watch for transactions, can have multiple",
             show_default=True,
         ),
-    ],
+    ] = [],
     watch_only: Annotated[
         bool,
         typer.Option(
@@ -552,14 +557,14 @@ def main(
             show_default=True,
         ),
     ] = False,
-    watch_witness: Annotated[
-        str,
+    watch_witnesses: Annotated[
+        List[str],
         typer.Option(
             "--witness",
-            help="Hive Witness to watch for transactions",
+            help="Hive Witness(es) to watch for transactions",
             show_default=True,
         ),
-    ] = "brianoflondon",
+    ] = [],
     database: Annotated[
         str,
         typer.Argument(help=("The database to monitor.")),
@@ -575,6 +580,8 @@ def main(
     config_filename: Annotated[
         str,
         typer.Option(
+            "-c",
+            "--config",
             "--config-filename",
             help="The name of the config file (in a folder called ./config)",
             show_default=True,
@@ -595,28 +602,28 @@ def main(
         None
     """
     CONFIG = InternalConfig(config_filename=config_filename).config
-    global COMMAND_LINE_WATCH_USERS
     global COMMAND_LINE_WATCH_ONLY
     global HIVE_DATABASE
     global HIVE_DATABASE_CONNECTION
     global HIVE_DATABASE_USER
 
-    if not database:
-        HIVE_DATABASE = CONFIG.default_db_name
     if not database_connection:
-        HIVE_DATABASE_CONNECTION = CONFIG.default_db_connection
+        HIVE_DATABASE_CONNECTION = CONFIG.dbs_config.default_connection
+    if not database:
+        HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
-        HIVE_DATABASE_USER = CONFIG.default_db_user
+        HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {CONFIG.version}",
+        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
         extra={"notification": True},
     )
     if not watch_users:
-        watch_users = ["v4vapp", "brianoflondon"]
-    COMMAND_LINE_WATCH_USERS = watch_users
+        watch_users = CONFIG.hive.watch_users
+    if not watch_witnesses:
+        watch_witnesses = CONFIG.hive.watch_witnesses
     COMMAND_LINE_WATCH_ONLY = watch_only
-    asyncio.run(main_async_start(watch_users, watch_witness))
+    asyncio.run(main_async_start(watch_users, watch_witnesses))
 
 
 if __name__ == "__main__":

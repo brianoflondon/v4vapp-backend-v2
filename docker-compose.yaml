@@ -62,7 +62,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/voltage:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "voltage"]
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
     restart: unless-stopped
     stop_grace_period: 20s
 
@@ -75,7 +75,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/umbrel:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "umbrel"]
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "umbrel"]
     restart: unless-stopped
     stop_grace_period: 20s
 
@@ -90,13 +90,7 @@ services:
       - ./logs_docker/hive:/app/logs
     command: [
       "python", "src/hive_monitor_v2.py",
-      "--user", "v4vapp",
-      "--user", "v4vapp.tre",
-      "--user", "v4vapp.dhf",
-      "--user", "brianoflondon",
-      "--user", "v4vapp-test",
-      "--user", "v4vapp.vsc",
-      "--witness", "brianoflondon",
+      "--config", "hive.config",
     ]
     restart: unless-stopped
     stop_grace_period: 20s

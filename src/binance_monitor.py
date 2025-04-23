@@ -6,7 +6,8 @@ from typing import Annotated
 
 import typer
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.helpers.binance_extras import (
     BinanceErrorBadConnection,
     get_balances,
@@ -43,7 +44,7 @@ async def sleep_with_shutdown_check(duration: int, check_interval: float = 1.0):
     Returns:
         None
     """
-    elapsed = 0
+    elapsed = 0.0
     while elapsed < duration:
         if shutdown_event.is_set():
             logger.info(f"{ICON} Shutdown event detected during sleep.")
@@ -226,19 +227,31 @@ def main(
         bool,
         typer.Option(help=("Use the Binance testnet. Defaults to False.")),
     ] = False,
+    config_filename: Annotated[
+        str,
+        typer.Option(
+            "-c",
+            "--config",
+            "--config-filename",
+            help="The name of the config file (in a folder called ./config)",
+            show_default=True,
+        ),
+    ] = DEFAULT_CONFIG_FILENAME,
 ):
     """
     Monitors a Binance account
     Args:
+        testnet (bool): Use the Binance testnet. Defaults to False.
+        config_filename (str): The name of the config file (in a folder called ./config).
 
 
     Returns:
         None
     """
     icon = ICON
-    version = InternalConfig().config.version
+    InternalConfig(config_filename=config_filename)
     logger.info(
-        f"{icon} ✅ Binance Monitor. Started. Version: {version}",
+        f"{icon} ✅ Binance Monitor. Started. {__version__}",
         extra={"notification": True},
     )
 

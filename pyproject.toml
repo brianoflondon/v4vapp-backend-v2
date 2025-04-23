@@ -30,6 +30,7 @@ dependencies = [
     "python-telegram-bot>=22.0,<23.0",
     "hive-nectar>=0.0.3",
     "tenacity>=9.1.2",
+    "packaging>=25.0",
 ]
 
 [dependency-groups]
@@ -47,6 +48,7 @@ dev = [
     "types-colorama>=0.4.15.20240311,<1.0.0",
     "dill>=0.3.9,<1.0.0",
     "hive-nectar>=0.0.3",
+    "pre-commit>=4.2.0",
 ]
 
 [build-system]
@@ -81,4 +83,4 @@ asyncio_default_fixture_loop_scope = "function"
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
 
 [tool.uv.sources]
-hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch = "main" }
+hive-nectar = { git = "https://github.com/TheCrazyGM/hive-nectar.git", branch = "dev" }
