@@ -115,18 +115,18 @@ class V4VAsyncRedis:
                 await redis.flushdb()
                 logger.info("Redis Database flushed successfully")
         except Exception as e:
-            logger.error(f"Error flushing database: {e}")
+            logger.error(f"Redis Error flushing database: {e}")
 
     async def __aenter__(self) -> Redis:
         try:
             _ = await self.redis.ping()
             return self.redis
         except ConnectionError as e:
-            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
         except Exception as e:
-            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
 
@@ -138,11 +138,11 @@ class V4VAsyncRedis:
             _ = self.sync_redis.ping()
             return self.sync_redis
         except ConnectionError as e:
-            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
         except Exception as e:
-            logger.warning(f"ConnectionError {self.host}:{self.port} - {e}")
+            logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
             logger.warning(e)
             raise e
 
