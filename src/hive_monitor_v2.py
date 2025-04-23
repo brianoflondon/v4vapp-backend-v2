@@ -414,8 +414,6 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         op.delta = op.timestamp - last_witness_timestamp
                         log_it = True
                         db_store = True
-                        if op.producer == "vsc.network":
-                            extra_bots = ["VSC_Proposals"]
 
                 if isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
