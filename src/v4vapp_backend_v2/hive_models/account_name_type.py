@@ -13,7 +13,7 @@ class AccName(str):
     @property
     def markdown_link(self) -> str:
         # Replace this with your specific URL pattern (the "mussel")
-        return f"**[{self}](https://hivehub.dev/@{self})**"
+        return f"[{self}](https://hivehub.dev/@{self})"
 
 
 # Annotated type with validator to cast to HiveAccName

@@ -172,7 +172,7 @@ class Transfer(TransferRaw):
                  - A hashtag indicating no preview.
         """
         ans = (
-            f"{self.from_account.markdown_link} sent **{self.amount_str}** to {self.to_account.markdown_link} "
+            f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
             f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
