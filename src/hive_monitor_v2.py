@@ -239,7 +239,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             return producer_reward
 
         # Empty database
-        look_back = timedelta(days=1)
+        look_back = timedelta(hours=3)
         async for op in stream_ops_async(
             opNames=["producer_reward"], look_back=look_back, stop_now=True
         ):
