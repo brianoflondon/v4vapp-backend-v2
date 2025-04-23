@@ -212,6 +212,7 @@ class OpBase(BaseModel):
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
     proposals_tracked: ClassVar[List[int]] = []
+    custom_json_ids_tracked: ClassVar[List[str]] = []
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     hive_inst: ClassVar[Hive | None] = None
     db_client: ClassVar[MongoDBClient | None] = None
@@ -252,8 +253,9 @@ class OpBase(BaseModel):
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
         if hasattr(self, "cj_id"):
-            if custom_json_test_id(self.cj_id):
-                return True
+            if self.cj_id in self.custom_json_ids_tracked:
+                if custom_json_test_id(self.cj_id):
+                    return True
         return False
 
     @property

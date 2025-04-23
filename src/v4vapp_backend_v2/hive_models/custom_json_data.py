@@ -95,7 +95,9 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
 
     """
     if data.get("id", "") in CUSTOM_JSON_IDS.keys():
-        return CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
+        return (
+            CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
+        )
     return None
 
 

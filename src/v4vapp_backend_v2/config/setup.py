@@ -191,6 +191,7 @@ class HiveConfig(BaseConfig):
     watch_users: List[str] = []
     proposals_tracked: List[str] = []
     watch_witnesses: List[str] = []
+    custom_json_ids_tracked: List[str] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
