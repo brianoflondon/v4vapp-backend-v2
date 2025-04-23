@@ -58,6 +58,7 @@ tailscale:
 dbs_config:
   default_connection: conn_1
   default_name: test_db
+  default_user: test_user
 
   connections:
     conn_bad:
