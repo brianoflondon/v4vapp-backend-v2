@@ -379,7 +379,8 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     if op.is_watched:
                         await Transfer.update_quote()
                         op.update_conv()
-                        asyncio.create_task(balance_server_hbd_level(op))
+                        if not COMMAND_LINE_WATCH_ONLY:
+                            asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
                         notification = True
@@ -422,7 +423,6 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     if op.is_tracked:
                         notification = True
                         db_store = True
-                        extra_bots = ["VSC_Proposals"]
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
@@ -477,7 +477,7 @@ async def combined_logging(
         }
         # Only send extra notifications if the bot is not in watch-only mode
         # so we don't double notify.
-        if extra_bots and not COMMAND_LINE_WATCH_ONLY:
+        if extra_bots:
             log_extras["extra_bot_names"] = extra_bots
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 

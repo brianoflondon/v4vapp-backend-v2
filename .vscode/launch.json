@@ -61,6 +61,19 @@
             "justMyCode": true,
         },
         {
+            "name": "VSC Hive Monitor HBD No SALE",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "--config-filename",
+                "hive.vsc.config.yaml",
+                "--watch-only",
+            ],
+            "justMyCode": true,
+        },
+        {
             "name": "SELLING Hive Monitor SELLING",
             "type": "debugpy",
             "consoleName": "Hive Monitor",
