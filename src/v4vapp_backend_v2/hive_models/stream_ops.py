@@ -117,7 +117,7 @@ async def stream_ops_async(
             )
             logger.info(
                 f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,} "
-                f"using {hive.rpc.url}",
+                f"using {hive.rpc.url} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",
                     "notification": True,
@@ -157,7 +157,7 @@ async def stream_ops_async(
                 last_block = op_base.block_num
                 yield op_base
         except SwitchToLiveStream as e:
-            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url}")
+            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
             continue
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")

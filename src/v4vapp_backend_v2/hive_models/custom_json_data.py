@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, Field, Json
 
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
 
@@ -48,6 +49,7 @@ class KeepsatsTransfer(BaseModel):
     @property
     def log_str(self) -> str:
         message_memo = self.invoice_message or self.memo
+        message_memo = lightning_memo(message_memo)
         if self.to_account == "":
             return (
                 f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
@@ -59,6 +61,7 @@ class KeepsatsTransfer(BaseModel):
     @property
     def notification_str(self) -> str:
         message_memo = self.invoice_message or self.memo
+        message_memo = lightning_memo(message_memo)
         if self.to_account == "":
             return (
                 f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"

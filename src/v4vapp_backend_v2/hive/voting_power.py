@@ -111,7 +111,7 @@ class VotingPower:
                 break
             except Exception as ex:
                 logging.error(
-                    f"Problem checking proposal votes {ex} {hive.rpc.url}", exc_info=True
+                    f"Problem checking proposal votes {ex} {hive.rpc.url} no_preview", exc_info=True
                 )
                 rpc_node_count -= 1
                 hive.rpc.next()

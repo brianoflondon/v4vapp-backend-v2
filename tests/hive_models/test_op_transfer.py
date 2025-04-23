@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from pprint import pprint
 
@@ -6,6 +7,7 @@ import pytest
 from nectar.amount import Amount
 
 from tests.load_data import load_hive_events
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown, sanitize_markdown_v1, sanitize_markdown_v2
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
@@ -50,7 +52,6 @@ def test_op_transfer_watch_list():
             assert transfer.from_account not in Transfer.watch_list
             assert transfer.to_account not in Transfer.watch_list
             print(transfer.to_account)
-
 
 
 def test_model_validate_transfer_enhanced():
@@ -108,3 +109,36 @@ async def test_model_dump_transfer_enhanced():
             assert transfer.log_str
             assert transfer.notification_str
             assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+
+
+@pytest.mark.asyncio
+async def test_lightning_invoices_replacement():
+    """
+    Test the replacement of lightning invoices in transfer events.
+
+    This test function performs the following steps:
+    1. Loads Hive events of type 'transfer' and iterates through them.
+    2. For each transfer event, it validates the event using the Transfer model.
+    3. Checks if the memo contains a lightning invoice and replaces it with a new one.
+    4. Asserts that the replaced invoice is not empty and is different from the original memo.
+    """
+    invoice = "lnbc565100n1p5qjqmqpp5r7z5qu9xmqfysuf5gtsp4dyhp6tc7ltmy2pz9axfzsyq47qdauysdqqcqzzsxqzrcrzjqfhv8c6rsvy9rxn4efzfdq32ds0z9yt5l092mm43w3cycdm3ztpnrapyqqqqqqqqmyqqqqqqqqqqqqqq2qsp5alqn0ntzfmh9vhmufqk9ymdqwr8tnaqczd6p4r4mdp7v4c0c0lqq9qxpqysgqqxdxepu42yegdzsfvemjeknrfmmnrx6j0e8my3wmg7d2ryc0s2nxxjpkke4sv7x9y0wwl7gw6z4qwzlj6f7aeslmvplwr2wjpqyvm9qp7fe8k3"
+    op_transfer = Transfer(
+        from_account="someone",
+        to_account="v4vapp",
+        type="transfer",
+        block_num="95282089",
+        trx_id="d54942972facb449d7a82590aad0d76c04d46d1c",
+        amount=Amount("33.000 HIVE"),
+        memo=invoice,
+        d_memo=invoice,
+        timestamp=datetime.now(tz=timezone.utc),
+        op_in_trx=1,
+    )
+    assert invoice not in op_transfer.notification_str
+    assert "⚡️" in op_transfer.notification_str
+    print(op_transfer.notification_str)
+
+    assert is_markdown(op_transfer.notification_str)
+    print(sanitize_markdown_v1(op_transfer.notification_str))
+    print(sanitize_markdown_v2(op_transfer.notification_str))

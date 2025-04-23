@@ -415,3 +415,21 @@ def sanitize_filename(filename: str) -> str:
     # Remove invalid characters (anything other than alphanumeric, underscores, hyphens, or dots)
     sanitized = re.sub(r"[^a-zA-Z0-9._-]", "", sanitized)
     return sanitized
+
+
+def lightning_memo(memo: str) -> str:
+    """
+    Removes and shortens a lightning invoice from a memo for output.
+
+    Returns:
+        str: The shortened memo string.
+    """
+    # Regex pattern to capture 'lnbc' followed by numbers and one letter
+    pattern = r"(lnbc\d+[a-zA-Z])"
+    match = re.search(pattern, memo)
+    if match:
+        # Replace the entire memo with the matched lnbc pattern
+        memo = f"⚡️{match.group(1)}...{memo[-5:]}"
+    else:
+        memo = f"💬{memo}"
+    return memo

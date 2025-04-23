@@ -1,6 +1,7 @@
 from asyncio import get_event_loop
 from datetime import datetime, timezone
 from enum import StrEnum, auto
+import re
 from typing import Any, ClassVar, Dict, List
 
 from nectar import Hive
@@ -482,3 +483,21 @@ class OpBase(BaseModel):
         if not markdown:
             return link_html
         return f"[{OpBase.block_explorer.name}]({link_html})"
+
+    @property
+    def lightning_memo(self) -> str:
+        """
+        Removes and shortens a lightning invoice from a memo for outpu.
+
+        Returns:
+            str: The shortened memo string.
+        """
+        # Regex pattern to capture 'lnbc' followed by numbers and one letter
+        pattern = r"(lnbc\d+[a-zA-Z])"
+        match = re.search(pattern, self.d_memo)
+        if match:
+            # Replace the entire memo with the matched lnbc pattern
+            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
+        else:
+            memo = f"💬{self.d_memo}"
+        return memo
