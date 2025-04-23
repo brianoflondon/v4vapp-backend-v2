@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from nectar import Hive
 from nectar.blockchain import Blockchain
+from nectar.exceptions import NectarException
 from nectarapi.exceptions import NumRetriesReached
 
 from v4vapp_backend_v2.config.setup import logger
@@ -158,26 +159,24 @@ async def stream_ops_async(
         except SwitchToLiveStream as e:
             logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url}")
             continue
-
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")
             return
+        except (NectarException, NumRetriesReached) as e:
+            logger.warning(
+                f"{start_block:,} NectarException in block_stream: {e} restarting",
+                extra={"notification": False, "error_code": "stream_restart", "error": e},
+            )
         except StopAsyncIteration as e:
             logger.error(
                 f"{start_block:,} StopAsyncIteration in block_stream stopped unexpectedly: {e}"
             )
         except TypeError as e:
             logger.warning(f"{start_block:,} TypeError in block_stream: {e} restarting")
-        except NumRetriesReached as e:
-            hive.rpc.next()
-            logger.warning(
-                f"{start_block:,} NumRetriesReached in block_stream: {e} restarting",
-                extra={"notification": True, "error_code": "stream_restart"},
-            )
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
-                extra={"notification": False},
+                extra={"notification": False, "error": e, "error_code": "stream_restart"},
             )
         finally:
             if last_block >= stop_block:
@@ -268,3 +267,41 @@ if __name__ == "__main__":
 # hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 740, in wait_for_and_get_block
 # hive-monitor-1     |     raise BlockWaitTimeExceeded(
 # hive-monitor-1     | nectar.exceptions.BlockWaitTimeExceeded: Already waited 9 s
+"""
+-monitor-1     | 2025-04-23T04:51:24+0000.060 INFO     hive_monitor_v2            61 : Received shutdown signal. Setting shutdown event.
+hive-monitor-1     | 2025-04-23T04:51:31+0000.254 WARNING  async_wrapper              95 : _next Already waited 9 s
+hive-monitor-1     | 2025-04-23T04:51:31+0000.255 ERROR    async_wrapper              96 : Already waited 9 s
+hive-monitor-1     | Traceback (most recent call last):
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 730, in wait_for_and_get_block
+hive-monitor-1     |     block = Block(
+hive-monitor-1     |             ^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/block.py", line 73, in __init__
+hive-monitor-1     |     super(Block, self).__init__(
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchainobject.py", line 132, in __init__
+hive-monitor-1     |     self.refresh()
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/block.py", line 189, in refresh
+hive-monitor-1     |     raise BlockDoesNotExistsException(
+hive-monitor-1     | nectar.exceptions.BlockDoesNotExistsException: output: {} of identifier 95269588
+hive-monitor-1     |
+hive-monitor-1     | During handling of the above exception, another exception occurred:
+hive-monitor-1     |
+hive-monitor-1     | Traceback (most recent call last):
+hive-monitor-1     |   File "/app/src/v4vapp_backend_v2/helpers/async_wrapper.py", line 73, in _next
+hive-monitor-1     |     return next(it)
+hive-monitor-1     |            ^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 856, in stream
+hive-monitor-1     |     for block in self.blocks(**kwargs):
+hive-monitor-1     |                  ^^^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 659, in blocks
+hive-monitor-1     |     block = self.wait_for_and_get_block(
+hive-monitor-1     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hive-monitor-1     |   File "/app/.venv/lib/python3.12/site-packages/nectar/blockchain.py", line 740, in wait_for_and_get_block
+hive-monitor-1     |     raise BlockWaitTimeExceeded(
+hive-monitor-1     | nectar.exceptions.BlockWaitTimeExceeded: Already waited 9 s
+hive-monitor-1     | 2025-04-23T04:51:31+0000.261 WARNING  async_wrapper              57 : sync_to_async_iterable Already waited 9 s
+hive-monitor-1     | 2025-04-23T04:51:31+0000.262 INFO     stream_ops                178 : 95,269,586 Stream running smoothly, continuing from last_block=95,269,587 https://hive-api.3speak.tv
+hive-monitor-1     | 2025-04-23T04:51:31+0000.500 INFO     crypto_prices             251 : Quotes fetched successfully in 0.24 seconds
+hive-monitor-1     | 2025-04-23T04:51:31+0000.645 INFO     stream_ops                110 : Starting Hive scanning at 95,269,586 2025-04-22 21:31:49.446914+00:00 Ending at 2,147,483,647 using https://hive-api.3speak.tv
+hive-monitor-1     | 2025-04-23T04:51:31+0000.649 WARNING  mylogger                  189 : Error code not found in error_codes stream_restart
+hive-monitor-1     |
+"""

@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Any, AsyncIterable, Callable, Iterator, TypeVar
 
 from asgiref.sync import sync_to_async as _sync_to_async
+from nectar.exceptions import NectarException
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -73,6 +74,17 @@ def _next(it: Iterator[T]) -> T:
         return next(it)
     except StopIteration:
         raise StopAsyncIteration
+    except NectarException as e:
+        logger.warning(
+            f"Nectar Error in _next {e}",
+            extra={
+                "notification": False,
+                "error": e,
+                "nectar_exception": True,
+            },
+        )
+        raise StopAsyncIteration
+
     except AttributeError as e:
         logger.exception(
             f"Logging error: {e} - problem with str in log level",
