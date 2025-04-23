@@ -392,8 +392,6 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         await op.update_quote_conv()
                     log_it = True
                     db_store = True
-                    if "vsc." in op.custom_json_ids_tracked:
-                        extra_bots = ["VSC_Proposals"]
 
                 if (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
