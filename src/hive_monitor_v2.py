@@ -315,9 +315,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
     return mean_time_diff, block_timestamps[0]
 
 
-async def all_ops_loop(
-    watch_witnesses: List[str] = [], watch_users: List[str] = []
-):
+async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] = []):
     """
     Asynchronously loops through transactions and processes them.
 
@@ -340,6 +338,7 @@ async def all_ops_loop(
     )
     OpBase.watch_users = watch_users
     OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
+    OpBase.custom_json_ids_tracked = InternalConfig().config.hive.custom_json_ids_tracked
     OpBase.db_client = MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
@@ -392,7 +391,7 @@ async def all_ops_loop(
                         await op.update_quote_conv()
                     log_it = True
                     db_store = True
-                    if op.cj_id in ["vsc.transfer", "vsc.withdraw"]:
+                    if "vsc." in op.custom_json_ids_tracked:
                         extra_bots = ["VSC_Proposals"]
 
                 if (
