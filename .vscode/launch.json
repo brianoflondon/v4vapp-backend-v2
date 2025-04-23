@@ -144,7 +144,8 @@
             "request": "launch",
             "program": "src/lnd_monitor_v2.py",
             "args": [
-                "voltage"
+                "--config",
+                "voltage.config.yaml"
             ],
             "console": "integratedTerminal"
         },

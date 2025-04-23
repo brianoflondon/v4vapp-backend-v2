@@ -261,30 +261,31 @@ class HiveConfig(BaseConfig):
 
 class Config(BaseModel):
     """
-    Config class for application configuration.
+    version (str): The version of the configuration. Default is an empty string.
+    lnd_config (LndConfig): Configuration for LND connections.
+    dbs_config (DbsConfig): Configuration for database connections.
+    redis (RedisConnectionConfig): Configuration for Redis connection.
+    notification_bots (Dict[str, NotificationBotConfig]): Dictionary of notification bot configurations.
+    api_keys (ApiKeys): Configuration for API keys.
+    hive (HiveConfig): Configuration for Hive.
+    min_config_version (ClassVar[str]): Minimum required configuration version.
 
-    Attributes:
-        version (str): The version of the configuration. Default is "1".
-        logging (LoggingConfig): Configuration for logging.
-        default_connection (str): The default connection name.
-        lnd_connections (List[LndConnectionConfig]):
-            List of LND connection configurations.
-        tailscale (TailscaleConfig): Configuration for Tailscale.
+    check_all_defaults(cls, v: Config) -> Config:
+        Validates the configuration after initialization to ensure all defaults are properly set.
+        Raises ValueError if any validation fails.
 
-    Methods:
-        unique_names(cls, v):
-            Validates that all LND connections have unique names.
+    lnd_connections_names(self) -> str:
+        Retrieves a comma-separated list of LND connection names.
 
-        check_default_connection(cls, v):
-            Validates that the default connection is present in the
-            list of LND connections.
+    db_connections_names(self) -> str:
+        Retrieves a comma-separated list of database connection names.
 
-        list_lnd_connections(self) -> List[str]:
-            Returns a list of names of all LND connections.
+    dbs_names(self) -> str:
+        Retrieves a comma-separated list of database names.
 
-        connection(self, connection_name: str) -> LndConnectionConfig:
-            Returns the LND connection configuration for the given connection name.
-            Raises a ValueError if the connection name is not found.
+    find_notification_bot_name(self, token: str) -> str:
+        Finds the name of a notification bot based on its token.
+        Raises ValueError if the token is not found.
     """
 
     version: str = ""
@@ -308,7 +309,7 @@ class Config(BaseModel):
     def check_all_defaults(cls, v: "Config") -> "Config":
         # Check that the default connection is in the list of connections
         # if it is given.
-        print("Checking all defaults")
+        logger.info("Validating the Config file and defaults....")
         config_version = version.parse(v.version)
         min_version = version.parse(cls.min_config_version)
         if config_version < min_version:
@@ -467,8 +468,9 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = safe_load(f_in)
             self.config_filename = config_filename
+            print(f"Config file found: {config_file}")
         except FileNotFoundError as ex:
-            logger.error(f"Config file not found: {ex}")
+            print(f"Config file not found: {ex}")
             raise ex
 
         try:
@@ -485,7 +487,7 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = json.load(f_in)
         except FileNotFoundError as ex:
-            logger.error(f"Logging config file not found: {ex}")
+            print(f"Logging config file not found: {ex}")
             raise ex
 
         # Ensure log folder exists
