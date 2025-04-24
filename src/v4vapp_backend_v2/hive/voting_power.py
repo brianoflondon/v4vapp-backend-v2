@@ -123,7 +123,9 @@ class VotingPower:
         this_prop = float(proposals[0]["total_votes"]) / 1e6
         self.proposal_total_votes = hive.vests_to_token_power(this_prop)
         try:
+            # What perecentage of the proposal total votes is this voter
             self.prop_percent = (self.total_value / self.proposal_total_votes) * 100
+            # What percentage of the votes up to the return proposal is this vote
             self.total_percent = (self.total_value / return_prop) * 100
         except ZeroDivisionError:
             self.prop_percent = 0
