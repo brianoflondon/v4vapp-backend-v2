@@ -14,18 +14,6 @@
             "justMyCode": false,
         },
         {
-            "name": "DB Monitor App",
-            "type": "debugpy",
-            "consoleName": "DB Monitor App",
-            "request": "launch",
-            "program": "src/db_monitor.py",
-            "args": [
-                "--config",
-                "db_monitor.config.yaml"
-            ],
-            "console": "integratedTerminal"
-        },
-        {
             "name": "Binance Monitor",
             "type": "debugpy",
             "consoleName": "Binance Monitor",
@@ -86,6 +74,72 @@
             "justMyCode": true,
         },
         {
+            "name": "SELLING Hive Monitor SELLING",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "--user",
+                "v4vapp",
+                "--user",
+                "brianoflondon",
+                "--user",
+                "v4vapp.tre",
+                "--user",
+                "v4vapp.dhf",
+                "--user",
+                "v4vapp-test",
+                "--witness",
+                "brianoflondon"
+            ],
+            "justMyCode": true,
+        },
+        {
+            "name": "Umbrel destination lookup",
+            "type": "debugpy",
+            "consoleName": "Umbrel Destination",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dest_alias_fill.py",
+            "args": [
+                "lnd_monitor_v2_umbrel",
+                "umbrel"
+            ],
+        },
+        {
+            "name": "Voltage destination lookup",
+            "type": "debugpy",
+            "consoleName": "Voltage Destination",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dest_alias_fill.py",
+            "args": [
+                "lnd_monitor_v2_voltage",
+                "voltage"
+            ],
+        },
+        {
+            "name": "CLI Help",
+            "type": "debugpy",
+            "consoleName": "CLI Help",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--help"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel-proxy Monitor v2",
+            "type": "debugpy",
+            "consoleName": "Umbrel-proxy Monitor v2",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "umbrel-proxy"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Umbrel Monitor v2",
             "type": "debugpy",
             "consoleName": "Umbrel Monitor v2",
@@ -106,6 +160,39 @@
             "args": [
                 "--config",
                 "voltage.config.yaml"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Voltage",
+            "type": "debugpy",
+            "consoleName": "Voltage",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "voltage"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel",
+            "type": "debugpy",
+            "consoleName": "Umbrel",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "umbrel"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Umbrel Proxy",
+            "type": "debugpy",
+            "consoleName": "Umbrel Proxy",
+            "request": "launch",
+            "program": "src/lnd_node_monitor.py",
+            "args": [
+                "umbrel-proxy"
             ],
             "console": "integratedTerminal"
         },
