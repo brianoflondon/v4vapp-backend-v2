@@ -1,7 +1,6 @@
 import asyncio
 import signal
 import sys
-from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
@@ -57,12 +56,18 @@ async def subscribe_stream(collection_name: str):
             {"$match": {"fullDocument.required_posting_auths": "podping.aaa"}},
             {"$project": {"fullDocument.iris": 1}},
         ]
+        pipeline: Sequence[Mapping[str, Any]] = [
+            {"$match": {}},
+            {"$project": {"fullDocument.iris": 1}},
+        ]
         async with collection.watch(pipeline=pipeline, resume_after=resume_token) as stream:
             async for change in stream:
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                pprint(change, indent=4)
+                iris = change.get("fullDocument", {}).get("iris", [])
+                for iri in iris:
+                    logger.info(f"{ICON} New change detected: {iri}")
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
