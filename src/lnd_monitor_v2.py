@@ -515,9 +515,7 @@ async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsG
     )
     channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
     if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
-        logger.info(
-            f"{lnd_client.icon} Channel names already filled: {len(channels_dict.get('channels', []))}"
-        )
+        logger.debug("No new channels to fill")
         await asyncio.sleep(60)
         return
     # Get the name of each channel
@@ -789,7 +787,6 @@ async def main_async_start(connection_name: str) -> None:
             ]
             await asyncio.gather(*startup_tasks)
             tasks = [
-                fill_channel_names(lnd_client, lnd_events_group),
                 invoices_loop(
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
                 ),
@@ -797,6 +794,7 @@ async def main_async_start(connection_name: str) -> None:
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
                 ),
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                fill_channel_names(lnd_client, lnd_events_group),
                 check_for_shutdown(),
             ]
             await asyncio.gather(*tasks)
