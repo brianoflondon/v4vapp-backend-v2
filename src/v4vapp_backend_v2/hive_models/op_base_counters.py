@@ -81,7 +81,7 @@ class BlockCounter:
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
-    marker_point: int = 50  # 500 blocks at 3s = 1500s = 25 min
+    marker_point: int = 30 * 60 / HIVE_BLOCK_TIME  # 30 minutes in blocks
     icon: str = "🧱"
     last_marker: float = timer()
     start: float = 0
@@ -145,7 +145,6 @@ class BlockCounter:
             self.last_good_block = self.current_block
             new_block = True
             if self.block_count >= self.next_marker:
-                self.next_marker += self.marker_point
                 marker = True
                 self.log_time_difference_errors(timestamp=timestamp)
                 old_node = self.hive_client.rpc.url
@@ -156,12 +155,13 @@ class BlockCounter:
                     self.time_diff.total_seconds()
                     / ((self.marker_point * HIVE_BLOCK_TIME) / last_marker_time)
                 )
-                if self.block_count > 1:
-                    speed_up_factor = (self.marker_point * HIVE_BLOCK_TIME) /last_marker_time
-                else:
-                    speed_up_factor = 1.0
-
                 self.time_diff = check_time_diff(timestamp)
+
+                speed_up_factor = (min(self.marker_point, self.block_count) * HIVE_BLOCK_TIME) / last_marker_time
+
+                self.marker_point = (5 * 60 / HIVE_BLOCK_TIME) if self.time_diff < TIME_DIFFERENCE_CHECK else (30 * 60 / HIVE_BLOCK_TIME)
+                self.next_marker += self.marker_point
+
                 self.running_time = timer() - self.start
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
