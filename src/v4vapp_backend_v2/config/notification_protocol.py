@@ -29,8 +29,8 @@ from v4vapp_backend_v2.helpers.notification_bot import NotificationBot, Notifica
 
 class NotificationProtocol(Protocol):
     def send_notification(self, message: str, record: LogRecord, bot_name: str = "") -> None:
-        internal_config = InternalConfig()
         InternalConfig.notification_lock = True
+        internal_config = InternalConfig()
         loop = internal_config.notification_loop
         if not loop or loop.is_closed() or not loop.is_running():
             # Recreate the event loop if it is closed

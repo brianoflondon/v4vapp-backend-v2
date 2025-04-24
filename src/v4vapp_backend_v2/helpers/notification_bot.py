@@ -16,6 +16,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
+shutdown_event = asyncio.Event()
 
 class NotificationNotSetupError(Exception):
     pass

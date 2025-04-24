@@ -415,7 +415,7 @@ async def invoices_loop(
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            return
+            raise e
         except Exception as e:
             logger.exception(e)
             pass
@@ -453,7 +453,7 @@ async def payments_loop(
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            return
+            raise e
         except Exception as e:
             logger.exception(e)
             pass
@@ -611,7 +611,7 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                     break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-        return
+        raise e
 
 
 async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
@@ -695,6 +695,9 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                     break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        raise e
+    except Exception as e:
+        logger.exception(e, extra={"error": e})
         return
 
 
@@ -817,18 +820,22 @@ async def main_async_start(connection_name: str) -> None:
 
     finally:
         # Cancel all tasks except the current one
+        logger.info(
+            f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
+            f"Monitoring node: {connection_name}. Version: {__version__}",
+            extra={"notification": True},
+        )
+        InternalConfig.notification_lock = True
+        # Ensure all pending notifications are sent
+        if hasattr(InternalConfig, "notification_loop"):
+            while InternalConfig.notification_lock:
+                logger.info("Waiting for notification loop to complete...")
+                await asyncio.sleep(0.5)  # Allow pending notifications to complete
         current_task = asyncio.current_task()
         tasks = [task for task in asyncio.all_tasks() if task is not current_task]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-
-    logger.info(
-        f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
-        f"Monitoring node: {connection_name}. Version: {__version__}",
-        extra={"notification": True},
-    )
-    await asyncio.sleep(0.2)
 
 
 async def check_for_shutdown():
