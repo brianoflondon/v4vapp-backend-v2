@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
@@ -14,6 +15,32 @@ app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+
+payment_pipeline: Sequence[Mapping[str, Any]] = [
+    {
+        "$project": {
+            "fullDocument.creation_date": 1,
+            "fullDocument.payment_hash": 1,
+            "fullDocument.status": 1,
+            "fullDocument.value_msat": 1,
+        }
+    }
+]
+invoice_pipeline: Sequence[Mapping[str, Any]] = [
+    {
+        "$project": {
+            "fullDocument.creation_date": 1,
+            "fullDocument.r_hash": 1,
+            "fullDocument.state": 1,
+            "fullDocument.amt_paid_msat": 1,
+            "fullDocument.value_msat": 1,
+            "fullDocument.memo": 1,
+        }
+    }
+]
+hive_ops_pipeline: Sequence[Mapping[str, Any]] = [
+    {"$match": {"fullDocument.type": {"$ne": "block_marker"}}}
+]
 
 
 def get_mongodb_client() -> MongoDBClient:
@@ -34,40 +61,39 @@ def get_mongodb_client() -> MongoDBClient:
     )
 
 
-async def subscribe_stream(collection_name: str):
+async def subscribe_stream(
+    collection_name: str = "invoices", pipeline: Sequence[Mapping[str, Any]] = None
+):
     """
     Asynchronously subscribes to a stream and logs updates.
 
     Args:
         collection (str): The name of the collection to subscribe to.
+        pipeline (Sequence[Mapping[str, Any]]): The aggregation pipeline to use for the stream.
 
     Returns:
         None
     """
-    resume_token = {
-        "_data": "82680A4B16000000012B042C0100296E5A100427C3560459D34841BCB69B20139E3E3F463C6F7065726174696F6E54797065003C696E736572740046646F63756D656E744B65790046645F69640064680A4B1689058837EB259D00000004"
-    }
+    # resume_token = {
+    #     "_data": "82680A4B16000000012B042C0100296E5A100427C3560459D34841BCB69B20139E3E3F463C6F7065726174696F6E54797065003C696E736572740046646F63756D656E744B65790046645F69640064680A4B1689058837EB259D00000004"
+    # }
     logger.info(f"Subscribing to {collection_name} stream...")
     client = get_mongodb_client()
     collection = await client.get_collection(collection_name)
 
     try:
-        pipeline: Sequence[Mapping[str, Any]] = [
-            {"$match": {"fullDocument.required_posting_auths": "podping.aaa"}},
-            {"$project": {"fullDocument.iris": 1}},
-        ]
-        pipeline: Sequence[Mapping[str, Any]] = [
-            {"$match": {}},
-            {"$project": {"fullDocument.iris": 1}},
-        ]
-        async with collection.watch(pipeline=pipeline, resume_after=resume_token) as stream:
+        # pipeline: Sequence[Mapping[str, Any]] = [
+        #     {"$match": {"fullDocument.required_posting_auths": "podping.aaa"}},
+        #     {"$project": {"fullDocument.iris": 1}},
+        # ]
+        # pipeline: Sequence[Mapping[str, Any]] = []
+        async with collection.watch(pipeline=pipeline, full_document="updateLookup") as stream:
             async for change in stream:
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                iris = change.get("fullDocument", {}).get("iris", [])
-                for iri in iris:
-                    logger.info(f"{ICON} New change detected: {iri}")
+                pprint(f"-- {collection_name} --" * 5)
+                pprint(change, indent=2)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
@@ -116,7 +142,19 @@ async def main_async_start():
         logger.info(f"{ICON} Database Monitor App started.")
         # Simulate some work
         while not shutdown_event.is_set():
-            await subscribe_stream("all_podpings")
+            tasks = [
+                asyncio.create_task(
+                    subscribe_stream(collection_name="invoices", pipeline=invoice_pipeline)
+                ),
+                asyncio.create_task(
+                    subscribe_stream(collection_name="payments", pipeline=payment_pipeline)
+                ),
+                asyncio.create_task(
+                    subscribe_stream(collection_name="hive_ops", pipeline=hive_ops_pipeline)
+                ),
+            ]
+            await asyncio.gather(*tasks)
+
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
