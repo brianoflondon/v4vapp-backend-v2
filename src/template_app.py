@@ -1,14 +1,13 @@
 import asyncio
 import signal
 import sys
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from lnd_monitor_v2 import InternalConfig, logger
+from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 
-INTERNAL_CONFIG = InternalConfig()
-CONFIG = INTERNAL_CONFIG.config
 ICON = "🏆"
 app = typer.Typer()
 
@@ -24,7 +23,7 @@ def handle_shutdown_signal():
     shutdown_event.set()
 
 
-async def main_async_start(database_connection: str, db_name: str, lnd_connection: str):
+async def main_async_start():
     """
     Main function to run Template app.
     Args:
@@ -33,10 +32,11 @@ async def main_async_start(database_connection: str, db_name: str, lnd_connectio
     Returns:
         None
     """
+    CONFIG = InternalConfig().config
     logger.info(
-        f"🔗 Database connection: {database_connection} "
-        f"🔗 Database name: {db_name} "
-        f"🔗 Lightning node: {lnd_connection} "
+        f"{ICON} Notificataion bot: {CONFIG.logging.default_notification_bot_name} "
+        f"🔗 Database connection: {CONFIG.dbs_config.default_connection} "
+        f"🔗 Database name: {CONFIG.dbs_config.default_name} "
     )
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
@@ -46,9 +46,10 @@ async def main_async_start(database_connection: str, db_name: str, lnd_connectio
         logger.info(f"{ICON} Template App started.")
         # Simulate some work
         while not shutdown_event.is_set():
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
             logger.info("Working...")
     except (asyncio.CancelledError, KeyboardInterrupt):
+        InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
         logger.info(f"{ICON} 👋 Goodbye! from Template App", extra={"notification": True})
     except Exception as e:
@@ -57,47 +58,48 @@ async def main_async_start(database_connection: str, db_name: str, lnd_connectio
         raise e
     finally:
         logger.info(f"{ICON} Cleaning up resources...")
+        # Cancel all tasks except the current one
+        if hasattr(InternalConfig, "notification_loop"):
+            while InternalConfig.notification_lock:
+                logger.info("Waiting for notification loop to complete...")
+                await asyncio.sleep(0.5)  # Allow pending notifications to complete
+        current_task = asyncio.current_task()
+        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+        logger.info(f"{ICON} Clearing notifications")
+        await asyncio.sleep(2)
 
 
 @app.command()
 def main(
-    database_connection: Annotated[
-        str | None,
-        typer.Argument(
-            help=(f"The database connection to use. Choose from: {CONFIG.db_connections_names}")
+    config_filename: Annotated[
+        str,
+        typer.Option(
+            "-c",
+            "--config",
+            "--config-filename",
+            help="The name of the config file (in a folder called ./config)",
+            show_default=True,
         ),
-    ] = CONFIG.default_db_connection,
-    db_name: Annotated[
-        Optional[str],
-        typer.Argument(help=(f"The database to monitor.Choose from: {CONFIG.dbs_names}")),
-    ] = CONFIG.default_db_name,
-    lnd_connection: Annotated[
-        Optional[str],
-        typer.Argument(
-            help=(
-                f"The Lightning node to monitor. If not provided, "
-                f"defaults to the value: "
-                f"{CONFIG.default_lnd_connection}.\n"
-                f"Choose from: {CONFIG.lnd_connections_names}"
-            )
-        ),
-    ] = CONFIG.default_lnd_connection,
+    ] = DEFAULT_CONFIG_FILENAME,
 ):
-    f"""
+    """
     Main function to do what you want.
     Args:
-        node (Annotated[Optional[str], Argument]): The node to monitor.
-        Choose from:
-        connections: {CONFIG.lnd_connections_names}
-        databases: {CONFIG.dbs_names}
+        config_filename (str): The name of the config file (in a folder called ./config).
 
     Returns:
         None
     """
-    icon = ICON
-    logger.info(f"{icon} ✅ Template App. Started. Version: {CONFIG.min_version}")
+    _ = InternalConfig()
+    logger.info(
+        f"{ICON} ✅ Template App. Started. Version: {__version__}", extra={"notification": True}
+    )
 
-    asyncio.run(main_async_start(database_connection, db_name, lnd_connection))
+    asyncio.run(main_async_start())
 
 
 if __name__ == "__main__":

@@ -87,20 +87,22 @@ class UpdateProposalVotes(OpBase):
         for prop_id in self.proposal_ids:
             details = self.prop_voter_details.get(str(prop_id), None)
             if details:
-                total_percent = details.total_percent * 100
-                prop_percent = details.prop_percent * 100
-                prop_id_sections.append(f"{prop_id} {prop_percent:.2f}% ({total_percent:.1f}%)")
+                total_percent = details.total_percent
+                prop_percent = details.prop_percent
+                prop_id_sections.append(
+                    f"{prop_id} {prop_percent:.2f}% ({total_percent:.1f}% to ret)"
+                )
 
         prop_id_sections = ", ".join(prop_id_sections)
 
         voter_details = self.prop_voter_details.get(str(self.proposal_ids[0]), None)
         if voter_details:
-            vote_value = f"{voter_details.vote_value:,.0f} HP"
+            vote_value = f"{voter_details.vote_value:>9,.0f} HP"
         else:
             vote_value = "unknown"
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
-        return f"👁️ {self.block_num:,} {voter} {voted_for:<8} {prop_id_sections} with {vote_value}"
+        return f"👁️ {self.block_num:,} {voter} {vote_value} {voted_for:<8} {prop_id_sections}"
 
     @property
     def is_tracked(self):
