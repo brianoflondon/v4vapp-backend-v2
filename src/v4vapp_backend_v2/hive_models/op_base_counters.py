@@ -8,6 +8,7 @@ from nectar import Hive
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, format_time_delta
+from v4vapp_backend_v2.hive.hive_extras import HIVE_BLOCK_TIME
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
@@ -80,7 +81,7 @@ class BlockCounter:
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
-    marker_point: int = 500  # 500 blocks at 3s = 1500s = 25 min
+    marker_point: int = 50  # 500 blocks at 3s = 1500s = 25 min
     icon: str = "🧱"
     last_marker: float = timer()
     start: float = 0
@@ -152,13 +153,20 @@ class BlockCounter:
                 last_marker_time = timer() - self.last_marker
                 last_marker_time_str = format_time_delta(last_marker_time)
                 catch_up_in = format_time_delta(
-                    self.time_diff.total_seconds() / ((self.marker_point * 3) / last_marker_time)
+                    self.time_diff.total_seconds()
+                    / ((self.marker_point * HIVE_BLOCK_TIME) / last_marker_time)
                 )
+                if self.block_count > 1:
+                    speed_up_factor = (self.marker_point * HIVE_BLOCK_TIME) /last_marker_time
+                else:
+                    speed_up_factor = 1.0
+
                 self.time_diff = check_time_diff(timestamp)
                 self.running_time = timer() - self.start
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"blocks processed in: {last_marker_time_str} "
+                    f"speed up: x{speed_up_factor:.2f} "
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
                     f"running time: {format_time_delta(self.running_time)} "
                     f"events: {self.event_count - self.last_event_count:,} "
