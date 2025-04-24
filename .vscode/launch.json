@@ -28,7 +28,7 @@
         {
             "name": "Notification Bot",
             "type": "debugpy",
-            "consoleName": "Template App Help",
+            "consoleName": "Notification Bot",
             "request": "launch",
             "program": "src/notification_bot_setup.py",
             "args": [
@@ -233,13 +233,14 @@
             ]
         },
         {
-            "name": "Template App Help",
+            "name": "Template App",
             "type": "debugpy",
-            "consoleName": "Template App Help",
+            "consoleName": "Template App",
             "request": "launch",
             "program": "src/template_app.py",
             "args": [
-                // "--help"
+                "--config",
+                "config.yaml"
             ],
             "console": "integratedTerminal"
         },
