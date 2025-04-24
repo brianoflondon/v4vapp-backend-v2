@@ -29,7 +29,7 @@ services:
       - "127.0.0.1:37017:37017"
       - "${LOCAL_TAILSCALE_IP}:37017:37017"
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--port", "37017", "--eval", "db.runCommand({ ping: 1 })"]
       interval: 10s
       timeout: 5s
       retries: 5
