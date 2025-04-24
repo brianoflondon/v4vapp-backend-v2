@@ -6,6 +6,7 @@ from typing import Annotated, Any, List
 
 import typer
 from google.protobuf.json_format import MessageToDict
+from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -210,7 +211,11 @@ def get_mongodb_client() -> MongoDBClient:
 
 
 async def db_store_invoice(
-    htlc_event: lnrpc.Invoice, lnd_client: LNDClient, *args: Any, **kwargs
+    htlc_event: lnrpc.Invoice,
+    lnd_client: LNDClient,
+    db_client: MongoDBClient = None,
+    *args: Any,
+    **kwargs,
 ) -> None:
     """
     Asynchronously stores an invoice in the MongoDB database.
@@ -221,7 +226,9 @@ async def db_store_invoice(
     Returns:
         None
     """
-    async with get_mongodb_client() as db_client:
+    if not db_client:
+        db_client = get_mongodb_client()
+    async with db_client:
         logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
             f"{db_client.hex_id}"
@@ -242,7 +249,11 @@ async def db_store_invoice(
 
 
 async def db_store_payment(
-    htlc_event: lnrpc.Payment, lnd_client: LNDClient, *args: Any, **kwargs
+    htlc_event: lnrpc.Payment,
+    lnd_client: LNDClient,
+    db_client: MongoDBClient = None,
+    *args: Any,
+    **kwargs,
 ) -> None:
     """
     Asynchronously stores a payment in the MongoDB database.
@@ -253,7 +264,9 @@ async def db_store_payment(
     Returns:
         None
     """
-    async with get_mongodb_client() as db_client:
+    if not db_client:
+        db_client = get_mongodb_client()
+    async with db_client:
         try:
             payment_pyd = Payment(htlc_event)
             await update_payment_route_with_alias(
@@ -286,6 +299,7 @@ async def invoice_report(
     htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup = None,
+    db_client: MongoDBClient = None,
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
         htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
@@ -310,6 +324,7 @@ async def payment_report(
     htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
+    db_client: MongoDBClient = None,
 ) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
@@ -335,6 +350,7 @@ async def htlc_event_report(
     htlc_event: routerrpc.HtlcEvent,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
+    db_client: MongoDBClient = None,
 ) -> None:
     event_type = (
         routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
@@ -356,7 +372,9 @@ async def htlc_event_report(
     )
 
 
-async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def invoices_loop(
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup, db_client: MongoDBClient
+) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
     Args:
@@ -365,7 +383,7 @@ async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
     Returns:
         None
     """
-    recent_invoice = await get_most_recent_invoice()
+    recent_invoice = await get_most_recent_invoice(db_client)
     request_sub = lnrpc.InvoiceSubscription(
         add_index=recent_invoice.add_index, settle_index=recent_invoice.settle_index
     )
@@ -384,6 +402,7 @@ async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                     htlc_event=lnrpc_invoice,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
+                    db_client=db_client,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -402,7 +421,9 @@ async def invoices_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
             pass
 
 
-async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def payments_loop(
+    lnd_client: LNDClient, lnd_events_group: LndEventsGroup, db_client: MongoDBClient
+) -> None:
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -419,6 +440,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                     htlc_event=lnrpc_payment,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
+                    db_client=db_client,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -473,12 +495,31 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
 
 
 async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+    """
+    Asynchronously fills the channel names for a given LND client and appends them to the provided LndEventsGroup.
+
+    This function retrieves the list of channels from the LND client, fetches the name of each channel asynchronously,
+    and appends the resulting channel names to the provided `lnd_events_group`. It also logs the channel names.
+
+    Args:
+        lnd_client (LNDClient): The LND client instance used to interact with the Lightning Network Daemon.
+        lnd_events_group (LndEventsGroup): The group to which the channel names will be appended.
+
+    Returns:
+        None: This function does not return a value. It performs asynchronous operations and updates the provided group.
+    """
     request = lnrpc.ListChannelsRequest()
     channels = await lnd_client.call(
         lnd_client.lightning_stub.ListChannels,
         request,
     )
     channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+    if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
+        logger.info(
+            f"{lnd_client.icon} Channel names already filled: {len(channels_dict.get('channels', []))}"
+        )
+        await asyncio.sleep(60)
+        return
     # Get the name of each channel
     tasks = []
     for channel in channels_dict.get("channels", []):
@@ -497,7 +538,7 @@ async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsG
         )
 
 
-async def read_all_invoices(lnd_client: LNDClient) -> None:
+async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
     """
     Reads all invoices from the LND client and inserts them into a MongoDB collection.
 
@@ -513,7 +554,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         None
     """
     try:
-        async with get_mongodb_client() as db_client:
+        async with db_client:
             index_offset = 0
             num_max_invoices = 1000
             total_invoices = 0
@@ -531,30 +572,39 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                 )
                 list_invoices = ListInvoiceResponse(invoices_raw)
                 index_offset = list_invoices.first_index_offset
-                insert_data = []
-                tasks = []
+                bulk_updates = []
                 for invoice in list_invoices.invoices:
                     insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
-                    insert_data.append(insert_one)
                     query = {"r_hash": invoice.r_hash}
-                    tasks.append(
-                        db_client.update_one(
-                            "invoices", query=query, update=insert_one, upsert=True
-                        )
+                    bulk_updates.append(
+                        {
+                            "filter": query,
+                            "update": {"$set": insert_one},
+                            "upsert": True,
+                        }
                     )
                 try:
-                    ans = await asyncio.gather(*tasks)
-                    modified = [a.modified_count for a in ans]
-                    inserted = [a.did_upsert for a in ans]
+                    result = await db_client.bulk_write(
+                        collection_name="invoices",
+                        operations=[
+                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
+                            for update in bulk_updates
+                        ],
+                    )
+                    modified = result.modified_count
+                    inserted = result.inserted_count
                     logger.info(
                         f"{lnd_client.icon} {DATABASE_ICON} "
                         f"Invoices {index_offset}... "
-                        f"modified: {sum(modified)} inserted: {sum(inserted)}"
+                        f"modified: {modified} inserted: {inserted}"
                     )
                     total_invoices += len(list_invoices.invoices)
                 except BulkWriteError as e:
                     logger.debug(e.details)
                     pass
+                except Exception as e:
+                    logger.exception(str(e), extra={"error": e})
+                    break
                 if len(list_invoices.invoices) < num_max_invoices:
                     logger.info(
                         f"{lnd_client.icon} {DATABASE_ICON} "
@@ -566,7 +616,7 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         return
 
 
-async def read_all_payments(lnd_client: LNDClient) -> None:
+async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
     """
     Reads all payments from the LND client and inserts them into a MongoDB collection.
 
@@ -582,7 +632,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         None
     """
     try:
-        async with get_mongodb_client() as db_client:
+        async with db_client:
             index_offset = 0
             num_max_payments = 1000
             total_payments = 0
@@ -600,8 +650,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 )
                 list_payments = ListPaymentsResponse(payments_raw)
                 index_offset = payments_raw.first_index_offset
-                insert_data = []
-                tasks = []
+                bulk_updates = []
                 for payment in list_payments.payments:
                     await update_payment_route_with_alias(
                         db_client=db_client,
@@ -611,21 +660,28 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                         col_pub_keys="pub_keys",
                     )
                     insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
-                    insert_data.append(insert_one)
                     query = {"payment_hash": payment.payment_hash}
-                    tasks.append(
-                        db_client.update_one(
-                            "payments", query=query, update=insert_one, upsert=True
-                        )
+                    bulk_updates.append(
+                        {
+                            "filter": query,
+                            "update": {"$set": insert_one},
+                            "upsert": True,
+                        }
                     )
                 try:
-                    ans = await asyncio.gather(*tasks)
-                    modified = [a.modified_count for a in ans]
-                    inserted = [a.did_upsert for a in ans]
+                    result = await db_client.bulk_write(
+                        collection_name="payments",
+                        operations=[
+                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
+                            for update in bulk_updates
+                        ],
+                    )
+                    modified = result.modified_count
+                    inserted = result.inserted_count
                     logger.info(
                         f"{lnd_client.icon} {DATABASE_ICON} "
                         f"Payments {index_offset}... "
-                        f"modified: {sum(modified)} inserted: {sum(inserted)}"
+                        f"modified: {modified} inserted: {inserted}"
                     )
                     total_payments += len(list_payments.payments)
                 except BulkWriteError as e:
@@ -644,7 +700,7 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         return
 
 
-async def get_most_recent_invoice() -> Invoice:
+async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
     """
     Fetches the most recent invoice from the MongoDB collection.
 
@@ -665,7 +721,7 @@ async def get_most_recent_invoice() -> Invoice:
         Logs the `add_index` and `settle_index` of the most recent invoice
         for debugging and monitoring purposes.
     """
-    async with get_mongodb_client() as db_client:
+    async with db_client:
         query = {}
         sort = [("creation_date", -1)]
         collection = db_client.db.get_collection("invoices")
@@ -726,11 +782,20 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_INVOICE, invoice_report)
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
+            db_client = get_mongodb_client()
+            startup_tasks = [
+                read_all_invoices(lnd_client, db_client),
+                read_all_payments(lnd_client, db_client),
+            ]
+            await asyncio.gather(*startup_tasks)
             tasks = [
-                read_all_invoices(lnd_client),
-                read_all_payments(lnd_client),
-                invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                fill_channel_names(lnd_client, lnd_events_group),
+                invoices_loop(
+                    lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
+                ),
+                payments_loop(
+                    lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
+                ),
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 check_for_shutdown(),
             ]

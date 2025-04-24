@@ -12,8 +12,9 @@ from pymongo.errors import (
     InvalidOperation,
     OperationFailure,
     ServerSelectionTimeoutError,
+    BulkWriteError,
 )
-from pymongo.results import DeleteResult, UpdateResult
+from pymongo.results import BulkWriteResult, DeleteResult, UpdateResult
 
 from v4vapp_backend_v2.config.setup import InternalConfig, TimeseriesConfig, logger
 
@@ -60,13 +61,13 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
             OperationFailure: If the maximum number of retries is reached.
         """
 
-        async def wrapper(*args, **kwargs):
+        async def wrapper(self, *args, **kwargs):
             error_code = None
             retries = 0
             delay = initial_delay
             while retries < max_retries:
                 try:
-                    ans = await func(*args, **kwargs)
+                    ans = await func(self, *args, **kwargs)
                     if error_code:
                         logger.info(
                             f"Retry successful: {func.__name__}",
@@ -83,7 +84,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         extra=extra,
                     )
                     raise e
-                except (ConnectionFailure, OperationFailure, InvalidOperation, Exception) as e:
+                except (ConnectionFailure, OperationFailure, InvalidOperation, BulkWriteError, Exception) as e:
                     retries += 1
                     error_code = "mongodb_error"
                     extra = {
@@ -103,6 +104,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         f"Retrying in {delay} s.",
                         extra=extra,
                     )
+                    await self.connect()
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
 
@@ -506,7 +508,39 @@ class MongoDBClient:
         return self.db[collection_name]
 
     @retry_on_failure()
+    async def bulk_write(self, collection_name: str, operations: list) -> BulkWriteResult:
+        """
+        Asynchronously performs a bulk write operation on the specified collection.
+
+        Args:
+            collection_name (str): The name of the collection to perform the bulk write on.
+            operations (list): A list of write operations to be performed.
+
+        Returns:
+            BulkWriteResult: The result of the bulk write operation.
+
+        Raises:
+            Exception: If there is an error during the bulk write operation.
+        """
+        collection = await self.get_collection(collection_name)
+        result = await collection.bulk_write(operations)
+        return result
+
+    @retry_on_failure()
     async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
+        """
+        Inserts a single document into the specified collection.
+
+        Args:
+            collection_name (str): The name of the collection where the document will be inserted.
+            document (dict): The document to be inserted into the collection.
+
+        Returns:
+            ObjectId: The ID of the inserted document.
+
+        Raises:
+            Exception: If there is an error during the insertion process.
+        """
         collection = await self.get_collection(collection_name)
         result = await collection.insert_one(document)
         return result.inserted_id
