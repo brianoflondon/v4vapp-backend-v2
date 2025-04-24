@@ -756,10 +756,6 @@ async def main_async_start(connection_name: str) -> None:
 
         lnd_events_group = LndEventsGroup()
         async with LNDClient(connection_name) as lnd_client:
-            logger.info(
-                f"{lnd_client.icon} 🔍 Monitoring node... {connection_name}",
-                extra={"notification": True},
-            )
             if lnd_client.get_info:
                 logger.info(
                     f"{lnd_client.icon} Node: {lnd_client.get_info.alias} "
@@ -877,7 +873,8 @@ def main(
     icon = CONFIG.lnd_config.connections[lnd_node].icon
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
-        f"Monitoring node: {lnd_node} {icon}. Version: {__version__}"
+        f"Monitoring node: {lnd_node} {icon}. Version: {__version__}",
+        extra={"notification": True},
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")
