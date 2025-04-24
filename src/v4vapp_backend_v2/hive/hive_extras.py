@@ -46,6 +46,8 @@ EXCLUDE_NODES = [
 
 MAX_HIVE_BATCH_SIZE = 25
 
+HIVE_BLOCK_TIME = 3  # seconds
+
 
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
 def get_hive_client(stream_only: bool = False, *args, **kwargs) -> Hive:

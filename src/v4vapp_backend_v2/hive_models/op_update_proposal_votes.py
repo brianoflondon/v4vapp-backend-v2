@@ -81,7 +81,7 @@ class UpdateProposalVotes(OpBase):
         Returns:
             str: The common log string.
         """
-        voted_for = "voted for" if self.approve else "unvoted"
+        voted_for = "✅voted" if self.approve else "❌unvoted"
 
         prop_id_sections = []
         for prop_id in self.proposal_ids:
@@ -100,7 +100,7 @@ class UpdateProposalVotes(OpBase):
             vote_value = "unknown"
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
-        return f"👁️ {self.block_num:,} {voter} {voted_for} {prop_id_sections} with {vote_value}"
+        return f"👁️ {self.block_num:,} {voter} {voted_for:<8} {prop_id_sections} with {vote_value}"
 
     @property
     def is_tracked(self):

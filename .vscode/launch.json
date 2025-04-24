@@ -146,7 +146,8 @@
             "request": "launch",
             "program": "src/lnd_monitor_v2.py",
             "args": [
-                "umbrel"
+                "--config",
+                "umbrel.config.yaml"
             ],
             "console": "integratedTerminal"
         },

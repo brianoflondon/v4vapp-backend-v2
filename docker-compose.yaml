@@ -11,25 +11,33 @@ services:
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
     # to both be resolvable at the same time. This is a nightmare.
-    # That is why it is vital that the port 37017 be used internally in the docker container and
+    # That is why it is vital that the port 27017 be used internally in the docker container and
     # externally on the host. This allows the same 127.0.0.1:37017 address to work both within the
     # docker container and externally on the host.
     image: mongo:8.0
     command: >
       bash -c "
         mongod --replSet rsPytest --bind_ip_all --port 37017 &
-        sleep 10 &&
-        mongosh --port 37017 --eval 'rs.initiate({
-          _id: \"rsPytest\",
-          members: [{ _id: 0, host: \"127.0.0.1:37017\" }]
-        })' &&
+        until mongosh --port 37017 --eval 'db.runCommand({ ping: 1 })' --quiet; do
+          echo 'Waiting for mongod to start...';
+          sleep 1;
+        done;
+        if ! mongosh --port 37017 --eval 'rs.status().ok' --quiet; then
+          echo 'Initializing replica set...';
+          mongosh --port 37017 --eval 'rs.initiate({
+            _id: \"rsPytest\",
+            members: [{ _id: 0, host: \"mongo-pytest-local:37017\" }]
+          })';
+        else
+          echo 'Replica set already initialized.';
+        fi;
         wait
       "
     ports:
       - "127.0.0.1:37017:37017"
-      - "${LOCAL_TAILSCALE_IP}:37017:37017"
+      - "${LOCAL_TAILSCALE_IP}:37017:37017"   # Needed on home-imac
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--port", "37017", "--eval", "rs.status().ok"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,6 +47,12 @@ services:
     volumes:
       - mongo_data:/data/db
       - mongo_config:/data/configdb
+    hostname: mongo-pytest-local
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
 
   redis-pytest-local:
     image: redis:latest

@@ -189,7 +189,7 @@ class HiveAccountConfig(BaseConfig):
 class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
     watch_users: List[str] = []
-    proposals_tracked: List[str] = []
+    proposals_tracked: List[int] = []
     watch_witnesses: List[str] = []
     custom_json_ids_tracked: List[str] = []
 

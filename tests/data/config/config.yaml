@@ -161,6 +161,16 @@ hive:
       posting_key: somepostingkey
       active_key: someactive
       memo_key: somememo
+  proposals_tracked:
+    - 342
+    - 303
+  custom_json_ids_tracked:
+    - vsc.transfer
+    - vsc.withdraw
+    - vsc.withdraw_hbd
+    - vsc.deposit
+
+
 
 ########### TEST CONFIG NO SECRETS #################
 
