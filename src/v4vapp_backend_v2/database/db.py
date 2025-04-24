@@ -3,16 +3,17 @@ from datetime import datetime, timezone
 from enum import Enum, StrEnum
 from timeit import default_timer as timer
 from typing import Any
+from urllib.parse import quote_plus
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
 from pymongo.errors import (
+    BulkWriteError,
     ConnectionFailure,
     DuplicateKeyError,
     InvalidOperation,
     OperationFailure,
     ServerSelectionTimeoutError,
-    BulkWriteError,
 )
 from pymongo.results import BulkWriteResult, DeleteResult, UpdateResult
 
@@ -84,7 +85,13 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         extra=extra,
                     )
                     raise e
-                except (ConnectionFailure, OperationFailure, InvalidOperation, BulkWriteError, Exception) as e:
+                except (
+                    ConnectionFailure,
+                    OperationFailure,
+                    InvalidOperation,
+                    BulkWriteError,
+                    Exception,
+                ) as e:
                     retries += 1
                     error_code = "mongodb_error"
                     extra = {
@@ -250,15 +257,20 @@ class MongoDBClient:
             auth_source = ""
         elif db_name == "admin":
             db_password = (
-                ":" + self.db_connection.admin_dbs["admin"].db_users["admin"].password + "@"
+                ":"
+                + quote_plus(self.db_connection.admin_dbs["admin"].db_users["admin"].password)
+                + "@"
             )
+            db_user = quote_plus(db_user)
         else:
-            db_password = ":" + self.db_password + "@"
+            db_password = ":" + quote_plus(self.db_password) + "@"
+            db_user = quote_plus(db_user)
 
         if self.db_connection.replica_set:
             replica_set = f"&replicaSet={self.db_connection.replica_set}"
         else:
             replica_set = ""
+
         return f"mongodb://{db_user}{db_password}{self.hosts}/{auth_source}{replica_set}"
 
     async def _check_create_db(self):
