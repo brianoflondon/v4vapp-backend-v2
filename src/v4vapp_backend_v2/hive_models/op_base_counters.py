@@ -159,7 +159,7 @@ class BlockCounter:
 
                 speed_up_factor = (min(self.marker_point, self.block_count) * HIVE_BLOCK_TIME) / last_marker_time
 
-                self.marker_point = (5 * 60 / HIVE_BLOCK_TIME) if self.time_diff < TIME_DIFFERENCE_CHECK else (30 * 60 / HIVE_BLOCK_TIME)
+                self.marker_point = (15 * 60 / HIVE_BLOCK_TIME) if self.time_diff < TIME_DIFFERENCE_CHECK else (5 * 60 / HIVE_BLOCK_TIME)
                 self.next_marker += self.marker_point
 
                 self.running_time = timer() - self.start
