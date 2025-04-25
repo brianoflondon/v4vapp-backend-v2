@@ -34,7 +34,7 @@ async def main_async_start():
     """
     CONFIG = InternalConfig().config
     logger.info(
-        f"{ICON} Notificataion bot: {CONFIG.logging.default_notification_bot_name} "
+        f"{ICON} Notification bot: {CONFIG.logging.default_notification_bot_name} "
         f"🔗 Database connection: {CONFIG.dbs_config.default_connection} "
         f"🔗 Database name: {CONFIG.dbs_config.default_name} "
     )

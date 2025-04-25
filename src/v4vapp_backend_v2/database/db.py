@@ -484,7 +484,7 @@ class MongoDBClient:
                 self.client = None
                 self.db = None
                 self.health_check = MongoDBStatus.ERROR
-                # Only retry if we have ever connected to stop retrys
+                # Only retry if we have ever connected to stop retries
                 if self.first_health_check != MongoDBStatus.VALIDATED:
                     raise e
                 # give me a sleep time which is 1 + count * 2 or 30
