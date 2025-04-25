@@ -103,7 +103,6 @@ async def stream_ops_async(
     last_block = start_block
 
     while last_block < stop_block:
-        e = None
         await OpBase.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
@@ -160,9 +159,8 @@ async def stream_ops_async(
         except SwitchToLiveStream as e:
             logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
             continue
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            logger.info("Async streamer received signal to stop. Exiting...")
-            e = None
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.info(f"Async streamer received signal to stop. Exiting... {e}")
             return
         except (NectarException, NumRetriesReached) as e:
             logger.warning(
