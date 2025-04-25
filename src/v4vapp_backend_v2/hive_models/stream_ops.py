@@ -196,7 +196,12 @@ async def stream_ops_async(
                 logger.info(
                     f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
                 )
+            current_node = hive.rpc.url
             hive.rpc.next()
+            logger.info(
+                f"{start_block:,} Switching {current_node} -> {hive.rpc.url} no_preview",
+                extra={"notification": True, "error_code": "stream_restart"},
+            )
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
