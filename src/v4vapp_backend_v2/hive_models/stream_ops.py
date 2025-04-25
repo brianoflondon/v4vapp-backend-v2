@@ -101,9 +101,10 @@ async def stream_ops_async(
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
     last_block = start_block
+
     while last_block < stop_block:
-        await OpBase.update_quote()
         e = None
+        await OpBase.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -161,6 +162,7 @@ async def stream_ops_async(
             continue
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Async streamer received signal to stop. Exiting...")
+            e = None
             return
         except (NectarException, NumRetriesReached) as e:
             logger.warning(
@@ -184,17 +186,17 @@ async def stream_ops_async(
                     f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
-            if not e:
-                logger.info(
-                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
-                )
-            else:
+            if e:
                 logger.warning(
                     f"{start_block:,} Shutting down or need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
                     extra={"notification": True, "error_code": "stream_restart"},
                 )
                 await asyncio.sleep(2)
-                hive.rpc.next()
+            else:
+                logger.info(
+                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
+                )
+            hive.rpc.next()
 
 
 def get_virtual_ops_block(block_num: int, blockchain: Blockchain):
