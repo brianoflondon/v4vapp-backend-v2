@@ -2,7 +2,6 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timezone
-from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
@@ -65,6 +64,25 @@ def get_mongodb_client() -> MongoDBClient:
 
 
 class ResumeToken(BaseModel):
+    """
+    ResumeToken is a model for managing MongoDB change stream resume tokens.
+
+    Attributes:
+        data (Mapping[str, Any] | None): The resume token data for MongoDB change streams.
+        timestamp (datetime): The timestamp when the token was created.
+        redis_client (V4VAsyncRedis | None): The Redis client instance for storing the resume token.
+
+    Methods:
+        __init__(collection: str, **data: Any):
+            Initialize the ResumeToken instance with a collection name and optional data.
+
+        async set_token(token_data: Mapping[str, Any]):
+            Set the resume token, update the timestamp, and store it in Redis.
+
+        async get_token() -> Mapping[str, Any]:
+            Retrieve the resume token from Redis and deserialize it.
+    """
+
     data: Mapping[str, Any] | None = Field(
         None, description="Resume token for MongoDB change stream"
     )
@@ -90,7 +108,17 @@ class ResumeToken(BaseModel):
         super().__init__(**data)
         self.collection = collection
 
-    async def set_token(self, token_data: Mapping[str, Any]):
+    @property
+    def redis_key(self) -> str:
+        """
+        Generate the Redis key for the resume token.
+
+        Returns:
+            str: The Redis key for the resume token.
+        """
+        return f"{logger.name}:resume_token:{self.collection}"
+
+    def set_token(self, token_data: Mapping[str, Any]):
         """
         Set the resume token and update the timestamp.
 
@@ -98,39 +126,47 @@ class ResumeToken(BaseModel):
             token_data (Mapping[str, Any]): The resume token data to set.
         """
         self.data = token_data
-        serialized_token = repr(self.data)
         self.timestamp = datetime.now(tz=timezone.utc)
-        redis_key = f"resume_token:{self.collection}"
+        serialized_token = repr(self.data)
+
         if not self.redis_client:
             self.redis_client = V4VAsyncRedis()
-        async with self.redis_client:
-            await self.redis_client.redis.set(
-                name=redis_key,
-                value=serialized_token,
+        try:
+            # Use the sync_redis client to store the token in Redis
+            self.redis_client.sync_redis.set(self.redis_key, serialized_token)
+            logger.info(
+                f"Resume token set for collection '{self.collection}'",
+                extra={"resume_token": serialized_token},
             )
+        except Exception as e:
+            logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
+            raise e
 
-    async def get_token(self) -> Mapping[str, Any]:
+    @property
+    def token(self) -> Mapping[str, Any] | None:
         """
-        Get the resume token from Redis.
+        Retrieve the resume token from Redis and deserialize it.
 
         Returns:
-            Mapping[str, Any]: The resume token data.
+            Mapping[str, Any] | None: The resume token data or None if not found.
         """
-        redis_key = f"resume_token:{self.collection}"
-        if not self.redis_client:
-            self.redis_client = V4VAsyncRedis()
-        async with self.redis_client:
-            resume_token = await self.redis_client.redis.get(redis_key)
-            if resume_token:
-                try:
-                    resume_token = eval(resume_token)  # Deserialize the resume token
-                    logger.info(f"Resume token deserialized: {resume_token}")
-                except Exception as e:
-                    logger.error(f"Failed to deserialize resume token: {e}")
-                    resume_token = None
+        try:
+            if not self.redis_client:
+                self.redis_client = V4VAsyncRedis()
+            serialized_token: str = self.redis_client.sync_redis.get(self.redis_key)  # type: ignore
+            if serialized_token:
+                self.data = eval(serialized_token)  # Deserialize the token # type: ignore
+                logger.info(
+                    f"Resume token retrieved for collection '{self.collection}'",
+                    extra={"resume_token": self.data},
+                )
+                return self.data
             else:
-                resume_token = None
-        return resume_token
+                logger.warning(f"No resume token found for collection '{self.collection}'.")
+                return None
+        except Exception as e:
+            logger.error(f"Error retrieving resume token for collection '{self.collection}': {e}")
+            raise e
 
 
 async def subscribe_stream(
@@ -154,7 +190,7 @@ async def subscribe_stream(
     collection = await client.get_collection(collection_name)
     resume = ResumeToken(collection=collection_name)
     try:
-        resume_token = await resume.get_token()
+        resume_token = resume.token
         async with collection.watch(
             pipeline=pipeline,
             full_document="updateLookup",
@@ -164,9 +200,11 @@ async def subscribe_stream(
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                await resume.set_token(change.get("_id", {}))
-                pprint(f"-- {collection_name} --" * 5)
-                pprint(change, indent=2)
+                resume.set_token(change.get("_id", {}))
+                logger.info(
+                    f"{ICON} Change detected in {collection_name}",
+                    extra={"notification": False, "change": change},
+                )
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
@@ -216,12 +254,8 @@ async def main_async_start():
         # Simulate some work
         while not shutdown_event.is_set():
             tasks = [
-                asyncio.create_task(
-                    subscribe_stream(collection_name="invoices", pipeline=invoice_pipeline)
-                ),
-                asyncio.create_task(
-                    subscribe_stream(collection_name="payments", pipeline=payment_pipeline)
-                ),
+                asyncio.create_task(subscribe_stream(collection_name="invoices")),
+                asyncio.create_task(subscribe_stream(collection_name="payments")),
                 asyncio.create_task(
                     subscribe_stream(collection_name="hive_ops", pipeline=hive_ops_pipeline)
                 ),
