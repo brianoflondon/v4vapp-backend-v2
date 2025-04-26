@@ -159,20 +159,18 @@ class Invoice(BaseModel):
               the method attempts to decode the base64-encoded value associated with the key "818818".
             - If decoding fails, a warning is logged, and the method returns `None`.
         """
+        extracted_value = None
         if self.memo:
             match = re.match(LND_INVOICE_TAG, self.memo.lower())
             if match:
                 extracted_value = match.group(1)
-            else:
-                extracted_value = None
-        elif self.htlcs and self.htlcs[0]:
-            if value := self.htlcs[0].custom_records.get("818818"):
+
+        elif self.htlcs and self.htlcs[0] and self.htlcs[0].custom_records:
+            if value := self.htlcs[0].custom_records.get("818818", None):
                 try:
                     extracted_value = b64_decode(value)
                 except Exception as e:
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
-        else:
-            extracted_value = None
 
         if extracted_value:
             hive_accname = AccNameType(extracted_value)

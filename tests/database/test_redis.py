@@ -53,7 +53,7 @@ async def test_redis_client_default():
     7. Deletes the key from the Redis database and asserts the deletion was successful.
     """
     redis_client = V4VAsyncRedis()
-    await redis_client.flush()
+    # await redis_client.flush()
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
@@ -65,7 +65,7 @@ async def test_redis_client_default():
 @pytest.mark.asyncio
 async def test_redis_client_decode_true():
     redis_client = V4VAsyncRedis(decode_responses=True)
-    await redis_client.flush()
+    # await redis_client.flush()
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
@@ -81,7 +81,7 @@ async def test_redis_client_no_config():
     This will work with the Redis server running from docker in the local environment.
     """
     redis_client = V4VAsyncRedis(no_config=True)
-    await redis_client.flush()
+    # await redis_client.flush()
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()
@@ -93,7 +93,7 @@ async def test_redis_client_no_config():
 @pytest.mark.asyncio
 async def test_redis_client_decode_false():
     redis_client = V4VAsyncRedis(decode_responses=False)
-    await redis_client.flush()
+    # await redis_client.flush()
     assert redis_client is not None
     assert redis_client.redis is not None
     assert await redis_client.redis.ping()

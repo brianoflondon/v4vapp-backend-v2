@@ -3,7 +3,7 @@ import re
 from base64 import b64decode
 from typing import Any
 
-from pydantic import AnyUrl, BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def is_json(check_json: str) -> bool:
@@ -51,7 +51,7 @@ def b64_decode(base64_message) -> str | dict:
 class KeysendCustomRecord(BaseModel):
     podcast: str | None = Field(None, description="Title of the podcast")
     feedID: int | None = Field(None, description="ID of podcast in PodcastIndex.org directory")
-    url: AnyUrl | None = Field(None, description="RSS feed URL of podcast")
+    url: str | None = Field(None, description="RSS feed URL of podcast")
     guid: str | None = Field(
         None,
         description="The `<podcast:guid>` tag. See https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md#guid",
@@ -134,18 +134,44 @@ class KeysendCustomRecord(BaseModel):
         description="Item GUID from the `<podcast:remoteItem>` tag when a payment is sent to a feed's value block via a `<podcast:valueTimeSplit>` tag.",
     )
 
-    @property
-    def trx_reason(self) -> "TrxReason":
-        """
-        Returns the trx reason for keysend invoice with this action
-        This is where we will switch to KEEPSATS_BOOST and KEEPSATS_STREAMING
-        """
-        if self.action == "boost":
-            return TrxReason.KEEPSATS_BOOST
-        elif self.action == "auto":
-            return TrxReason.KEEPSATS_AUTO
-        else:
-            return TrxReason.KEEPSATS_STREAMING
+    @field_validator("speed", "app_version", "name", "guid", "reply_address", mode="before")
+    def coerce_to_str(cls, value):
+        if isinstance(value, (float, int)):
+            return str(value)
+        if isinstance(value, dict):
+            return json.dumps(value)
+        if isinstance(value, bytes):
+            return value.decode("utf-8")
+        if isinstance(value, str):
+            if value.startswith("b'") and value.endswith("'"):
+                return value[2:-1]
+            if value.startswith('"') and value.endswith('"'):
+                return value[1:-1]
+            if value.startswith("{") and value.endswith("}"):
+                return json.loads(value)
+        return value
+
+    @field_validator("ts", "value_msat", "itemID", mode="before")
+    def coerce_to_int(cls, value):
+        if isinstance(value, (float, int, str)):
+            try:
+                return int(value)
+            except ValueError:
+                return 0
+        return value
+
+    # @property
+    # def trx_reason(self) -> "TrxReason":
+    #     """
+    #     Returns the trx reason for keysend invoice with this action
+    #     This is where we will switch to KEEPSATS_BOOST and KEEPSATS_STREAMING
+    #     """
+    #     if self.action == "boost":
+    #         return TrxReason.KEEPSATS_BOOST
+    #     elif self.action == "auto":
+    #         return TrxReason.KEEPSATS_AUTO
+    #     else:
+    #         return TrxReason.KEEPSATS_STREAMING
 
     @property
     def action_type(self) -> str:
@@ -202,7 +228,5 @@ class KeysendCustomRecord(BaseModel):
         #     try:
         #         logging.warning(json.dumps(data))
         #     except Exception:
-        #         pass
-        super().__init__(**data)
         #         pass
         super().__init__(**data)
