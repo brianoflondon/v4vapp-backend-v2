@@ -27,7 +27,7 @@ class InvoiceHTLC(BaseModel):
     custom_records: dict | None = None
     mpp_total_amt_msat: BSONInt64 | None = None
     amp: dict | None = None
-
+#TODO: #92 this is where the custom_records in each invoice are stored this is where we will decode the custom records
 
 class Invoice(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
