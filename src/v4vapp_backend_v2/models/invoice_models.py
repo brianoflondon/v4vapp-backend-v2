@@ -1,12 +1,15 @@
-from typing import Any, List
-from datetime import datetime, timezone
-from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.config.setup import LoggerFunction
-from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
-
 import re
+from datetime import datetime
+from typing import Any, List
+
+from google.protobuf.json_format import MessageToDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.config.setup import LoggerFunction, logger
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.models.custom_records import KeysendCustomRecord, b64_decode
+from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 # This is the regex for finding if a given message is an LND invoice to pay.
 # This looks for #v4vapp v4vapp
@@ -27,11 +30,12 @@ class InvoiceHTLC(BaseModel):
     custom_records: dict | None = None
     mpp_total_amt_msat: BSONInt64 | None = None
     amp: dict | None = None
-#TODO: #92 this is where the custom_records in each invoice are stored this is where we will decode the custom records
+
+
+# TODO: #92 this is where the custom_records in each invoice are stored this is where we will decode the custom records
+
 
 class Invoice(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     memo: str = ""
     r_preimage: str | None = None
     r_hash: str | None = None
@@ -61,10 +65,11 @@ class Invoice(BaseModel):
     amp_invoice_state: dict | None = None
 
     is_lndtohive: bool = False
+    hive_accname: AccNameType | None = None
 
-    def __init__(
-        __pydantic_self__, lnrpc_invoice: lnrpc.Invoice = None, **data: Any
-    ) -> None:
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def __init__(__pydantic_self__, lnrpc_invoice: lnrpc.Invoice = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
@@ -78,21 +83,45 @@ class Invoice(BaseModel):
             if match:
                 __pydantic_self__.is_lndtohive = True
 
+        __pydantic_self__.hive_accname = __pydantic_self__.hive_account()
+
+    def hive_account(self) -> AccNameType | None:
+        if self.memo:
+            match = re.match(LND_INVOICE_TAG, self.memo.lower())
+            if match:
+                extracted_value = match.group(1)
+        if self.htlcs[0]:
+            if self.htlcs[0].custom_records.get("818818"):
+                value = self.htlcs[0].custom_records.get("818818")
+                try:
+                    extracted_value = b64_decode(value)
+                except Exception as e:
+                    logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
+
+        if extracted_value:
+            hive_accname = AccNameType(extracted_value)
+            return hive_accname
+
+        return None
+
+    @computed_field
+    def custom_record(self) -> KeysendCustomRecord | None:
+        if self.htlcs[0].custom_records:
+            for key, value in self.htlcs[0].custom_records.items():
+                if key == 818818:
+                    return b64_decode(value)
+
     def invoice_message(self) -> str:
         if self.settled:
             return (
-                f"✅ Settled invoice {self.add_index} "
-                f"with memo {self.memo} {self.value:,.0f} sats"
+                f"✅ Settled invoice {self.add_index} with memo {self.memo} {self.value:,.0f} sats"
             )
         else:
             return (
-                f"✅ Valid   invoice {self.add_index} "
-                f"with memo {self.memo} {self.value:,.0f} sats"
+                f"✅ Valid   invoice {self.add_index} with memo {self.memo} {self.value:,.0f} sats"
             )
 
-    def invoice_log(
-        self, logger_func: LoggerFunction, send_notification: bool = False
-    ) -> None:
+    def invoice_log(self, logger_func: LoggerFunction, send_notification: bool = False) -> None:
         logger_func(
             self.invoice_message(),
             extra={
@@ -120,15 +149,13 @@ class ListInvoiceResponse(BaseModel):
                 lnrpc_list_invoice_response, preserving_proto_field_name=True
             )
             list_invoice_dict["invoices"] = [
-                Invoice.model_validate(invoice)
-                for invoice in list_invoice_dict["invoices"]
+                Invoice.model_validate(invoice) for invoice in list_invoice_dict["invoices"]
             ]
             super().__init__(**list_invoice_dict)
         else:
             super().__init__(**data)
             if not __pydantic_self__.invoices:
                 __pydantic_self__.invoices = []
-
 
 
 def protobuf_invoice_to_pydantic(invoice: lnrpc.Invoice) -> Invoice:
@@ -160,4 +187,5 @@ def protobuf_to_pydantic(message) -> ListInvoiceResponse:
         #     invoice_model = Invoice.model_validate(invoice)
         # except Exception as e:
         #     print(e)
+    return ListInvoiceResponse.model_validate(message_dict)
     return ListInvoiceResponse.model_validate(message_dict)
