@@ -134,10 +134,6 @@ class ResumeToken(BaseModel):
         try:
             # Use the sync_redis client to store the token in Redis
             self.redis_client.sync_redis.set(self.redis_key, serialized_token)
-            logger.info(
-                f"Resume token set for collection '{self.collection}'",
-                extra={"resume_token": serialized_token},
-            )
         except Exception as e:
             logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
             raise e
