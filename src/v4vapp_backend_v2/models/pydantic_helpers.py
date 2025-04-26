@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
+
 from bson import Int64
 
 
@@ -69,6 +70,10 @@ def convert_datetime_fields(item: dict) -> dict:
         if isinstance(value, (int, float)):
             return convert_timestamp_to_datetime(value)
         if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
             bsonint60 = BSONInt64.validate(value, None)
             if bsonint60 > 1e12:
                 timestamp = bsonint60 / 1e9
