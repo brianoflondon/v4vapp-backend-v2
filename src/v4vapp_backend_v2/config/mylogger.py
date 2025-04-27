@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import json
 import logging
@@ -170,6 +171,11 @@ class CustomNotificationHandler(logging.Handler):
             bot_name = record.bot_name
         else:
             bot_name = InternalConfig().config.logging.default_notification_bot_name
+
+        if InternalConfig.notification_loop:
+            pending_tasks = asyncio.all_tasks(loop=InternalConfig.notification_loop)
+            if pending_tasks:
+                logger.info(f"Pending tasks: {len(pending_tasks)}")
 
         log_message = record.getMessage()
         if self.error_codes:
