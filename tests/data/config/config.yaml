@@ -4,7 +4,8 @@ version: "0.2.0"
 logging:
   log_config_file: 2-stderr-json-file.json
   default_log_level: DEBUG
-  log_folder: logs
+  log_folder: logs/
+  log_file: test.log.jsonl
   log_levels:
     grpc: WARNING
     asyncio: WARNING

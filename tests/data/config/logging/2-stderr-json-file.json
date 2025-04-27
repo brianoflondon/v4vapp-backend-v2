@@ -27,7 +27,7 @@
       "formatter": "simple",
       "stream": "ext://sys.stderr"
     },
-    "file": {
+    "file_json": {
       "class": "logging.handlers.RotatingFileHandler",
       "level": "DEBUG",
       "formatter": "json",
@@ -41,7 +41,7 @@
       "level": "DEBUG",
       "handlers": [
         "stderr",
-        "file"
+        "file_json"
       ]
     }
   }

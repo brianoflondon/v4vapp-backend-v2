@@ -102,7 +102,7 @@ class UpdateProposalVotes(OpBase):
             vote_value = "unknown"
 
         voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
-        return f"👁️ {self.block_num:,} {voter} {vote_value} {voted_for:<8} {prop_id_sections}"
+        return f"👁️ {voter} {vote_value} {voted_for:<8} {prop_id_sections}"
 
     @property
     def is_tracked(self):

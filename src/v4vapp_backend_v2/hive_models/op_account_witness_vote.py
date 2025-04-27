@@ -78,7 +78,7 @@ class AccountWitnessVote(OpBase):
         else:
             total_value = 0
         return (
-            f"👁️ {self.block_num:,} {self.account} "
+            f"👁️ {self.account} "
             f"{voted_for} {self.witness} "
             f"with {total_value:,.0f} HP"
         )

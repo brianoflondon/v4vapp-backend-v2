@@ -71,7 +71,6 @@ async def stream_ops_async(
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
-    e = None
     if opNames:
         op_realms = [op_realm(op) for op in opNames]
         only_virtual_ops = all(realm == "virtual" for realm in op_realms)
@@ -104,6 +103,7 @@ async def stream_ops_async(
 
     while last_block < stop_block:
         await OpBase.update_quote()
+        e = None
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(

@@ -67,6 +67,8 @@ services:
     networks:
       - v4vapp-backend
     restart: unless-stopped
+    volumes:
+      - redis_data:/data
 
   voltage-node-monitor:
     depends_on:
@@ -126,6 +128,7 @@ services:
 volumes:
   mongo_data:
   mongo_config:
+  redis_data:
 
 networks:
   repl-mongo_repl-set:

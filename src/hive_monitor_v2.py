@@ -517,7 +517,7 @@ async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -
             all_ops_loop(watch_witnesses=watch_witnesses, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})

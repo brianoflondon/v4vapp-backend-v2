@@ -71,8 +71,8 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     ans = await func(self, *args, **kwargs)
                     if error_code:
                         logger.info(
-                            f"Retry successful: {func.__name__}",
-                            extra={"error_code_clear": error_code},
+                            f"{DATABASE_ICON} {logger.name} Retry successful: {func.__name__}",
+                            extra={"notification": True, "error_code_clear": error_code},
                         )
                     return ans
                 except DuplicateKeyError as e:
@@ -81,7 +81,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         "retries": retries,
                     }
                     logger.debug(
-                        f"DuplicateKeyError: {e}. Not retrying.",
+                        f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
                         extra=extra,
                     )
                     raise e
@@ -101,11 +101,13 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     }
                     if retries >= max_retries:
                         logger.error(
+                            f"{DATABASE_ICON} {logger.name} "
                             f"Failed to execute {func.__name__} after {retries} attempts: {e}",
                             extra=extra,
                         )
                         raise e
                     logger.warning(
+                        f"{DATABASE_ICON} {logger.name} "
                         f"Retrying {func.__name__} due to {e}. "
                         f"Attempt {retries}/{max_retries}. "
                         f"Retrying in {delay} s.",
@@ -143,7 +145,7 @@ class MongoDBClient:
         Returns:
             None
         """
-        logger.info(f"{DATABASE_ICON} Initializing MongoDBClient {db_conn}")
+        logger.info(f"{DATABASE_ICON} {logger.name} Initializing MongoDBClient {db_conn}")
         self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.first_health_check = MongoDBStatus.UNKNOWN
@@ -188,6 +190,7 @@ class MongoDBClient:
     def validate_user_db(self):
         elapsed_time = timer() - self.start_connection
         logger.debug(
+            f"{DATABASE_ICON} {logger.name} "
             f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
         )
         if self.db_name not in self.dbs:
@@ -312,7 +315,7 @@ class MongoDBClient:
             }
             ans = await admin_db.command(create_user)
             logger.info(
-                f"{DATABASE_ICON} "
+                f"{DATABASE_ICON} {logger.name} "
                 f"Created user {self.db_user} with "
                 f"roles {self.db_roles} in {self.db_name}",
                 extra={
@@ -327,7 +330,7 @@ class MongoDBClient:
             if e.code not in [11000, 51003]:
                 create_user = {} if not create_user else create_user
                 logger.error(
-                    f"Failed to create user {self.db_user}: {e}",
+                    f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                     extra={"error": str(e), "create_user": create_user},
                 )
                 raise e
@@ -335,7 +338,7 @@ class MongoDBClient:
         except Exception as e:
             create_user = {} if not create_user else create_user
             logger.error(
-                f"Failed to create user {self.db_user}: {e}",
+                f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                 extra={"error": e, "create_user": create_user},
             )
             pass
@@ -366,7 +369,8 @@ class MongoDBClient:
                                 name=index_name,
                             )
                             logger.info(
-                                f"{DATABASE_ICON} Created index {index_name} in {collection_name}"
+                                f"{DATABASE_ICON} {logger.name} "
+                                f"Created index {index_name} in {collection_name}"
                             )
                         except Exception as ex:
                             logger.error(ex)
@@ -377,10 +381,11 @@ class MongoDBClient:
                         timeseries=collection_config.model_dump(),
                     )
                     logger.info(
-                        f"{DATABASE_ICON} Created time series collection {collection_name}"
+                        f"{DATABASE_ICON} {logger.name} Created time series collection {collection_name}"
                     )
                 except Exception as ex:
-                    logger.error(ex)
+                    message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {collection_name} {ex}"
+                    logger.error(message, exc_info=True)
 
     def _check_index_exists(self, indexes, index_name):
         for index in indexes:
@@ -427,7 +432,7 @@ class MongoDBClient:
                 )
                 if first_time_check_or_recheck:
                     logger.info(
-                        f"{DATABASE_ICON} Attempting to connect to MongoDB for the first time or after failure."
+                        f"{DATABASE_ICON} {logger.name} Attempting to connect to MongoDB for the first time or after failure."
                     )
                     ans = await self.admin_client["admin"].command("ping")
                     assert ans.get("ok") == 1
@@ -441,7 +446,7 @@ class MongoDBClient:
                         await self._check_create_db()
                     await self._check_indexes()
                 logger.debug(
-                    f"{DATABASE_ICON} "
+                    f"{DATABASE_ICON} {logger.name} "
                     f"Connected to MongoDB {self.db_name} "
                     f"after {timer() - self.start_connection:.3f}s "
                     f"{self.hex_id} {count}",
@@ -457,6 +462,7 @@ class MongoDBClient:
                 self.health_check = MongoDBStatus.CONNECTED
                 if count > 1:
                     logger.warning(
+                        f"{DATABASE_ICON} {logger.name} "
                         f"Reconnected to MongoDB {self.db_name} after {count} attempts",
                         extra={
                             "uri": self.uri,
@@ -474,6 +480,7 @@ class MongoDBClient:
             ) as e:
                 error_code = e.code if hasattr(e, "code") else type(e).__name__
                 logger.error(
+                    f"{DATABASE_ICON} {logger.name} "
                     f"Attempt {count} Failed to connect to MongoDB: {e}",
                     extra={
                         "uri": self.uri,
@@ -497,7 +504,7 @@ class MongoDBClient:
         if self.client:
             time_connected = timer() - self.start_connection
             logger.debug(
-                f"{DATABASE_ICON} "
+                f"{DATABASE_ICON} {logger.name} "
                 f"Disconnected MongoDB {self.db_name} after {time_connected:.3f}s "
                 f"{self.hex_id}",
                 extra={
