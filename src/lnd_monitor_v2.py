@@ -871,6 +871,10 @@ def main(
     CONFIG = InternalConfig(config_filename=config_filename).config
     lnd_node = CONFIG.lnd_config.default
     icon = CONFIG.lnd_config.connections[lnd_node].icon
+    if not lnd_node:
+        logger.error("No LND node found in the config file.")
+        sys.exit(1)
+    logger.name = f"lnd_monitor_{lnd_node}"
     logger.info(
         f"{icon} ✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {__version__}",
@@ -882,7 +886,6 @@ def main(
 
 if __name__ == "__main__":
     try:
-        logger.name = "lnd_monitor_v2"
         app()
     except KeyboardInterrupt:
         print("👋 Goodbye!")

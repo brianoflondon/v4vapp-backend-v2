@@ -319,7 +319,7 @@ def main(
 
 if __name__ == "__main__":
     try:
-        logger.name = "db_monitor_app"
+        logger.name = "db_monitor"
         app()
         print("👋 Goodbye!")
     except KeyboardInterrupt:
