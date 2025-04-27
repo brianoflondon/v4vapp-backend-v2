@@ -574,6 +574,20 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                 for invoice in list_invoices.invoices:
                     insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
                     query = {"r_hash": invoice.r_hash}
+                    read_invoice = await db_client.find_one(
+                        collection_name="invoices",
+                        query=query,
+                    )
+                    if read_invoice:
+                        try:
+                            db_invoice = Invoice(**read_invoice)
+                            if db_invoice == invoice:
+                                continue
+                        except Exception as e:
+                            logger.warning(
+                                e, extra={"notification": False, "invoice": read_invoice}
+                            )
+                            pass
                     bulk_updates.append(
                         {
                             "filter": query,
@@ -582,15 +596,21 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                         }
                     )
                 try:
-                    result = await db_client.bulk_write(
-                        collection_name="invoices",
-                        operations=[
-                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
-                            for update in bulk_updates
-                        ],
-                    )
-                    modified = result.modified_count
-                    inserted = result.inserted_count
+                    if bulk_updates:
+                        result = await db_client.bulk_write(
+                            collection_name="invoices",
+                            operations=[
+                                UpdateOne(
+                                    update["filter"], update["update"], upsert=update["upsert"]
+                                )
+                                for update in bulk_updates
+                            ],
+                        )
+                        modified = result.modified_count
+                        inserted = result.inserted_count
+                    else:
+                        modified = 0
+                        inserted = 0
                     logger.info(
                         f"{lnd_client.icon} {DATABASE_ICON} "
                         f"Invoices {index_offset}... "
@@ -659,6 +679,20 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                     )
                     insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
                     query = {"payment_hash": payment.payment_hash}
+                    read_payment = await db_client.find_one(
+                        collection_name="payments",
+                        query=query,
+                    )
+                    if read_payment:
+                        try:
+                            db_payment = Payment(**read_payment)
+                            if db_payment == payment:
+                                continue
+                        except Exception as e:
+                            logger.warning(
+                                e, extra={"notification": False, "payment": read_payment}
+                            )
+                            pass
                     bulk_updates.append(
                         {
                             "filter": query,
@@ -667,15 +701,21 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                         }
                     )
                 try:
-                    result = await db_client.bulk_write(
-                        collection_name="payments",
-                        operations=[
-                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
-                            for update in bulk_updates
-                        ],
-                    )
-                    modified = result.modified_count
-                    inserted = result.inserted_count
+                    if bulk_updates:
+                        result = await db_client.bulk_write(
+                            collection_name="payments",
+                            operations=[
+                                UpdateOne(
+                                    update["filter"], update["update"], upsert=update["upsert"]
+                                )
+                                for update in bulk_updates
+                            ],
+                        )
+                        modified = result.modified_count
+                        inserted = result.inserted_count
+                    else:
+                        modified = 0
+                        inserted = 0
                     logger.info(
                         f"{lnd_client.icon} {DATABASE_ICON} "
                         f"Payments {index_offset}... "

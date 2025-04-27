@@ -139,7 +139,10 @@ class KeysendCustomRecord(BaseModel):
         if isinstance(value, (float, int)):
             return str(value)
         if isinstance(value, dict):
-            return json.dumps(value)
+            try:
+                return json.dumps(value, default=str)
+            except TypeError:
+                return None
         if isinstance(value, bytes):
             return value.decode("utf-8")
         if isinstance(value, str):
