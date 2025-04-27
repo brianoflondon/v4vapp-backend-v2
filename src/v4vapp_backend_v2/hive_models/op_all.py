@@ -2,6 +2,7 @@ from typing import Any, Union
 
 from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
 
+from .op_account_update2 import AccountUpdate2
 from .op_account_witness_vote import AccountWitnessVote
 from .op_base import OpBase
 from .op_custom_json import CustomJson
@@ -12,9 +13,9 @@ from .op_transfer import Transfer
 
 OpMarket = Union[FillOrder, LimitOrderCreate]
 
-OpAny = Union[Transfer, ProducerReward, AccountWitnessVote, CustomJson, OpBase]
+OpAny = Union[Transfer, ProducerReward, AccountWitnessVote, CustomJson, AccountUpdate2, OpBase]
 OpVirtual = Union[ProducerReward, FillOrder]
-OpReal = Union[Transfer, AccountWitnessVote, CustomJson]
+OpReal = Union[Transfer, AccountWitnessVote, CustomJson, AccountUpdate2]
 OpRealOpsLoop = Union[OpAny, OpMarket]
 
 OP_MAP: dict[str, OpAny] = {
@@ -25,6 +26,7 @@ OP_MAP: dict[str, OpAny] = {
     "fill_order": FillOrder,
     "limit_order_create": LimitOrderCreate,
     "update_proposal_votes": UpdateProposalVotes,
+    "account_update2": AccountUpdate2,
 }
 
 
@@ -55,6 +57,7 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         raise ValueError(f"Unknown operation type: {op_type_value}")
 
     return op_type.model_validate(hive_event)
+
 
 def op_any_or_base(hive_event: dict) -> OpAny:
     """
