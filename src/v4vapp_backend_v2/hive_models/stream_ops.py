@@ -1,4 +1,5 @@
 import asyncio
+import random
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
@@ -103,7 +104,6 @@ async def stream_ops_async(
 
     while last_block < stop_block:
         await OpBase.update_quote()
-        e = None
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -167,6 +167,8 @@ async def stream_ops_async(
                 f"{start_block:,} NectarException in block_stream: {e} restarting",
                 extra={"notification": False, "error_code": "stream_restart", "error": e},
             )
+            await asyncio.sleep(2)
+
         except StopAsyncIteration as e:
             logger.error(
                 f"{start_block:,} StopAsyncIteration in block_stream stopped unexpectedly: {e}"
@@ -176,7 +178,12 @@ async def stream_ops_async(
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",
-                extra={"notification": False, "error": e, "error_code": "stream_restart"},
+                extra={
+                    "notification": False,
+                    "error": e,
+                    "error_code": "stream_restart",
+                    "exc_info": True,
+                },
             )
         finally:
             if last_block >= stop_block:
@@ -184,12 +191,6 @@ async def stream_ops_async(
                     f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
-            if e:
-                logger.warning(
-                    f"{start_block:,} Shutting down or need to restart stream, sleeping for 2 seconds {last_block=:,} {hive.rpc.url} no_preview",
-                    extra={"notification": True, "error_code": "stream_restart"},
-                )
-                await asyncio.sleep(2)
             else:
                 logger.info(
                     f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {hive.rpc.url}"
