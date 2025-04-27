@@ -777,6 +777,35 @@ async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
         return invoice
 
 
+async def syncronize_db(
+    lnd_client: LNDClient,
+    db_client: MongoDBClient,
+) -> None:
+    """
+    Synchronizes the database with the LND client.
+
+    This function retrieves all invoices from the LND client and stores them
+    in the specified MongoDB collection. It also handles any exceptions that
+    may occur during the process.
+
+    Args:
+        lnd_client (LNDClient): The LND client instance used to interact with
+            the Lightning Network Daemon.
+        db_client (MongoDBClient): The MongoDB client instance used to store
+            the invoices.
+
+    Returns:
+        None: This function does not return a value. It performs asynchronous
+            operations and updates the database after waiting for 10 seconds.
+    """
+    sync_tasks = [
+        read_all_invoices(lnd_client, db_client),
+        read_all_payments(lnd_client, db_client),
+    ]
+    await asyncio.sleep(10)
+    await asyncio.gather(*sync_tasks)
+
+
 async def main_async_start(connection_name: str) -> None:
     """
     Main function to run the node monitor.
@@ -820,11 +849,6 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             db_client = get_mongodb_client()
-            startup_tasks = [
-                read_all_invoices(lnd_client, db_client),
-                read_all_payments(lnd_client, db_client),
-            ]
-            await asyncio.gather(*startup_tasks)
             tasks = [
                 invoices_loop(
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
@@ -835,6 +859,10 @@ async def main_async_start(connection_name: str) -> None:
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 fill_channel_names(lnd_client, lnd_events_group),
                 check_for_shutdown(),
+                syncronize_db(
+                    lnd_client=lnd_client,
+                    db_client=db_client,
+                ),
             ]
             await asyncio.gather(*tasks)
 
