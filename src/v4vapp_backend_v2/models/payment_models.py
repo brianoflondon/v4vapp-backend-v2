@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, List, Optional
 
 from google.protobuf.json_format import MessageToDict
@@ -6,6 +7,18 @@ from pydantic import BaseModel, ConfigDict, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
+
+
+class PaymentStatus(StrEnum):
+    """
+    Enum representing the status of a payment.
+    """
+
+    UNKNOWN = "UNKNOWN"
+    IN_FLIGHT = "IN_FLIGHT"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    INITIATED = "INITIATED"
 
 
 class Hop(BaseModel):
@@ -144,7 +157,7 @@ class Payment(PaymentExtra):
     value_sat: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     payment_request: str | None = None
-    status: str
+    status: PaymentStatus | None = None
     fee_sat: BSONInt64 | None = None
     fee_msat: BSONInt64 | None = None
     creation_time_ns: datetime
@@ -152,9 +165,7 @@ class Payment(PaymentExtra):
     failure_reason: str | None = None
     htlcs: List[HTLCAttempt] | None = None
 
-    def __init__(
-        __pydantic_self__, lnrpc_payment: lnrpc.Payment = None, **data: Any
-    ) -> None:
+    def __init__(__pydantic_self__, lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
             data_dict = MessageToDict(lnrpc_payment, preserving_proto_field_name=True)
             payment_dict = convert_datetime_fields(data_dict)
@@ -246,8 +257,7 @@ class ListPaymentsResponse(BaseModel):
                 lnrpc_list_payments_response, preserving_proto_field_name=True
             )
             list_payments_dict["invoices"] = [
-                Payment.model_validate(payment)
-                for payment in list_payments_dict["payments"]
+                Payment.model_validate(payment) for payment in list_payments_dict["payments"]
             ]
             super().__init__(**list_payments_dict)
         else:

@@ -46,6 +46,7 @@ class LoggingConfig(BaseConfig):
     default_log_level: str = "DEBUG"
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
+    log_filename: Path = Path("v4vapp-backend-v2.log.jsonl")
     log_notification_silent: List[str] = []
     default_notification_bot_name: str = ""
 
@@ -486,6 +487,14 @@ class InternalConfig:
             config_file = Path(BASE_LOGGING_CONFIG_PATH, self.config.logging.log_config_file)
             with open(config_file) as f_in:
                 config = json.load(f_in)
+                try:
+                    if self.config.logging.log_folder and self.config.logging.log_filename:
+                        config["handlers"]["file_json"]["filename"] = str(
+                            Path(self.config.logging.log_folder, self.config.logging.log_filename)
+                        )
+                except KeyError as ex:
+                    print(f"KeyError in logging config no logfile set: {ex}")
+                    raise ex
         except FileNotFoundError as ex:
             print(f"Logging config file not found: {ex}")
             raise ex

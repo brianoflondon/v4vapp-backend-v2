@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
-from typing import Any, List
+from enum import StrEnum
+from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict
@@ -18,6 +19,37 @@ from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetim
 LND_INVOICE_TAG = r"^\s*(\S+).*#v4vapp"
 
 
+class InvoiceState(StrEnum):
+    """
+    Enum representing the possible states of an invoice.
+
+    Attributes:
+        OPEN (str): The invoice is open and not yet settled.
+        SETTLED (str): The invoice has been settled.
+        CANCELED (str): The invoice has been canceled.
+    """
+
+    OPEN = "OPEN"
+    SETTLED = "SETTLED"
+    CANCELED = "CANCELED"
+    ACCEPTED = "ACCEPTED"
+
+
+class InvoiceHTLCState(StrEnum):
+    """
+    Enum representing the possible states of an HTLC (Hashed Time-Locked Contract).
+
+    Attributes:
+        ACCEPTED (str): The HTLC is accepted.
+        SETTLED (str): The HTLC is settled.
+        CANCELED (str): The HTLC has been canceled.
+    """
+
+    ACCEPTED = "ACCEPTED"
+    SETTLED = "SETTLED"
+    CANCELED = "CANCELED"
+
+
 class InvoiceHTLC(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -28,10 +60,16 @@ class InvoiceHTLC(BaseModel):
     accept_time: datetime
     resolve_time: datetime
     expiry_height: int
-    state: str
-    custom_records: dict | None = None
+    state: InvoiceHTLCState
+    custom_records: Dict[str, str] | None = None
     mpp_total_amt_msat: BSONInt64 | None = None
     amp: dict | None = None
+
+
+class Feature(BaseModel):
+    name: str = ""
+    is_required: bool = False
+    is_known: bool = False
 
 
 # TODO: #92 this is where the custom_records in each invoice are stored this is where we will decode the custom records
@@ -44,6 +82,9 @@ class Invoice(BaseModel):
     This class represents an invoice model with various attributes and methods to handle
     invoice-related data. It is designed to work with data from the Lightning Network Daemon (LND)
     and includes functionality for extracting Hive account information and custom records.
+
+    Based on :
+    https://github.com/lightningnetwork/lnd/blob/7e50b8438ef5f88841002c4a8c23510928cfe64b/lnrpc/lightning.proto#L3768
 
     Attributes:
         memo (str): A memo or description for the invoice. Defaults to an empty string.
@@ -110,9 +151,9 @@ class Invoice(BaseModel):
     amt_paid: BSONInt64 | None = None
     amt_paid_sat: BSONInt64 | None = None
     amt_paid_msat: BSONInt64 | None = None
-    state: str | None = None
+    state: InvoiceState | None = None
     htlcs: List[InvoiceHTLC] | None = None
-    features: dict
+    features: dict[str, Feature] | None = None
     is_keysend: bool = False
     payment_addr: str | None = None
     is_amp: bool = False

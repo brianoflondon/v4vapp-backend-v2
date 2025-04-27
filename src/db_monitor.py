@@ -93,6 +93,7 @@ class ResumeToken(BaseModel):
     redis_client: V4VAsyncRedis | None = Field(
         None, description="Redis client instance for storing the resume token"
     )
+    redis_key: str = Field("", description="Redis key for storing the resume token")
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -107,16 +108,11 @@ class ResumeToken(BaseModel):
         """
         super().__init__(**data)
         self.collection = collection
-
-    @property
-    def redis_key(self) -> str:
-        """
-        Generate the Redis key for the resume token.
-
-        Returns:
-            str: The Redis key for the resume token.
-        """
-        return f"{logger.name}:resume_token:{self.collection}"
+        dbs_config = InternalConfig().config.dbs_config
+        self.redis_key = (
+            f"resume_token:{logger.name}:{dbs_config.default_connection}:"
+            f"{dbs_config.default_name}:{self.collection}"
+        )
 
     def set_token(self, token_data: Mapping[str, Any]):
         """
