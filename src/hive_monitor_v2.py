@@ -20,6 +20,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, sec
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
@@ -420,6 +421,12 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         notification = True
                         db_store = True
 
+                if isinstance(op, AccountUpdate2):
+                    if op.is_watched:
+                        log_it = True
+                        notification = True
+                        db_store = True
+
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
                 if timer() - start > 55:
@@ -517,7 +524,7 @@ async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -
             all_ops_loop(watch_witnesses=watch_witnesses, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
-    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
