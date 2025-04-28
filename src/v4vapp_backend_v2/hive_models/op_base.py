@@ -1,7 +1,7 @@
+import re
 from asyncio import get_event_loop
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-import re
 from typing import Any, ClassVar, Dict, List
 
 from nectar import Hive
@@ -249,6 +249,29 @@ class OpBase(BaseModel):
             self.realm = op_realm(data["type"])
             if not self.realm:
                 raise ValueError(f"Unknown operation type: {data['type']}")
+
+    @property
+    def db_query(self) -> dict[str, Any]:
+        """
+        Returns a Mongodb Query for this record.
+
+        This method is used to determine the key in the database where
+        the operation data will be stored. It is typically used for
+        database operations and indexing.
+
+        The mongodb is a compound of these three fields (and also the realm)
+
+        Returns:
+            str: The database index for the operation.
+        """
+        ans = {
+            "block_num": self.block_num,
+            "trx_num": self.trx_num,
+            "op_in_trx": self.op_in_trx,
+            "realm": self.realm,
+        }
+        # special case for OpRealm.MARKER (Overides this default)
+        return ans
 
     @classmethod
     def name(cls) -> str:

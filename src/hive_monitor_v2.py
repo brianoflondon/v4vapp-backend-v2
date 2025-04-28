@@ -24,7 +24,7 @@ from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAny
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -101,13 +101,9 @@ async def db_store_op(
 
     try:
         async with OpBase.db_client as db_client:
-            if op.realm == OpRealm.MARKER:
-                query = {"realm": OpRealm.MARKER, "trx_id": op.trx_id}
-            else:
-                query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx, "block_num": op.block_num}
             db_ans = await db_client.update_one(
                 db_collection,
-                query=query,
+                query=op.db_query,
                 update=op.model_dump(
                     by_alias=True,
                 ),
