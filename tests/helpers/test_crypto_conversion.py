@@ -24,8 +24,9 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     # No need to restore the original value, monkeypatch will handle it
 
 
+
 @pytest.mark.asyncio
-async def test_crypto_conversion():
+async def test_crypto_conversion(mocker):
     amount = Amount("10.0 HBD")
     conv = CryptoConversion(amount=amount)
     await conv.get_quote()

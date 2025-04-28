@@ -161,6 +161,7 @@ class V4VConfig:
                 # Uses the default values and doesn't check Hive.
                 logger.info("No server account name provided, using default values.")
                 self.data = V4VConfigData()
+                return
 
             metadata = self._get_posting_metadata()
             if metadata:
@@ -179,11 +180,11 @@ class V4VConfig:
                 )
                 self.data = V4VConfigData()
         except Exception as ex:
-            logger.error(
-                f"Error fetching settings from Hive: {ex}",
+            self.data = V4VConfigData()
+            logger.warning(
+                f"Error fetching settings from Hive: {ex} using default values.",
                 extra={"hive_config": self.data.model_dump()},
             )
-            raise
 
     def put(self) -> None:
         """
