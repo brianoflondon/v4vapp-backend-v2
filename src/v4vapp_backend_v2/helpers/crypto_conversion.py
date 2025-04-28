@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
@@ -52,6 +52,19 @@ class CryptoConv(BaseModel):
         """
         return limit_test(self.msats)
 
+    @computed_field
+    def in_limits(self) -> bool:
+        """
+        Check if the conversion is within the limits.
+
+        Returns:
+            bool: True if the conversion is within limits, False otherwise.
+        """
+        try:
+            return self.limit_test()
+        except ValueError:
+            return False
+
     @property
     def log_str(self) -> str:
         """
@@ -63,7 +76,8 @@ class CryptoConv(BaseModel):
                  - <Satoshi amount> is the conversion value in Sats, formatted with commas as thousand separators.
         """
         fee_sats: int = int(round(self.msats_fee / 1000, 0))
-        return f"(${self.usd:>.2f} {self.sats:,.0f} sats) ±{fee_sats:,}"
+        fee_str: str = f" ±{fee_sats:,}" if fee_sats > 0 else ""
+        return f"(${self.usd:>.2f} {self.sats:,.0f} sats){fee_str}"
 
     @property
     def notification_str(self) -> str:
