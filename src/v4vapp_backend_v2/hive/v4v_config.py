@@ -94,6 +94,8 @@ class V4VConfig:
             self.check()
             logger.info(f"V4VConfig initialized {self.server_accname}", extra={**self.log_extra})
             return
+        if hive:
+            self.hive = hive
 
         if server_accname and self.server_accname != server_accname:
             logger.info(

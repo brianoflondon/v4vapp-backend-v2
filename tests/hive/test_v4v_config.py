@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,6 @@ HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "TEST_KEY")
 HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "TEST_KEY")
 
 
-
 @pytest.mark.asyncio
 async def test_get_settings_from_hive():
     hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
@@ -43,12 +42,11 @@ async def test_get_settings_from_hive():
 
 
 @pytest.mark.skipif(
-    os.environ.get("HIVE_ACC_TEST") is None,
-    reason="HIVE_ACC_TEST environment variable is not set",
+    os.environ.get("HIVE_POSTING_TEST_KEY") is None,
+    reason="HIVE_POSTING_TEST_KEY environment variable is not set",
 )
 @pytest.mark.asyncio
 async def test_put_settings_into_hive():
-    # This does a fetch to get the latest settings from Hive
     hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
     hive_config = V4VConfig(server_accname=HIVE_ACC_TEST, hive=hive)
     # Directly update the settings
