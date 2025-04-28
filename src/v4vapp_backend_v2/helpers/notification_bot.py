@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
 
 shutdown_event = asyncio.Event()
+
 
 class NotificationNotSetupError(Exception):
     pass
@@ -219,7 +221,7 @@ class NotificationBot:
         attempt = 0
         while attempt < retries:
             try:
-                await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
+                ans = await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
                 return
             except TimedOut as e:
                 attempt += 1
@@ -233,7 +235,7 @@ class NotificationBot:
                     f"Timed out while sending message. Retrying {attempt}/{retries}...",
                     extra={"notification": False},
                 )
-                await asyncio.sleep(2**attempt)  # Exponential backoff
+                await asyncio.sleep(2**attempt + random.random())  # Exponential backoff
             except BadRequest:
                 attempt += 1
                 try:
