@@ -25,14 +25,14 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
 
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
+# HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
 HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "TEST_KEY")
-HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "TEST_KEY")
+# HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "TEST_KEY")
 
 
 @pytest.mark.asyncio
 async def test_get_settings_from_hive():
-    hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
+    hive = get_hive_client()
     hive_config = V4VConfig(server_accname="hivehydra", hive=hive)
     assert hive_config is not None
     assert hive_config.data.conv_fee_sats is not None
@@ -50,7 +50,9 @@ async def test_get_settings_from_hive():
 async def test_put_settings_into_hive():
     hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
     hive_config = V4VConfig(server_accname=HIVE_ACC_TEST, hive=hive)
-    print(f"Minimum invoice taken from Hive for {HIVE_ACC_TEST} {hive_config.data.minimum_invoice_payment_sats}")
+    print(
+        f"Minimum invoice taken from Hive for {HIVE_ACC_TEST} {hive_config.data.minimum_invoice_payment_sats}"
+    )
     # Directly update the settings
     hive_config.data.minimum_invoice_payment_sats += 1
     test_minimum_invoice_payment_sats = hive_config.data.minimum_invoice_payment_sats
