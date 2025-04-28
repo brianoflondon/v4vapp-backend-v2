@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 
@@ -49,12 +50,14 @@ async def test_get_settings_from_hive():
 async def test_put_settings_into_hive():
     hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
     hive_config = V4VConfig(server_accname=HIVE_ACC_TEST, hive=hive)
+    print(f"Minimum invoice taken from Hive for {HIVE_ACC_TEST} {hive_config.data.minimum_invoice_payment_sats}")
     # Directly update the settings
     hive_config.data.minimum_invoice_payment_sats += 1
     test_minimum_invoice_payment_sats = hive_config.data.minimum_invoice_payment_sats
     # FORCE them to update Hive
     hive_config.put()
     assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats
+    await asyncio.sleep(4)
     # Fetch the settings again to check if they were updated
     hive_config.fetch()
     assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats

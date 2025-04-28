@@ -91,7 +91,7 @@ class V4VConfig:
             self._initialized = True
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
-            self.check()
+            self.fetch()
             logger.info(f"V4VConfig initialized {self.server_accname}", extra={**self.log_extra})
             return
         if hive:
