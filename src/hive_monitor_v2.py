@@ -19,10 +19,12 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAny
-from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -99,13 +101,9 @@ async def db_store_op(
 
     try:
         async with OpBase.db_client as db_client:
-            if op.realm == OpRealm.MARKER:
-                query = {"realm": OpRealm.MARKER, "trx_id": op.trx_id}
-            else:
-                query = {"trx_id": op.trx_id, "op_in_trx": op.op_in_trx, "block_num": op.block_num}
             db_ans = await db_client.update_one(
                 db_collection,
-                query=query,
+                query=op.db_query,
                 update=op.model_dump(
                     by_alias=True,
                 ),
@@ -344,6 +342,9 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,
     )
+    server_accounts = InternalConfig().config.hive.server_account_names
+    if server_accounts:
+        v4v_config = V4VConfig(server_accname=server_accounts[0])
     async with asyncio.TaskGroup() as tg:
         for witness in watch_witnesses:
             tg.create_task(witness_first_run(witness))
@@ -419,6 +420,14 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     if op.is_tracked:
                         notification = True
                         db_store = True
+
+                if isinstance(op, AccountUpdate2):
+                    if op.is_watched:
+                        log_it = True
+                        notification = True
+                        db_store = True
+                        if v4v_config.server_accname == op.account:
+                            v4v_config.fetch()
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
@@ -517,7 +526,7 @@ async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -
             all_ops_loop(watch_witnesses=watch_witnesses, watch_users=watch_users),
         ]
         await asyncio.gather(*tasks)
-    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})

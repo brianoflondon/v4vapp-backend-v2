@@ -45,7 +45,7 @@ class NotificationProtocol(Protocol):
             # If the loop is running, schedule the task using the correct loop
             if loop.is_running():
                 try:
-                    logger.info(
+                    logger.debug(
                         f"✉️ Notification Thread: {threading.get_ident()} loop already running"
                     )
                     asyncio.run_coroutine_threadsafe(

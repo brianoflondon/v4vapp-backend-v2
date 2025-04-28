@@ -1,16 +1,20 @@
 import json
-import logging
+from datetime import datetime, timezone
 from typing import List
 
+from nectar import Hive
 from nectar.account import Account
 from pydantic import BaseModel, Field
 
+from v4vapp_backend_v2.config.setup import logger
+
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
-from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
+CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 
-class HiveConfigRateLimits(BaseModel):
+
+class V4VConfigRateLimits(BaseModel):
     """Class for holding the hourly rate limits for using the Lightning exchange"""
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
@@ -26,7 +30,7 @@ class HiveConfigRateLimits(BaseModel):
         )
 
 
-class HiveConfigData(BaseModel):
+class V4VConfigData(BaseModel):
     """Class for fetching and storing some config settings on Hive"""
 
     hive_return_fee: float = Field(0.002, description="Fee for returning Hive transactions.")
@@ -54,11 +58,11 @@ class HiveConfigData(BaseModel):
     v4v_fees_streaming_sats_to_hive_percent: float = Field(
         0.03, description="Fee percentage for streaming sats to Hive."
     )
-    lightning_rate_limits: List[HiveConfigRateLimits] = Field(
+    lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            HiveConfigRateLimits(hours=4, limit=100_000 * 2),
-            HiveConfigRateLimits(hours=72, limit=100_000 * 4),
-            HiveConfigRateLimits(hours=168, limit=100_000 * 6),
+            V4VConfigRateLimits(hours=4, limit=100_000 * 2),
+            V4VConfigRateLimits(hours=72, limit=100_000 * 4),
+            V4VConfigRateLimits(hours=168, limit=100_000 * 6),
         ],
         description="Rate limits for Lightning transactions.",
     )
@@ -69,85 +73,208 @@ class HiveConfigData(BaseModel):
         super().__init__(**kwargs)
 
 
-class HiveConfig:
+class V4VConfig:
     _instance = None
-    data: HiveConfigData = HiveConfigData()
-    server_accname: str = None
+    data: V4VConfigData = V4VConfigData()
+    hive: Hive | None = None
+    server_accname: str | None = None
+    timestamp: datetime | None = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(HiveConfig, cls).__new__(cls)
+            cls._instance = super(V4VConfig, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, server_accname: str = None, *args, **kwargs):
+    def __init__(self, server_accname: str = "", hive: Hive | None = None, *args, **kwargs):
         if not hasattr(self, "_initialized"):
             super().__init__(*args, **kwargs)
             self._initialized = True
-            self.sync_from_hive(server_accname)
+            self.server_accname = server_accname
+            self.hive = hive or get_hive_client()
+            self.fetch()
+            logger.info(f"V4VConfig initialized {self.server_accname}", extra={**self.log_extra})
             return
+        if hive:
+            self.hive = hive
 
         if server_accname and self.server_accname != server_accname:
-            logging.info(
+            logger.info(
                 f"Server account name changed from {self.server_accname} to {server_accname}"
             )
-            self.sync_from_hive(server_accname=server_accname)
+            self.server_accname = server_accname
+            self.fetch()
 
-    def sync_from_hive(self, server_accname: str) -> None:
-        """Returns podping settings if they exist"""
-        # Must use main chain for settings
-        try:
-            hive = get_hive_client()
-            if not server_accname:
-                self.server_accname = InternalConfig().config.hive.server_account_names[0]
-            else:
-                self.server_accname = server_accname
-            acc = Account(
-                self.server_accname,
-                blockchain_instance=hive,
-                lazy=True,
+    @property
+    def log_extra(self) -> dict:
+        return {"hive_config": self.data.model_dump(), "timestamp": self.timestamp}
+
+    def check(self) -> None:
+        """
+        Checks if the Hive configuration data is valid.
+
+        This method verifies if the configuration data has been fetched and
+        if it is not empty.
+
+        If the data is older than 1 hour, it will fetch new data.
+
+        """
+        if self.timestamp and self.data and isinstance(self.data, V4VConfigData):
+            if (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds() > 3600:
+                logger.info(
+                    "HiveConfig data is older than 1 hour, fetching new data.",
+                    extra={**self.log_extra},
+                )
+                self.fetch()
+        if not self.data:
+            logger.warning(
+                "HiveConfig data is empty or invalid, fetching new data.",
+                extra={**self.log_extra},
             )
-            posting_json_metadata = acc.get("posting_json_metadata", None)
-            if posting_json_metadata:
-                metadata = json.loads(posting_json_metadata)
-                o_h_c = metadata.get("v4vapp_hiveconfig")
-                if o_h_c:
-                    self.data = HiveConfigData.model_validate(o_h_c)
-                    logging.info(
+            self.fetch()
+
+    def fetch(self) -> None:
+        """
+        Synchronizes configuration data from the Hive blockchain.
+
+        This method fetches the configuration settings stored in the Hive blockchain
+        for a given server account name. If no server account name is provided, it
+        defaults to the first account name specified in the internal configuration.
+        The fetched settings are validated and stored in the `self.data` attribute.
+
+        Args:
+            server_accname (str): The server account name to fetch the configuration
+                from. If not provided, the default account name from the internal
+                configuration is used.
+
+        Raises:
+            Exception: Logs an error if there is an issue fetching or processing
+                the settings from the Hive blockchain.
+
+        Logging:
+            - Logs an info message when settings are successfully fetched and validated.
+            - Logs an info message if no settings are found for the given account.
+            - Logs an error message if an exception occurs during the process.
+        """
+
+        try:
+            if not self.server_accname:
+                # Uses the default values and doesn't check Hive.
+                logger.info("No server account name provided, using default values.")
+                self.data = V4VConfigData()
+                return
+
+            metadata = self._get_posting_metadata()
+            if metadata:
+                existing_hive_config_raw = metadata.get(CONFIG_ROOT_KEY)
+                if existing_hive_config_raw:
+                    self.data = V4VConfigData.model_validate(existing_hive_config_raw)
+                    self.timestamp = datetime.now(tz=timezone.utc)
+                    logger.info(
                         f"Fetched settings from Hive. {self.server_accname}",
-                        extra={"settings": {**o_h_c}},
+                        extra={**self.log_extra},
                     )
             else:
-                logging.info(
+                metadata = {}
+                logger.info(
                     f"No settings found in Hive. {self.server_accname}",
-                    extra={self.server_accname: "no settings"},
                 )
-                self.data = HiveConfigData()
+                self.data = V4VConfigData()
         except Exception as ex:
-            logging.error(
-                f"Error fetching settings from Hive: {ex}",
-                extra={"hive_config": metadata},
+            self.data = V4VConfigData()
+            logger.warning(
+                f"Error fetching settings from Hive: {ex} using default values.",
+                extra={"hive_config": self.data.model_dump()},
             )
 
+    def put(self) -> None:
+        """
+        Updates the Hive configuration settings with the provided data.
 
-# async def put_settings_in_hive(hive_config: HiveConfig) -> dict:
-#     """Put the current set of config settings into Hive"""
-#     hive = Hive(keys=[Config.SERVER_ACTIVE_KEY])
-#     acc = Account(Config.SERVER_ACCOUNT_NAME, blockchain_instance=hive, lazy=True)
-#     original_metadata = json.loads(acc["posting_json_metadata"])
-#     o_h_c = original_metadata.get("v4vapp_hiveconfig")
-#     if o_h_c:
-#         original_hive_config = HiveConfig(**o_h_c)
-#         if hive_config == original_hive_config:
-#             logging.info("Settings in Hive do not need to change")
-#             Config.ALL_PARAMS = hive_config
-#             return {"message": "no changes"}
+        This method updates the Hive configuration settings stored in the blockchain
+        by comparing the new data with the existing configuration. If the new data
+        matches the current settings, no update is performed. Otherwise, the new
+        settings are serialized and written to the blockchain.
 
-#     new_meta = {**original_metadata, "v4vapp_hiveconfig": hive_config.dict()}
-#     # Overwrite hive params into the Config.
-#     Config.ALL_PARAMS = hive_config
-#     tx = acc.update_account_jsonmetadata(new_meta)
-#     logging.info(f"Settings in Hive changed: \n{json.dumps(tx, indent=2)}")
-#     return tx
+        Args:
+            new_data (HiveConfigData): The new configuration data to be stored in Hive.
+
+        Raises:
+            ValueError: If the provided `new_data` is invalid or cannot be serialized.
+
+        Logs:
+            - Logs a message if the settings in Hive do not need to change.
+            - Logs a message with the transaction ID when the settings are successfully updated.
+        """
+        acc = Account(self.server_accname, blockchain_instance=self.hive, lazy=True)
+        existing_metadata = self._get_posting_metadata()
+        if not existing_metadata:
+            existing_metadata = {}
+        existing_hive_config_raw = existing_metadata.get(CONFIG_ROOT_KEY)
+        if existing_hive_config_raw:
+            existing_hive_config = V4VConfigData(**existing_hive_config_raw)
+            if self.data == existing_hive_config:
+                logger.info(
+                    "Settings in Hive do not need to change",
+                    extra={"settings": {**self.data.model_dump()}},
+                )
+                return
+
+        if not self.data or not isinstance(self.data, V4VConfigData):
+            logger.warning("No settings found to update to Hive")
+        # If the settings are different, update them in Hive
+        # and add the new settings to the metadata
+        # Serialize the new settings
+        existing_metadata.pop(CONFIG_ROOT_KEY)
+        new_meta = {**(existing_metadata or {}), CONFIG_ROOT_KEY: self.data.model_dump()}
+        self.timestamp = datetime.now(tz=timezone.utc)
+        # Overwrite hive params into the Config.
+        try:
+            trx = acc.update_account_jsonmetadata(new_meta)
+            logger.info(
+                f"Settings in Hive changed: {trx.get('trx_id')}",
+                extra={**self.log_extra, "trx": trx},
+            )
+            return
+        except Exception as ex:
+            logger.error(
+                f"Error updating settings in Hive: {ex}",
+                extra={"hive_config": new_meta, **self.log_extra},
+            )
+            return
+
+    def _get_posting_metadata(self) -> dict | None:
+        """
+        Retrieves the posting metadata for the current account.
+
+        This method fetches the `posting_json_metadata` field from the account
+        on the Hive blockchain and parses it as JSON. If the metadata exists,
+        it is returned as a dictionary. If no metadata is found, `None` is returned.
+
+        Returns:
+            dict | None: A dictionary containing the posting metadata if available,
+            otherwise `None`.
+
+        Raises:
+            ValueError: If the `posting_json_metadata` cannot be parsed as valid JSON.
+        """
+        """Get the posting metadata for the current account"""
+        acc = Account(self.server_accname, blockchain_instance=self.hive, lazy=True)
+        try:
+            # Important to use the [] method not get() to avoid lazy loading problems
+            posting_json_metadata = acc["posting_json_metadata"]
+        except KeyError:
+            posting_json_metadata = None
+        if posting_json_metadata:
+            try:
+                metadata = json.loads(posting_json_metadata)
+                return metadata
+            except ValueError as e:
+                logger.error(
+                    f"Error parsing posting_json_metadata: {e}",
+                    extra={**self.log_extra},
+                )
+                raise ValueError("Error parsing posting_json_metadata. Invalid JSON format.")
+        return None
 
 
 # async def sync_environment_with_hive(force_over: bool, new_config: HiveConfig = None) -> dict:
@@ -155,18 +282,18 @@ class HiveConfig:
 #     settings and write them to Hive. If force_over then always overwrite Hive
 #     with .env settings"""
 #     if force_over:
-#         logging.info("Pushing Environment settings to Hive")
+#         logger.info("Pushing Environment settings to Hive")
 #         tx = await put_settings_in_hive(new_config)
 #     else:
 #         hive_config = await get_settings_from_hive()
 #         if hive_config:
-#             logging.info("Updating settings from Hive")
+#             logger.info("Updating settings from Hive")
 #             Config.ALL_PARAMS = hive_config
 #             tx = {"message": "updated settings from Hive"}
 #         else:
-#             logging.info("Getting settings from Environment - and writing to Hive")
+#             logger.info("Getting settings from Environment - and writing to Hive")
 #             tx = await put_settings_in_hive(Config.ALL_PARAMS)
-#             logging.info(f"Updated TX: {json.dumps(tx, indent=2, default=str)}")
+#             logger.info(f"Updated TX: {json.dumps(tx, indent=2, default=str)}")
 #     return tx
 
 
@@ -194,13 +321,13 @@ class HiveConfig:
 
 #     post_age: timedelta = datetime.now(tz=timezone.utc) - current_post["updated"]
 #     price_change = pct_diff(new_conv, old_conv)
-#     logging.info(f"Price change since last run for 1000 Sats: {price_change:.1f}%")
-#     logging.info(f"Time since last change: {post_age}")
+#     logger.info(f"Price change since last run for 1000 Sats: {price_change:.1f}%")
+#     logger.info(f"Time since last change: {post_age}")
 
 #     if not force_update:
 #         if abs(price_change) < 1.0:
 #             if post_age < timedelta(seconds=(Config.HIVE_POST_FEE_UPDATE_INTERVAL_HOURS * 3600)):
-#                 logging.info("No need to update post")
+#                 logger.info("No need to update post")
 #                 return {
 #                     "updated": False,
 #                     "post_age": f"{post_age}",
@@ -255,7 +382,7 @@ class HiveConfig:
 #         "<max_inv_HBD>": f"{max_inv.HBD:>7,.2f}",
 #     }
 
-#     logging.debug(json.dumps(search_replace, indent=2))
+#     logger.debug(json.dumps(search_replace, indent=2))
 
 #     # Main text block search and replace
 #     post_body = fee_post_file.read()
@@ -291,11 +418,11 @@ class HiveConfig:
 #         "crypto_prices": cp.json(),
 #         "timestamp": datetime.timestamp(datetime.now(tz=timezone.utc)),
 #     }
-#     logging.debug(json_metadata)
-#     logging.debug(post_body)
+#     logger.debug(json_metadata)
+#     logger.debug(post_body)
 #     try:
 #         blockchain = Blockchain()
-#         logging.info(f"Current block: {blockchain.get_current_block_num()}")
+#         logger.info(f"Current block: {blockchain.get_current_block_num()}")
 #         tx = hive.post(
 #             title=title,
 #             body=post_body,
@@ -305,12 +432,12 @@ class HiveConfig:
 #             app=f"v4vapi/{__version__}",
 #             json_metadata=json_metadata,
 #         )
-#         logging.info(tx)
-#         logging.info(f"Fee post updated tx: {tx['trx_id']}")
+#         logger.info(tx)
+#         logger.info(f"Fee post updated tx: {tx['trx_id']}")
 #         return {"updated": True, "tx": tx}
 #     except Exception as ex:
-#         logging.exception(ex)
-#         logging.error(f"{ex}")
+#         logger.exception(ex)
+#         logger.error(f"{ex}")
 #         return {"updated": False, "tx": "none"}
 
 

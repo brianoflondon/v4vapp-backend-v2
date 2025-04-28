@@ -447,6 +447,7 @@ class InternalConfig:
         self, bot_name: str = "", config_filename: str = DEFAULT_CONFIG_FILENAME, *args, **kwargs
     ):
         if not hasattr(self, "_initialized"):
+            logger.info(f"Config filename: {config_filename}")
             super().__init__()
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False

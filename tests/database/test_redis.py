@@ -132,7 +132,7 @@ async def test_redis_client_context_manager():
         assert await redis_client.ping()
         await redis_client.set("test_key", "test_value")
         assert await redis_client.get("test_key") == "test_value"
-        await redis_client.flushdb()
+        # await redis_client.flushdb()
 
     assert redis_client is not None
     await redis_client.aclose()
@@ -162,7 +162,7 @@ def test_sync_redis_client_default():
 
     This test performs the following actions:
     1. Initializes a V4VAsyncRedis client.
-    2. Flushes the Redis database.
+
     3. Asserts that the Redis client and its underlying Redis connection are not None.
     4. Pings the Redis server to ensure it is responsive.
     5. Sets a key-value pair in the Redis database.
@@ -184,7 +184,7 @@ def test_sync_redis_client_context_manager():
         assert redis_sync_client.ping()
         redis_sync_client.set("test_key", "test_value")
         assert redis_sync_client.get("test_key") == "test_value"
-        redis_sync_client.flushdb()
+        # redis_sync_client.flushdb()
 
 
 @pytest.mark.asyncio
