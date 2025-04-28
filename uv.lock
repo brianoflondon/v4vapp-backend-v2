@@ -375,8 +375,8 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.0.6"
-source = { git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=v0.0.6#bdec0614724472d22a1014018355a34e7713876f" }
+version = "0.0.7b0"
+source = { git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=355c2c3a481165b1f9a48abf253b8c4e899a2625#355c2c3a481165b1f9a48abf253b8c4e899a2625" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -1205,7 +1205,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = "==1.62.0" },
     { name = "grpcio", specifier = ">=1.63.0,<2.0.0" },
     { name = "grpcio-tools", specifier = "==1.62.0" },
-    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=v0.0.6" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=355c2c3a481165b1f9a48abf253b8c4e899a2625" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "motor", specifier = ">=3.7.0,<4.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
@@ -1226,7 +1226,7 @@ requires-dist = [
 dev = [
     { name = "black", specifier = ">=25.1.0,<26.0.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0.0" },
-    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=v0.0.6" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=355c2c3a481165b1f9a48abf253b8c4e899a2625" },
     { name = "mongomock-motor", specifier = ">=0.0.35,<1.0.0" },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
