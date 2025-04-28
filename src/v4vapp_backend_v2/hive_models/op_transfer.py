@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 
 from nectar import Hive
 from pydantic import ConfigDict, Field
@@ -124,6 +124,7 @@ class Transfer(TransferRaw):
         return self.amount.__str__()
 
     @property
+    @override
     def log_str(self) -> str:
         time_diff = seconds_only_time_diff(self.timestamp)
         log_str = (
@@ -137,6 +138,7 @@ class Transfer(TransferRaw):
         return log_str
 
     @property
+    @override
     def notification_str(self) -> str:
         """
         Generates a notification string summarizing a transfer operation. Adds a flag

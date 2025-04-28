@@ -15,6 +15,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, s
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
+# This list needs to be synced with op_all.py
 OP_TRACKED = [
     "custom_json",
     "transfer",
@@ -23,6 +24,7 @@ OP_TRACKED = [
     "fill_order",
     "limit_order_create",
     "update_proposal_votes",
+    "account_update2",
 ]
 
 

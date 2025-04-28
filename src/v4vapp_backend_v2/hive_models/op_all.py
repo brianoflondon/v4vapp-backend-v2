@@ -4,7 +4,7 @@ from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposa
 
 from .op_account_update2 import AccountUpdate2
 from .op_account_witness_vote import AccountWitnessVote
-from .op_base import OpBase
+from .op_base import OP_TRACKED, OpBase
 from .op_custom_json import CustomJson
 from .op_fill_order import FillOrder
 from .op_limit_order_create import LimitOrderCreate
@@ -18,6 +18,9 @@ OpVirtual = Union[ProducerReward, FillOrder]
 OpReal = Union[Transfer, AccountWitnessVote, CustomJson, AccountUpdate2]
 OpRealOpsLoop = Union[OpAny, OpMarket]
 
+
+# Important: This list must be kept in sync with the OP_TRACKED list in the
+# op_base.py file.
 OP_MAP: dict[str, OpAny] = {
     "custom_json": CustomJson,
     "transfer": Transfer,
@@ -29,11 +32,34 @@ OP_MAP: dict[str, OpAny] = {
     "account_update2": AccountUpdate2,
 }
 
+# Check lists at startup
+
 
 def op_tracked(op_type: str) -> bool:
     if op_type in OP_MAP:
         return True
     return False
+
+
+def check_op_tracked() -> bool:
+    # Convert OP_MAP keys and OP_TRACKED to sets
+    op_map_keys = set(OP_MAP.keys())
+    op_tracked_set = set(OP_TRACKED)
+
+    # Find differences
+    missing_in_op_tracked = op_map_keys - op_tracked_set
+    missing_in_op_map = op_tracked_set - op_map_keys
+
+    # Output results
+    if missing_in_op_tracked:
+        raise ValueError(f"Missing in OP_TRACKED: {missing_in_op_tracked}")
+
+    if missing_in_op_map:
+        raise ValueError(f"Missing in OP_MAP: {missing_in_op_map}")
+
+
+# This runs before the app starts and will also prevent tests from running.
+check_op_tracked()
 
 
 def op_any(hive_event: dict[str, Any]) -> OpAny:
