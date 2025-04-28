@@ -56,7 +56,7 @@ class AccountUpdate2(OpBase):
         Returns:
             str: A formatted string representing the account update operation.
         """
-        return f"Account Update: {self.account} updated metadata"
+        return f"Account Update: {self.account} updated metadata {self.link}"
 
     @property
     def notification_str(self) -> str:
@@ -66,7 +66,7 @@ class AccountUpdate2(OpBase):
         Returns:
             str: A formatted string containing details about the account update.
         """
-        return self.log_str
+        return f"Account Update: {self.account} updated metadata {self.markdown_link}"
 
     @property
     def log_extra(self) -> dict[str, Any]:
