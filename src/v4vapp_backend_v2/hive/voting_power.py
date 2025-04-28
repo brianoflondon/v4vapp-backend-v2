@@ -118,6 +118,8 @@ class VotingPower:
             finally:
                 if rpc_node_count == 0:
                     raise Exception("No RPC nodes available to check proposal votes")
+        if len(proposals) < 2:
+            raise Exception("No proposals found")
         return_prop = float(proposals[1]["total_votes"]) / 1e6
         return_prop = hive.vests_to_token_power(return_prop)
         this_prop = float(proposals[0]["total_votes"]) / 1e6
