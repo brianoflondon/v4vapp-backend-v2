@@ -17,6 +17,23 @@ T = TypeVar("T")
 def sync_to_async(
     sync_fn: Callable[..., Any], thread_sensitive: bool = True
 ) -> Callable[..., Any]:
+    """
+    Converts a synchronous function into an asynchronous function.
+
+    This utility wraps a synchronous function and allows it to be called
+    in an asynchronous context. It supports both regular functions and
+    generator functions.
+
+    Args:
+        sync_fn (Callable[..., Any]): The synchronous function to be converted.
+        thread_sensitive (bool, optional): If True, the function will run in the
+            main thread. If False, it will run in a thread pool. Defaults to True.
+
+    Returns:
+        Callable[..., Any]: An asynchronous version of the provided synchronous function.
+            If the input function is a generator function, the returned function will
+            yield items asynchronously.
+    """
     executor = thread_pool if not thread_sensitive else None
     is_gen = inspect.isgeneratorfunction(sync_fn)
     async_fn = _sync_to_async(sync_fn, thread_sensitive=thread_sensitive, executor=executor)

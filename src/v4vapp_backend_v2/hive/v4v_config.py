@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import datetime, timezone
 from typing import List
 
@@ -7,14 +6,15 @@ from nectar import Hive
 from nectar.account import Account
 from pydantic import BaseModel, Field
 
+from v4vapp_backend_v2.config.setup import logger
+
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
-from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 
 
-class HiveConfigRateLimits(BaseModel):
+class V4VConfigRateLimits(BaseModel):
     """Class for holding the hourly rate limits for using the Lightning exchange"""
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
@@ -30,7 +30,7 @@ class HiveConfigRateLimits(BaseModel):
         )
 
 
-class HiveConfigData(BaseModel):
+class V4VConfigData(BaseModel):
     """Class for fetching and storing some config settings on Hive"""
 
     hive_return_fee: float = Field(0.002, description="Fee for returning Hive transactions.")
@@ -58,11 +58,11 @@ class HiveConfigData(BaseModel):
     v4v_fees_streaming_sats_to_hive_percent: float = Field(
         0.03, description="Fee percentage for streaming sats to Hive."
     )
-    lightning_rate_limits: List[HiveConfigRateLimits] = Field(
+    lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            HiveConfigRateLimits(hours=4, limit=100_000 * 2),
-            HiveConfigRateLimits(hours=72, limit=100_000 * 4),
-            HiveConfigRateLimits(hours=168, limit=100_000 * 6),
+            V4VConfigRateLimits(hours=4, limit=100_000 * 2),
+            V4VConfigRateLimits(hours=72, limit=100_000 * 4),
+            V4VConfigRateLimits(hours=168, limit=100_000 * 6),
         ],
         description="Rate limits for Lightning transactions.",
     )
@@ -73,16 +73,16 @@ class HiveConfigData(BaseModel):
         super().__init__(**kwargs)
 
 
-class HiveConfig:
+class V4VConfig:
     _instance = None
-    data: HiveConfigData = None
+    data: V4VConfigData = V4VConfigData()
     hive: Hive | None = None
     server_accname: str | None = None
-    timestamp: datetime = datetime.now(tz=timezone.utc)
+    timestamp: datetime | None = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(HiveConfig, cls).__new__(cls)
+            cls._instance = super(V4VConfig, cls).__new__(cls)
         return cls._instance
 
     def __init__(self, server_accname: str = "", hive: Hive | None = None, *args, **kwargs):
@@ -91,11 +91,12 @@ class HiveConfig:
             self._initialized = True
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
-            self.fetch()
+            self.check()
+            logger.info(f"V4VConfig initialized {self.server_accname}", extra={**self.log_extra})
             return
 
         if server_accname and self.server_accname != server_accname:
-            logging.info(
+            logger.info(
                 f"Server account name changed from {self.server_accname} to {server_accname}"
             )
             self.server_accname = server_accname
@@ -104,6 +105,30 @@ class HiveConfig:
     @property
     def log_extra(self) -> dict:
         return {"hive_config": self.data.model_dump(), "timestamp": self.timestamp}
+
+    def check(self) -> None:
+        """
+        Checks if the Hive configuration data is valid.
+
+        This method verifies if the configuration data has been fetched and
+        if it is not empty.
+
+        If the data is older than 1 hour, it will fetch new data.
+
+        """
+        if self.timestamp and self.data and isinstance(self.data, V4VConfigData):
+            if (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds() > 3600:
+                logger.info(
+                    "HiveConfig data is older than 1 hour, fetching new data.",
+                    extra={**self.log_extra},
+                )
+                self.fetch()
+        if not self.data:
+            logger.warning(
+                "HiveConfig data is empty or invalid, fetching new data.",
+                extra={**self.log_extra},
+            )
+            self.fetch()
 
     def fetch(self) -> None:
         """
@@ -131,27 +156,28 @@ class HiveConfig:
 
         try:
             if not self.server_accname:
-                self.server_accname = InternalConfig().config.hive.server_account_names[0]
+                # Uses the default values and doesn't check Hive.
+                logger.info("No server account name provided, using default values.")
+                self.data = V4VConfigData()
 
             metadata = self._get_posting_metadata()
             if metadata:
                 existing_hive_config_raw = metadata.get(CONFIG_ROOT_KEY)
                 if existing_hive_config_raw:
-                    self.data = HiveConfigData.model_validate(existing_hive_config_raw)
+                    self.data = V4VConfigData.model_validate(existing_hive_config_raw)
                     self.timestamp = datetime.now(tz=timezone.utc)
-                    logging.info(
+                    logger.info(
                         f"Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
                     )
             else:
                 metadata = {}
-                logging.info(
+                logger.info(
                     f"No settings found in Hive. {self.server_accname}",
-                    extra={self.server_accname: "no settings"},
                 )
-                self.data = HiveConfigData()
+                self.data = V4VConfigData()
         except Exception as ex:
-            logging.error(
+            logger.error(
                 f"Error fetching settings from Hive: {ex}",
                 extra={"hive_config": self.data.model_dump()},
             )
@@ -182,16 +208,16 @@ class HiveConfig:
             existing_metadata = {}
         existing_hive_config_raw = existing_metadata.get(CONFIG_ROOT_KEY)
         if existing_hive_config_raw:
-            existing_hive_config = HiveConfigData(**existing_hive_config_raw)
+            existing_hive_config = V4VConfigData(**existing_hive_config_raw)
             if self.data == existing_hive_config:
-                logging.info(
+                logger.info(
                     "Settings in Hive do not need to change",
                     extra={"settings": {**self.data.model_dump()}},
                 )
                 return
 
-        if not self.data or not isinstance(self.data, HiveConfigData):
-            logging.warning("No settings found to update to Hive")
+        if not self.data or not isinstance(self.data, V4VConfigData):
+            logger.warning("No settings found to update to Hive")
         # If the settings are different, update them in Hive
         # and add the new settings to the metadata
         # Serialize the new settings
@@ -201,13 +227,13 @@ class HiveConfig:
         # Overwrite hive params into the Config.
         try:
             trx = acc.update_account_jsonmetadata(new_meta)
-            logging.info(
+            logger.info(
                 f"Settings in Hive changed: {trx.get('trx_id')}",
                 extra={**self.log_extra, "trx": trx},
             )
             return
         except Exception as ex:
-            logging.error(
+            logger.error(
                 f"Error updating settings in Hive: {ex}",
                 extra={"hive_config": new_meta, **self.log_extra},
             )
@@ -240,7 +266,7 @@ class HiveConfig:
                 metadata = json.loads(posting_json_metadata)
                 return metadata
             except ValueError as e:
-                logging.error(
+                logger.error(
                     f"Error parsing posting_json_metadata: {e}",
                     extra={**self.log_extra},
                 )
@@ -253,18 +279,18 @@ class HiveConfig:
 #     settings and write them to Hive. If force_over then always overwrite Hive
 #     with .env settings"""
 #     if force_over:
-#         logging.info("Pushing Environment settings to Hive")
+#         logger.info("Pushing Environment settings to Hive")
 #         tx = await put_settings_in_hive(new_config)
 #     else:
 #         hive_config = await get_settings_from_hive()
 #         if hive_config:
-#             logging.info("Updating settings from Hive")
+#             logger.info("Updating settings from Hive")
 #             Config.ALL_PARAMS = hive_config
 #             tx = {"message": "updated settings from Hive"}
 #         else:
-#             logging.info("Getting settings from Environment - and writing to Hive")
+#             logger.info("Getting settings from Environment - and writing to Hive")
 #             tx = await put_settings_in_hive(Config.ALL_PARAMS)
-#             logging.info(f"Updated TX: {json.dumps(tx, indent=2, default=str)}")
+#             logger.info(f"Updated TX: {json.dumps(tx, indent=2, default=str)}")
 #     return tx
 
 
@@ -292,13 +318,13 @@ class HiveConfig:
 
 #     post_age: timedelta = datetime.now(tz=timezone.utc) - current_post["updated"]
 #     price_change = pct_diff(new_conv, old_conv)
-#     logging.info(f"Price change since last run for 1000 Sats: {price_change:.1f}%")
-#     logging.info(f"Time since last change: {post_age}")
+#     logger.info(f"Price change since last run for 1000 Sats: {price_change:.1f}%")
+#     logger.info(f"Time since last change: {post_age}")
 
 #     if not force_update:
 #         if abs(price_change) < 1.0:
 #             if post_age < timedelta(seconds=(Config.HIVE_POST_FEE_UPDATE_INTERVAL_HOURS * 3600)):
-#                 logging.info("No need to update post")
+#                 logger.info("No need to update post")
 #                 return {
 #                     "updated": False,
 #                     "post_age": f"{post_age}",
@@ -353,7 +379,7 @@ class HiveConfig:
 #         "<max_inv_HBD>": f"{max_inv.HBD:>7,.2f}",
 #     }
 
-#     logging.debug(json.dumps(search_replace, indent=2))
+#     logger.debug(json.dumps(search_replace, indent=2))
 
 #     # Main text block search and replace
 #     post_body = fee_post_file.read()
@@ -389,11 +415,11 @@ class HiveConfig:
 #         "crypto_prices": cp.json(),
 #         "timestamp": datetime.timestamp(datetime.now(tz=timezone.utc)),
 #     }
-#     logging.debug(json_metadata)
-#     logging.debug(post_body)
+#     logger.debug(json_metadata)
+#     logger.debug(post_body)
 #     try:
 #         blockchain = Blockchain()
-#         logging.info(f"Current block: {blockchain.get_current_block_num()}")
+#         logger.info(f"Current block: {blockchain.get_current_block_num()}")
 #         tx = hive.post(
 #             title=title,
 #             body=post_body,
@@ -403,12 +429,12 @@ class HiveConfig:
 #             app=f"v4vapi/{__version__}",
 #             json_metadata=json_metadata,
 #         )
-#         logging.info(tx)
-#         logging.info(f"Fee post updated tx: {tx['trx_id']}")
+#         logger.info(tx)
+#         logger.info(f"Fee post updated tx: {tx['trx_id']}")
 #         return {"updated": True, "tx": tx}
 #     except Exception as ex:
-#         logging.exception(ex)
-#         logging.error(f"{ex}")
+#         logger.exception(ex)
+#         logger.error(f"{ex}")
 #         return {"updated": False, "tx": "none"}
 
 

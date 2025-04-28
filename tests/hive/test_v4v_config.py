@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from v4vapp_backend_v2.hive.hive_config import HiveConfig
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 
@@ -33,13 +33,12 @@ hive = get_hive_client(keys=[HIVE_POSTING_TEST_KEY])
 
 @pytest.mark.asyncio
 async def test_get_settings_from_hive():
-    hive_config = HiveConfig(server_accname="hivehydra", hive=hive)
+    hive_config = V4VConfig(server_accname="hivehydra", hive=hive)
     assert hive_config is not None
     assert hive_config.data.conv_fee_sats is not None
 
-    hive_config = HiveConfig(server_accname="testnet", hive=hive)
+    hive_config = V4VConfig(server_accname="testnet", hive=hive)
     assert hive_config is not None
-    print(hive_config.server_accname)
     assert hive_config.data.conv_fee_sats is not None
 
 
@@ -48,14 +47,15 @@ async def test_get_settings_from_hive():
     reason="HIVE_ACC_TEST environment variable is not set",
 )
 @pytest.mark.asyncio
-async def test_put_settings_from_hive():
+async def test_put_settings_into_hive():
     # This does a fetch to get the latest settings from Hive
-    hive_config = HiveConfig(server_accname=HIVE_ACC_TEST, hive=hive)
+    hive_config = V4VConfig(server_accname=HIVE_ACC_TEST, hive=hive)
     # Directly update the settings
     hive_config.data.minimum_invoice_payment_sats += 1
     test_minimum_invoice_payment_sats = hive_config.data.minimum_invoice_payment_sats
     # FORCE them to update Hive
     hive_config.put()
+    assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats
     # Fetch the settings again to check if they were updated
     hive_config.fetch()
     assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats

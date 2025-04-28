@@ -7,6 +7,7 @@ from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
 
 
 class CryptoConv(BaseModel):
@@ -19,6 +20,7 @@ class CryptoConv(BaseModel):
     usd: float = Field(0.0, description="Converted value in USD")
     sats: int = Field(0, description="Converted value in Sats")
     msats: int = Field(0, description="Converted value in milliSats")
+    msats_fee: int = Field(0, description="Service fee in milliSats")
     btc: float = Field(0.0, description="Converted value in Bitcoin")
     sats_hive: float = Field(0.0, description="Sats per HIVE")
     sats_hbd: float = Field(0.0, description="Sats per HBD")
@@ -37,6 +39,19 @@ class CryptoConv(BaseModel):
         use_enum_values=True,  # Serializes enum as its value
     )
 
+    def limit_test(self) -> bool:
+        """
+        Check if the conversion is within the limits.
+
+        Returns:
+            bool: True if the conversion is within limits, False otherwise.
+
+        Raises:
+            ValueError: If the conversion amount is less than the minimum or greater than the maximum.
+
+        """
+        return limit_test(self.msats)
+
     @property
     def log_str(self) -> str:
         """
@@ -47,7 +62,8 @@ class CryptoConv(BaseModel):
                  - <USD amount> is the conversion value in USD, formatted to two decimal places.
                  - <Satoshi amount> is the conversion value in Sats, formatted with commas as thousand separators.
         """
-        return f"(${self.usd:>.2f} {self.sats:,.0f} sats)"
+        fee_sats: int = int(round(self.msats_fee / 1000, 0))
+        return f"(${self.usd:>.2f} {self.sats:,.0f} sats) ±{fee_sats:,}"
 
     @property
     def notification_str(self) -> str:
@@ -76,6 +92,7 @@ class CryptoConversion(BaseModel):
     sats: float = 0
     msats: int = 0
     btc: float = 0.0
+    msats_fee: int = 0
 
     # model_config = ConfigDict(
     #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
@@ -140,6 +157,7 @@ class CryptoConversion(BaseModel):
             self.usd = round(self.msats / (self.quote.sats_usd * 1000), 6)
             self.hbd = round(self.msats / (self.quote.sats_hbd * 1000), 6)
             self.hive = round(self.msats / (self.quote.sats_hive * 1000), 5)
+            self.msats_fee = msats_fee(self.msats)
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
             self.msats = 0
@@ -148,6 +166,7 @@ class CryptoConversion(BaseModel):
             self.usd = 0.0
             self.hbd = 0.0
             self.hive = 0.0
+            self.msats_fee = 0
 
     @property
     def conversion(self) -> CryptoConv:
@@ -158,6 +177,7 @@ class CryptoConversion(BaseModel):
             usd=self.usd,
             sats=int(self.sats),  # Cast to int to match CryptoConv type
             msats=self.msats,
+            msats_fee=self.msats_fee,
             btc=self.btc,
             # These two values are floats, they are property functions of quote
             sats_hive=self.quote.sats_hive,  # type: float

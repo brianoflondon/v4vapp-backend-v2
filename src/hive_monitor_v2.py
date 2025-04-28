@@ -19,6 +19,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
@@ -345,6 +346,9 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,
     )
+    server_accounts = InternalConfig().config.hive.server_account_names
+    if server_accounts:
+        v4v_config = V4VConfig(server_accname=server_accounts[0])
     async with asyncio.TaskGroup() as tg:
         for witness in watch_witnesses:
             tg.create_task(witness_first_run(witness))
@@ -426,6 +430,8 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         log_it = True
                         notification = True
                         db_store = True
+                        if v4v_config.server_accname == op.account:
+                            v4v_config.fetch()
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 

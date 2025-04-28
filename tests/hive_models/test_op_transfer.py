@@ -9,6 +9,7 @@ from nectar.amount import Amount
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_markdown, sanitize_markdown_v1, sanitize_markdown_v2
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
@@ -96,6 +97,8 @@ def test_model_validate_transfer_enhanced():
 
 @pytest.mark.asyncio
 async def test_model_dump_transfer_enhanced():
+    v4v_config = V4VConfig()
+    assert v4v_config.data.conv_fee_sats == 50
     await Transfer.update_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
@@ -106,9 +109,11 @@ async def test_model_dump_transfer_enhanced():
             assert hive_event_model["to"] == transfer.to_account
             assert hive_event_model["memo"] == transfer.memo
             assert transfer.conv.hive == hive_event_model["conv"]["hive"]
+            assert transfer.conv.msats_fee >= v4v_config.data.conv_fee_sats * 1_000
             assert transfer.log_str
             assert transfer.notification_str
             assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+            print(transfer.notification_str)
 
 
 @pytest.mark.asyncio
