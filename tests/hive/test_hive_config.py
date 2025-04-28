@@ -40,16 +40,22 @@ async def test_get_settings_from_hive():
     hive_config = HiveConfig(server_accname="testnet", hive=hive)
     assert hive_config is not None
     print(hive_config.server_accname)
-
-
-@pytest.mark.asyncio
-async def test_put_settings_from_hive():
-    hive_config = HiveConfig(server_accname="hivehydra", hive=hive)
-    assert hive_config is not None
     assert hive_config.data.conv_fee_sats is not None
 
-    new_data = hive_config.data
 
+@pytest.mark.skipif(
+    os.environ.get("HIVE_ACC_TEST") is None,
+    reason="HIVE_ACC_TEST environment variable is not set",
+)
+@pytest.mark.asyncio
+async def test_put_settings_from_hive():
+    # This does a fetch to get the latest settings from Hive
     hive_config = HiveConfig(server_accname=HIVE_ACC_TEST, hive=hive)
-    hive_config.put(new_data)
-    assert hive_config.data == new_data
+    # Directly update the settings
+    hive_config.data.minimum_invoice_payment_sats += 1
+    test_minimum_invoice_payment_sats = hive_config.data.minimum_invoice_payment_sats
+    # FORCE them to update Hive
+    hive_config.put()
+    # Fetch the settings again to check if they were updated
+    hive_config.fetch()
+    assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats
