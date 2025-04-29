@@ -9,6 +9,7 @@
         "filterwarnings",
         "grpcio",
         "healthcheck",
+        "HIVEUSDT",
         "htlc",
         "imac",
         "INITDB",
