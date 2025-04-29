@@ -2,16 +2,23 @@ import re
 from asyncio import get_event_loop
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, override
 
 from nectar import Hive
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from v4vapp_backend_v2.accounting.account_type import AccountAny, AssetAccount, ExpenseAccount
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    format_time_delta,
+    seconds_only_time_diff,
+    snake_case,
+)
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
@@ -25,7 +32,11 @@ OP_TRACKED = [
     "limit_order_create",
     "update_proposal_votes",
     "account_update2",
+    "fill_recurrent_transfer",
+    "recurrent_transfer",
 ]
+
+# I don't think I need the recurrent_transfer_cancel op because it doesn't affect me.
 
 
 class OpRealm(StrEnum):
@@ -136,6 +147,44 @@ class OpLogData(BaseModel):
     log: str
     notification: str
     log_extra: Dict[str, Any]
+
+
+class WatchPair(BaseModel):
+    """
+    WatchPair is a Pydantic model that represents a pair of accounts to watch.
+
+    Attributes:
+        from_account (str): The account from which the operation originates.
+        to_account (str): The account to which the operation is directed.
+    """
+
+    from_account: str | None = None
+    to_account: str | None = None
+    ledger_debit: AccountAny | None = None
+    ledger_credit: AccountAny | None = None
+    ledger_fee: AccountAny | None = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+
+# These are not correct, they are just examples.
+watch_pairs: List[WatchPair] = [
+    WatchPair(
+        from_account="v4vapp.dhf",
+        to_account="privex",
+        ledger_debit=ExpenseAccount(name="Hosting Expenses Privex"),
+        ledger_credit=AssetAccount(name="V4VApp DHF"),
+        ledger_fee=None,
+    ),
+    WatchPair(
+        from_account="v4vapp.tre",
+        to_account="bdhivesteem",
+        ledger_debit=AssetAccount(name="V4VApp Treasury"),
+        ledger_credit=AssetAccount(name="Binance Hive Wallet"),
+        ledger_fee=None,
+    ),
+]
 
 
 class OpBase(BaseModel):
@@ -307,6 +356,28 @@ class OpBase(BaseModel):
             return self.known_custom_json
         else:
             return self.type in OP_TRACKED
+
+    @property
+    def is_watched(self) -> bool:
+        """
+        Check if the transfer is to a watched user.
+
+        Returns:
+            bool: True if the transfer is to a watched user, False otherwise.
+        """
+        if not OpBase.watch_users:
+            return False
+        if self.type == "custom_json" and hasattr(self, "cj_id"):
+            if not custom_json_test_id(self.get("cj_id")):
+                return False
+
+        if OpBase.watch_users:
+            if hasattr(self, "to_account") and self.to_account in OpBase.watch_users:
+                return True
+            # Check if the transfer is from a watched user
+            if hasattr(self, "from_account") and self.from_account in OpBase.watch_users:
+                return True
+        return False
 
     @property
     def log_extra(self) -> Dict[str, Any]:
@@ -526,3 +597,63 @@ class OpBase(BaseModel):
         else:
             memo = f"💬{self.d_memo}"
         return memo
+
+
+class TransferBase(OpBase):
+    from_account: AccNameType = Field(alias="from")
+    to_account: AccNameType = Field(alias="to")
+    amount: AmountPyd = Field(description="Amount being transferred")
+    memo: str = Field("", description="Memo associated with the transfer")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+
+    def __init__(self, **hive_event: Any) -> None:
+        super().__init__(**hive_event)
+
+    @property
+    def amount_decimal(self) -> float:
+        """Convert string amount to decimal with proper precision"""
+        return self.amount.amount_decimal
+
+    @property
+    def amount_str(self) -> str:
+        return self.amount.__str__()
+
+    @property
+    @override
+    def log_str(self) -> str:
+        time_diff = seconds_only_time_diff(self.timestamp)
+        log_str = (
+            f"{self.from_account:<17} "
+            f"sent {self.amount.fixed_width_str(14)} "
+            f"to {self.to_account:<17} "
+            f" - {self.lightning_memo[:30]:>30} "
+            f"{time_diff} ago {self.age_str}"
+            f"{self.link} {self.op_in_trx:>3}"
+        )
+        return log_str
+
+    @property
+    @override
+    def notification_str(self) -> str:
+        """
+        Generates a notification string summarizing a transfer operation. Adds a flag
+        to prevent a link preview.
+
+        Returns:
+            str: A formatted string containing details about the transfer, including:
+                 - Sender's account as a markdown link.
+                 - Amount transferred as a string.
+                 - Recipient's account as a markdown link.
+                 - Converted USD value and equivalent in satoshis.
+                 - Memo associated with the transfer.
+                 - A markdown link for additional context.
+                 - A hashtag indicating no preview.
+        """
+        ans = (
+            f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
+            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
+        )
+        return ans

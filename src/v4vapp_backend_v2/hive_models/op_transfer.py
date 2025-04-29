@@ -1,35 +1,15 @@
-from datetime import datetime
-from typing import Any, override
+from typing import Any
 
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
-from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.hive_models.op_base import OpBase
-
-from .amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.op_base import OpBase, TransferBase
 
 
-class TransferRaw(OpBase):
-    from_account: AccNameType = Field(alias="from")
-    to_account: AccNameType = Field(alias="to")
-    amount: AmountPyd
-    memo: str
-    timestamp: datetime
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-    )
-
-    def __init__(self, **hive_event: Any) -> None:
-        super().__init__(**hive_event)
-
-
-class Transfer(TransferRaw):
+class Transfer(TransferBase):
     """
     Transfer class represents a transaction operation with additional processing
     and conversion functionalities.
@@ -78,7 +58,7 @@ class Transfer(TransferRaw):
             a markdown link to the Hive block explorer.
     """
 
-    d_memo: str = ""
+    d_memo: str = Field("", description="Decoded memo string")
     conv: CryptoConv = CryptoConv()
 
     model_config = ConfigDict(populate_by_name=True)
@@ -97,68 +77,3 @@ class Transfer(TransferRaw):
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
             self.d_memo = self.memo
-
-    @property
-    def is_watched(self) -> bool:
-        """
-        Check if the transfer is to a watched user.
-
-        Returns:
-            bool: True if the transfer is to a watched user, False otherwise.
-        """
-        if Transfer.watch_users:
-            if (
-                self.to_account in Transfer.watch_users
-                or self.from_account in Transfer.watch_users
-            ):
-                return True
-        return False
-
-    @property
-    def amount_decimal(self) -> float:
-        """Convert string amount to decimal with proper precision"""
-        return self.amount.amount_decimal
-
-    @property
-    def amount_str(self) -> str:
-        return self.amount.__str__()
-
-    @property
-    @override
-    def log_str(self) -> str:
-        time_diff = seconds_only_time_diff(self.timestamp)
-        log_str = (
-            f"{self.from_account:<17} "
-            f"sent {self.amount.fixed_width_str(14)} "
-            f"to {self.to_account:<17} "
-            f" - {self.lightning_memo[:30]:>30} "
-            f"{time_diff} ago {self.age_str}"
-            f"{self.link} {self.op_in_trx:>3}"
-        )
-        return log_str
-
-    @property
-    @override
-    def notification_str(self) -> str:
-        """
-        Generates a notification string summarizing a transfer operation. Adds a flag
-        to prevent a link preview.
-
-        Returns:
-            str: A formatted string containing details about the transfer, including:
-                 - Sender's account as a markdown link.
-                 - Amount transferred as a string.
-                 - Recipient's account as a markdown link.
-                 - Converted USD value and equivalent in satoshis.
-                 - Memo associated with the transfer.
-                 - A markdown link for additional context.
-                 - A hashtag indicating no preview.
-        """
-        ans = (
-            f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
-            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
-        )
-        return ans
-
-
-# TODO #45 Add Recurrent Transfer type

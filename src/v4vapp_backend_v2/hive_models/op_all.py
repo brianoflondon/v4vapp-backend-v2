@@ -7,8 +7,10 @@ from .op_account_witness_vote import AccountWitnessVote
 from .op_base import OP_TRACKED, OpBase
 from .op_custom_json import CustomJson
 from .op_fill_order import FillOrder
+from .op_fill_recurrent_transfer import FillRecurrentTransfer
 from .op_limit_order_create import LimitOrderCreate
 from .op_producer_reward import ProducerReward
+from .op_recurrent_transfer import RecurrentTransfer
 from .op_transfer import Transfer
 
 OpMarket = Union[FillOrder, LimitOrderCreate]
@@ -16,6 +18,7 @@ OpMarket = Union[FillOrder, LimitOrderCreate]
 OpAny = Union[Transfer, ProducerReward, AccountWitnessVote, CustomJson, AccountUpdate2, OpBase]
 OpVirtual = Union[ProducerReward, FillOrder]
 OpReal = Union[Transfer, AccountWitnessVote, CustomJson, AccountUpdate2]
+OpTransfers = Union[Transfer, RecurrentTransfer, FillRecurrentTransfer]
 OpRealOpsLoop = Union[OpAny, OpMarket]
 
 
@@ -30,6 +33,8 @@ OP_MAP: dict[str, OpAny] = {
     "limit_order_create": LimitOrderCreate,
     "update_proposal_votes": UpdateProposalVotes,
     "account_update2": AccountUpdate2,
+    "fill_recurrent_transfer": FillRecurrentTransfer,
+    "recurrent_transfer": RecurrentTransfer,
 }
 
 # Check lists at startup
@@ -80,7 +85,9 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
 
     op_type = OP_MAP.get(op_type_value, None)
     if op_type is None:
-        raise ValueError(f"Unknown operation type: {op_type_value}")
+        raise ValueError(
+            f"Unknown operation type: {op_type_value} did you mean to use op_any_or_base?"
+        )
 
     return op_type.model_validate(hive_event)
 

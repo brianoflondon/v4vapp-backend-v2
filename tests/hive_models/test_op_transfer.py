@@ -15,7 +15,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.op_base import OpBase
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferRaw
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
 
@@ -42,7 +42,7 @@ HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 def test_model_validate_transfer():
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
-            transfer = TransferRaw.model_validate(hive_event)
+            transfer = TransferBase.model_validate(hive_event)
             assert transfer.trx_id == hive_event["trx_id"]
             assert transfer.amount.amount == hive_event["amount"]["amount"]
 
@@ -51,7 +51,7 @@ def test_op_transfer_watch_list():
     OpBase.watch_list = ["john", "paul", "george", "ringo"]
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
-            transfer = TransferRaw.model_validate(hive_event)
+            transfer = TransferBase.model_validate(hive_event)
             assert transfer.trx_id == hive_event["trx_id"]
             assert transfer.amount.amount == hive_event["amount"]["amount"]
             assert transfer.from_account not in Transfer.watch_list

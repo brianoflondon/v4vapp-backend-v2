@@ -23,7 +23,7 @@ from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
-from v4vapp_backend_v2.hive_models.op_all import OpAny
+from v4vapp_backend_v2.hive_models.op_all import OpAny, OpTransfers
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -376,7 +376,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         notification = True
                         db_store = True
 
-                if isinstance(op, Transfer):
+                if isinstance(op, OpTransfers):
                     if op.is_watched:
                         await Transfer.update_quote()
                         op.update_conv()
