@@ -4,7 +4,7 @@ from pprint import pprint
 import pytest
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_all import OpTransfers, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, op_any_or_base, OpAllRecurrent
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
@@ -32,12 +32,13 @@ def test_find_recurrent_transfers():
     OpBase.watch_users = ["spartano", "risingstar2"]
     for hive_event in load_hive_events():
         op = op_any_or_base(hive_event)
-        if isinstance(op, OpTransfers):
-            assert isinstance(op, OpTransfers)
+        if isinstance(op, OpAllTransfers):
+            assert isinstance(op, OpAllTransfers)
             assert isinstance(op, OpBase)
             assert op.markdown_link
             if op.type in all_recurrent_ops:
-                assert isinstance(op, OpTransfers)
+                assert isinstance(op, OpAllTransfers)
+                assert isinstance(op, OpAllRecurrent)
                 assert isinstance(op, OpBase)
                 assert op.markdown_link
                 if op.type == "recurrent_transfer":
@@ -46,5 +47,4 @@ def test_find_recurrent_transfers():
                     assert isinstance(op, FillRecurrentTransfer)
         if op.is_watched:
             if op.type in all_recurrent_ops:
-                print(op.realm)
-                pprint(op.model_dump(), indent=2)
+                print(op.log_str)
