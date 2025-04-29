@@ -18,7 +18,8 @@ OpMarket = Union[FillOrder, LimitOrderCreate]
 OpAny = Union[Transfer, ProducerReward, AccountWitnessVote, CustomJson, AccountUpdate2, OpBase]
 OpVirtual = Union[ProducerReward, FillOrder]
 OpReal = Union[Transfer, AccountWitnessVote, CustomJson, AccountUpdate2]
-OpTransfers = Union[Transfer, RecurrentTransfer, FillRecurrentTransfer]
+OpAllTransfers = Union[Transfer, RecurrentTransfer, FillRecurrentTransfer]
+OpAllRecurrent = Union[RecurrentTransfer, FillRecurrentTransfer]
 OpRealOpsLoop = Union[OpAny, OpMarket]
 
 
