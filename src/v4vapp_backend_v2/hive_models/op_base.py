@@ -7,6 +7,7 @@ from typing import Any, ClassVar, Dict, List
 from nectar import Hive
 from pydantic import BaseModel, Field, computed_field
 
+from v4vapp_backend_v2.accounting.account_type import AccountAny, AssetAccount, ExpenseAccount
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -25,7 +26,11 @@ OP_TRACKED = [
     "limit_order_create",
     "update_proposal_votes",
     "account_update2",
+    "fill_recurrent_transfer",
+    "recurrent_transfer",
 ]
+
+# I don't think I need the recurrent_transfer_cancel op because it doesn't affect me.
 
 
 class OpRealm(StrEnum):
@@ -138,6 +143,44 @@ class OpLogData(BaseModel):
     log_extra: Dict[str, Any]
 
 
+class WatchPair(BaseModel):
+    """
+    WatchPair is a Pydantic model that represents a pair of accounts to watch.
+
+    Attributes:
+        from_account (str): The account from which the operation originates.
+        to_account (str): The account to which the operation is directed.
+    """
+
+    from_account: str | None = None
+    to_account: str | None = None
+    ledger_debit: AccountAny | None = None
+    ledger_credit: AccountAny | None = None
+    ledger_fee: AccountAny | None = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+
+# These are not correct, they are just examples.
+watch_pairs: List[WatchPair] = [
+    WatchPair(
+        from_account="v4vapp.dhf",
+        to_account="privex",
+        ledger_debit=ExpenseAccount(name="Hosting Expenses Privex"),
+        ledger_credit=AssetAccount(name="V4VApp DHF"),
+        ledger_fee=None,
+    ),
+    WatchPair(
+        from_account="v4vapp.tre",
+        to_account="bdhivesteem",
+        ledger_debit=AssetAccount(name="V4VApp Treasury"),
+        ledger_credit=AssetAccount(name="Binance Hive Wallet"),
+        ledger_fee=None,
+    ),
+]
+
+
 class OpBase(BaseModel):
     """
     OpBase is a base model representing a Hive blockchain operation. It provides attributes
@@ -200,11 +243,14 @@ class OpBase(BaseModel):
         ),
     )
     trx_id: str = Field(description="Transaction ID")
-    op_in_trx: int = Field(default=0, description="Operation index in the block")
+    op_in_trx: int = Field(default=1, description="Operation index in the block")
     type: str = Field(description="Type of the event")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+    extensions: List[Any] = Field(
+        default=[], description="List of extensions associated with the operation"
+    )
 
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
@@ -309,6 +355,28 @@ class OpBase(BaseModel):
             return self.type in OP_TRACKED
 
     @property
+    def is_watched(self) -> bool:
+        """
+        Check if the transfer is to a watched user.
+
+        Returns:
+            bool: True if the transfer is to a watched user, False otherwise.
+        """
+        if not OpBase.watch_users:
+            return False
+        if self.type == "custom_json" and hasattr(self, "cj_id"):
+            if not custom_json_test_id(self.get("cj_id")):
+                return False
+
+        if OpBase.watch_users:
+            if hasattr(self, "to_account") and self.to_account in OpBase.watch_users:
+                return True
+            # Check if the transfer is from a watched user
+            if hasattr(self, "from_account") and self.from_account in OpBase.watch_users:
+                return True
+        return False
+
+    @property
     def log_extra(self) -> Dict[str, Any]:
         """
         Generates a dictionary containing additional logging information.
@@ -324,7 +392,7 @@ class OpBase(BaseModel):
 
     @property
     def log_str(self) -> str:
-        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
+        return f"{self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:

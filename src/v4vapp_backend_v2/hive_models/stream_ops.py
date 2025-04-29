@@ -1,5 +1,4 @@
 import asyncio
-import random
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
@@ -136,13 +135,16 @@ async def stream_ops_async(
                         stop=last_block - 1,
                         raw_ops=False,
                         only_virtual_ops=True,
-                        opNames=opNames,
+                        # Very subtle problem with op_in_trx counter if we filter for opNames here.
+                        # opNames=opNames,      # we must filter them after updating op_in_trx counter
                         threading=False,
                     ):
                         last_block = hive_event.get("block_num")
                         op_virtual_base = op_any_or_base(virtual_event)
                         op_in_trx_counter.op_in_trx_inc(op_virtual_base)
-                        yield op_virtual_base
+                        # print(op_virtual_base.type, op_virtual_base.block_num, op_virtual_base.trx_id, op_virtual_base.op_in_trx)
+                        if op_virtual_base.type in opNames:
+                            yield op_virtual_base
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue
                 op_base = op_any_or_base(hive_event)

@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from pprint import pprint
 
 import httpx
 import pytest
@@ -8,6 +10,7 @@ from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
+from tests.helpers.test_crypto_prices import mock_binance
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +26,8 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     # No need to restore the original value, monkeypatch will handle it
 
 
-def test_all_validate():
+def test_all_validate(mocker):
+    _ = mock_binance(mocker)
     with httpx.Client() as httpx_client:
         for hive_event in load_hive_events():
             try:
@@ -59,8 +63,8 @@ def test_op_any_or_base():
             assert False
 
 
-# TODO: #47 Need more work hivehub.dev working but others not so much with blocks and 0000
-def test_all_block_exporer_links():
+def test_all_block_explorer_links(mocker):
+    _ = mock_binance(mocker)
     for block_explorer in HiveExp:
         tested_type = []
         OpBase.block_explorer = block_explorer
@@ -86,7 +90,8 @@ def test_all_block_exporer_links():
                     assert False
 
 
-def test_hive_account_name_links():
+def test_hive_account_name_links(mocker):
+    _ = mock_binance(mocker)
     with httpx.Client() as httpx_client:
         for hive_event in load_hive_events():
             try:

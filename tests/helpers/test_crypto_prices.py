@@ -81,6 +81,20 @@ async def test_coin_gecko_quote_service_error(mocker):
 
 
 def mock_binance(mocker):
+    """
+    Mocks the Binance Spot client to return predefined data for testing purposes.
+
+    Args:
+        mocker: The pytest-mock fixture used to patch objects during testing.
+
+    Returns:
+        dict: The mocked Binance API response loaded from a JSON file.
+
+    Notes:
+        - The function patches the `Spot` class in the `v4vapp_backend_v2.helpers.crypto_prices` module.
+        - The mocked response is loaded from the file `tests/data/crypto_prices/Binance.json`.
+        - The JSON file should contain a key "raw_response" with the expected API response.
+    """
     mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
     with open("tests/data/crypto_prices/Binance.json") as f_in:
         binance_resp = json.load(f_in).get("raw_response")
