@@ -1,10 +1,14 @@
 from typing import Any
-from pydantic import ConfigDict, Field
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from .amount_pyd import AmountPyd
-from v4vapp_backend_v2.hive_models.op_base import OpBase
 
-class FillRecurrentTransfer(OpBase):
+from pydantic import ConfigDict, Field
+
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+
+from .amount_pyd import AmountPyd
+
+
+class FillRecurrentTransfer(TransferBase):
     from_account: AccNameType = Field(alias="from")
     to_account: AccNameType = Field(alias="to")
     remaining_executions: int = Field(0, description="Number of remaining executions")

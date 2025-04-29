@@ -2,23 +2,17 @@ import re
 from asyncio import get_event_loop
 from datetime import datetime, timezone
 from enum import StrEnum, auto
-from typing import Any, ClassVar, Dict, List, override
+from typing import Any, ClassVar, Dict, List
 
 from nectar import Hive
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny, AssetAccount, ExpenseAccount
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    format_time_delta,
-    seconds_only_time_diff,
-    snake_case,
-)
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
@@ -249,11 +243,14 @@ class OpBase(BaseModel):
         ),
     )
     trx_id: str = Field(description="Transaction ID")
-    op_in_trx: int = Field(default=0, description="Operation index in the block")
+    op_in_trx: int = Field(default=1, description="Operation index in the block")
     type: str = Field(description="Type of the event")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+    extensions: List[Any] = Field(
+        default=[], description="List of extensions associated with the operation"
+    )
 
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
@@ -395,7 +392,7 @@ class OpBase(BaseModel):
 
     @property
     def log_str(self) -> str:
-        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
+        return f"{self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
@@ -597,63 +594,3 @@ class OpBase(BaseModel):
         else:
             memo = f"💬{self.d_memo}"
         return memo
-
-
-class TransferBase(OpBase):
-    from_account: AccNameType = Field(alias="from")
-    to_account: AccNameType = Field(alias="to")
-    amount: AmountPyd = Field(description="Amount being transferred")
-    memo: str = Field("", description="Memo associated with the transfer")
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-    )
-
-    def __init__(self, **hive_event: Any) -> None:
-        super().__init__(**hive_event)
-
-    @property
-    def amount_decimal(self) -> float:
-        """Convert string amount to decimal with proper precision"""
-        return self.amount.amount_decimal
-
-    @property
-    def amount_str(self) -> str:
-        return self.amount.__str__()
-
-    @property
-    @override
-    def log_str(self) -> str:
-        time_diff = seconds_only_time_diff(self.timestamp)
-        log_str = (
-            f"{self.from_account:<17} "
-            f"sent {self.amount.fixed_width_str(14)} "
-            f"to {self.to_account:<17} "
-            f" - {self.lightning_memo[:30]:>30} "
-            f"{time_diff} ago {self.age_str}"
-            f"{self.link} {self.op_in_trx:>3}"
-        )
-        return log_str
-
-    @property
-    @override
-    def notification_str(self) -> str:
-        """
-        Generates a notification string summarizing a transfer operation. Adds a flag
-        to prevent a link preview.
-
-        Returns:
-            str: A formatted string containing details about the transfer, including:
-                 - Sender's account as a markdown link.
-                 - Amount transferred as a string.
-                 - Recipient's account as a markdown link.
-                 - Converted USD value and equivalent in satoshis.
-                 - Memo associated with the transfer.
-                 - A markdown link for additional context.
-                 - A hashtag indicating no preview.
-        """
-        ans = (
-            f"{self.from_account.markdown_link} sent {self.amount_str} to {self.to_account.markdown_link} "
-            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
-        )
-        return ans

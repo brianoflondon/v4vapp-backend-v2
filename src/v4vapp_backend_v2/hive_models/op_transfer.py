@@ -1,68 +1,31 @@
-from typing import Any
+from typing import Any, override
 
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
-from v4vapp_backend_v2.hive_models.op_base import OpBase, TransferBase
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 
-class Transfer(TransferBase):
-    """
-    Transfer class represents a transaction operation with additional processing
-    and conversion functionalities.
-
-    Important to note: the `last_quote` class variable is used to store the last quote
-    and needs to be fetched asyncronously. The `update_quote` method is used to update
-    the last quote.
-
-    This class extends the TransferRaw class and provides methods for handling
-    transaction details, updating conversion rates, and generating log and
-    notification strings. It also includes mechanisms for decoding memos and
-    validating the age of the last quote.
-
-    Attributes:
-        d_memo (str): Decoded memo string. Defaults to an empty string.
-        conv (CryptoConv): Conversion object for the transaction. Defaults to a new CryptoConv instance.
-        model_config (ConfigDict): Configuration for the model, with `populate_by_name` set to True.
-        last_quote (ClassVar[QuoteResponse]): Class-level variable to store the last quote.
-
-    Methods:
-        __init__(**hive_event: Any) -> None:
-            Initializes the Transfer object, processes the hive event, and updates the conversion.
-
-        post_process(hive_inst: Hive | None = None) -> None:
-            Processes the memo field and decodes it if necessary.
-
-        update_quote(cls, quote: QuoteResponse | None = None) -> None:
-            Asynchronously updates the last quote for the class. If no quote is provided,
-            fetches all quotes and sets the last quote to the fetched quote.
-
-        update_conv(quote: QuoteResponse | None = None) -> None:
-            Updates the conversion for the transaction using the provided quote or the last quote.
-
-        amount_decimal -> float:
-            Property that converts the string amount to a decimal with proper precision.
-
-        amount_str -> str:
-            Property that returns the string representation of the amount.
-
-        log_str -> str:
-            Property that generates a log string with transaction details, including a link
-            to the Hive block explorer.
-
-        notification_str -> str:
-            Property that generates a notification string with transaction details, including
-            a markdown link to the Hive block explorer.
-    """
-
-    d_memo: str = Field("", description="Decoded memo string")
+class TransferBase(OpBase):
+    from_account: AccNameType = Field(alias="from")
+    to_account: AccNameType = Field(alias="to")
+    amount: AmountPyd = Field(description="Amount being transferred")
+    memo: str = Field("", description="Memo associated with the transfer")
     conv: CryptoConv = CryptoConv()
+    d_memo: str = Field("", description="Decoded memo string")
 
     model_config = ConfigDict(populate_by_name=True)
     # Defined as a CLASS VARIABLE outside the
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
@@ -77,3 +40,70 @@ class Transfer(TransferBase):
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
             self.d_memo = self.memo
+
+    @property
+    def amount_decimal(self) -> float:
+        """Convert string amount to decimal with proper precision"""
+        return self.amount.amount_decimal
+
+    @property
+    def amount_str(self) -> str:
+        return self.amount.__str__()
+
+    @property
+    def recurrence_str(self) -> str:
+        """
+        Generates a string representation of the transfer operation, including the
+        sender, recipient, amount, and memo.
+
+        Returns:
+            str: A formatted string containing details about the transfer.
+        """
+        if hasattr(self, "recurrence"):
+            return f" Execution: {self.executions} every {self.recurrence} hours"
+        if hasattr(self, "remaining_executions"):
+            return f" Remaining: {self.remaining_executions}"
+        return ""
+
+    @property
+    @override
+    def log_str(self) -> str:
+        time_diff = seconds_only_time_diff(self.timestamp)
+        log_str = (
+            f"{self.from_account:<17} "
+            f"sent {self.amount.fixed_width_str(14)} "
+            f"to {self.to_account:<17}{self.recurrence_str} "
+            f" - {self.lightning_memo[:30]:>30} "
+            f"{time_diff} ago {self.age_str} "
+            f"{self.link} {self.op_in_trx:>3}"
+        )
+        return log_str
+
+    @property
+    @override
+    def notification_str(self) -> str:
+        """
+        Generates a notification string summarizing a transfer operation. Adds a flag
+        to prevent a link preview.
+
+        Returns:
+            str: A formatted string containing details about the transfer, including:
+                 - Sender's account as a markdown link.
+                 - Amount transferred as a string.
+                 - Recipient's account as a markdown link.
+                 - Converted USD value and equivalent in satoshis.
+                 - Memo associated with the transfer.
+                 - A markdown link for additional context.
+                 - A hashtag indicating no preview.
+        """
+        ans = (
+            f"{self.from_account.markdown_link} sent {self.amount_str} "
+            f"to {self.to_account.markdown_link}{self.recurrence_str} "
+            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
+        )
+        return ans
+
+
+class Transfer(TransferBase):
+    def __init__(self, **hive_event: Any) -> None:
+        super().__init__(**hive_event)
