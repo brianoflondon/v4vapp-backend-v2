@@ -308,7 +308,8 @@ class OpBase(BaseModel):
         The mongodb is a compound of these three fields (and also the realm)
 
         Returns:
-            str: The database index for the operation.
+            dict: A dictionary containing the block number, transaction number,
+            operation index in the transaction, and realm.
         """
         ans = {
             "block_num": self.block_num,

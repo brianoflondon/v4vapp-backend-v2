@@ -59,6 +59,12 @@ class CustomJson(OpBase):
                     f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
                 )
         super().__init__(**data)
+        # test if any key in a json_data is a big int necessary if ingesting podpings!
+        # if self.cj_id.startswith(("pp_")):
+        #     for key, value in self.json_data.items():  # Changed from self.json_data: to self.json_data.items():
+        #         if isinstance(value, int) and value > 2**53:
+        #             self.json_data[key] = str(value)
+
         if getattr(self.json_data, "sats", None) is not None:
             if self.last_quote and not self.last_quote.hive_hbd == 0:
                 self.conv = CryptoConversion(

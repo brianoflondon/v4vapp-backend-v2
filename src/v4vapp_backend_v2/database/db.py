@@ -91,9 +91,7 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 except (
                     ConnectionFailure,
                     OperationFailure,
-                    InvalidOperation,
                     BulkWriteError,
-                    Exception,
                 ) as e:
                     retries += 1
                     error_code = "mongodb_error"
@@ -119,6 +117,15 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     await self.connect()
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
+                except (InvalidOperation, Exception) as e:
+                    logger.error(
+                        f"{DATABASE_ICON} {logger.name} "
+                        f"Retrying {func.__name__} due to {e}. "
+                        f"Attempt {retries}/{max_retries}. "
+                        f"Retrying in {delay} s.",
+                        extra=extra,
+                    )
+                    raise e
 
         return wrapper
 
@@ -751,7 +758,9 @@ class MongoDBClient:
         return results
 
     @retry_on_failure()
-    async def _perform_bulk_write(self, collection_name: str) -> BulkWriteResult | None:
+    async def _perform_bulk_write(
+        self, collection_name: str
+    ) -> BulkWriteResult | List[BulkWriteResult] | None:
         """
         Performs a bulk write operation with the current items in the buffer.
 
@@ -772,18 +781,31 @@ class MongoDBClient:
                     UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
                     for update in bulk_updates
                 ]
-                logger.info(f"Performing bulk write with {len(operations)} updates...")
                 result = await self.bulk_write(collection_name, operations)
-                logger.info(
-                    f"Performed bulk write with {len(operations)} updates in collection {collection_name}.",
-                    extra={"result": result.bulk_api_result},
-                )
+                if len(operations) > 1:
+                    logger.info(
+                        f"Performed bulk write with {len(operations)} updates in {collection_name}.",
+                        extra={"result": result.bulk_api_result},
+                    )
                 return result
             except Exception as e:
                 logger.error(
-                    f"Failed to perform bulk write in collection {collection_name}: {e}",
+                    f"Failed to perform bulk write for {len(operations)} ops in collection {collection_name}: {e}",
                     extra={"error": str(e), "operations": operations},
                 )
-                return None
+                for operation in operations:
+                    results = []
+                    try:
+                        result = await self.bulk_write(
+                            collection_name=collection_name, operations=[operation]
+                        )
+                        results.append(result)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to perform single update for operation {operation}: {e}",
+                            extra={"error": str(e), "operation": operation},
+                        )
+
+                return results
 
         return None
