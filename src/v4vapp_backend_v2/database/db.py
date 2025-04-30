@@ -763,6 +763,8 @@ class MongoDBClient:
     ) -> BulkWriteResult | List[BulkWriteResult] | None:
         """
         Performs a bulk write operation with the current items in the buffer.
+        This should always be called from within a self._buffer_lock context manager.
+        This method collects all buffered updates and performs a bulk write operation.
 
         Args:
             collection_name (str): The name of the collection to update.
