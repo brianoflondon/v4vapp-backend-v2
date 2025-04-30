@@ -1,10 +1,10 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
@@ -159,28 +159,44 @@ class Invoice(BaseModel):
     is_amp: bool = False
     amp_invoice_state: dict | None = None
 
-    is_lndtohive: bool = False
-    hive_accname: AccNameType | None = None
-    custom_record: KeysendCustomRecord | None = None
+    # Additional fields, not in the LND invoice (but calculated at ingestion time)
+    is_lndtohive: bool = Field(
+        default=False, description="True if the invoice is a LND to Hive invoice"
+    )
+    hive_accname: AccNameType | None = Field(
+        default=None, description="Hive account name associated with the invoice"
+    )
+    custom_record: KeysendCustomRecord | None = Field(
+        default=None,
+        description="Custom record from a podcast streaming payment or boost associated with the invoice",
+    )
+    expiry_date: datetime | None = Field(
+        default=None, description="Expiry date of the invoice (creation_date + expiry)"
+    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __init__(__pydantic_self__, lnrpc_invoice: lnrpc.Invoice = None, **data: Any) -> None:
+    def __init__(self, lnrpc_invoice: lnrpc.Invoice = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
         else:
             invoice_dict = convert_datetime_fields(data)
+
         super().__init__(**invoice_dict)
 
+        # set the expiry date to the creation date + expiry time
+        self.expiry_date = (
+            self.creation_date + timedelta(seconds=self.expiry) if self.expiry else None
+        )
         # perform my check to see if this invoice can be paid to Hive
-        if __pydantic_self__.memo:
-            match = re.match(LND_INVOICE_TAG, __pydantic_self__.memo.lower())
+        if self.memo:
+            match = re.match(LND_INVOICE_TAG, self.memo.lower())
             if match:
-                __pydantic_self__.is_lndtohive = True
+                self.is_lndtohive = True
 
-        __pydantic_self__.fill_hive_accname()
-        __pydantic_self__.fill_custom_record()
+        self.fill_hive_accname()
+        self.fill_custom_record()
 
     def fill_hive_accname(self) -> None:
         """
@@ -216,6 +232,7 @@ class Invoice(BaseModel):
         if extracted_value:
             hive_accname = AccNameType(extracted_value)
             self.hive_accname = hive_accname
+            self.is_lndtohive = True
 
     def fill_custom_record(self) -> None:
         """

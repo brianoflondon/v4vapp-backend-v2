@@ -23,7 +23,7 @@ from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
-from v4vapp_backend_v2.hive_models.op_all import OpAllRecurrent, OpAllTransfers, OpAny
+from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, OpAny
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -104,9 +104,7 @@ async def db_store_op(
             db_ans = await db_client.update_one(
                 db_collection,
                 query=op.db_query,
-                update=op.model_dump(
-                    by_alias=True,
-                ),
+                update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
                 upsert=True,
             )
             return db_ans
