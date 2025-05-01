@@ -264,7 +264,10 @@ class Invoice(BaseModel):
                     self.custom_record = custom_record
                 except Exception as e:
                     logger.warning(
-                        f"Error validating custom record: {e}",
+                        f"Error in {self.r_hash} {self.memo}", extra={"notification": False}
+                    )
+                    logger.warning(
+                        f"Error validating custom record: {e} ",
                         extra={
                             "notification": False,
                             "invoice": self.model_dump(exclude_none=True, exclude_unset=True),

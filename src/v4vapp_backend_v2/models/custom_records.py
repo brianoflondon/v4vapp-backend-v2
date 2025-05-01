@@ -134,7 +134,16 @@ class KeysendCustomRecord(BaseModel):
         description="Item GUID from the `<podcast:remoteItem>` tag when a payment is sent to a feed's value block via a `<podcast:valueTimeSplit>` tag.",
     )
 
-    @field_validator("speed", "app_version", "name", "guid", "reply_address", mode="before")
+    @field_validator(
+        "speed",
+        "app_version",
+        "name",
+        "guid",
+        "reply_address",
+        "reply_custom_key",
+        "reply_custom_value",
+        mode="before",
+    )
     def coerce_to_str(cls, value):
         if isinstance(value, (float, int)):
             return str(value)
@@ -150,9 +159,24 @@ class KeysendCustomRecord(BaseModel):
                 return value[2:-1]
             if value.startswith('"') and value.endswith('"'):
                 return value[1:-1]
+            if value.startswith('{"cache'):
+                return ""
             if value.startswith("{") and value.endswith("}"):
                 return json.loads(value)
         return value
+
+    # @field_validator(
+    #     "reply_address",
+    #     mode="before",
+    # )
+    # def validate_reply_address(cls, value):
+    #     """
+    #     Validates the `reply_address` field. If it contains JSON-like data, it is replaced with an empty string.
+    #     This fixes Errheads bad tests 2023-06-12.
+    #     """
+    #     if value.startswith('{"cache'):
+    #         return ""
+    #     return value
 
     @field_validator("ts", "value_msat", "itemID", mode="before")
     def coerce_to_int(cls, value):

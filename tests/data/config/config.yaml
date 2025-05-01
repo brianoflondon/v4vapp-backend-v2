@@ -141,6 +141,19 @@ dbs_config:
       collections:
         test2_collection:
         test2_collection2:
+    lnd_monitor_v2_voltage:
+      db_users:
+        lnd_monitor:
+          password: lnd-monitor-password
+          roles:
+            - readWrite
+            - dbAdmin
+        default:
+          password: default-password
+          roles:
+            - readWrite
+            - dbAdmin
+
 
 ########### TEST CONFIG NO SECRETS #################
 
