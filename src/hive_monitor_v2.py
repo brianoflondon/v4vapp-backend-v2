@@ -103,7 +103,7 @@ async def db_store_op(
         async with OpBase.db_client as db_client:
             db_ans = await db_client.update_one_buffer(
                 db_collection,
-                query=op.db_query,
+                query=op.group_id_query,
                 update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
                 upsert=True,
             )

@@ -15,6 +15,6 @@ class BlockMarker(OpBase):
 
     @property
     @override
-    def db_query(self) -> dict[str, Any]:
+    def group_id_query(self) -> dict[str, Any]:
         ans = {"trx_id": self.trx_id, "realm": self.realm}
         return ans

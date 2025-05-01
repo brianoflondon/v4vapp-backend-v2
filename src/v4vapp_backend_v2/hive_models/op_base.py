@@ -297,7 +297,7 @@ class OpBase(BaseModel):
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @property
-    def db_query(self) -> dict[str, Any]:
+    def group_id_query(self) -> dict[str, Any]:
         """
         Returns a Mongodb Query for this record.
 
@@ -317,7 +317,7 @@ class OpBase(BaseModel):
             "op_in_trx": self.op_in_trx,
             "realm": self.realm,
         }
-        # special case for OpRealm.MARKER (Overides this default)
+        # special case for OpRealm.MARKER (Overrides this default)
         return ans
 
     @property
