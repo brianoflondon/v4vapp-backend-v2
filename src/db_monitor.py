@@ -194,10 +194,8 @@ async def make_ledger_entry(change: Mapping[str, Any], collection: str):
                         description=op.d_memo,
                         amount=op.amount.amount_decimal,
                         unit=op.amount.unit,
-                        debit_account=AssetAccount(
-                            name="Customer Hive Deposits", sub=op.to_account
-                        ),
-                        credit_account=LiabilityAccount(
+                        debit=AssetAccount(name="Customer Hive Deposits", sub=op.to_account),
+                        credit=LiabilityAccount(
                             name="Customer Hive Liability", sub=op.from_account
                         ),
                     )

@@ -28,7 +28,9 @@ class AssetAccount(Account):
     Represents an asset account in the accounting system.
     """
 
-    name: Literal["Customer Hive Deposits"] = Field(..., description="Specific asset account name")
+    name: Literal["Customer Deposits Hive", "Customer Deposits Lightning"] = Field(
+        ..., description="Specific asset account name"
+    )
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
@@ -43,8 +45,8 @@ class AssetAccount(Account):
 # MARK: Liability Accounts
 class LiabilityAccount(Account):
     name: Literal[
-        "Customer Lightning Liability",
-        "Customer Hive Liability",
+        "Customer Liability Hive",
+        "Customer Liability Lightning",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
@@ -76,7 +78,7 @@ class EquityAccount(Account):
 
 # MARK: Revenue Accounts
 class RevenueAccount(Account):
-    name: Literal["Hive Fees", "HBD Fees", "Sats Fees", "DHF Income", "Other Income"] = Field(
+    name: Literal["Fee Income", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
     )
     account_type: Literal[AccountType.REVENUE] = Field(
@@ -95,6 +97,7 @@ class ExpenseAccount(Account):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
+        "Fee Expenses",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"

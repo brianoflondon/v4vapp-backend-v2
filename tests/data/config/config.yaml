@@ -153,6 +153,12 @@ dbs_config:
           roles:
             - readWrite
             - dbAdmin
+      collections:
+        ledger:
+          indexes:
+            ledger_id:
+              index_key: [["group_id", -1]]
+              unique: true
 
 
 ########### TEST CONFIG NO SECRETS #################
