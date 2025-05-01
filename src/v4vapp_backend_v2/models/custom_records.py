@@ -163,6 +163,10 @@ class KeysendCustomRecord(BaseModel):
             if value.startswith('"') and value.endswith('"'):
                 return value[1:-1]
             if value.startswith('{"cache'):
+                #     Validates the `reply_address` field. If it contains JSON-like data, it is replaced with an empty string.
+                #     This fixes Errheads bad tests 2023-06-12.
+                return ""
+            if value == {}:
                 return ""
             if value.startswith("{") and value.endswith("}"):
                 return json.loads(value)
