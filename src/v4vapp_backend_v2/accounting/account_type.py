@@ -13,55 +13,52 @@ class AccountType(StrEnum):
     EXPENSE = "Expense"
 
 
-# Base class for all accounts
+# MARK: Base class for all accounts
 class Account(BaseModel):
     name: str = Field(..., description="Name of the ledger account")
     account_type: AccountType = Field(..., description="Type of account")
+    sub: str = Field("", description="Sub-account name for more specific categorization")
 
     model_config = ConfigDict(use_enum_values=True)
 
 
-# Asset Accounts
+# MARK: Asset Accounts
 class AssetAccount(Account):
     """
     Represents an asset account in the accounting system.
     """
 
-    name: Literal[
-        "Cash (Fiat)",
-        "Bitcoin Wallet",
-        "Ethereum Wallet",
-        "Binance Hive Wallet",
-        "V4VApp Treasury",
-        "V4VApp DHF",
-        "Customer Bitcoin Deposits",
-        "Customer Ethereum Deposits",
-        "Accounts Receivable",
-        "Prepaid Expenses",
-        "Fixed Assets",
-        "Intangible Assets",
-    ] = Field(..., description="Specific asset account name")
+    name: Literal["Customer Hive Deposits"] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
 
+    def __init__(self, name="", sub=""):
+        super().__init__(name=name, sub=sub)
+        self.account_type = AccountType.ASSET
+        self.name = name
+        self.sub = sub
 
-# Liability Accounts
+
+# MARK: Liability Accounts
 class LiabilityAccount(Account):
     name: Literal[
-        "Customer Bitcoin Liability",
-        "Customer Ethereum Liability",
-        "Accounts Payable",
-        "Accrued Expenses",
-        "Loans Payable",
+        "Customer Lightning Liability",
+        "Customer Hive Liability",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
         AccountType.LIABILITY, description="Type of account"
     )
 
+    def __init__(self, name="", sub=""):
+        super().__init__(name=name, sub=sub)
+        self.account_type = AccountType.LIABILITY
+        self.name = name
+        self.sub = sub
 
-# Equity Accounts
+
+# MARK: Equity Accounts
 class EquityAccount(Account):
     name: Literal["Owner's Capital", "Retained Earnings", "Dividends/Distributions"] = Field(
         ..., description="Specific equity account name"
@@ -70,8 +67,14 @@ class EquityAccount(Account):
         AccountType.EQUITY, description="Type of account"
     )
 
+    def __init__(self, name="", sub=""):
+        super().__init__(name=name, sub=sub)
+        self.account_type = AccountType.EQUITY
+        self.name = name
+        self.sub = sub
 
-# Revenue Accounts
+
+# MARK: Revenue Accounts
 class RevenueAccount(Account):
     name: Literal["Hive Fees", "HBD Fees", "Sats Fees", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
@@ -80,27 +83,28 @@ class RevenueAccount(Account):
         AccountType.REVENUE, description="Type of account"
     )
 
+    def __init__(self, name="", sub=""):
+        super().__init__(name=name, sub=sub)
+        self.account_type = AccountType.REVENUE
+        self.name = name
+        self.sub = sub
 
-# Expense Accounts
+
+# MARK: Expense Accounts
 class ExpenseAccount(Account):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
-        "Hosting Expenses Other",
-        "Transaction Fees (Outgoing)",
-        "Salaries and Wages",
-        "Rent and Utilities",
-        "Software Subscriptions",
-        "Marketing Expenses",
-        "Professional Fees",
-        "Insurance",
-        "Tax Expenses",
-        "Depreciation/Amortization",
-        "Miscellaneous Expenses",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"
     )
+
+    def __init__(self, name="", sub=""):
+        super().__init__(name=name, sub=sub)
+        self.account_type = AccountType.EXPENSE
+        self.name = name
+        self.sub = sub
 
 
 AccountAny = Union[AssetAccount, LiabilityAccount, EquityAccount, RevenueAccount, ExpenseAccount]

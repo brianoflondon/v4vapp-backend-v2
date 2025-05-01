@@ -2,9 +2,12 @@ import asyncio
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from timeit import default_timer as timer
 from unittest.mock import patch
 
 import pytest
+from pymongo import InsertOne
+from pymongo.results import BulkWriteResult, DeleteResult, UpdateResult
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, WriteConcernError
 
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -306,4 +309,50 @@ async def test_interrupted_insert_one(set_base_config_path: None, mocker):
         async for _ in cursor:
             count += 1
         assert count == 99
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_update_one_repeat(set_base_config_path: None):
+    collection_name = "multi_update_one"
+    repeat = 3333
+    async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
+        start = timer()
+
+        # Prepare bulk insert operations
+        bulk_operations = [
+            InsertOne({str(n): f"test_{n}", "timestamp": datetime.now(tz=timezone.utc)})
+            for n in range(repeat)
+        ]
+
+        # Perform bulk write to insert the test data
+        bulk_result = await test_client.bulk_write(collection_name, bulk_operations)
+        assert bulk_result is not None
+        print("Bulk insert time:", timer() - start)
+        print("Insert time:", timer() - start)
+        tasks = []
+        for n in range(repeat):
+            tasks.append(
+                test_client.update_one_buffer(
+                    collection_name, query={str(n): f"test_{n}"}, update={str(n): f"updated {n}"}
+                )
+            )
+
+        results = await asyncio.gather(*tasks)
+        print("Update time:", timer() - start)
+
+        # Initialize totals
+        total_nMatched = 0
+        total_nModified = 0
+
+        # Iterate through the results and sum up nMatched and nModified
+        for result in results:
+            if result and result[0] and isinstance(result[0], BulkWriteResult):
+                total_nMatched += result[0].matched_count
+                total_nModified += result[0].modified_count
+
+
+        assert total_nMatched == repeat
+        assert total_nModified == repeat
+
     await drop_collection_and_user("conn_1", "test_db", "test_user")

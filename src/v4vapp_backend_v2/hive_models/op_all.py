@@ -89,7 +89,8 @@ def op_any(hive_event: dict[str, Any]) -> OpAny:
         raise ValueError(
             f"Unknown operation type: {op_type_value} did you mean to use op_any_or_base?"
         )
-
+    if "_id" in hive_event:
+        del hive_event["_id"]
     return op_type.model_validate(hive_event)
 
 

@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Dict, List
 from nectar import Hive
 from pydantic import BaseModel, Field, computed_field
 
-from v4vapp_backend_v2.accounting.account_type import AccountAny, AssetAccount, ExpenseAccount
+from v4vapp_backend_v2.accounting.account_type import AccountAny
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -163,22 +163,22 @@ class WatchPair(BaseModel):
 
 
 # These are not correct, they are just examples.
-watch_pairs: List[WatchPair] = [
-    WatchPair(
-        from_account="v4vapp.dhf",
-        to_account="privex",
-        ledger_debit=ExpenseAccount(name="Hosting Expenses Privex"),
-        ledger_credit=AssetAccount(name="V4VApp DHF"),
-        ledger_fee=None,
-    ),
-    WatchPair(
-        from_account="v4vapp.tre",
-        to_account="bdhivesteem",
-        ledger_debit=AssetAccount(name="V4VApp Treasury"),
-        ledger_credit=AssetAccount(name="Binance Hive Wallet"),
-        ledger_fee=None,
-    ),
-]
+# watch_pairs: List[WatchPair] = [
+#     WatchPair(
+#         from_account="v4vapp.dhf",
+#         to_account="privex",
+#         ledger_debit=ExpenseAccount(name="Hosting Expenses Privex"),
+#         ledger_credit=AssetAccount(name="V4VApp DHF"),
+#         ledger_fee=None,
+#     ),
+#     WatchPair(
+#         from_account="v4vapp.tre",
+#         to_account="bdhivesteem",
+#         ledger_debit=AssetAccount(name="V4VApp Treasury"),
+#         ledger_credit=AssetAccount(name="Binance Hive Wallet"),
+#         ledger_fee=None,
+#     ),
+# ]
 
 
 class OpBase(BaseModel):
@@ -297,7 +297,7 @@ class OpBase(BaseModel):
                 raise ValueError(f"Unknown operation type: {data['type']}")
 
     @property
-    def db_query(self) -> dict[str, Any]:
+    def group_id_query(self) -> dict[str, Any]:
         """
         Returns a Mongodb Query for this record.
 
@@ -308,7 +308,8 @@ class OpBase(BaseModel):
         The mongodb is a compound of these three fields (and also the realm)
 
         Returns:
-            str: The database index for the operation.
+            dict: A dictionary containing the block number, transaction number,
+            operation index in the transaction, and realm.
         """
         ans = {
             "block_num": self.block_num,
@@ -316,8 +317,20 @@ class OpBase(BaseModel):
             "op_in_trx": self.op_in_trx,
             "realm": self.realm,
         }
-        # special case for OpRealm.MARKER (Overides this default)
+        # special case for OpRealm.MARKER (Overrides this default)
         return ans
+
+    @property
+    def group_id(self) -> str:
+        """
+        Returns a group ID for this record. This is a string used to uniquely identify
+        the operation in the database.
+        The group ID is a combination of the block number, transaction number,
+        operation index in the transaction, and realm.
+        This is used to determine the key in the database where the operation
+        """
+        group_id = f"{self.block_num}_{self.trx_num}_{self.op_in_trx}_{self.realm}"
+        return group_id
 
     @classmethod
     def name(cls) -> str:

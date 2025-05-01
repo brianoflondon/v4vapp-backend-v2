@@ -1,12 +1,15 @@
 import asyncio
+from asyncio import Lock
+from collections import deque
 from datetime import datetime, timezone
 from enum import Enum, StrEnum
 from timeit import default_timer as timer
-from typing import Any
+from typing import Any, List
 from urllib.parse import quote_plus
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
+from pymongo import UpdateOne
 from pymongo.errors import (
     BulkWriteError,
     ConnectionFailure,
@@ -88,8 +91,8 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 except (
                     ConnectionFailure,
                     OperationFailure,
-                    InvalidOperation,
                     BulkWriteError,
+                    InvalidOperation,
                     Exception,
                 ) as e:
                     retries += 1
@@ -166,6 +169,9 @@ class MongoDBClient:
         self.retry = retry
         self.kwargs = kwargs
         self.health_check = MongoDBStatus.VALIDATED
+        self._update_buffer = deque()  # Buffer to store updates
+        self._buffer_lock = Lock()
+        self._bulk_write_in_progress = False  # Flag to track bulk write status
 
     def validate_connection(self):
         try:
@@ -406,6 +412,39 @@ class MongoDBClient:
         return [user["user"] for user in users_info["users"]]
 
     async def connect(self):
+        """
+        Establishes a connection to the MongoDB database using the provided URI and configuration.
+
+        This method attempts to connect to the MongoDB server using the `AsyncIOMotorClient`.
+        It includes retry logic with exponential backoff in case of connection failures.
+        The method also performs initial health checks, validates the database and user,
+        and ensures necessary indexes are created.
+
+        Raises:
+            ConnectionFailure: If the connection to MongoDB fails.
+            OperationFailure: If an operation on MongoDB fails.
+            ServerSelectionTimeoutError: If the server selection times out.
+            Exception: For any other unexpected errors.
+
+        Attributes:
+            self.uri (str): The MongoDB URI for the main database.
+            self.admin_uri (str): The MongoDB URI for the admin database.
+            self.db_name (str): The name of the database to connect to.
+            self.db_user (str): The username for the database.
+            self.kwargs (dict): Additional keyword arguments for the MongoDB client.
+            self.retry (bool): Whether to retry connection attempts on failure.
+            self.first_health_check (MongoDBStatus): The initial health check status.
+            self.health_check (MongoDBStatus): The current health check status.
+            self.client (AsyncIOMotorClient): The MongoDB client instance.
+            self.admin_client (AsyncIOMotorClient): The admin MongoDB client instance.
+            self.db (AsyncIOMotorDatabase): The connected database instance.
+
+        Notes:
+            - If the connection fails and `self.retry` is enabled, the method will retry
+              with an exponential backoff up to a maximum of 20 attempts.
+            - If the database or user does not exist, it will attempt to create them.
+            - Logs detailed information about connection attempts and errors.
+        """
         error_code = ""
         count = 0
         while True:
@@ -653,3 +692,115 @@ class MongoDBClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.disconnect()
         self.start_connection = 0
+
+    async def update_one_buffer(
+        self, collection_name: str, query: dict, update: dict, **kwargs
+    ) -> List[BulkWriteResult | None]:
+        """
+        Asynchronously updates a document in the specified collection by adding the update operation
+        to a buffer. If the buffer reaches a threshold or conditions are met, a bulk write is triggered.
+
+        Args:
+            collection_name (str): The name of the collection to update.
+            query (dict): The filter query to identify the document(s) to update.
+            update (dict): The update operation to apply to the document(s).
+            **kwargs: Additional optional arguments, such as:
+                - upsert (bool): Whether to insert a new document if no document matches the query.
+                  Defaults to True.
+
+        Returns:
+            List[BulkWriteResult | None]: A list of results from the bulk write operations, or None
+            if no bulk write was performed.
+
+        Notes:
+            - Updates are buffered to optimize database operations by performing bulk writes.
+            - If the buffer reaches 100 items, a bulk write is triggered immediately.
+            - If the buffer has fewer than 100 items, a bulk write is performed after a short delay.
+            - The method uses a lock to ensure thread-safe access to the buffer.
+        """
+
+        # Add the update to the buffer
+        buffer_size = 300
+        results = []
+        async with self._buffer_lock:
+            self._update_buffer.append(
+                {
+                    "filter": query,
+                    "update": {"$set": update},
+                    "upsert": kwargs.get("upsert", True),
+                }
+            )
+
+            # If the buffer reaches 100 items and no bulk write is in progress, trigger a bulk write
+            if len(self._update_buffer) >= buffer_size:
+                result = await self._perform_bulk_write(collection_name)
+                results.append(result)
+        # Wait briefly to allow more updates to accumulate
+        await asyncio.sleep(0.05)
+
+        # If the buffer has fewer than 100 items and no bulk write is in progress, perform a bulk write after a short delay
+        async with self._buffer_lock:
+            if (
+                len(self._update_buffer) > 0
+                and len(self._update_buffer) < buffer_size
+                and not self._bulk_write_in_progress
+            ):
+                result = await self._perform_bulk_write(collection_name)
+                results.append(result)
+
+        return results
+
+    @retry_on_failure()
+    async def _perform_bulk_write(
+        self, collection_name: str
+    ) -> BulkWriteResult | List[BulkWriteResult] | None:
+        """
+        Performs a bulk write operation with the current items in the buffer.
+        This should always be called from within a self._buffer_lock context manager.
+        This method collects all buffered updates and performs a bulk write operation.
+
+        Args:
+            collection_name (str): The name of the collection to update.
+
+        Returns:
+            None
+        """
+        # Collect all buffered updates
+        bulk_updates = list(self._update_buffer)
+        self._update_buffer.clear()
+
+        # Perform the bulk write
+        if bulk_updates:
+            try:
+                operations = [
+                    UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
+                    for update in bulk_updates
+                ]
+                result = await self.bulk_write(collection_name, operations)
+                if len(operations) > 1:
+                    logger.info(
+                        f"Performed bulk write with {len(operations)} updates in {collection_name}.",
+                        extra={"result": result.bulk_api_result},
+                    )
+                return result
+            except Exception as e:
+                logger.error(
+                    f"Failed to perform bulk write for {len(operations)} ops in collection {collection_name}: {e}",
+                    extra={"error": str(e), "operations": operations},
+                )
+                for operation in operations:
+                    results = []
+                    try:
+                        result = await self.bulk_write(
+                            collection_name=collection_name, operations=[operation]
+                        )
+                        results.append(result)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to perform single update for operation {operation}: {e}",
+                            extra={"error": str(e), "operation": operation},
+                        )
+
+                return results
+
+        return None

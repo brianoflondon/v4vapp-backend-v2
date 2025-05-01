@@ -2,15 +2,19 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timezone
+from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.hive_models.op_all import op_any
 
 ICON = "🏆"
 app = typer.Typer()
@@ -161,6 +165,59 @@ class ResumeToken(BaseModel):
             raise e
 
 
+async def make_ledger_entry(change: Mapping[str, Any], collection: str):
+    """
+    Creates a ledger entry based on the document and collection name.
+
+    Args:
+        change (Mapping[str, Any]): The document containing the change data.
+        collection (str): The name of the collection.
+
+    Returns:
+        None
+    """
+    server_account_names = InternalConfig().config.hive.server_account_names
+    if collection == "hive_ops":
+        try:
+            full_document = change.get("fullDocument", {})
+            pprint(full_document, indent=2)
+            op = op_any(full_document)
+            logger.info(op.group_id)
+            logger.info(op.log_str)
+            if op.type in ["transfer", "fill_recurrent_transfer"]:
+                # Deposit in as Hive
+                if op.to_account in server_account_names:
+                    logger.info(op.log_str)
+                    journal_entry = LedgerEntry(
+                        group_id=op.group_id,
+                        timestamp=op.timestamp,
+                        description=op.d_memo,
+                        amount=op.amount.amount_decimal,
+                        unit=op.amount.unit,
+                        debit_account=AssetAccount(
+                            name="Customer Hive Deposits", sub=op.to_account
+                        ),
+                        credit_account=LiabilityAccount(
+                            name="Customer Hive Liability", sub=op.from_account
+                        ),
+                    )
+                    logger.info(journal_entry.model_dump())
+                    db_client = get_mongodb_client()
+                    async with db_client:
+                        await db_client.insert_one(
+                            collection="ledger",
+                            document=journal_entry.model_dump(
+                                exclude_none=True, exclude_unset=True
+                            ),
+                        )
+
+                # Create a ledger entry based on the document
+        except Exception as e:
+            logger.exception(
+                f"Error creating ledger entry: {e}", extra={"exc_info": True, "stack_info": True}
+            )
+
+
 async def subscribe_stream(
     collection_name: str = "invoices", pipeline: Sequence[Mapping[str, Any]] | None = None
 ):
@@ -197,6 +254,7 @@ async def subscribe_stream(
                     f"{ICON} Change detected in {collection_name}",
                     extra={"notification": False, "change": change},
                 )
+                asyncio.create_task(make_ledger_entry(change=change, collection=collection_name))
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True

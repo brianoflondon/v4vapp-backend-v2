@@ -383,9 +383,20 @@ async def invoices_loop(
     Returns:
         None
     """
+    if not db_client:
+        db_client = get_mongodb_client()
+    await db_client.connect()
     recent_invoice = await get_most_recent_invoice(db_client)
+    if recent_invoice:
+        add_index = recent_invoice.add_index
+        settle_index = recent_invoice.settle_index
+    else:
+        add_index = 0
+        settle_index = 0
+        await asyncio.sleep(10)
+
     request_sub = lnrpc.InvoiceSubscription(
-        add_index=recent_invoice.add_index, settle_index=recent_invoice.settle_index
+        add_index=add_index, settle_index=settle_index
     )
     while True:
         try:
@@ -424,6 +435,9 @@ async def invoices_loop(
 async def payments_loop(
     lnd_client: LNDClient, lnd_events_group: LndEventsGroup, db_client: MongoDBClient
 ) -> None:
+    if not db_client:
+        db_client = get_mongodb_client()
+    await db_client.connect()
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -764,20 +778,25 @@ async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
     """
     async with db_client:
         query = {}
-        sort = [("creation_date", -1)]
+        sort = [("add_index", -1)]
         collection = db_client.db.get_collection("invoices")
         cursor = collection.find(query)
         cursor.sort(sort)
-        async for ans in cursor:
-            invoice = Invoice(**ans)
-            break
-        logger.info(
-            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
-        )
-        return invoice
+        try:
+            async for ans in cursor:
+                invoice = Invoice(**ans)
+                break
+            logger.info(
+                f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
+            )
+            if invoice:
+                return invoice
+        except Exception as e:
+            logger.warning(f"No invoices found, empty database {e}")
+        return None
 
 
-async def syncronize_db(
+async def synchronize_db(
     lnd_client: LNDClient,
     db_client: MongoDBClient,
 ) -> None:
@@ -850,6 +869,10 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             db_client = get_mongodb_client()
             tasks = [
+                synchronize_db(
+                    lnd_client=lnd_client,
+                    db_client=db_client,
+                ),
                 invoices_loop(
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
                 ),
@@ -859,10 +882,6 @@ async def main_async_start(connection_name: str) -> None:
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 fill_channel_names(lnd_client, lnd_events_group),
                 check_for_shutdown(),
-                syncronize_db(
-                    lnd_client=lnd_client,
-                    db_client=db_client,
-                ),
             ]
             await asyncio.gather(*tasks)
 
