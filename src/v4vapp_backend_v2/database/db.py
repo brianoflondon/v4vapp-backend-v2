@@ -92,6 +92,8 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     ConnectionFailure,
                     OperationFailure,
                     BulkWriteError,
+                    InvalidOperation,
+                    Exception,
                 ) as e:
                     retries += 1
                     error_code = "mongodb_error"
@@ -117,15 +119,6 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                     await self.connect()
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
-                except (InvalidOperation, Exception) as e:
-                    logger.error(
-                        f"{DATABASE_ICON} {logger.name} "
-                        f"Retrying {func.__name__} due to {e}. "
-                        f"Attempt {retries}/{max_retries}. "
-                        f"Retrying in {delay} s.",
-                        extra=extra,
-                    )
-                    raise e
 
         return wrapper
 
