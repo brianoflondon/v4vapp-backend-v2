@@ -1,7 +1,7 @@
-import json
 
 from nectar.amount import Amount
 from pydantic import BaseModel
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 
 class AmountPyd(BaseModel):
@@ -64,3 +64,7 @@ class AmountPyd(BaseModel):
     @property
     def symbol(self) -> str:
         return self.beam.symbol
+
+    @property
+    def unit(self) -> Currency:
+        return Currency(self.beam.symbol.lower())

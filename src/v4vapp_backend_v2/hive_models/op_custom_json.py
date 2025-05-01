@@ -52,8 +52,13 @@ class CustomJson(OpBase):
         SpecialJsonType = custom_json_test_data(data)
         if SpecialJsonType is not None:
             try:
-                json_object = SpecialJsonType.model_validate(json.loads(data["json"]))
+                if isinstance(data["json"], str):
+                    json_data = json.loads(data["json"])
+                else:
+                    json_data = data["json"]
+                json_object = SpecialJsonType.model_validate(json_data)
                 data["json"] = json_object
+
             except ValueError as e:
                 raise ValueError(
                     f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
