@@ -142,12 +142,15 @@ class KeysendCustomRecord(BaseModel):
         "reply_address",
         "reply_custom_key",
         "reply_custom_value",
+        "guid",
         mode="before",
     )
     def coerce_to_str(cls, value):
         if isinstance(value, (float, int)):
             return str(value)
         if isinstance(value, dict):
+            if value == {}:
+                return ""
             try:
                 return json.dumps(value, default=str)
             except TypeError:

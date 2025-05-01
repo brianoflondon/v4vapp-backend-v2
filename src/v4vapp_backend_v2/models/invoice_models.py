@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
@@ -262,6 +262,8 @@ class Invoice(BaseModel):
                 try:
                     custom_record = KeysendCustomRecord.model_validate(extracted_value)
                     self.custom_record = custom_record
+                except ValidationError:
+                    self.custom_record = None
                 except Exception as e:
                     logger.warning(
                         f"Error in {self.r_hash} {self.memo}", extra={"notification": False}
