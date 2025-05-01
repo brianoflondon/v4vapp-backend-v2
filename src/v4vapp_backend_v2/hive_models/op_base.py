@@ -329,7 +329,7 @@ class OpBase(BaseModel):
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
         """
-        group_id = f"{self.block_num}_{self.trx_num}_{self.op_in_trx}_{self.realm}"
+        group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
         return group_id
 
     @classmethod

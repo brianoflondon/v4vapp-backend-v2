@@ -666,10 +666,6 @@ class HiveInternalMarket(QuoteService):
             )
 
 
-class CryptoConversion:
-    pass
-
-
 def per_diff(a: float, b: float) -> float:
     """
     Calculate the percentage difference between two numbers.

@@ -115,3 +115,16 @@ def op_any_or_base(hive_event: dict) -> OpAny:
             return op_answer
         except ValueError as e:
             raise ValueError(f"Unknown operation type: {e}") from e
+
+
+def op_query(types: list[str]) -> dict[str, str]:
+    # query = {"type": {"$in": ["transfer", "fill_recurrent_transfer"]}}
+    if not types:
+        raise ValueError("types list cannot be empty")
+
+    in_list = []
+    for op_type in types:
+        in_list.append(op_type.lower())
+
+    query = {"type": {"$in": in_list}}
+    return query

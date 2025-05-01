@@ -4,7 +4,7 @@ from nectar import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -45,6 +45,11 @@ class TransferBase(OpBase):
     def amount_decimal(self) -> float:
         """Convert string amount to decimal with proper precision"""
         return self.amount.amount_decimal
+
+    @property
+    def unit(self) -> Currency:
+        """Get the unit of the amount"""
+        return self.amount.unit
 
     @property
     def amount_str(self) -> str:
