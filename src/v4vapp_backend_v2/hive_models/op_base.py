@@ -162,25 +162,6 @@ class WatchPair(BaseModel):
         super().__init__(**data)
 
 
-# These are not correct, they are just examples.
-# watch_pairs: List[WatchPair] = [
-#     WatchPair(
-#         from_account="v4vapp.dhf",
-#         to_account="privex",
-#         ledger_debit=ExpenseAccount(name="Hosting Expenses Privex"),
-#         ledger_credit=AssetAccount(name="V4VApp DHF"),
-#         ledger_fee=None,
-#     ),
-#     WatchPair(
-#         from_account="v4vapp.tre",
-#         to_account="bdhivesteem",
-#         ledger_debit=AssetAccount(name="V4VApp Treasury"),
-#         ledger_credit=AssetAccount(name="Binance Hive Wallet"),
-#         ledger_fee=None,
-#     ),
-# ]
-
-
 class OpBase(BaseModel):
     """
     OpBase is a base model representing a Hive blockchain operation. It provides attributes
