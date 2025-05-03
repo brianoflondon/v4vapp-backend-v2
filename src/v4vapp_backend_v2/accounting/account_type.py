@@ -28,9 +28,12 @@ class AssetAccount(Account):
     Represents an asset account in the accounting system.
     """
 
-    name: Literal["Customer Deposits Hive", "Customer Deposits Lightning"] = Field(
-        ..., description="Specific asset account name"
-    )
+    name: Literal[
+        "Customer Deposits Hive",
+        "Customer Deposits Lightning",
+        "Treasury Hive",
+        "Treasury Lightning",
+    ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
@@ -44,6 +47,20 @@ class AssetAccount(Account):
 
 # MARK: Liability Accounts
 class LiabilityAccount(Account):
+    """
+    LiabilityAccount is a subclass of Account that represents a specific type of liability account.
+    Attributes:
+        name (Literal): The specific name of the liability account. Must be one of:
+            - "Customer Liability Hive"
+            - "Customer Liability Lightning"
+            - "Tax Liabilities"
+        account_type (Literal[AccountType.LIABILITY]): The type of account, which is always set to `AccountType.LIABILITY`.
+    Methods:
+        __init__(name: str = "", sub: str = ""):
+            Initializes a LiabilityAccount instance with the specified name and sub-account.
+            Overrides the account_type to `AccountType.LIABILITY`.
+    """
+
     name: Literal[
         "Customer Liability Hive",
         "Customer Liability Lightning",
@@ -97,7 +114,7 @@ class ExpenseAccount(Account):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
-        "Fee Expenses",
+        "Fee Expenses Lightning",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"

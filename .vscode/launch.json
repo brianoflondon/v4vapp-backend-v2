@@ -60,17 +60,29 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Hive Monitor HBD No SALE",
+            "name": "Dev Hive Monitor devser devtre",
             "type": "debugpy",
             "consoleName": "Hive Monitor",
             "request": "launch",
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "hive.config.yaml",
-                "--watch-only",
+                "devhive.config.yaml",
+                // "--watch-only",
             ],
             "justMyCode": true,
+        },
+        {
+            "name": "Dev Umbrel Monitor",
+            "type": "debugpy",
+            "consoleName": "Dev Umbrel Monitor",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal"
         },
         {
             "name": "VSC Hive Monitor HBD No SALE",

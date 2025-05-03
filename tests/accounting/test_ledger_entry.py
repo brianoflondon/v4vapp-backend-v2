@@ -4,7 +4,7 @@ from typing import Any, AsyncGenerator
 import pytest
 from pymongo.errors import DuplicateKeyError
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry import HiveServerTransfer, draw_t_diagram
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base, op_query
 
@@ -53,10 +53,15 @@ async def test_ledger_entry_transfer():
         db_user="lnd_monitor",
     ) as db_client:
         # Get the collection
+        server_account = "v4vapp"
+        treasury_account = "v4vapp.tre"
         async for op in get_all_ops():
             if op.from_account == "v4vapp" or op.to_account == "v4vapp":
-                ledger_entry = LedgerEntry()
-                ledger_entry.customer_deposit(hive_op=op, server_account="v4vapp")
+                ledger_entry = HiveServerTransfer(
+                    hive_op=op, server_account=server_account, treasury_account=treasury_account
+                )
+                lines = draw_t_diagram(ledger_entry)
+                print(lines)
                 print(op.log_str)
                 try:
                     await db_client.update_one(
@@ -66,6 +71,8 @@ async def test_ledger_entry_transfer():
                     )
                 except DuplicateKeyError:
                     print("Duplicate key error")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
 
 
 @pytest.mark.asyncio
@@ -76,18 +83,18 @@ async def test_ledger_entry():
         db_user="lnd_monitor",
     )
     collection = await client.get_collection("ledger")
-
+    hive_account = "v4vapp"
     pipeline = [
         {
             "$match": {
                 "$or": [
                     {
                         "debit.name": "Customer Deposits Hive",
-                        "debit.sub": "v4vapp",
+                        "debit.sub": hive_account,
                     },
                     {
                         "credit.name": "Customer Deposits Hive",
-                        "credit.sub": "v4vapp",
+                        "credit.sub": hive_account,
                     },
                 ],
                 # "unit": "hive",  # Ensure Hive transactions only
@@ -99,13 +106,13 @@ async def test_ledger_entry():
                 "date": "$timestamp",
                 "description": 1,
                 "amount": 1,
-                "unit": 1,
+                "unit": "hbd",
                 "debit": {
                     "$cond": [
                         {
                             "$and": [
                                 {"$eq": ["$debit.name", "Customer Deposits Hive"]},
-                                {"$eq": ["$debit.sub", "v4vapp"]},
+                                {"$eq": ["$debit.sub", hive_account]},
                             ]
                         },
                         "$conv.hbd",
@@ -117,7 +124,7 @@ async def test_ledger_entry():
                         {
                             "$and": [
                                 {"$eq": ["$credit.name", "Customer Deposits Hive"]},
-                                {"$eq": ["$credit.sub", "v4vapp"]},
+                                {"$eq": ["$credit.sub", hive_account]},
                             ]
                         },
                         "$conv.hbd",

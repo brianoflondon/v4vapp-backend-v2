@@ -244,15 +244,15 @@ async def subscribe_stream(
             resume_after=resume_token,
         ) as stream:
             async for change in stream:
+                asyncio.create_task(make_ledger_entry(change=change, collection=collection_name))
+                resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                resume.set_token(change.get("_id", {}))
                 logger.info(
                     f"{ICON} Change detected in {collection_name}",
                     extra={"notification": False, "change": change},
                 )
-                asyncio.create_task(make_ledger_entry(change=change, collection=collection_name))
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
