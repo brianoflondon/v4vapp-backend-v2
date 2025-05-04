@@ -240,6 +240,17 @@ class HiveConfig(BaseConfig):
         return self.server_accounts[0] if self.server_accounts else None
 
     @property
+    def treasury_account(self) -> HiveAccountConfig | None:
+        """
+        Retrieve the first treasury account from the Hive account configurations.
+
+        Returns:
+            HiveAccountConfig: The first Hive account with the role HiveRoles.treasury.
+        """
+        return self.treasury_accounts[0] if self.treasury_accounts else None
+
+
+    @property
     def server_account_names(self) -> List[str]:
         """
         Retrieve the names of the server accounts.

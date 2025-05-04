@@ -138,13 +138,13 @@ class Invoice(TrackedBaseModel):
     value: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     settled: bool = False
-    creation_date: datetime
+    creation_date: datetime | None = None
     settle_date: datetime | None = None
     payment_request: str | None = None
     description_hash: str | None = None
     expiry: int | None = None
     fallback_addr: str | None = None
-    cltv_expiry: int
+    cltv_expiry: int | None = None
     route_hints: List[dict] | None = None
     private: bool | None = None
     add_index: BSONInt64 | None = None

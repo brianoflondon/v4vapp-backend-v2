@@ -14,6 +14,9 @@ from v4vapp_backend_v2.actions.lnurl_models import (
     strip_lightning,
 )
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_invoice_from_pay_request
+from v4vapp_backend_v2.models.invoice_models import Invoice, protobuf_invoice_to_pydantic
 
 # Get this from the config
 LNURL_BASE_URL = "https://v4v.app/"
@@ -96,6 +99,90 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
         and the bech32 address, respectively.
     """
     return check_lightning_address(anything), check_bech32_lnurl(anything)
+
+
+async def decode_any_lightning_string(
+    input: str,
+    sats: int = 0,
+    comment: str = "",
+    ignore_limits: bool = False,
+    client: LNDClient = None,
+) -> Invoice:
+    """
+    Takes in a string and checks if it is a valid LNURL or a valid Lightning Address.
+
+    Args:
+        input (str): The input string to decode.
+        sats (int, optional): The amount in satoshis. Defaults to 0.
+        comment (str, optional): A comment to include. Defaults to "".
+        ignore_limits (bool, optional): Whether to ignore limits. Defaults to False.
+
+    Returns:
+        Invoice: Returns an Invoice object if the input is a valid Lightning invoice,
+                  otherwise raises an exception.
+
+    Raises:
+        LNDInvoiceError: If the amount is out of the allowed range or the comment is too long
+        some other error with the LNDInvoice.
+    """
+    if sats:
+        sats = round(sats)
+    input = strip_lightning(input)
+
+    extras = input.split(" ", 1)
+    if len(extras) > 1:
+        comment = extras[1] if not comment else comment
+        input = extras[0]
+
+    if input.startswith("lnbc"):
+        ln_invoice = await get_invoice_from_pay_request(pay_request=input, client=client)
+        # # Dealing with a zero sat invoice record the amount to be sent.
+        # if ln_invoice.zero_sat:
+        #     ln_invoice.force_send_sats = sats
+        invoice = protobuf_invoice_to_pydantic(ln_invoice)
+        return invoice
+
+    data = LnurlProxyData(
+        anything=input,
+    )
+    try:
+        response = await decode_any_lnurp_or_lightning_address(data)
+        milisats = sats * 1_000
+        if response.tag != "payRequest":
+            raise LnurlException("Not a valid LNURLp or Lightning Address")
+        if not (response.min_sendable <= milisats <= response.max_sendable):
+            raise LnurlException(
+                f"Amount {sats:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
+                failure={"error": "amount out of range"},
+            )
+        if not response.comment_allowed:
+            params = {"amount": milisats}
+        else:
+            if len(comment) > response.comment_allowed:
+                comment = comment[: response.comment_allowed]
+            params = {"amount": milisats, "comment": comment}
+
+    except LnurlException as ex:
+        logger.error(
+            f"LnurlException: {ex}", extra={"notification": False, "lnurl_failure": ex.failure}
+        )
+        raise LnurlException(failure=ex.failure)
+
+    with httpx.Client() as client:
+        try:
+            response = client.get(str(response.callback), params=params, follow_redirects=True)
+            response.raise_for_status()
+            response_data = response.json()
+            if response_data.get("pr"):
+                invoice = await get_invoice_from_pay_request(
+                    pay_request=response_data["pr"], client=client
+                )
+                if invoice:
+                    return protobuf_invoice_to_pydantic(invoice)
+            raise LnurlException("No payment request found in response")
+        except (httpx.RequestError, httpx.HTTPStatusError) as ex:
+            logger.error(f"HTTP error: {str(ex)}", extra={"notification": False})
+            raise LnurlException(failure={"error": str(ex)})
 
 
 async def decode_any_lnurp_or_lightning_address(
