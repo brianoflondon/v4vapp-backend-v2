@@ -169,8 +169,8 @@ class MongoDBClient:
         self.retry = retry
         self.kwargs = kwargs
         self.health_check = MongoDBStatus.VALIDATED
-        self._update_buffer = deque()  # Buffer to store updates
-        self._buffer_lock = Lock()
+        self._update_buffer: deque = deque()  # Buffer to store updates
+        self._buffer_lock: Lock = Lock()
         self._bulk_write_in_progress = False  # Flag to track bulk write status
 
     def validate_connection(self):
