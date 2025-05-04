@@ -176,8 +176,8 @@ async def decode_any_lnurp_or_lightning_address(
 
 async def perform_lnaddress_proxy(url: str, failure: Dict[str, str]) -> LnurlPayResponseComment:
     """
-    Performs the actual .well-known lookup for a lightning address
-    Filters out calls to this API to prevent stressing own api
+    Performs the actual .well-known lookup for a lightning address.
+    Filters out calls to this API to prevent stressing its own API.
 
     Args:
         url (str): The URL to perform the lookup on.
@@ -185,61 +185,32 @@ async def perform_lnaddress_proxy(url: str, failure: Dict[str, str]) -> LnurlPay
         during the lookup.
 
     Returns:
-        LnurlPayResponseCommentNostr: The response object containing the result of
-        the lookup.
+        LnurlPayResponseComment: The response object containing the result of the lookup.
 
     Raises:
-        HTTPException: If any error occurs during the lookup process.
-
+        LnurlException: If any error occurs during the lookup process.
     """
-    # Needs to decode the sats.v4v.app or hbd.v4v.app
-    # Check if this is a URL for this API/website
-    # parsed_url = urlparse(url)
-    # if parsed_url.netloc.endswith(urlparse(LNURL_BASE_URL).netloc):
-    #     failure.append({"message": "Processing own urls"})
-    #     if parsed_url.path.startswith("/.well-known/lnurlp/"):
-    #         try:
-    #             if len(parsed_url.netloc.split(".")) == 2:
-    #                 currency = LnurlCurrencyEnum.hive
-    #             else:
-    #                 currency = TypeAdapter(LnurlCurrency).validate_python(
-    #                     parsed_url.netloc.split(".")[0]
-    #                 )
-    #             hive_accname = parsed_url.path.split("/")[-1]
-    #             lpr = await lnd_lnurlp(hive_accname, no_image=False, currency=currency)
-    #             return lpr
-    #         except ValueError as ex:
-    #             failure.append({"error": f"{ex}"})
-    #             raise LnurlException(failure=failure)
-    #         except Exception as ex:
-    #             failure.append({"error": f"{ex}"})
-    #             raise LnurlException(failure=failure)
+    try:
+        # Perform the HTTP GET request
+        response = httpx.get(url, follow_redirects=True)
+        response.raise_for_status()  # Raise an exception for non-2xx status codes
+        response_data = response.json()
+    except (httpx.RequestError, httpx.HTTPStatusError) as ex:
+        # Handle HTTP and connection-related errors
+        failure["error"] = f"HTTP error: {str(ex)}"
+        raise LnurlException(failure=failure)
+    except ValueError as ex:
+        # Handle JSON decoding errors
+        failure["error"] = f"Invalid JSON response: {str(ex)}"
+        raise LnurlException(failure=failure)
 
     try:
-        res = httpx.get(url, follow_redirects=True)
-        res_json = res.json()
-    except (httpx.ReadTimeout, httpx.ConnectError) as ex:
-        failure["error"] = f"{ex}"
-        raise LnurlException(failure=failure)
+        # Validate and return the response as LnurlPayResponseComment
+        return LnurlPayResponseComment(**response_data)
     except Exception as ex:
-        try:
-            failure["error"] = str(res.status_code)
-        except NameError:
-            pass  # Ignore the error if res is undefined
-        failure["error"] = ex.args[0]
-        raise LnurlException(failure=failure)
-    if not res.is_success:
-        try:
-            failure["error"] = str(res.status_code)
-        except NameError:
-            pass
-        raise LnurlException(failure=failure)
-    try:
-        lpr = LnurlPayResponseComment(**res_json)
-        return lpr
-    except Exception as ex:
-        failure["error"] = str(res_json)
-        logger.error(f"Error in proxy {ex}")
+        # Handle validation or unexpected errors
+        failure["error"] = f"Error validating response: {str(ex)}"
+        logger.error(f"Error in proxy: {ex}")
         raise LnurlException(failure=failure)
 
 

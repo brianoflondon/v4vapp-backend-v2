@@ -1,17 +1,17 @@
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
 import pytest
+from google.protobuf.json_format import Parse
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
-
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_invoice_from_pay_request,
     get_node_alias_from_pay_request,
     get_node_info,
 )
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from google.protobuf.json_format import Parse
 
 
 @pytest.fixture(autouse=True)
@@ -25,11 +25,8 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
-
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -51,9 +48,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
-async def test_get_node_info(
-    set_base_config_path: None, monkeypatch: pytest.MonkeyPatch
-):
+async def test_get_node_info(set_base_config_path: None, monkeypatch: pytest.MonkeyPatch):
     with open("tests/data/lnd_functions/get_node_info_response.json") as f:
         json_data = f.read()
 
@@ -63,9 +58,7 @@ async def test_get_node_info(
         new_callable=AsyncMock(return_value=mock_node_info),
     ):
         async with LNDClient(connection_name="example") as client:
-            pub_key = (
-                "0396693dee59afd67f178af392990d907d3a9679fa7ce00e806b8e373ff6b70bd8"
-            )
+            pub_key = "0396693dee59afd67f178af392990d907d3a9679fa7ce00e806b8e373ff6b70bd8"
             result: lnrpc.NodeInfo = await get_node_info(pub_key, client)
             assert result.node.alias == "V4VAPP Hive GoPodcasting!"
             assert result.node.pub_key == pub_key
@@ -114,3 +107,36 @@ async def test_get_node_alias_from_pay_request(
                     payment_request = "lnbc1u1pnhykavpp5egz3h400vl9dh5s3ck6g7w5dhy34hmnq3c34ydnt9d8phzkpj42qdqqcqzpgxqyz5vqsp5z97q3e70kgzn4094ywks9hrvj7msz8xxujd5phkhg7vs72w4cc7s9qxpqysgqmld4mgxw74v9vkg3l8hx2a3afk4xzhl9merh7gup9h9j5rnq0q64c2vx9vktztwlajc9kkluaaelzefyk0c0spcvtzhpcamex6qxwscp6u9hp8"
                     result = await get_node_alias_from_pay_request(payment_request, client)
                     assert result == "V4VAPP Hive GoPodcasting!"
+
+
+@pytest.mark.asyncio
+async def test_get_invoice_from_pay_request(
+    set_base_config_path: None, monkeypatch: pytest.MonkeyPatch
+):
+    with open("tests/data/lnd_functions/get_node_info_response.json") as f:
+        json_data = f.read()
+
+    mock_node_info = Parse(json_data, lnrpc.NodeInfo())
+
+    # Test with a valid payment request
+    with open("tests/data/lnd_functions/decode_pay_req_response.json") as f:
+        json_data = f.read()
+    mock_response = Parse(json_data, lnrpc.PayReq())
+    mock_method = AsyncMock(return_value=mock_response)
+    with patch.object(
+        lightningstub,
+        "LightningStub",
+        return_value=AsyncMock(DecodePayReq=mock_method),
+    ):
+        with patch(
+            "v4vapp_backend_v2.lnd_grpc.lnd_functions.get_node_info",
+            new=AsyncMock(return_value=mock_node_info),
+        ):
+            with patch(
+                "v4vapp_backend_v2.lnd_grpc.lnd_client.LNDClient.node_get_info",
+                new_callable=AsyncMock(return_value=mock_node_info),
+            ):
+                async with LNDClient(connection_name="example") as client:
+                    payment_request = "lnbc1u1pnhykavpp5egz3h400vl9dh5s3ck6g7w5dhy34hmnq3c34ydnt9d8phzkpj42qdqqcqzpgxqyz5vqsp5z97q3e70kgzn4094ywks9hrvj7msz8xxujd5phkhg7vs72w4cc7s9qxpqysgqmld4mgxw74v9vkg3l8hx2a3afk4xzhl9merh7gup9h9j5rnq0q64c2vx9vktztwlajc9kkluaaelzefyk0c0spcvtzhpcamex6qxwscp6u9hp8"
+                    result = await get_invoice_from_pay_request(payment_request, client)
+                    assert result == mock_response
