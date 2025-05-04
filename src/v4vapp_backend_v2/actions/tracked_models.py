@@ -50,6 +50,18 @@ class TrackedBaseModel(BaseModel):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
+    def process(self):
+        """
+        Process the operation.
+
+        This method should be overridden in subclasses to provide the
+        specific processing logic for the operation.
+
+        Returns:
+            None
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
+
     async def lock_op(self) -> UpdateResult | None:
         """
         Locks the operation to prevent concurrent processing.

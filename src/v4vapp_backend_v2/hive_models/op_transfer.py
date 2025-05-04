@@ -3,6 +3,8 @@ from typing import Any, override
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
+from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
@@ -107,6 +109,24 @@ class TransferBase(OpBase):
             f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
+
+    @override
+    async def process(self) -> None:
+        """
+        Processes the transfer operation. This method is a placeholder and should
+        be overridden in subclasses to provide specific processing logic.
+
+        Returns:
+            None
+        """
+        server_account = InternalConfig().config.hive.server_account.name
+        treasury_account = InternalConfig().config.hive.treasury_account.name
+
+        if self.to_account == server_account:
+            if self.d_memo.startswith("lnbc"):
+                invoice = await decode_any_lightning_string(
+                    input=self.d_memo, ignore_limits=True
+                )
 
 
 class Transfer(TransferBase):
