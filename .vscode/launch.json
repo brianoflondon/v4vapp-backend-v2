@@ -85,6 +85,18 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "DEV DB Monitor App",
+            "type": "debugpy",
+            "consoleName": "DB Monitor App",
+            "request": "launch",
+            "program": "src/db_monitor.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "VSC Hive Monitor HBD No SALE",
             "type": "debugpy",
             "consoleName": "Hive Monitor",
