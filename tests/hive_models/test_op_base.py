@@ -5,7 +5,8 @@ from secrets import token_hex
 import httpx
 import pytest
 
-from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase, get_hive_block_explorer_link
+from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
+from v4vapp_backend_v2.hive_models.op_base_extras import  get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 

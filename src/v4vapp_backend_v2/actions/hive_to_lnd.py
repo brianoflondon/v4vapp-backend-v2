@@ -15,7 +15,7 @@ class HiveToLnd:
         """
         self.op = op
         self.hive_config = InternalConfig().config.hive
-        self.server_account = server_account or self.hive_config.
+        self.server_account = server_account or self.hive_config.server_account
         self.hive_inst = op.hive_inst
         self.lnd_data = None
 
@@ -25,8 +25,8 @@ class HiveToLnd:
 
         :return: True if the operation is a transfer from Hive to LND, False otherwise.
         """
+        return True
 
-        
 
     async def process(self):
         """
@@ -37,4 +37,7 @@ class HiveToLnd:
         # Conversion logic goes here
         if not self.op:
             logger.error("No data to process")
+            return None
+        if not self.is_hive_to_lnd():
+            logger.error("Not a Hive to LND transfer")
             return None
