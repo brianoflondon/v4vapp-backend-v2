@@ -71,6 +71,15 @@ wheels = [
 ]
 
 [[package]]
+name = "bech32"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/fe/b67ac9b123e25a3c1b8fc3f3c92648804516ab44215adb165284e024c43f/bech32-1.2.0.tar.gz", hash = "sha256:7d6db8214603bd7871fcfa6c0826ef68b85b0abd90fa21c285a9c5e21d2bd899", size = 3695 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/41/7022a226e5a6ac7091a95ba36bad057012ab7330b9894ad4e14e31d0b858/bech32-1.2.0-py3-none-any.whl", hash = "sha256:990dc8e5a5e4feabbdf55207b5315fdd9b73db40be294a19b3752cde9e79d981", size = 4587 },
+]
+
+[[package]]
 name = "binance-connector"
 version = "3.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -291,6 +300,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c0/1f/924e3caae75f471eae4b26bd13b698f6af2c44279f67af317439c2f4c46a/ecdsa-0.19.1.tar.gz", hash = "sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61", size = 201793 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a3/460c57f094a4a165c84a1341c373b0a4f5ec6ac244b998d5021aade89b77/ecdsa-0.19.1-py2.py3-none-any.whl", hash = "sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3", size = 150607 },
+]
+
+[[package]]
+name = "email-validator"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dnspython" },
+    { name = "idna" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/ce/13508a1ec3f8bb981ae4ca79ea40384becc868bfae97fd1c942bb3a001b1/email_validator-2.2.0.tar.gz", hash = "sha256:cb690f344c617a714f22e66ae771445a1ceb46821152df8e165c5f9a364582b7", size = 48967 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/ee/bf0adb559ad3c786f12bcbc9296b3f5675f529199bef03e2df281fa1fadb/email_validator-2.2.0-py3-none-any.whl", hash = "sha256:561977c2d73ce3611850a06fa56b414621e0c8faa9d66f2611407d87465da631", size = 33521 },
 ]
 
 [[package]]
@@ -690,6 +712,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/77/ab/5250d56ad03884ab5efd07f734203943c8a8ab40d551e208af81d0257bf2/pydantic-2.11.4.tar.gz", hash = "sha256:32738d19d63a226a52eed76645a98ee07c1f410ee41d93b4afbfa85ed8111c2d", size = 786540 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/12/46b65f3534d099349e38ef6ec98b1a5a81f42536d17e0ba382c28c67ba67/pydantic-2.11.4-py3-none-any.whl", hash = "sha256:d9615eaa9ac5a063471da949c8fc16376a84afb5024688b3ff885693506764eb", size = 443900 },
+]
+
+[package.optional-dependencies]
+email = [
+    { name = "email-validator" },
 ]
 
 [[package]]
@@ -1165,6 +1192,7 @@ dependencies = [
     { name = "aiofiles" },
     { name = "asgiref" },
     { name = "backoff" },
+    { name = "bech32" },
     { name = "binance-connector" },
     { name = "colorama" },
     { name = "colorlog" },
@@ -1176,7 +1204,7 @@ dependencies = [
     { name = "motor" },
     { name = "mypy-protobuf" },
     { name = "packaging" },
-    { name = "pydantic" },
+    { name = "pydantic", extra = ["email"] },
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -1211,6 +1239,7 @@ requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0,<25.0.0" },
     { name = "asgiref", specifier = ">=3.8.1,<4.0.0" },
     { name = "backoff", specifier = ">=2.2.1,<3.0.0" },
+    { name = "bech32", specifier = ">=1.2.0" },
     { name = "binance-connector", specifier = ">=3.12.0,<4.0.0" },
     { name = "colorama", specifier = ">=0.4.6,<1.0.0" },
     { name = "colorlog", specifier = ">=6.8.2,<7.0.0" },
@@ -1222,7 +1251,7 @@ requires-dist = [
     { name = "motor", specifier = ">=3.7.0,<4.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
     { name = "packaging", specifier = ">=25.0" },
-    { name = "pydantic", specifier = ">=2.7.1,<3.0.0" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.7.1,<3.0.0" },
     { name = "python-telegram-bot", specifier = ">=22.0,<23.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "redis", specifier = ">=5.2.1,<6.0.0" },
