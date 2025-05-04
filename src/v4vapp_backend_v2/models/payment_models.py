@@ -6,6 +6,7 @@ from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
@@ -63,7 +64,7 @@ class NodeAlias(BaseModel):
     alias: str
 
 
-class PaymentExtra(BaseModel):
+class PaymentExtra(TrackedBaseModel):
     route: list[NodeAlias] | None = []
 
     @computed_field
@@ -172,6 +173,26 @@ class Payment(PaymentExtra):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
+
+    @property
+    def collection(self) -> str:
+        """
+        Returns the collection name for the invoice.
+
+        Returns:
+            str: The collection name for the invoice.
+        """
+        return "payments"
+
+    @property
+    def group_id_query(self) -> dict:
+        """
+        Returns the query used to identify the group ID in the database.
+
+        Returns:
+            dict: The query used to identify the group ID.
+        """
+        return {"payment_hash": self.payment_hash}
 
     @property
     def get_succeeded_htlc(self) -> HTLCAttempt | None:
