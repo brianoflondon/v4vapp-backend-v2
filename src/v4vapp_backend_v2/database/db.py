@@ -657,13 +657,20 @@ class MongoDBClient:
         self, collection_name: str, query: dict, update: dict, **kwargs
     ) -> UpdateResult:
         collection = await self.get_collection(collection_name)
-        result = await collection.update_one(query, {"$set": update}, **kwargs)
+        # check if the update starts with $ then don't add $set
+        if update and list(update.keys())[0].startswith("$"):
+            result = await collection.update_one(query, update, **kwargs)
+        else:
+            result = await collection.update_one(query, {"$set": update}, **kwargs)
         return result
 
     @retry_on_failure()
     async def update_many(self, collection_name: str, query: dict, update: dict) -> UpdateResult:
         collection = await self.get_collection(collection_name)
-        result = await collection.update_many(query, {"$set": update}, upsert=True)
+        if update and list(update.keys())[0].startswith("$"):
+            result = await collection.update_one(query, update, upsert=True)
+        else:
+            result = await collection.update_many(query, {"$set": update}, upsert=True)
         return result
 
     @retry_on_failure()
