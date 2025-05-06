@@ -128,3 +128,18 @@ class ExpenseAccount(Account):
 
 
 AccountAny = Union[AssetAccount, LiabilityAccount, EquityAccount, RevenueAccount, ExpenseAccount]
+
+
+if __name__ == "__main__":
+    # Example usage
+    asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
+    liability_account = LiabilityAccount(name="Customer Liability Hive", sub="Sub-account 2")
+    equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
+    revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
+    expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")
+
+    print(asset_account)
+    print(liability_account)
+    print(equity_account)
+    print(revenue_account)
+    print(expense_account)
