@@ -326,14 +326,14 @@ wheels = [
 
 [[package]]
 name = "googleapis-common-protos"
-version = "1.62.0"
+version = "1.70.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/5f/eb12d721b45d20a977289d674e179995a0ddab1684d2c61b29a63d43a5f1/googleapis-common-protos-1.62.0.tar.gz", hash = "sha256:83f0ece9f94e5672cced82f592d2a5edf527a96ed1794f0bab36d5735c996277", size = 121172 }
+sdist = { url = "https://files.pythonhosted.org/packages/39/24/33db22342cf4a2ea27c9955e6713140fedd51e8b141b5ce5260897020f1a/googleapis_common_protos-1.70.0.tar.gz", hash = "sha256:0e1b44e0ea153e6594f9f394fef15193a68aaaea2d843f83e2742717ca753257", size = 145903 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/43/c9d8f75ddf08e2a0a27db243c13a700c3cc7ec615b545b697cf6f715ad92/googleapis_common_protos-1.62.0-py2.py3-none-any.whl", hash = "sha256:4750113612205514f9f6aa4cb00d523a94f3e8c06c5ad2fee466387dc4875f07", size = 228660 },
+    { url = "https://files.pythonhosted.org/packages/86/f1/62a193f0227cf15a920390abe675f386dec35f7ae3ffe6da582d3ade42c7/googleapis_common_protos-1.70.0-py3-none-any.whl", hash = "sha256:b8bfcca8c25a2bb253e0e0b0adaf8c00773e5e6af6fd92397576680b807e0fd8", size = 294530 },
 ]
 
 [[package]]
@@ -397,8 +397,8 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.0.7b0"
-source = { git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=2fb98088ce6c5f136d8d52438f911d7c3cba987e#2fb98088ce6c5f136d8d52438f911d7c3cba987e" }
+version = "0.0.7"
+source = { git = "https://github.com/TheCrazyGM/hive-nectar.git#d8b96ec1d6e98e7a1b74e81642f30e330cd6572e" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -1251,7 +1251,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "0.2.14"
+version = "0.2.15"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -1309,10 +1309,10 @@ requires-dist = [
     { name = "binance-connector", specifier = ">=3.12.0,<4.0.0" },
     { name = "colorama", specifier = ">=0.4.6,<1.0.0" },
     { name = "colorlog", specifier = ">=6.8.2,<7.0.0" },
-    { name = "googleapis-common-protos", specifier = "==1.62.0" },
+    { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.63.0,<2.0.0" },
     { name = "grpcio-tools", specifier = "==1.62.0" },
-    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=2fb98088ce6c5f136d8d52438f911d7c3cba987e" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "motor", specifier = ">=3.7.0,<4.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
@@ -1334,7 +1334,7 @@ requires-dist = [
 dev = [
     { name = "black", specifier = ">=25.1.0,<26.0.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0.0" },
-    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git?rev=2fb98088ce6c5f136d8d52438f911d7c3cba987e" },
+    { name = "hive-nectar", git = "https://github.com/TheCrazyGM/hive-nectar.git" },
     { name = "mongomock-motor", specifier = ">=0.0.35,<1.0.0" },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
