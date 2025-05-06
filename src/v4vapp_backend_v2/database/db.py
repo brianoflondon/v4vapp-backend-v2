@@ -73,9 +73,10 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 try:
                     ans = await func(self, *args, **kwargs)
                     if error_code:
+                        notification = False if retries < 3 else True
                         logger.info(
                             f"{DATABASE_ICON} {logger.name} Retry successful: {func.__name__}",
-                            extra={"notification": True, "error_code_clear": error_code},
+                            extra={"notification": notification, "error_code_clear": error_code},
                         )
                     return ans
                 except DuplicateKeyError as e:
@@ -109,12 +110,13 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                             extra=extra,
                         )
                         raise e
+                    notification = False if retries < 3 else True
                     logger.warning(
                         f"{DATABASE_ICON} {logger.name} "
                         f"Retrying {func.__name__} due to {e}. "
                         f"Attempt {retries}/{max_retries}. "
                         f"Retrying in {delay} s.",
-                        extra=extra,
+                        extra={"notification": notification, **extra},
                     )
                     await self.connect()
                     await asyncio.sleep(delay)
