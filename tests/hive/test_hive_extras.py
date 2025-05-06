@@ -69,6 +69,8 @@ def test_decode_memo_from_trx_id(test_data):
 )
 @pytest.mark.parametrize("test_data", TEST_MEMO_TRX_ID)
 def test_decode_memo_from_memo_text_lookup_hive(test_data):
+    if HIVE_MEMO_TEST_KEY == "TEST_KEY":
+        pytest.skip("Shouldn't reach this No test key provided.")
     trx_id = test_data["trx_id"]
     expected_plain_text = test_data["plain_text"]
     hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
