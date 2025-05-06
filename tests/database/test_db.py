@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 from pymongo import InsertOne
-from pymongo.results import BulkWriteResult, DeleteResult, UpdateResult
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, WriteConcernError
+from pymongo.results import BulkWriteResult
 
 from v4vapp_backend_v2.database.db import MongoDBClient
 
@@ -169,6 +169,26 @@ async def test_insert_one_find_one(set_base_config_path: None):
 
 @pytest.mark.asyncio
 async def test_update_one_delete_one(set_base_config_path: None):
+    """
+    Test the functionality of updating, finding, and deleting a document in a MongoDB collection.
+    This test performs the following steps:
+    1. Inserts a document into the specified collection.
+    2. Updates the inserted document with new data.
+    3. Verifies the update by finding the updated document.
+    4. Updates the document again to unset a specific field.
+    5. Verifies the document no longer exists after the unset operation.
+    6. Deletes the document from the collection.
+    7. Cleans up by dropping the collection and user.
+    Args:
+        set_base_config_path (None): A fixture or parameter to set the base configuration path.
+    Assertions:
+        - Ensures the document is successfully inserted.
+        - Ensures the document is successfully updated.
+        - Ensures the updated document can be found.
+        - Ensures the document is no longer found after the unset operation.
+        - Ensures the document is successfully deleted.
+    """
+
     collection_name = "update_delete"
     async with MongoDBClient("conn_1", "test_db", "test_user") as test_client:
         insert_ans = await test_client.insert_one(
@@ -182,6 +202,14 @@ async def test_update_one_delete_one(set_base_config_path: None):
         assert update_ans is not None
         find_one_ans = await test_client.find_one(collection_name, {collection_name: "updated"})
         assert find_one_ans is not None
+        update_ans = await test_client.update_one(
+            collection_name=collection_name,
+            query={collection_name: "updated"},
+            update={"$unset": {collection_name: "test"}},
+        )
+        assert update_ans is not None
+        find_one_ans = await test_client.find_one(collection_name, {collection_name: "updated"})
+        assert find_one_ans is None
         delete_ans = await test_client.delete_one(collection_name, {collection_name: "updated"})
         assert delete_ans is not None
     await drop_collection_and_user("conn_1", "test_db2", "test_user2")
@@ -350,7 +378,6 @@ async def test_update_one_repeat(set_base_config_path: None):
             if result and result[0] and isinstance(result[0], BulkWriteResult):
                 total_nMatched += result[0].matched_count
                 total_nModified += result[0].modified_count
-
 
         assert total_nMatched == repeat
         assert total_nModified == repeat

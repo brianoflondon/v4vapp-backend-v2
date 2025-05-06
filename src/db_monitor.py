@@ -2,19 +2,17 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timezone
-from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.actions.tracked_all import tracked_any
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.hive_models.op_all import op_any
 
 ICON = "🏆"
 app = typer.Typer()
@@ -22,7 +20,10 @@ app = typer.Typer()
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
-payment_pipeline: Sequence[Mapping[str, Any]] = [
+# Can't find any way to filter this in the pipeline, will do it in code.
+pipeline_exclude_locked_changes: Sequence[Mapping[str, Any]] = []
+
+payment_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
     {
         "$project": {
             "fullDocument.creation_date": 1,
@@ -30,9 +31,9 @@ payment_pipeline: Sequence[Mapping[str, Any]] = [
             "fullDocument.status": 1,
             "fullDocument.value_msat": 1,
         }
-    }
+    },
 ]
-invoice_pipeline: Sequence[Mapping[str, Any]] = [
+invoice_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
     {
         "$project": {
             "fullDocument.creation_date": 1,
@@ -42,10 +43,14 @@ invoice_pipeline: Sequence[Mapping[str, Any]] = [
             "fullDocument.value_msat": 1,
             "fullDocument.memo": 1,
         }
-    }
+    },
 ]
-hive_ops_pipeline: Sequence[Mapping[str, Any]] = [
-    {"$match": {"fullDocument.type": {"$ne": "block_marker"}}}
+hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+    {
+        "$match": {
+            "fullDocument.type": {"$ne": "block_marker"},
+        }
+    }
 ]
 
 
@@ -165,7 +170,18 @@ class ResumeToken(BaseModel):
             raise e
 
 
-async def make_ledger_entry(change: Mapping[str, Any], collection: str):
+def change_to_locked(change: Mapping[str, Any]) -> bool:
+    update_description = change.get("updateDescription", {})
+    updated_fields = update_description.get("updatedFields", {})
+    removed_fields = update_description.get("removedFields", [])
+
+    # Check if "locked" is in either updatedFields or removedFields
+    if "locked" in updated_fields or "locked" in removed_fields:
+        return True
+    return False
+
+
+async def process_op(change: Mapping[str, Any], collection: str):
     """
     Creates a ledger entry based on the document and collection name.
 
@@ -176,46 +192,14 @@ async def make_ledger_entry(change: Mapping[str, Any], collection: str):
     Returns:
         None
     """
-    server_account_names = InternalConfig().config.hive.server_account_names
-    if collection == "hive_ops":
-        try:
-            full_document = change.get("fullDocument", {})
-            pprint(full_document, indent=2)
-            op = op_any(full_document)
-            logger.info(op.group_id)
-            logger.info(op.log_str)
-            if op.type in ["transfer", "fill_recurrent_transfer"]:
-                # Deposit in as Hive
-                if op.to_account in server_account_names:
-                    logger.info(op.log_str)
-                    journal_entry = LedgerEntry(
-                        group_id=op.group_id,
-                        timestamp=op.timestamp,
-                        description=op.d_memo,
-                        amount=op.amount.amount_decimal,
-                        unit=op.amount.unit,
-                        debit_account=AssetAccount(
-                            name="Customer Hive Deposits", sub=op.to_account
-                        ),
-                        credit_account=LiabilityAccount(
-                            name="Customer Hive Liability", sub=op.from_account
-                        ),
-                    )
-                    logger.info(journal_entry.model_dump())
-                    db_client = get_mongodb_client()
-                    async with db_client:
-                        await db_client.insert_one(
-                            collection="ledger",
-                            document=journal_entry.model_dump(
-                                exclude_none=True, exclude_unset=True
-                            ),
-                        )
-
-                # Create a ledger entry based on the document
-        except Exception as e:
-            logger.exception(
-                f"Error creating ledger entry: {e}", extra={"exc_info": True, "stack_info": True}
-            )
+    # server_account_names = InternalConfig().config.hive.server_account_names
+    full_document = change.get("fullDocument", {})
+    op = tracked_any(full_document)
+    logger.info(f"Processing {op.group_id_query}")
+    await op.lock_op()
+    await asyncio.sleep(2)
+    logger.info(f"Unlocking {op.group_id_query}")
+    await op.unlock_op()
 
 
 async def subscribe_stream(
@@ -236,6 +220,7 @@ async def subscribe_stream(
     # }
     logger.info(f"Subscribing to {collection_name} stream...")
     client = get_mongodb_client()
+    TrackedBaseModel.db_client = client
     collection = await client.get_collection(collection_name)
     resume = ResumeToken(collection=collection_name)
     try:
@@ -246,15 +231,16 @@ async def subscribe_stream(
             resume_after=resume_token,
         ) as stream:
             async for change in stream:
+                if not change_to_locked(change):
+                    asyncio.create_task(process_op(change=change, collection=collection_name))
+                resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                resume.set_token(change.get("_id", {}))
                 logger.info(
                     f"{ICON} Change detected in {collection_name}",
                     extra={"notification": False, "change": change},
                 )
-                asyncio.create_task(make_ledger_entry(change=change, collection=collection_name))
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True

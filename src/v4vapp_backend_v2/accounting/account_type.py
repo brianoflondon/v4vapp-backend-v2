@@ -28,7 +28,12 @@ class AssetAccount(Account):
     Represents an asset account in the accounting system.
     """
 
-    name: Literal["Customer Hive Deposits"] = Field(..., description="Specific asset account name")
+    name: Literal[
+        "Customer Deposits Hive",
+        "Customer Deposits Lightning",
+        "Treasury Hive",
+        "Treasury Lightning",
+    ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
@@ -42,9 +47,23 @@ class AssetAccount(Account):
 
 # MARK: Liability Accounts
 class LiabilityAccount(Account):
+    """
+    LiabilityAccount is a subclass of Account that represents a specific type of liability account.
+    Attributes:
+        name (Literal): The specific name of the liability account. Must be one of:
+            - "Customer Liability Hive"
+            - "Customer Liability Lightning"
+            - "Tax Liabilities"
+        account_type (Literal[AccountType.LIABILITY]): The type of account, which is always set to `AccountType.LIABILITY`.
+    Methods:
+        __init__(name: str = "", sub: str = ""):
+            Initializes a LiabilityAccount instance with the specified name and sub-account.
+            Overrides the account_type to `AccountType.LIABILITY`.
+    """
+
     name: Literal[
-        "Customer Lightning Liability",
-        "Customer Hive Liability",
+        "Customer Liability Hive",
+        "Customer Liability Lightning",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
@@ -76,7 +95,7 @@ class EquityAccount(Account):
 
 # MARK: Revenue Accounts
 class RevenueAccount(Account):
-    name: Literal["Hive Fees", "HBD Fees", "Sats Fees", "DHF Income", "Other Income"] = Field(
+    name: Literal["Fee Income", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
     )
     account_type: Literal[AccountType.REVENUE] = Field(
@@ -95,6 +114,7 @@ class ExpenseAccount(Account):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
+        "Fee Expenses Lightning",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"
@@ -108,3 +128,18 @@ class ExpenseAccount(Account):
 
 
 AccountAny = Union[AssetAccount, LiabilityAccount, EquityAccount, RevenueAccount, ExpenseAccount]
+
+
+if __name__ == "__main__":
+    # Example usage
+    asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
+    liability_account = LiabilityAccount(name="Customer Liability Hive", sub="Sub-account 2")
+    equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
+    revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
+    expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")
+
+    print(asset_account)
+    print(liability_account)
+    print(equity_account)
+    print(revenue_account)
+    print(expense_account)

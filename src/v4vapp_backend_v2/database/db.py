@@ -73,9 +73,10 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                 try:
                     ans = await func(self, *args, **kwargs)
                     if error_code:
+                        notification = False if retries < 3 else True
                         logger.info(
                             f"{DATABASE_ICON} {logger.name} Retry successful: {func.__name__}",
-                            extra={"notification": True, "error_code_clear": error_code},
+                            extra={"notification": notification, "error_code_clear": error_code},
                         )
                     return ans
                 except DuplicateKeyError as e:
@@ -109,12 +110,13 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                             extra=extra,
                         )
                         raise e
+                    notification = False if retries < 3 else True
                     logger.warning(
                         f"{DATABASE_ICON} {logger.name} "
                         f"Retrying {func.__name__} due to {e}. "
                         f"Attempt {retries}/{max_retries}. "
                         f"Retrying in {delay} s.",
-                        extra=extra,
+                        extra={"notification": notification, **extra},
                     )
                     await self.connect()
                     await asyncio.sleep(delay)
@@ -169,8 +171,8 @@ class MongoDBClient:
         self.retry = retry
         self.kwargs = kwargs
         self.health_check = MongoDBStatus.VALIDATED
-        self._update_buffer = deque()  # Buffer to store updates
-        self._buffer_lock = Lock()
+        self._update_buffer: deque = deque()  # Buffer to store updates
+        self._buffer_lock: Lock = Lock()
         self._bulk_write_in_progress = False  # Flag to track bulk write status
 
     def validate_connection(self):
@@ -657,13 +659,20 @@ class MongoDBClient:
         self, collection_name: str, query: dict, update: dict, **kwargs
     ) -> UpdateResult:
         collection = await self.get_collection(collection_name)
-        result = await collection.update_one(query, {"$set": update}, **kwargs)
+        # check if the update starts with $ then don't add $set
+        if update and list(update.keys())[0].startswith("$"):
+            result = await collection.update_one(query, update, **kwargs)
+        else:
+            result = await collection.update_one(query, {"$set": update}, **kwargs)
         return result
 
     @retry_on_failure()
     async def update_many(self, collection_name: str, query: dict, update: dict) -> UpdateResult:
         collection = await self.get_collection(collection_name)
-        result = await collection.update_many(query, {"$set": update}, upsert=True)
+        if update and list(update.keys())[0].startswith("$"):
+            result = await collection.update_one(query, update, upsert=True)
+        else:
+            result = await collection.update_many(query, {"$set": update}, upsert=True)
         return result
 
     @retry_on_failure()

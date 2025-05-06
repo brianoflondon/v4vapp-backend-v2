@@ -8,7 +8,7 @@ from grpc.aio import AioRpcError
 from google.protobuf.json_format import Parse
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient, LNDConnectionError
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 
 os.environ["TESTING"] = "True"

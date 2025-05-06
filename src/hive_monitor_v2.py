@@ -366,7 +366,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     raise asyncio.CancelledError("Docker Shutdown")
                 new_block, marker = block_counter.inc(op.raw_op)
 
-                if isinstance(op, AccountWitnessVote):
+                if watch_witnesses and isinstance(op, AccountWitnessVote):
                     op.get_voter_details()
                     log_it = True
                     if op.witness in watch_witnesses:
@@ -374,7 +374,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         notification = True
                         db_store = True
 
-                if isinstance(op, OpAllTransfers):
+                elif isinstance(op, OpAllTransfers):
                     if op.is_watched:
                         await OpBase.update_quote()
                         op.update_conv()
@@ -384,7 +384,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         db_store = True
                         notification = True
 
-                if op.known_custom_json:
+                elif op.known_custom_json:
                     op: CustomJson
                     notification = True
                     if not op.conv:
@@ -392,7 +392,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     log_it = True
                     db_store = True
 
-                if (
+                elif (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
                     notification = (
@@ -401,7 +401,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                     log_it = True
                     db_store = True
 
-                if isinstance(op, ProducerReward):
+                elif isinstance(op, ProducerReward):
                     if op.producer in watch_witnesses:
                         notification = True
                         await op.get_witness_details()
@@ -412,20 +412,23 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
                         log_it = True
                         db_store = True
 
-                if isinstance(op, UpdateProposalVotes):
+                elif OpBase.proposals_tracked and isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
                     log_it = True
                     if op.is_tracked:
                         notification = True
                         db_store = True
 
-                if isinstance(op, AccountUpdate2):
+                elif isinstance(op, AccountUpdate2):
                     if op.is_watched:
                         log_it = True
                         notification = True
                         db_store = True
                         if v4v_config.server_accname == op.account:
                             v4v_config.fetch()
+                else:
+                    # If the op is not in the list of tracked ops, skip it
+                    continue
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 

@@ -1,5 +1,5 @@
 from google.protobuf.json_format import MessageToDict
-from grpc.aio import AioRpcError
+from grpc.aio import AioRpcError  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
@@ -88,9 +88,7 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         logger.debug(f"get_node_info: {pub_key} {response.node.alias}")
         return response
     except AioRpcError as e:
-        logger.debug(
-            f"{client.icon} get_node_info {e.details()}", extra={"original_error": e}
-        )
+        logger.debug(f"{client.icon} get_node_info {e.details()}", extra={"original_error": e})
         return lnrpc.NodeInfo()
 
     except LNDConnectionError as e:
@@ -107,6 +105,33 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         logger.info(f"{client.icon} Failure get_node_info: {pub_key}")
         logger.exception(e)
         return lnrpc.NodeInfo()
+
+
+async def get_invoice_from_pay_request(pay_request: str, client: LNDClient) -> lnrpc.Invoice:
+    """
+    Retrieve the invoice from a payment request.
+
+    Args:
+        pay_request (str): The payment request string.
+        client (LNDClient): An instance of the LNDClient.
+
+    Returns:
+        lnrpc.Invoice: The invoice object.
+    """
+    try:
+        # Decode the payment request
+        if pay_request == "":
+            logger.debug("Empty payment request", extra={"notification": False})
+            return lnrpc.Invoice()
+        decode_request = lnrpc.PayReqString(pay_req=pay_request)
+        decode_response: lnrpc.PayReq = await client.call(
+            client.lightning_stub.DecodePayReq,
+            decode_request,
+        )
+        return decode_response
+    except Exception as e:
+        logger.exception(e)
+        return lnrpc.Invoice()
 
 
 async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -> str:
@@ -131,9 +156,7 @@ async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -
             decode_request,
         )
 
-        decoded_pay_req = MessageToDict(
-            decode_response, preserving_proto_field_name=True
-        )
+        decoded_pay_req = MessageToDict(decode_response, preserving_proto_field_name=True)
         destination_pub_key = decoded_pay_req.get("destination")
 
         if not destination_pub_key:

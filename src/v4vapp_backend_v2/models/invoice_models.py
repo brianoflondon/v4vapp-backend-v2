@@ -7,6 +7,7 @@ from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.models.custom_records import KeysendCustomRecord, b64_decode
@@ -75,7 +76,7 @@ class Feature(BaseModel):
 # TODO: #92 this is where the custom_records in each invoice are stored this is where we will decode the custom records
 
 
-class Invoice(BaseModel):
+class Invoice(TrackedBaseModel):
     """
     Invoice Model
 
@@ -137,13 +138,13 @@ class Invoice(BaseModel):
     value: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     settled: bool = False
-    creation_date: datetime
+    creation_date: datetime | None = None
     settle_date: datetime | None = None
     payment_request: str | None = None
     description_hash: str | None = None
     expiry: int | None = None
     fallback_addr: str | None = None
-    cltv_expiry: int
+    cltv_expiry: int | None = None
     route_hints: List[dict] | None = None
     private: bool | None = None
     add_index: BSONInt64 | None = None
@@ -197,6 +198,26 @@ class Invoice(BaseModel):
 
         self.fill_hive_accname()
         self.fill_custom_record()
+
+    @property
+    def collection(self) -> str:
+        """
+        Returns the collection name for the invoice.
+
+        Returns:
+            str: The collection name for the invoice.
+        """
+        return "invoices"
+
+    @property
+    def group_id_query(self) -> dict:
+        """
+        Returns the query used to identify the group ID in the database.
+
+        Returns:
+            dict: The query used to identify the group ID.
+        """
+        return {"r_hash": self.r_hash}
 
     def fill_hive_accname(self) -> None:
         """
