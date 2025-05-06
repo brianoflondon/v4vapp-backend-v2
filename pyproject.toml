@@ -32,6 +32,7 @@ dependencies = [
     "tenacity>=9.1.2",
     "packaging>=25.0",
     "bech32>=1.2.0",
+    "pyluca",
 ]
 
 [dependency-groups]
@@ -85,3 +86,4 @@ exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a singl
 
 [tool.uv.sources]
 hive-nectar = { git = "https://github.com/TheCrazyGM/hive-nectar.git", rev = "2fb98088ce6c5f136d8d52438f911d7c3cba987e" }
+pyluca = { git = "https://github.com/datasignstech/pyluca" }
