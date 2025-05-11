@@ -1,11 +1,12 @@
 from datetime import datetime
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny, AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.actions.tracked_all import TrackedAny, tracked_type
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive_models.op_all import OpAny
 
 
 class LedgerEntry(BaseModel):
@@ -21,7 +22,7 @@ class LedgerEntry(BaseModel):
     conv: CryptoConv = Field(None, description="Conversion details for the ledger entry")
     debit: AccountAny = Field(None, description="Account to be debited")
     credit: AccountAny = Field(None, description="Account to be credited")
-    op: OpAny = Field(None, description="Associated Hive operation")
+    op: TrackedAny = Field(None, description="Associated Hive operation")
 
     model_config = ConfigDict()
 
@@ -35,90 +36,107 @@ class LedgerEntry(BaseModel):
         """
         return self.credit, self.debit
 
+    def owners_loan(self, op: TrackedAny) -> Self:
+        """
+        Process a hive operation for an owner's loan.
+        This method sets the debit and credit accounts based on the operation type.
+        """
+        if tracked_type(op) != "transfer":
+            raise ValueError("Operation must be of type 'transfer'")
+        self.group_id = op.group_id
+        self.timestamp = op.timestamp
+        self.description = op.d_memo
+        self.unit = op.unit
+        self.amount = op.amount_decimal
+        self.conv = op.conv
+        self.debit = AssetAccount(name="Treasury Hive", sub=op.to_account)
+        self.credit = LiabilityAccount(name="Owners Loan Payable", sub=op.from_account)
+        self.op = op
+        return self
 
-class HiveServerTransfer(LedgerEntry):
-    """
-    Represents a ledger entry for Hive operations involving a server account.
-    Transfers to and from the server account are treated as customer deposits and liabilities.
-    Transfers to and from the treasury account are treated as internal transfers.
-    Attributes:
-        hive_op (OpAny): The Hive operation associated with this ledger entry.
-        server_account (str): The server account involved in the transaction.
-        treasury_account (str): The treasury account involved in the transaction.
 
-    """
+# class HiveServerTransfer(LedgerEntry):
+#     """
+#     Represents a ledger entry for Hive operations involving a server account.
+#     Transfers to and from the server account are treated as customer deposits and liabilities.
+#     Transfers to and from the treasury account are treated as internal transfers.
+#     Attributes:
+#         hive_op (OpAny): The Hive operation associated with this ledger entry.
+#         server_account (str): The server account involved in the transaction.
+#         treasury_account (str): The treasury account involved in the transaction.
 
-    def __init__(self, hive_op: OpAny, server_account: str, treasury_account: str) -> None:
-        if not hive_op:
-            raise ValueError("hive_op must be provided")
-        if not server_account:
-            raise ValueError("server_account must be provided")
-        if not treasury_account:
-            raise ValueError("treasury_account must be provided")
-        if server_account not in [hive_op.to_account, hive_op.from_account]:
-            raise ValueError(
-                f"{server_account} must be either the to: {hive_op.to_account} "
-                f"or from: {hive_op.from_account} of the hive_op"
-            )
+#     """
 
-        super().__init__()
-        if treasury_account == hive_op.to_account and server_account == hive_op.from_account:
-            # Server to Treasury transfer
-            debit = AssetAccount(
-                name="Treasury Hive",
-                sub=hive_op.to_account,
-            )
-            credit = AssetAccount(
-                name="Customer Deposits Hive",
-                sub=hive_op.from_account,
-            )
-        elif treasury_account == hive_op.from_account and server_account == hive_op.to_account:
-            # Treasury to Server transfer
-            debit = AssetAccount(
-                name="Customer Deposits Hive",
-                sub=hive_op.to_account,
-            )
-            credit = AssetAccount(
-                name="Treasury Hive",
-                sub=hive_op.from_account,
-            )
-        elif hive_op.to_account == server_account:
-            # Customer deposit
-            debit = AssetAccount(
-                name="Customer Deposits Hive",
-                sub=hive_op.to_account,
-            )
-            credit = LiabilityAccount(
-                name="Customer Liability Hive",
-                sub=hive_op.from_account,
-            )
-        elif hive_op.from_account == server_account:
-            # Customer withdrawal
-            debit = LiabilityAccount(
-                name="Customer Liability Hive",
-                sub=hive_op.to_account,
-            )
-            credit = AssetAccount(
-                name="Customer Deposits Hive",
-                sub=hive_op.from_account,
-            )
-        else:
-            # This code should never be reached because of the earlier check
-            # but it's here for safety
-            raise ValueError(
-                f"Server account {server_account} is not involved in the "
-                f"transaction ({hive_op.to_account}, {hive_op.from_account} {hive_op.d_memo})"
-            )
-        self.group_id = hive_op.group_id
-        self.timestamp = hive_op.timestamp
-        self.description = hive_op.d_memo
-        self.unit = hive_op.unit
-        self.amount = hive_op.amount_decimal
-        self.conv = hive_op.conv
-        self.debit = debit
-        self.credit = credit
-        self.op = hive_op
+#     def __init__(self, hive_op: OpAny, server_account: str, treasury_account: str) -> None:
+#         if not hive_op:
+#             raise ValueError("hive_op must be provided")
+#         if not server_account:
+#             raise ValueError("server_account must be provided")
+#         if not treasury_account:
+#             raise ValueError("treasury_account must be provided")
+#         if server_account not in [hive_op.to_account, hive_op.from_account]:
+#             raise ValueError(
+#                 f"{server_account} must be either the to: {hive_op.to_account} "
+#                 f"or from: {hive_op.from_account} of the hive_op"
+#             )
 
+#         super().__init__()
+#         if treasury_account == hive_op.to_account and server_account == hive_op.from_account:
+#             # Server to Treasury transfer
+#             debit = AssetAccount(
+#                 name="Treasury Hive",
+#                 sub=hive_op.to_account,
+#             )
+#             credit = AssetAccount(
+#                 name="Customer Deposits Hive",
+#                 sub=hive_op.from_account,
+#             )
+#         elif treasury_account == hive_op.from_account and server_account == hive_op.to_account:
+#             # Treasury to Server transfer
+#             debit = AssetAccount(
+#                 name="Customer Deposits Hive",
+#                 sub=hive_op.to_account,
+#             )
+#             credit = AssetAccount(
+#                 name="Treasury Hive",
+#                 sub=hive_op.from_account,
+#             )
+#         elif hive_op.to_account == server_account:
+#             # Customer deposit
+#             debit = AssetAccount(
+#                 name="Customer Deposits Hive",
+#                 sub=hive_op.to_account,
+#             )
+#             credit = LiabilityAccount(
+#                 name="Customer Liability Hive",
+#                 sub=hive_op.from_account,
+#             )
+#         elif hive_op.from_account == server_account:
+#             # Customer withdrawal
+#             debit = LiabilityAccount(
+#                 name="Customer Liability Hive",
+#                 sub=hive_op.to_account,
+#             )
+#             credit = AssetAccount(
+#                 name="Customer Deposits Hive",
+#                 sub=hive_op.from_account,
+#             )
+#         else:
+#             # This code should never be reached because of the earlier check
+#             # but it's here for safety
+#             raise ValueError(
+#                 f"Server account {server_account} is not involved in the "
+#                 f"transaction ({hive_op.to_account}, {hive_op.from_account} {hive_op.d_memo})"
+#             )
+#         self.group_id = hive_op.group_id
+#         self.timestamp = hive_op.timestamp
+#         self.description = hive_op.d_memo
+#         self.unit = hive_op.unit
+#         self.amount = hive_op.amount_decimal
+#         self.conv = hive_op.conv
+#         self.debit = debit
+#         self.credit = credit
+#         self.op = hive_op
 
 
 def draw_t_diagram(entry: LedgerEntry) -> str:

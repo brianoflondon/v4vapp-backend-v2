@@ -14,6 +14,8 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     :param tracked: The object to check.
     :return: True if the object is of type OpAny, Invoice, or Payment, False otherwise.
     """
+    if not tracked.get("locked", None):
+        tracked["locked"] = False
     if isinstance(tracked, OpAny):
         return tracked
     elif isinstance(tracked, Invoice) or isinstance(tracked, Payment):
@@ -31,3 +33,20 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
         return Payment.model_validate(tracked)
 
     raise ValueError("Invalid tracked object")
+
+
+def tracked_type(tracked: TrackedAny) -> str:
+    """
+    Generate a query for the tracked object.
+
+    :param tracked: The tracked object.
+    :return: A dictionary representing the query.
+    """
+    if isinstance(tracked, OpAny):
+        return tracked.name
+    elif isinstance(tracked, Invoice):
+        return "invoice"
+    elif isinstance(tracked, Payment):
+        return "payment"
+    else:
+        raise ValueError("Invalid tracked object")

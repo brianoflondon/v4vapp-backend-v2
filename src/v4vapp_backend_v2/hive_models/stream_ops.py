@@ -184,7 +184,6 @@ async def stream_ops_async(
                     "notification": False,
                     "error": e,
                     "error_code": "stream_restart",
-                    "exc_info": True,
                 },
             )
         finally:

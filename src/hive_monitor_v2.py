@@ -311,7 +311,9 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
     return mean_time_diff, block_timestamps[0]
 
 
-async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] = []):
+async def all_ops_loop(
+    watch_witnesses: List[str] = [], watch_users: List[str] = [], start_block: int = 0
+) -> None:
     """
     Asynchronously loops through transactions and processes them.
 
@@ -348,7 +350,10 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
             tg.create_task(witness_first_run(witness))
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
-    last_good_block = await get_last_good_block() + 1
+    if start_block == 0:
+        last_good_block = await get_last_good_block() + 1
+    else:
+        last_good_block = start_block
     block_counter = BlockCounter(
         last_good_block=last_good_block, hive_client=hive_client, id="combined"
     )
@@ -442,7 +447,7 @@ async def all_ops_loop(watch_witnesses: List[str] = [], watch_users: List[str] =
             raise e
 
         except Exception as e:
-            logger.exception(f"{icon} {e}", extra={"error": e})
+            logger.exception(f"{icon} {e}", extra={"notification": False})
             raise e
 
         finally:
@@ -488,11 +493,15 @@ async def combined_logging(
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
 
-async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -> None:
+async def main_async_start(
+    watch_users: List[str], watch_witnesses: List[str], start_block: int
+) -> None:
     """
     Main function to run the Hive Watcher client.
     Args:
         watch_users (List[str]): The Hive user(s) to watch for transactions.
+        watch_witnesses (List[str]): The Hive witness(es) to watch for transactions.
+        start_block (int): The block number to start processing from.
 
     Returns:
         None
@@ -508,7 +517,7 @@ async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -
         try:
             await redis_client.ping()
         except Exception as e:
-            logger.error(f"{icon} Redis connection test failed", extra={"error": e})
+            logger.error(f"{icon} Redis connection test failed", extra={})
             raise e
         logger.info(f"{icon} Redis connection established")
 
@@ -524,7 +533,9 @@ async def main_async_start(watch_users: List[str], watch_witnesses: List[str]) -
 
     try:
         tasks = [
-            all_ops_loop(watch_witnesses=watch_witnesses, watch_users=watch_users),
+            all_ops_loop(
+                watch_witnesses=watch_witnesses, watch_users=watch_users, start_block=start_block
+            ),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -593,6 +604,14 @@ def main(
             show_default=True,
         ),
     ] = DEFAULT_CONFIG_FILENAME,
+    start_block: Annotated[
+        int,
+        typer.Option(
+            "--start-block",
+            help="The block number to start from.",
+            show_default=True,
+        ),
+    ] = 0,
 ):
     """
     Watch the Hive blockchain for transactions.
@@ -629,7 +648,7 @@ def main(
     if not watch_witnesses:
         watch_witnesses = CONFIG.hive.watch_witnesses
     COMMAND_LINE_WATCH_ONLY = watch_only
-    asyncio.run(main_async_start(watch_users, watch_witnesses))
+    asyncio.run(main_async_start(watch_users, watch_witnesses, start_block=start_block))
 
 
 if __name__ == "__main__":

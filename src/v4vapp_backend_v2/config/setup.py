@@ -151,10 +151,14 @@ class HiveRoles(StrEnum):
     Attributes:
         server (str): Represents the server role.
         treasury (str): Represents the treasury role.
+        funding (str): Represents the funding role: this account is recognized when moving
+            Owner's equity funds into the treasury account.
     """
 
     server = "server"
     treasury = "treasury"
+    funding = "funding"
+    exchange = "exchange"
 
 
 class HiveAccountConfig(BaseConfig):
@@ -249,6 +253,25 @@ class HiveConfig(BaseConfig):
         """
         return self.treasury_accounts[0] if self.treasury_accounts else None
 
+    @property
+    def funding_account(self) -> HiveAccountConfig | None:
+        """
+        Retrieve the first funding account from the Hive account configurations.
+
+        Returns:
+            HiveAccountConfig: The first Hive account with the role HiveRoles.funding.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.funding][0]
+
+    @property
+    def exchange_account(self) -> HiveAccountConfig | None:
+        """
+        Retrieve the first exchange account from the Hive account configurations.
+
+        Returns:
+            HiveAccountConfig: The first Hive account with the role HiveRoles.exchange.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange][0]
 
     @property
     def server_account_names(self) -> List[str]:

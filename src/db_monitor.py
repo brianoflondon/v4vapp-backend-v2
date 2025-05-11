@@ -194,9 +194,12 @@ async def process_op(change: Mapping[str, Any], collection: str):
     """
     # server_account_names = InternalConfig().config.hive.server_account_names
     full_document = change.get("fullDocument", {})
+    if not full_document:
+        logger.warning(f"{ICON} No fullDocument found in change: {change}")
+        return
     op = tracked_any(full_document)
     logger.info(f"Processing {op.group_id_query}")
-    await op.lock_op()
+    await op.process()
     await asyncio.sleep(2)
     logger.info(f"Unlocking {op.group_id_query}")
     await op.unlock_op()

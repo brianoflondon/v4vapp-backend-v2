@@ -26,6 +26,14 @@ class Account(BaseModel):
 class AssetAccount(Account):
     """
     Represents an asset account in the accounting system.
+    Assets INCREASE with a DEBIT and DECREASE with a CREDIT.
+    Attributes:
+        name (Literal): The specific name of the asset account. Must be one of:
+            - "Customer Deposits Hive"
+            - "Customer Deposits Lightning"
+            - "Treasury Hive"
+            - "Treasury Lightning"
+        account_type (Literal[AccountType.ASSET]): The type of account, which is always set to `AccountType.ASSET`.
     """
 
     name: Literal[
@@ -49,6 +57,7 @@ class AssetAccount(Account):
 class LiabilityAccount(Account):
     """
     LiabilityAccount is a subclass of Account that represents a specific type of liability account.
+    Liabilities INCREASE with a CREDIT and DECREASE with a DEBIT.
     Attributes:
         name (Literal): The specific name of the liability account. Must be one of:
             - "Customer Liability Hive"
@@ -64,6 +73,7 @@ class LiabilityAccount(Account):
     name: Literal[
         "Customer Liability Hive",
         "Customer Liability Lightning",
+        "Owner Loan Payable (funding)",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
@@ -79,6 +89,21 @@ class LiabilityAccount(Account):
 
 # MARK: Equity Accounts
 class EquityAccount(Account):
+    """
+    Represents an equity account in the accounting system.
+    Equity accounts INCREASE with a CREDIT and DECREASE with a DEBIT.
+    Attributes:
+        name (Literal): The specific name of the equity account. Must be one of:
+            - "Owner's Capital"
+            - "Retained Earnings"
+            - "Dividends/Distributions"
+        account_type (Literal[AccountType.EQUITY]): The type of account, which is always set to `AccountType.EQUITY`.
+    Methods:
+        __init__(name: str = "", sub: str = ""):
+            Initializes an EquityAccount instance with the specified name and sub-account.
+            Overrides the account_type to `AccountType.EQUITY`.
+    """
+
     name: Literal["Owner's Capital", "Retained Earnings", "Dividends/Distributions"] = Field(
         ..., description="Specific equity account name"
     )
@@ -95,7 +120,7 @@ class EquityAccount(Account):
 
 # MARK: Revenue Accounts
 class RevenueAccount(Account):
-    name: Literal["Fee Income", "DHF Income", "Other Income"] = Field(
+    name: Literal["Fee Income Hive", "Fee Income Lightning", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
     )
     account_type: Literal[AccountType.REVENUE] = Field(
@@ -115,6 +140,7 @@ class ExpenseAccount(Account):
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
         "Fee Expenses Lightning",
+        "Fee Expenses Hive",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"

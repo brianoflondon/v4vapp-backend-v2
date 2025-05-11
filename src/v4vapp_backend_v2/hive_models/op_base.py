@@ -99,6 +99,7 @@ class OpBase(TrackedBaseModel):
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
 
+
     # Class variables
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
     op_tracked: ClassVar[List[str]] = OP_TRACKED
@@ -352,43 +353,43 @@ class OpBase(TrackedBaseModel):
             await all_quotes.get_all_quotes()
             cls.last_quote = all_quotes.quote
 
-    async def lock_op(self) -> None:
-        """
-        Locks the operation to prevent concurrent processing.
+    # async def lock_op(self) -> None:
+    #     """
+    #     Locks the operation to prevent concurrent processing.
 
-        This method sets the `_locked` attribute to True, indicating that
-        the operation is currently being processed and should not be
-        modified or accessed by other threads or processes.
+    #     This method sets the `_locked` attribute to True, indicating that
+    #     the operation is currently being processed and should not be
+    #     modified or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        self._locked = True
-        if self.db_client:
-            await self.db_client.update_one(
-                collection="hive_ops",
-                query=self.group_id_query,
-                update={"$set": {"_locked": self._locked}},
-            )
+    #     Returns:
+    #         None
+    #     """
+    #     self._locked = True
+    #     if self.db_client:
+    #         await self.db_client.update_one(
+    #             collection="hive_ops",
+    #             query=self.group_id_query,
+    #             update={"$set": {"_locked": self._locked}},
+    #         )
 
-    async def unlock_op(self) -> None:
-        """
-        Unlocks the operation to allow concurrent processing.
+    # async def unlock_op(self) -> None:
+    #     """
+    #     Unlocks the operation to allow concurrent processing.
 
-        This method sets the `_locked` attribute to False, indicating that
-        the operation is no longer being processed and can be modified
-        or accessed by other threads or processes.
+    #     This method sets the `_locked` attribute to False, indicating that
+    #     the operation is no longer being processed and can be modified
+    #     or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        self._locked = False
-        if self.db_client:
-            await self.db_client.update_one(
-                collection="hive_ops",
-                query=self.group_id_query,
-                update={"$set": {"_locked": self._locked}},
-            )
+    #     Returns:
+    #         None
+    #     """
+    #     self._locked = False
+    #     if self.db_client:
+    #         await self.db_client.update_one(
+    #             collection="hive_ops",
+    #             query=self.group_id_query,
+    #             update={"$set": {"_locked": self._locked}},
+    #         )
 
     async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
         """
