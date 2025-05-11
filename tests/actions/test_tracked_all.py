@@ -5,7 +5,12 @@ from typing import Dict, Generator
 import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
+from v4vapp_backend_v2.actions.tracked_all import (
+    formatted_balance_sheet,
+    generate_balance_sheet,
+    process_tracked,
+    tracked_any,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 
@@ -60,5 +65,9 @@ async def test_process_tracked():
         ledger_entry = await process_tracked(op_tracked)
         if isinstance(ledger_entry, LedgerEntry):
             print(ledger_entry.draw_t_diagram())
+
+    balance_sheet = await generate_balance_sheet()
+    fbs= formatted_balance_sheet(balance_sheet)
+    print(fbs)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")

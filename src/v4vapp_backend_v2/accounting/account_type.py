@@ -46,8 +46,8 @@ class AssetAccount(Account):
         AccountType.ASSET, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.ASSET):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.ASSET
         self.name = name
         self.sub = sub
@@ -80,8 +80,8 @@ class LiabilityAccount(Account):
         AccountType.LIABILITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.LIABILITY):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.LIABILITY
         self.name = name
         self.sub = sub
@@ -111,8 +111,8 @@ class EquityAccount(Account):
         AccountType.EQUITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EQUITY):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.EQUITY
         self.name = name
         self.sub = sub
@@ -127,8 +127,8 @@ class RevenueAccount(Account):
         AccountType.REVENUE, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.REVENUE):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.REVENUE
         self.name = name
         self.sub = sub
@@ -146,8 +146,8 @@ class ExpenseAccount(Account):
         AccountType.EXPENSE, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EXPENSE):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.EXPENSE
         self.name = name
         self.sub = sub

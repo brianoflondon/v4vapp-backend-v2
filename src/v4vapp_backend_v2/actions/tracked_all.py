@@ -1,4 +1,6 @@
-from typing import Any, Union
+from collections import defaultdict
+from datetime import datetime, timezone
+from typing import Any, Dict, Union
 
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
@@ -177,3 +179,160 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
         return ledger_entry
     else:
         return None
+
+
+# Function to generate balance sheet
+async def generate_balance_sheet(as_of_date: datetime = datetime.now(tz=timezone.utc)) -> Dict:
+    """
+    Generate a balance sheet from ledger entries as of a given date.
+    Returns a dictionary with Assets, Liabilities, and Equity balances in USD.
+    """
+    # Initialize dictionaries to track balances
+    ledger_entries = []
+
+    async with TrackedBaseModel.db_client as db_client:
+        cursor = await db_client.find(
+            collection_name="ledger",
+            query={"timestamp": {"$lte": as_of_date}},
+            projection={
+                "group_id": 1,
+                "timestamp": 1,
+                "description": 1,
+                "amount": 1,
+                "unit": 1,
+                "conv": 1,
+                "debit": 1,
+                "credit": 1,
+                "_id": 0,
+                "op": 1,
+            },
+        )
+        async for entry in cursor:
+            ledger_entry = LedgerEntry.model_validate(entry)
+            ledger_entries.append(ledger_entry)
+
+    account_balances = defaultdict(float)
+
+    # Process each ledger entry
+    for entry in ledger_entries:
+        if entry.timestamp > as_of_date:
+            continue  # Skip entries after the as_of_date
+
+        # Get USD amount from conv.usd
+        usd_amount = entry.conv.usd
+
+        # Update debit account (Assets increase, Liabilities/Equity decrease)
+        if entry.debit.account_type == "Asset":
+            account_balances[entry.debit.name] += usd_amount
+        elif entry.debit.account_type in ["Liability", "Equity"]:
+            account_balances[entry.debit.name] -= usd_amount
+
+        # Update credit account (Assets decrease, Liabilities/Equity increase)
+        if entry.credit.account_type == "Asset":
+            account_balances[entry.credit.name] -= usd_amount
+        elif entry.credit.account_type in ["Liability", "Equity"]:
+            account_balances[entry.credit.name] += usd_amount
+
+    # Organize balances by account type
+    balance_sheet = {"Assets": {}, "Liabilities": {}, "Equity": {}}
+
+    # Assign balances to appropriate categories
+    for account_name, balance in account_balances.items():
+        if account_name in [
+            "Customer Deposits Hive",
+            "Customer Deposits Lightning",
+            "Treasury Hive",
+            "Treasury Lightning",
+        ]:
+            balance_sheet["Assets"][account_name] = round(balance, 2)
+        elif account_name in [
+            "Customer Liability Hive",
+            "Customer Liability Lightning",
+            "Tax Liabilities",
+            "Owner Loan Payable (funding)",
+        ]:
+            balance_sheet["Liabilities"][account_name] = round(balance, 2)
+        elif account_name in [
+            "Owner's Capital",
+            "Retained Earnings",
+            "Dividends/Distributions",
+        ]:
+            balance_sheet["Equity"][account_name] = round(balance, 2)
+
+    # Calculate totals
+    balance_sheet["Assets"]["Total Assets"] = round(sum(balance_sheet["Assets"].values()), 2)
+    balance_sheet["Liabilities"]["Total Liabilities"] = round(
+        sum(balance_sheet["Liabilities"].values()), 2
+    )
+    balance_sheet["Equity"]["Total Equity"] = round(sum(balance_sheet["Equity"].values()), 2)
+    balance_sheet["Total Liabilities and Equity"] = round(
+        balance_sheet["Liabilities"]["Total Liabilities"]
+        + balance_sheet["Equity"]["Total Equity"],
+        2,
+    )
+
+    return balance_sheet
+
+
+def formatted_balance_sheet(balance_sheet: Dict) -> str:
+    """
+    Formats a balance sheet as a string, 70 characters wide with right-aligned numbers.
+
+    Args:
+        balance_sheet: Dictionary containing Assets, Liabilities, Equity, and totals.
+
+    Returns:
+        A formatted string representing the balance sheet.
+    """
+    # Accumulate lines in a list
+    lines = []
+
+    # Define column widths
+    number_width = 12  # For "$XXXXXX.XX"
+    name_width = 70 - number_width - 3  # 3 for ": " and space before number
+    total_width = 70
+
+    # Assets section
+    lines.append("\nAssets")
+    lines.append("-" * total_width)
+    for account, balance in balance_sheet["Assets"].items():
+        if account != "Total Assets":
+            account_truncated = account[:name_width] if len(account) > name_width else account
+            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
+    lines.append(
+        f"{'Total Assets':<{name_width}}: ${balance_sheet['Assets']['Total Assets']:>{number_width - 1}.2f}"
+    )
+
+    # Liabilities section
+    lines.append("\nLiabilities")
+    lines.append("-" * total_width)
+    for account, balance in balance_sheet["Liabilities"].items():
+        if account != "Total Liabilities":
+            account_truncated = account[:name_width] if len(account) > name_width else account
+            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
+    lines.append(
+        f"{'Total Liabilities':<{name_width}}: ${balance_sheet['Liabilities']['Total Liabilities']:>{number_width - 1}.2f}"
+    )
+
+    # Equity section
+    lines.append("\nEquity")
+    lines.append("-" * total_width)
+    for account, balance in balance_sheet["Equity"].items():
+        if account != "Total Equity":
+            account_truncated = account[:name_width] if len(account) > name_width else account
+            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
+    lines.append(
+        f"{'Total Equity':<{name_width}}: ${balance_sheet['Equity']['Total Equity']:>{number_width - 1}.2f}"
+    )
+
+    # Total Liabilities and Equity
+    lines.append("\nTotal Liabilities and Equity")
+    lines.append("-" * total_width)
+    lines.append(
+        f"{'':<{name_width}}  ${balance_sheet['Total Liabilities and Equity']:>{number_width - 1}.2f}"
+    )
+
+    # Join lines with newlines and return
+    return "\n".join(lines)
+
+
