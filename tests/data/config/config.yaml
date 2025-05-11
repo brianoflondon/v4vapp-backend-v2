@@ -176,11 +176,19 @@ binance:
 
 hive:
   hive_accs:
+    devser.v4vapp:
+      role: server
     someaccount:
       role: server
       posting_key: somepostingkey
       active_key: someactive
       memo_key: somememo
+    devtre.v4vapp:
+      role: treasury
+    v4vapp.dhf:
+      role: funding
+    fiction:
+      role: exchange
   proposals_tracked:
     - 342
     - 303

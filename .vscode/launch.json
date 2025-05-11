@@ -23,7 +23,8 @@
                 "--config-filename",
                 "devhive.config.yaml",
                 "--start-block",
-                "95793080"
+                // "95793083",
+                "95801528"
                 // "--watch-only",
             ],
             "justMyCode": true,

@@ -8,11 +8,12 @@ import typer
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.actions.tracked_all import tracked_any
+from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 ICON = "🏆"
 app = typer.Typer()
@@ -195,12 +196,20 @@ async def process_op(change: Mapping[str, Any], collection: str):
     # server_account_names = InternalConfig().config.hive.server_account_names
     full_document = change.get("fullDocument", {})
     if not full_document:
-        logger.warning(f"{ICON} No fullDocument found in change: {change}")
+        logger.warning(
+            f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
+        )
         return
     op = tracked_any(full_document)
     logger.info(f"Processing {op.group_id_query}")
-    await op.process()
-    await asyncio.sleep(2)
+    ledger_entry = await process_tracked(op)
+    if not ledger_entry:
+        logger.warning(
+            f"{ICON} No ledger entry created for {op.group_id_query}",
+            extra={"notification": False},
+        )
+        return
+    print(ledger_entry.draw_t_diagram())
     logger.info(f"Unlocking {op.group_id_query}")
     await op.unlock_op()
 

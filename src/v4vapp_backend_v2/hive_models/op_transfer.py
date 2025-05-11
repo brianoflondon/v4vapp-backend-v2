@@ -3,9 +3,6 @@ from typing import Any, override
 from nectar import Hive
 from pydantic import ConfigDict, Field
 
-# from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, draw_t_diagram
-from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
@@ -16,6 +13,42 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 
 class TransferBase(OpBase):
+    """
+    TransferBase is a subclass of OpBase that represents a transfer operation in the system.
+    It encapsulates details about the transfer, including sender, recipient, amount, memo,
+    and additional metadata. The class provides methods and properties to process and
+    retrieve information about the transfer.
+
+    Attributes:
+        from_account (AccNameType): The account initiating the transfer.
+        to_account (AccNameType): The account receiving the transfer.
+        amount (AmountPyd): The amount being transferred, with precision and unit.
+        memo (str): A memo associated with the transfer, defaulting to an empty string.
+        conv (CryptoConv): A conversion object for cryptocurrency-related operations.
+        d_memo (str): A decoded memo string, if applicable.
+
+    Class Variables:
+        model_config (ConfigDict): Configuration for the model, enabling population by alias.
+
+    Methods:
+        __init__(**hive_event: Any): Initializes the TransferBase object, processes the
+            transfer details, and updates conversion rates if necessary.
+        post_process(hive_inst: Hive): Processes the memo to decode it if it starts with
+            a hash (#) and a Hive instance is provided.
+
+    Properties:
+        amount_decimal (float): Converts the string amount to a decimal with proper precision.
+        unit (Currency): Retrieves the unit of the amount.
+        amount_str (str): Returns the string representation of the amount.
+        recurrence_str (str): Generates a string representation of the transfer's recurrence
+            details, if applicable.
+        log_str (str): A formatted string summarizing the transfer operation for logging
+            purposes. Overrides the base class implementation.
+        notification_str (str): A formatted string summarizing the transfer operation for
+            notifications, including sender, recipient, amount, memo, and additional context.
+            Overrides the base class implementation.
+    """
+
     from_account: AccNameType = Field(alias="from")
     to_account: AccNameType = Field(alias="to")
     amount: AmountPyd = Field(description="Amount being transferred")
@@ -34,9 +67,10 @@ class TransferBase(OpBase):
         super().__init__(**hive_event)
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
-        if self.last_quote.get_age() > 600.0:
-            self.update_quote_sync(AllQuotes().get_binance_quote())
-        self.update_conv()
+        if hive_event.get("update_conv", True):
+            if self.last_quote.get_age() > 600.0:
+                self.update_quote_sync(AllQuotes().get_binance_quote())
+            self.update_conv()
 
     def post_process(self, hive_inst: Hive) -> None:
         if self.memo.startswith("#") and hive_inst:
@@ -111,110 +145,7 @@ class TransferBase(OpBase):
         )
         return ans
 
-    @override
-    async def process(self) -> None:
-        """
-        Processes the transfer operation. This method is a placeholder and should
-        be overridden in subclasses to provide specific processing logic.
-
-        Returns:
-            None
-        """
-        await self.lock_op()
-        server_account = InternalConfig().config.hive.server_account.name
-        treasury_account = InternalConfig().config.hive.treasury_account.name
-        funding_account = InternalConfig().config.hive.funding_account.name
-        exchange_account = InternalConfig().config.hive.exchange_account.name
-        # Check if the transfer is between the server account and the treasury account
-
-        match (self.from_account, self.to_account):
-            case (server_account, treasury_account):
-                # this is from the server account to the treasury account
-                logger.info(
-                    f"Transfer from server account to treasury account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (treasury_account, server_account):
-                # This is a transfer from the server account
-                logger.info(
-                    f"Transfer from treasury account to server account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (funding_account, treasury_account):
-                # This is a transfer between two different accounts
-                logger.info(
-                    f"Transfer from funding account to treasury account: {self.from_account} -> {self.to_account}"
-                )
-                # ledger_entry = LedgerEntry().owners_loan(self)
-                # draw_t_diagram(ledger_entry)
-                pass
-            case (treasury_account, funding_account):
-                # This is a transfer between the treasury account and the funding account
-                logger.info(
-                    f"Transfer from treasury account to funding account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (treasury_account, exchange_account):
-                # This is a transfer between the treasury account and the exchange account
-                logger.info(
-                    f"Transfer from treasury account to exchange account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (exchange_account, treasury_account):
-                # This is a transfer between two different accounts
-                logger.info(
-                    f"Transfer from exchange account to treasury account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (server_account, _):
-                # This is a transfer from the server account to any other account
-                # except the treasury, funding or exchange accounts
-                logger.info(
-                    f"Transfer from server account to another account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case (_, server_account):
-                # This is a transfer to the server account from any other account
-                # except the treasury, funding or exchange accounts
-                logger.info(
-                    f"Transfer to server account from another account: {self.from_account} -> {self.to_account}"
-                )
-                pass
-            case _:
-                # This is a transfer between two different accounts
-                logger.info(
-                    f"Transfer between two different accounts: {self.from_account} -> {self.to_account}"
-                )
-                pass
-
-        # HIVE to LND Transfers
-        if self.to_account == server_account:
-            if self.d_memo.startswith("lnbc"):
-                try:
-                    self.lightning_memo = await decode_any_lightning_string(
-                        input=self.d_memo, ignore_limits=True
-                    )
-                    print(f"Decoded Lightning memo: {self.lightning_memo}")
-                    await self.unlock_op()
-                except Exception as e:
-                    self.lightning_memo = f"Error decoding: {e}"
-
-        # Deposit of Hive to Treasury
-        elif self.to_account == treasury_account:
-            if self.d_memo.startswith("lnbc"):
-                try:
-                    self.lightning_memo = await decode_any_lightning_string(
-                        input=self.d_memo, ignore_limits=True
-                    )
-                    print(f"Decoded Lightning memo: {self.lightning_memo}")
-                    await self.unlock_op()
-                except Exception as e:
-                    self.lightning_memo = f"Error decoding: {e}"
-
-        await self.unlock_op()
-
 
 class Transfer(TransferBase):
     def __init__(self, **hive_event: Any) -> None:
-        super().__init__(**hive_event)
         super().__init__(**hive_event)

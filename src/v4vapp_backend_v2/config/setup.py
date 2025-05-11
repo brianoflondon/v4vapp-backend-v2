@@ -234,6 +234,16 @@ class HiveConfig(BaseConfig):
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.server]
 
     @property
+    def server_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the server accounts.
+
+        Returns:
+            List[str]: A list containing the names of all server accounts.
+        """
+        return [acc.name for acc in self.server_accounts]
+
+    @property
     def server_account(self) -> HiveAccountConfig | None:
         """
         Retrieve the first server account from the Hive account configurations.
@@ -254,6 +264,16 @@ class HiveConfig(BaseConfig):
         return self.treasury_accounts[0] if self.treasury_accounts else None
 
     @property
+    def treasury_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the treasury accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury]
+
+    @property
     def funding_account(self) -> HiveAccountConfig | None:
         """
         Retrieve the first funding account from the Hive account configurations.
@@ -261,7 +281,17 @@ class HiveConfig(BaseConfig):
         Returns:
             HiveAccountConfig: The first Hive account with the role HiveRoles.funding.
         """
-        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.funding][0]
+        return self.funding_accounts[0] if self.funding_accounts else None
+
+    @property
+    def funding_accounts(self) -> List[HiveAccountConfig]:
+        """
+        Retrieve the funding accounts from the Hive account configurations.
+
+        Returns:
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.funding.
+        """
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.funding]
 
     @property
     def exchange_account(self) -> HiveAccountConfig | None:
@@ -271,27 +301,17 @@ class HiveConfig(BaseConfig):
         Returns:
             HiveAccountConfig: The first Hive account with the role HiveRoles.exchange.
         """
-        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange][0]
+        return self.exchange_accounts[0] if self.exchange_accounts else None
 
     @property
-    def server_account_names(self) -> List[str]:
+    def exchange_accounts(self) -> List[HiveAccountConfig]:
         """
-        Retrieve the names of the server accounts.
+        Retrieve the exchange accounts from the Hive account configurations.
 
         Returns:
-            List[str]: A list containing the names of all server accounts.
+            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.exchange.
         """
-        return [acc.name for acc in self.server_accounts]
-
-    @property
-    def treasury_accounts(self) -> List[HiveAccountConfig]:
-        """
-        Retrieve the treasury accounts from the Hive account configurations.
-
-        Returns:
-            List[HiveAccountConfig]: A list of Hive accounts with the role HiveRoles.treasury.
-        """
-        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.treasury]
+        return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange]
 
     @property
     def treasury_account_names(self) -> List[str]:
