@@ -24,22 +24,11 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
-    with patch(
-        "v4vapp_backend_v2.config.mylogger.NotificationProtocol.send_notification",
-        lambda self, message, record, alert_level=1: None,
-    ):
-        yield
-    # Unpatch the monkeypatch
-    monkeypatch.undo()
-
-
-@pytest.fixture(autouse=True)
-def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
-    # Reset the singleton instance before each test
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     yield
-    # Reset the singleton instance after each test
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
 
 
 async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:

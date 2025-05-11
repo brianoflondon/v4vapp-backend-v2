@@ -6,7 +6,23 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
-from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.database.db import MongoDBClient
+
+
+async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
+    # Drop the collection and user
+    async with MongoDBClient(conn_name, db_name, db_user) as test_client:
+        ans = await test_client.db.drop_collection("startup_collection")
+        assert ans.get("ok") == 1
+        ans = await test_client.drop_user()
+        assert ans.get("ok") == 1
+    await drop_database(conn_name=conn_name, db_name=db_name)
+
+
+async def drop_database(conn_name: str, db_name: str) -> None:
+    async with MongoDBClient(conn_name) as admin_client:
+        await admin_client.drop_database(db_name)
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +52,7 @@ def load_hive_events(file_path: str) -> Generator[Dict, None, None]:
 
 
 async def test_process_tracked():
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     for hive_event in load_hive_events("tests/data/hive_models/ledger_actions_log.jsonl"):
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
@@ -43,3 +60,5 @@ async def test_process_tracked():
         ledger_entry = await process_tracked(op_tracked)
         if isinstance(ledger_entry, LedgerEntry):
             print(ledger_entry.draw_t_diagram())
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
