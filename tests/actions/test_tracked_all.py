@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Generator
 
@@ -58,6 +59,8 @@ def load_hive_events(file_path: str) -> Generator[Dict, None, None]:
 
 async def test_process_tracked():
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    as_of_date = datetime.now(tz=timezone.utc)
+
     for hive_event in load_hive_events("tests/data/hive_models/ledger_actions_log.jsonl"):
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
@@ -66,8 +69,8 @@ async def test_process_tracked():
         if isinstance(ledger_entry, LedgerEntry):
             print(ledger_entry.draw_t_diagram())
 
-    balance_sheet = await generate_balance_sheet()
-    fbs= formatted_balance_sheet(balance_sheet)
+    balance_sheet = await generate_balance_sheet(as_of_date=as_of_date)
+    fbs = formatted_balance_sheet(balance_sheet, as_of_date)
     print(fbs)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")

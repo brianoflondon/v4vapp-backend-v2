@@ -14,7 +14,7 @@
             "justMyCode": false,
         },
         {
-            "name": "Dev Hive Monitor devser devtre",
+            "name": "DEV Hive Monitor devser devtre",
             "type": "debugpy",
             "consoleName": "DEV Hive Monitor",
             "request": "launch",
@@ -23,8 +23,9 @@
                 "--config-filename",
                 "devhive.config.yaml",
                 "--start-block",
+                "95817680"
                 // "95793083",
-                "95801528"
+                // "95801528"
                 // "--watch-only",
             ],
             "justMyCode": true,

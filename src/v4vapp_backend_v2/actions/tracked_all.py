@@ -102,46 +102,48 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     exchange_account = InternalConfig().config.hive.exchange_account.name
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts
+    ledger_entry = LedgerEntry(
+        group_id=op.group_id,
+        timestamp=op.timestamp,
+        description=op.d_memo,
+        unit=op.unit,
+        amount=op.amount_decimal,
+        conv=op.conv,
+        op=op,
+    )
+
     if op.from_account == server_account and op.to_account == treasury_account:
+        # MARK: Server to Treasury
         logger.info(
             f"Transfer from server account to treasury account: {op.from_account} -> {op.to_account}"
         )
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=op.to_account)
+        ledger_entry.credit = LiabilityAccount(name="Owner's Capital", sub=op.from_account)
     elif op.from_account == treasury_account and op.to_account == server_account:
+        # MARK: Treasury to Server
         logger.info(
             f"Transfer from treasury account to server account: {op.from_account} -> {op.to_account}"
         )
-        ledger_entry = LedgerEntry(
-            group_id=op.group_id,
-            timestamp=op.timestamp,
-            description=op.d_memo,
-            unit=op.unit,
-            amount=op.amount_decimal,
-            conv=op.conv,
-            debit=AssetAccount(name="Customer Deposits Hive", sub=op.to_account),
-            credit=AssetAccount(name="Treasury Hive", sub=op.from_account),
-            op=op,
-        )
-
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.to_account)
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=op.from_account)
     elif op.from_account == funding_account and op.to_account == treasury_account:
+        # MARK: Funding to Treasury
         logger.info(
             f"Transfer from funding account to treasury account: {op.from_account} -> {op.to_account}"
         )
-        ledger_entry = LedgerEntry(
-            group_id=op.group_id,
-            timestamp=op.timestamp,
-            description=op.d_memo,
-            unit=op.unit,
-            amount=op.amount_decimal,
-            conv=op.conv,
-            debit=AssetAccount(name="Treasury Hive", sub=op.to_account),
-            credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=op.from_account),
-            op=op,
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=op.to_account)
+        ledger_entry.credit = LiabilityAccount(
+            name="Owner Loan Payable (funding)", sub=op.from_account
         )
-
     elif op.from_account == treasury_account and op.to_account == funding_account:
+        # MARK: Treasury to Funding
         logger.info(
             f"Transfer from treasury account to funding account: {op.from_account} -> {op.to_account}"
         )
+        ledger_entry.debit = LiabilityAccount(
+            name="Owner Loan Payable (funding)", sub=op.from_account
+        )
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=op.to_account)
     elif op.from_account == treasury_account and op.to_account == exchange_account:
         logger.info(
             f"Transfer from treasury account to exchange account: {op.from_account} -> {op.to_account}"
@@ -163,7 +165,7 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
         )
 
-    if ledger_entry and ledger_entry.group_id and TrackedBaseModel.db_client:
+    if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
         try:
             await TrackedBaseModel.db_client.insert_one(
                 collection_name=ledger_entry.collection,
@@ -184,7 +186,7 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
 # Function to generate balance sheet
 async def generate_balance_sheet(as_of_date: datetime = datetime.now(tz=timezone.utc)) -> Dict:
     """
-    Generate a balance sheet from ledger entries as of a given date.
+    Generate a balance sheet with sub-accounts as of a given date.
     Returns a dictionary with Assets, Liabilities, and Equity balances in USD.
     """
     # Initialize dictionaries to track balances
@@ -219,120 +221,152 @@ async def generate_balance_sheet(as_of_date: datetime = datetime.now(tz=timezone
             continue  # Skip entries after the as_of_date
 
         # Get USD amount from conv.usd
-        usd_amount = entry.conv.usd
+        usd_amount = entry.conv.hive
 
-        # Update debit account (Assets increase, Liabilities/Equity decrease)
+        # Update debit account
+        debit_key = (entry.debit.name, entry.debit.sub)
         if entry.debit.account_type == "Asset":
-            account_balances[entry.debit.name] += usd_amount
+            account_balances[debit_key] += usd_amount
         elif entry.debit.account_type in ["Liability", "Equity"]:
-            account_balances[entry.debit.name] -= usd_amount
+            account_balances[debit_key] -= usd_amount
 
-        # Update credit account (Assets decrease, Liabilities/Equity increase)
+        # Update credit account
+        credit_key = (entry.credit.name, entry.credit.sub)
         if entry.credit.account_type == "Asset":
-            account_balances[entry.credit.name] -= usd_amount
+            account_balances[credit_key] -= usd_amount
         elif entry.credit.account_type in ["Liability", "Equity"]:
-            account_balances[entry.credit.name] += usd_amount
+            account_balances[credit_key] += usd_amount
 
-    # Organize balances by account type
-    balance_sheet = {"Assets": {}, "Liabilities": {}, "Equity": {}}
+    # Organize balances by account type and main account
+    balance_sheet = {
+        "Assets": defaultdict(dict),
+        "Liabilities": defaultdict(dict),
+        "Equity": defaultdict(dict),
+    }
 
     # Assign balances to appropriate categories
-    for account_name, balance in account_balances.items():
+    for (account_name, sub), balance in account_balances.items():
         if account_name in [
             "Customer Deposits Hive",
             "Customer Deposits Lightning",
             "Treasury Hive",
             "Treasury Lightning",
         ]:
-            balance_sheet["Assets"][account_name] = round(balance, 2)
+            balance_sheet["Assets"][account_name][sub] = round(balance, 2)
         elif account_name in [
             "Customer Liability Hive",
             "Customer Liability Lightning",
             "Tax Liabilities",
             "Owner Loan Payable (funding)",
         ]:
-            balance_sheet["Liabilities"][account_name] = round(balance, 2)
-        elif account_name in [
-            "Owner's Capital",
-            "Retained Earnings",
-            "Dividends/Distributions",
-        ]:
-            balance_sheet["Equity"][account_name] = round(balance, 2)
+            balance_sheet["Liabilities"][account_name][sub] = round(balance, 2)
+        elif account_name in ["Owner's Capital", "Retained Earnings", "Dividends/Distributions"]:
+            balance_sheet["Equity"][account_name][sub] = round(balance, 2)
 
-    # Calculate totals
-    balance_sheet["Assets"]["Total Assets"] = round(sum(balance_sheet["Assets"].values()), 2)
-    balance_sheet["Liabilities"]["Total Liabilities"] = round(
-        sum(balance_sheet["Liabilities"].values()), 2
-    )
-    balance_sheet["Equity"]["Total Equity"] = round(sum(balance_sheet["Equity"].values()), 2)
+    # Calculate main account totals and overall totals
+    for category in ["Assets", "Liabilities", "Equity"]:
+        for account_name in balance_sheet[category]:
+            total = sum(balance_sheet[category][account_name].values())
+            balance_sheet[category][account_name]["Total"] = round(total, 2)
+        balance_sheet[category]["Total"] = round(
+            sum(
+                account["Total"]
+                for account in balance_sheet[category].values()
+                if "Total" in account
+            ),
+            2,
+        )
+
     balance_sheet["Total Liabilities and Equity"] = round(
-        balance_sheet["Liabilities"]["Total Liabilities"]
-        + balance_sheet["Equity"]["Total Equity"],
-        2,
+        balance_sheet["Liabilities"]["Total"] + balance_sheet["Equity"]["Total"], 2
     )
 
     return balance_sheet
 
 
-def formatted_balance_sheet(balance_sheet: Dict) -> str:
+def truncate_text(text: str, max_length: int) -> str:
+    if len(text) > max_length:
+        return text[: max_length - 3] + "..."
+    return text
+
+
+def formatted_balance_sheet(balance_sheet: Dict, as_of_date: datetime) -> str:
     """
-    Formats a balance sheet as a string, 70 characters wide with right-aligned numbers.
-
-    Args:
-        balance_sheet: Dictionary containing Assets, Liabilities, Equity, and totals.
-
-    Returns:
-        A formatted string representing the balance sheet.
+    Format a balance sheet as a string within 60 characters.
+    Returns a string with Assets, Liabilities, and Equity in USD.
     """
-    # Accumulate lines in a list
-    lines = []
+    # Initialize string buffer
+    output = []
 
-    # Define column widths
-    number_width = 12  # For "$XXXXXX.XX"
-    name_width = 70 - number_width - 3  # 3 for ": " and space before number
-    total_width = 70
+    # Header (truncate to fit 60 chars)
+    date_str = as_of_date.strftime("%Y-%m-%d")
+    header = f"Balance Sheet as of {date_str}"
+    output.append(f"{truncate_text(header, 60):^60}")
+    output.append("-" * 60)
 
-    # Assets section
-    lines.append("\nAssets")
-    lines.append("-" * total_width)
-    for account, balance in balance_sheet["Assets"].items():
-        if account != "Total Assets":
-            account_truncated = account[:name_width] if len(account) > name_width else account
-            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
-    lines.append(
-        f"{'Total Assets':<{name_width}}: ${balance_sheet['Assets']['Total Assets']:>{number_width - 1}.2f}"
-    )
+    # Assets
+    output.append(f"{'Assets':^60}")
+    output.append("-" * 5)
+    for account_name, sub_accounts in balance_sheet["Assets"].items():
+        if account_name != "Total":
+            # Main account (truncate to 40 chars)
+            account_display = truncate_text(account_name, 40)
+            output.append(f"{account_display:<40}")
+            for sub, balance in sub_accounts.items():
+                if sub != "Total":
+                    # Sub-account: 4-space indent, truncate to 30 chars
+                    sub_display = truncate_text(sub, 30)
+                    formatted_balance = f"${balance:,.2f}"
+                    output.append(f"    {sub_display:<30} {formatted_balance:>15}")
+            # Account total: 2-space indent
+            total_display = f"Total {truncate_text(account_name, 33)}"
+            formatted_total = f"${sub_accounts['Total']:,.2f}"
+            output.append(f"  {total_display:<33} {formatted_total:>15}")
+    # Total Assets
+    formatted_total_assets = f"${balance_sheet['Assets']['Total']:,.2f}"
+    output.append(f"{'Total Assets':<40} {formatted_total_assets:>15}")
 
-    # Liabilities section
-    lines.append("\nLiabilities")
-    lines.append("-" * total_width)
-    for account, balance in balance_sheet["Liabilities"].items():
-        if account != "Total Liabilities":
-            account_truncated = account[:name_width] if len(account) > name_width else account
-            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
-    lines.append(
-        f"{'Total Liabilities':<{name_width}}: ${balance_sheet['Liabilities']['Total Liabilities']:>{number_width - 1}.2f}"
-    )
+    # Liabilities
+    output.append(f"\n{'Liabilities':^60}")
+    output.append("-" * 5)
+    for account_name, sub_accounts in balance_sheet["Liabilities"].items():
+        if account_name != "Total":
+            account_display = truncate_text(account_name, 40)
+            output.append(f"{account_display:<40}")
+            for sub, balance in sub_accounts.items():
+                if sub != "Total":
+                    sub_display = truncate_text(sub, 30)
+                    formatted_balance = f"${balance:,.2f}"
+                    output.append(f"    {sub_display:<30} {formatted_balance:>15}")
+            total_display = f"Total {truncate_text(account_name, 33)}"
+            formatted_total = f"${sub_accounts['Total']:,.2f}"
+            output.append(f"  {total_display:<33} {formatted_total:>15}")
+    formatted_total_liabilities = f"${balance_sheet['Liabilities']['Total']:,.2f}"
+    output.append(f"{'Total Liabilities':<40} {formatted_total_liabilities:>15}")
 
-    # Equity section
-    lines.append("\nEquity")
-    lines.append("-" * total_width)
-    for account, balance in balance_sheet["Equity"].items():
-        if account != "Total Equity":
-            account_truncated = account[:name_width] if len(account) > name_width else account
-            lines.append(f"{account_truncated:<{name_width}}: ${balance:>{number_width - 1}.2f}")
-    lines.append(
-        f"{'Total Equity':<{name_width}}: ${balance_sheet['Equity']['Total Equity']:>{number_width - 1}.2f}"
-    )
+    # Equity
+    output.append(f"\n{'Equity':^60}")
+    output.append("-" * 5)
+    for account_name, sub_accounts in balance_sheet["Equity"].items():
+        if account_name != "Total":
+            account_display = truncate_text(account_name, 40)
+            output.append(f"{account_display:<40}")
+            for sub, balance in sub_accounts.items():
+                if sub != "Total":
+                    sub_display = truncate_text(sub, 30)
+                    formatted_balance = f"${balance:,.2f}"
+                    output.append(f"    {sub_display:<30} {formatted_balance:>15}")
+            total_display = f"Total {truncate_text(account_name, 33)}"
+            formatted_total = f"${sub_accounts['Total']:,.2f}"
+            output.append(f"  {total_display:<33} {formatted_total:>15}")
+    formatted_total_equity = f"${balance_sheet['Equity']['Total']:,.2f}"
+    output.append(f"{'Total Equity':<40} {formatted_total_equity:>15}")
 
     # Total Liabilities and Equity
-    lines.append("\nTotal Liabilities and Equity")
-    lines.append("-" * total_width)
-    lines.append(
-        f"{'':<{name_width}}  ${balance_sheet['Total Liabilities and Equity']:>{number_width - 1}.2f}"
-    )
+    output.append(f"\n{'Total Liabilities and Equity':^60}")
+    output.append("-" * 5)
+    formatted_total = f"${balance_sheet['Total Liabilities and Equity']:,.2f}"
+    output.append(f"{'':<40} {formatted_total:>15}")
 
-    # Join lines with newlines and return
-    return "\n".join(lines)
-
-
+    # Join lines with newlines
+    return "\n".join(output)
