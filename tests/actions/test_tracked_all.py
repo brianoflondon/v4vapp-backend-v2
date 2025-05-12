@@ -7,8 +7,12 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_all import (
-    formatted_balance_sheet,
-    generate_balance_sheet,
+    format_all_currencies,
+    format_balance_sheet,
+    generate_balance_sheet_pandas,
+    get_account_balance,
+    get_ledger_dataframe,
+    list_all_accounts,
     process_tracked,
     tracked_any,
 )
@@ -57,10 +61,13 @@ def load_hive_events(file_path: str) -> Generator[Dict, None, None]:
                 yield json.loads(line)["transfer"]
 
 
-async def test_process_tracked():
-    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
-    as_of_date = datetime.now(tz=timezone.utc)
+async def fill_ledger_database() -> None:
+    """
+    Fill the ledger database with data from a JSONL file.
 
+    :param file_path: Path to the JSONL file.
+    """
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     for hive_event in load_hive_events("tests/data/hive_models/ledger_actions_log.jsonl"):
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
@@ -69,8 +76,29 @@ async def test_process_tracked():
         if isinstance(ledger_entry, LedgerEntry):
             print(ledger_entry.draw_t_diagram())
 
-    balance_sheet = await generate_balance_sheet(as_of_date=as_of_date)
-    fbs = formatted_balance_sheet(balance_sheet, as_of_date)
+
+async def test_process_tracked_and_balance_sheet():
+    await fill_ledger_database()
+    as_of_date = datetime.now(tz=timezone.utc)
+    df = await get_ledger_dataframe()
+    balance_sheet_pandas = generate_balance_sheet_pandas(df)
+    fbs = format_balance_sheet(balance_sheet_pandas, as_of_date)
     print(fbs)
+
+    all_currencies = format_all_currencies(balance_sheet_pandas)
+    print(all_currencies)
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+async def test_account_balances():
+    await fill_ledger_database()
+    all_accounts = await list_all_accounts()
+    df = await get_ledger_dataframe()
+    for account in all_accounts:
+        account_balances = get_account_balance(
+            df=df, account_name=account.get("name"), sub_account=account.get("sub")
+        )
+        print(account_balances)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")
