@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Generator
@@ -36,7 +37,7 @@ async def drop_database(conn_name: str, db_name: str) -> None:
 
 
 @pytest.fixture(autouse=True)
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
@@ -44,8 +45,11 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     yield
-    # No need to restore the original value, monkeypatch will handle it
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
 
 
 def load_hive_events(file_path: str) -> Generator[Dict, None, None]:
@@ -75,6 +79,37 @@ async def fill_ledger_database() -> None:
         ledger_entry = await process_tracked(op_tracked)
         if isinstance(ledger_entry, LedgerEntry):
             print(ledger_entry.draw_t_diagram())
+
+
+async def test_balance_sheet_steps():
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    count = 0
+    for hive_event in load_hive_events("tests/data/hive_models/ledger_actions_log.jsonl"):
+        count += 1
+        print(f"Processing event {count} -----------------------------")
+        hive_event["update_conv"] = False
+        op_tracked = tracked_any(hive_event)
+        ledger_entry = await process_tracked(op_tracked)
+        df = await get_ledger_dataframe()
+        balance_sheet_pandas = generate_balance_sheet_pandas(df)
+        all_currencies = format_all_currencies(balance_sheet_pandas)
+        is_balanced = math.isclose(
+            balance_sheet_pandas["Assets"]["Total"]["usd"],
+            -1 * balance_sheet_pandas["Liabilities"]["Total"]["usd"],
+            rel_tol=0.01,
+        )
+        if not is_balanced:
+            print(f"The balance sheet is not balanced. {count}")
+            print(ledger_entry.draw_t_diagram())
+            print(all_currencies)
+        else:
+            pass
+            # print(f"The balance sheet is balanced. {count}")
+        collection = await TrackedBaseModel.db_client.get_collection("ledger")
+        await collection.delete_many({})
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
 async def test_process_tracked_and_balance_sheet():

@@ -73,6 +73,22 @@ class TransferBase(OpBase):
             self.update_conv()
 
     def post_process(self, hive_inst: Hive) -> None:
+        """
+        Post-processes the memo field and decodes it if necessary.
+        This method checks the `d_memo` and `memo` attributes of the instance.
+        If `d_memo` exists and does not start with a "#", the method exits early.
+        Otherwise, if `memo` starts with a "#" and a `Hive` instance is provided,
+        the method decodes the `memo` using the `decode_memo` function and assigns
+        the result to `d_memo`. If these conditions are not met, `d_memo` is set
+        to the value of `memo`.
+        Args:
+            hive_inst (Hive): An instance of the Hive class used for decoding the memo.
+        """
+        if not self.memo:
+            self.d_memo = ""
+            return
+        if self.d_memo and not self.d_memo.startswith("#"):
+            return
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:

@@ -41,6 +41,8 @@ class AssetAccount(Account):
         "Customer Deposits Lightning",
         "Treasury Hive",
         "Treasury Lightning",
+        "Exchange Deposits Hive",
+        "Exchange Deposits Lightning",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"

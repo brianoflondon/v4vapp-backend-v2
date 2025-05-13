@@ -3,6 +3,7 @@ from typing import Any, List
 
 from pydantic import Field
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
@@ -33,7 +34,7 @@ class AccountUpdate2(OpBase):
         try:
             super().__init__(**hive_event)
         except Exception as e:
-            print(f"Error in AccountUpdate2: {e}")
+            logger.error(f"Error in AccountUpdate2: {e}", extra={"notification": False})
             raise e
 
     @property
