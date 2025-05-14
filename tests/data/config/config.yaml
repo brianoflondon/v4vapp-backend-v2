@@ -120,6 +120,14 @@ dbs_config:
             test_index2:
               index_key: [["test2", 1], ["test3", -1]]
               unique: false
+        ledger:
+          indexes:
+            ledger_id:
+              index_key: [["group_id", -1]]
+              unique: true
+            timestamp:
+              index_key: [["timestamp", 1]]
+              unique: false
         rates:
           timeseries:
             timeField: "timestamp"
@@ -159,6 +167,9 @@ dbs_config:
             ledger_id:
               index_key: [["group_id", -1]]
               unique: true
+            timestamp:
+              index_key: [["timestamp", 1]]
+              unique: false
 
 
 ########### TEST CONFIG NO SECRETS #################

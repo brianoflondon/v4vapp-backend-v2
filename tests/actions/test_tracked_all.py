@@ -5,17 +5,16 @@ from typing import Dict, Generator
 
 import pytest
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
-from v4vapp_backend_v2.actions.tracked_all import (
+from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     balance_sheet_printout,
     generate_balance_sheet_pandas,
     get_account_balance,
     get_ledger_dataframe,
     list_all_accounts,
-    process_tracked,
-    tracked_any,
 )
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 
@@ -102,9 +101,9 @@ async def test_balance_sheet_steps():
         balance_sheet_print = balance_sheet_printout(
             balance_sheet_pandas, datetime.now(tz=timezone.utc)
         )
-        print(all_currencies)
-        print(balance_sheet_print)
         if not balance_sheet_pandas["is_balanced"]:
+            print(all_currencies)
+            print(balance_sheet_print)
             print(f"***********The balance sheet is not balanced. {count}************")
             assert False
 
