@@ -22,6 +22,7 @@ async def test_call_hive_internal_market():
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
 HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
+HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "TEST_KEY")
 HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "TEST_KEY")
 
 TEST_MEMO_TRX_ID = [
@@ -123,8 +124,11 @@ async def test_get_hive_client_error():
 
 
 @pytest.mark.asyncio
-async def test_send_custom_json():
-    # Mock the `get_hive_client` function to return a mock client
+@pytest.mark.skipif(
+    HIVE_ACTIVE_TEST_KEY == "TEST_KEY",
+    reason="Active key not provided.",
+)
+async def test_send_custom_json_active_key():
     test_data = KeepsatsTransfer(
         from_account="alice",
         to_account="bob",
@@ -142,6 +146,57 @@ async def test_send_custom_json():
             nobroadcast=True,
         )
         assert answer is not None
+    except Exception as e:
+        pytest.fail(f"send_custom_json raised an exception: {e}")
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    HIVE_POSTING_TEST_KEY == "TEST_KEY",
+    reason="Active key not provided.",
+)
+async def test_send_custom_json_posting_key():
+    test_data = KeepsatsTransfer(
+        from_account="alice",
+        to_account="bob",
+        sats=1000,
+        memo="Test message",
+    )
+    dict_data = test_data.model_dump()
+    try:
+        answer = await send_custom_json(
+            hive_client=get_hive_client(keys=[HIVE_POSTING_TEST_KEY]),
+            id="test_id",
+            send_account=HIVE_ACC_TEST,
+            json_data=dict_data,
+            active=False,
+            nobroadcast=True,
+        )
+        assert answer is not None
+    except Exception as e:
+        pytest.fail(f"send_custom_json raised an exception: {e}")
+
+
+@pytest.mark.asyncio
+async def test_send_custom_json_fail_posting_key_instead_active():
+    test_data = KeepsatsTransfer(
+        from_account="alice",
+        to_account="bob",
+        sats=1000,
+        memo="Test message",
+    )
+    dict_data = test_data.model_dump()
+    try:
+        answer = await send_custom_json(
+            hive_client=get_hive_client(keys=[HIVE_POSTING_TEST_KEY]),
+            id="test_id",
+            send_account=HIVE_ACC_TEST,
+            json_data=dict_data,
+            active=True,
+            nobroadcast=True,
+        )
+        assert answer is not None
+    except CustomJsonSendError:
+        assert True
     except Exception as e:
         pytest.fail(f"send_custom_json raised an exception: {e}")
 
@@ -196,7 +251,6 @@ async def test_send_custom_json_failures(
             hive_client=hive_client,
             keys=keys,
         )
-
 
 
 if __name__ == "__main__":

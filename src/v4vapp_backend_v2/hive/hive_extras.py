@@ -446,8 +446,14 @@ async def send_custom_json(
                 "nobroadcast": nobroadcast,
             },
         )
+    except MissingKeyError as ex:
+        logger.warning(
+            f"Error sending custom_json: MissingKeyError: {ex}",
+            extra={"notification": False, "send_account": send_account},
+        )
+        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account})
     except Exception as ex:
-        logger.exception(ex)
+        logger.exception(ex, extra={"notification": False})
         logger.error(f"{send_account} {ex} {ex.__class__}", extra={"notification": False})
         raise CustomJsonSendError(f"Error sending custom_json: {ex}")
 
