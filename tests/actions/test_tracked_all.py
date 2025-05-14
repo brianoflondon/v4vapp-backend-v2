@@ -1,5 +1,4 @@
 import json
-import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Generator
@@ -96,19 +95,19 @@ async def test_balance_sheet_steps():
         ledger_entry = await process_tracked(op_tracked)
         print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()
-        balance_sheet_pandas = generate_balance_sheet_pandas(df)
-        all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
-        balance_sheet = balance_sheet_printout(balance_sheet_pandas, datetime.now(tz=timezone.utc))
-        is_balanced = math.isclose(
-            balance_sheet_pandas["Assets"]["Total"]["usd"],
-            balance_sheet_pandas["Liabilities"]["Total"]["usd"]
-            + balance_sheet_pandas["Equity"]["Total"]["usd"],
-            rel_tol=0.01,
+        balance_sheet_pandas = generate_balance_sheet_pandas(
+            df, reporting_date=datetime.now(tz=timezone.utc)
         )
-        if not is_balanced:
-            print(f"***********The balance sheet is not balanced. {count}************")
+        all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+        balance_sheet_print = balance_sheet_printout(
+            balance_sheet_pandas, datetime.now(tz=timezone.utc)
+        )
         print(all_currencies)
-        print(balance_sheet)
+        print(balance_sheet_print)
+        if not balance_sheet_pandas["is_balanced"]:
+            print(f"***********The balance sheet is not balanced. {count}************")
+            assert False
+
         # print(f"The balance sheet is balanced. {count}")
         # if count != 8:
         #     collection = await TrackedBaseModel.db_client.get_collection("ledger")
