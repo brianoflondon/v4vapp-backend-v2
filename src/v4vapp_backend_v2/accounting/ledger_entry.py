@@ -47,7 +47,7 @@ class LedgerEntry(BaseModel):
         """
         Returns a string representation of the LedgerEntry.
         """
-        return f"{self.timestamp}   , description={self.description}, amount={self.amount}, unit={self.unit}, debit={self.debit}, credit={self.credit})"
+        return self.print_journal_entry()
 
     def print_journal_entry(self) -> str:
         """

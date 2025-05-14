@@ -21,9 +21,9 @@ async def test_call_hive_internal_market():
 
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
-HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "TEST_KEY")
-HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "TEST_KEY")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "NO_KEY_PROVIDED")
+HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "NO_KEY_PROVIDED")
+HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "NO_KEY_PROVIDED")
 
 TEST_MEMO_TRX_ID = [
     {
@@ -69,12 +69,12 @@ def test_decode_memo_from_trx_id(test_data):
 
 
 @pytest.mark.skipif(
-    HIVE_MEMO_TEST_KEY == "TEST_KEY",
+    HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED",
     reason="No test key provided.",
 )
 @pytest.mark.parametrize("test_data", TEST_MEMO_TRX_ID)
 def test_decode_memo_from_memo_text_lookup_hive(test_data):
-    if HIVE_MEMO_TEST_KEY == "TEST_KEY":
+    if HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED":
         pytest.skip("Shouldn't reach this No test key provided.")
     trx_id = test_data["trx_id"]
     expected_plain_text = test_data["plain_text"]
@@ -93,7 +93,7 @@ def test_decode_memo_from_memo_text_lookup_hive(test_data):
 
 
 @pytest.mark.skipif(
-    HIVE_MEMO_TEST_KEY == "TEST_KEY",
+    HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED",
     reason="No test key provided.",
 )
 @pytest.mark.parametrize("test_data", TEST_MEMO_TRX_ID)
@@ -123,11 +123,11 @@ async def test_get_hive_client_error():
             assert "No working node found" in str(e)
 
 
-@pytest.mark.asyncio
 @pytest.mark.skipif(
-    HIVE_ACTIVE_TEST_KEY == "TEST_KEY",
+    HIVE_ACTIVE_TEST_KEY == "NO_KEY_PROVIDED",
     reason="Active key not provided.",
 )
+@pytest.mark.asyncio
 async def test_send_custom_json_active_key():
     test_data = KeepsatsTransfer(
         from_account="alice",
@@ -149,11 +149,11 @@ async def test_send_custom_json_active_key():
     except Exception as e:
         pytest.fail(f"send_custom_json raised an exception: {e}")
 
-@pytest.mark.asyncio
 @pytest.mark.skipif(
-    HIVE_POSTING_TEST_KEY == "TEST_KEY",
+    HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
     reason="Active key not provided.",
 )
+@pytest.mark.asyncio
 async def test_send_custom_json_posting_key():
     test_data = KeepsatsTransfer(
         from_account="alice",
@@ -175,7 +175,10 @@ async def test_send_custom_json_posting_key():
     except Exception as e:
         pytest.fail(f"send_custom_json raised an exception: {e}")
 
-
+@pytest.mark.skipif(
+    HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
+    reason="Active key not provided.",
+)
 @pytest.mark.asyncio
 async def test_send_custom_json_fail_posting_key_instead_active():
     test_data = KeepsatsTransfer(
