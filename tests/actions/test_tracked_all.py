@@ -19,7 +19,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import op_any_or_base
 
-ledger_actions_log_path = Path("tests/data/hive_models/tracked_all/ledger_actions_log.jsonl")
+mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
 
 
 async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
@@ -53,19 +53,6 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
-def load_hive_events_from_log(file_path: str) -> Generator[Dict, None, None]:
-    """
-    Load hive events from a JSONL file.
-
-    :param file_path: Path to the JSONL file.
-    :return: List of hive events.
-    """
-    with open(file_path, "r") as f:
-        for line in f:
-            if "transfer" in line:
-                yield json.loads(line)["transfer"]
-
-
 def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[Dict, None, None]:
     """
     Load hive events from a MongoDB collection.
@@ -79,8 +66,7 @@ def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[Dict, None, 
         json_data = json_util.loads(raw_data)
     for hive_event in json_data:
         op = op_any_or_base(hive_event)
-        if op.type == "transfer":
-            yield op
+        yield op
 
 
 @pytest.mark.asyncio
@@ -115,7 +101,7 @@ def test_print_block_numbers_of_events() -> None:
 
     :param file_path: Path to the JSONL file.
     """
-    block_numbers = get_block_numbers_of_events(ledger_actions_log_path)
+    block_numbers = get_block_numbers_of_events(mongodb_export_path)
     print("[")
     for block_number in block_numbers:
         print(f"'{block_number}',")
@@ -129,7 +115,7 @@ async def fill_ledger_database_from_log() -> None:
     :param file_path: Path to the JSONL file.
     """
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
-    for hive_event in load_hive_events_from_log(ledger_actions_log_path):
+    for hive_event in load_hive_events_from_mongodb_dump(mongodb_export_path):
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
         assert op_tracked.type == op_tracked.name()
@@ -144,7 +130,8 @@ async def test_balance_sheet_steps():
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
-    for hive_event in load_hive_events_from_log(ledger_actions_log_path):
+    for op in load_hive_events_from_mongodb_dump(mongodb_export_path):
+        hive_event = op.model_dump()
         count += 1
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
@@ -207,6 +194,8 @@ async def test_process_tracked_and_balance_sheet():
 
 @pytest.mark.asyncio
 async def test_account_balances():
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
     await test_fill_ledger_database_from_mongodb_dump()
     all_accounts = await list_all_accounts()
     for account in all_accounts:

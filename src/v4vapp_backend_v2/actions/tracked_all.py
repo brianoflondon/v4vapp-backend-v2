@@ -4,7 +4,10 @@ from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAcc
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any
+from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
@@ -121,18 +124,22 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
 
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts
-    description = op.d_memo if op.d_memo else ""
+
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
         timestamp=op.timestamp,
-        description=description,
-        unit=op.unit,
-        amount=op.amount_decimal,
-        conv=op.conv,
         op=op,
     )
     # MARK: Transfers or Recurrent Transfers
+    if isinstance(op, BlockMarker):
+        return None
+
     if isinstance(op, TransferBase):
+        description = op.d_memo if op.d_memo else ""
+        ledger_entry.description = description
+        ledger_entry.unit = op.unit
+        ledger_entry.amount = op.amount_decimal
+        ledger_entry.conv = op.conv
         if op.from_account == server_account and op.to_account == treasury_account:
             # MARK: Server to Treasury
             ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
@@ -177,7 +184,22 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             logger.info(
                 f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
             )
-
+    # elif isinstance(op, LimitOrderCreate):
+    #     logger.info(f"Limit order create: {op.orderid}")
+    #     ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
+    #     ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
+    #     ledger_entry.description = op.log_str
+    #     ledger_entry.unit = op.amount_to_sell.unit
+    #     ledger_entry.amount = op.amount_to_sell.amount_decimal
+    # elif isinstance(op, FillOrder):
+    #     logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
+    #     ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
+    #     ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
+    #     ledger_entry.description = op.log_str
+    #     ledger_entry.debit_unit = op.current_pays.unit
+    #     ledger_entry.credit_unit = op.open_pays.unit
+    #     ledger_entry.debit_amount = op.current_pays.amount_decimal
+    #     ledger_entry.credit_amount = op.open_pays.amount_decimal
     if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
         try:
             await TrackedBaseModel.db_client.insert_one(
@@ -187,11 +209,9 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
                 ),  # Ensure model_dump() is called correctly
                 report_duplicates=True,
             )
+            await op.unlock_op()
+            return ledger_entry
         except Exception as e:
             logger.error(f"Error updating ledger: {e}")
-
     await op.unlock_op()
-    if ledger_entry:
-        return ledger_entry
-    else:
-        return None
+    return None

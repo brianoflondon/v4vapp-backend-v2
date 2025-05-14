@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 class CryptoConv(BaseModel):
@@ -125,6 +126,8 @@ class CryptoConversion(BaseModel):
             self.conv_from = Currency(amount.symbol.lower())
             self.value = amount.amount
             self.original = amount
+            if isinstance(amount, AmountPyd):
+                self.value = amount.amount_decimal
         elif conv_from:
             if isinstance(conv_from, str):
                 self.conv_from = Currency(conv_from.lower())

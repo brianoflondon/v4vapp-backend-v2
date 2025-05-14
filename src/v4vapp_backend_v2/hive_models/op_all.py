@@ -15,7 +15,9 @@ from .op_transfer import Transfer
 
 OpMarket = Union[FillOrder, LimitOrderCreate]
 
-OpAny = Union[Transfer, ProducerReward, AccountWitnessVote, CustomJson, AccountUpdate2, OpBase]
+OpAny = Union[
+    Transfer, ProducerReward, AccountWitnessVote, CustomJson, AccountUpdate2, OpBase, OpMarket
+]
 OpVirtual = Union[ProducerReward, FillOrder]
 OpReal = Union[Transfer, AccountWitnessVote, CustomJson, AccountUpdate2]
 OpAllTransfers = Union[Transfer, RecurrentTransfer, FillRecurrentTransfer]

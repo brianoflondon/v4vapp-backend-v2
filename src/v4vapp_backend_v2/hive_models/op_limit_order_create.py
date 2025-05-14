@@ -4,6 +4,8 @@ from typing import Any, ClassVar, Dict, List
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -20,6 +22,8 @@ class LimitOrderCreate(OpBase):
     timestamp: datetime
     trx_num: int
 
+    conv: CryptoConv = CryptoConv()
+
     # Used to store the amount remaining to be filled when doing math
     amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
 
@@ -28,8 +32,8 @@ class LimitOrderCreate(OpBase):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __init__(self, **data: Any):
-        super().__init__(**data)
+    def __init__(self, **hive_event: Any):
+        super().__init__(**hive_event)
         self.realm = OpRealm.REAL
         self.amount_remaining = self.min_to_receive
         if self.expiration.tzinfo is None:
@@ -43,6 +47,10 @@ class LimitOrderCreate(OpBase):
                     f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
+        if hive_event.get("update_conv", True):
+            if self.last_quote.get_age() > 600.0:
+                self.update_quote_sync(AllQuotes().get_binance_quote())
+            self.update_conv()
 
     @property
     def log_extra(self) -> Dict[str, Any]:

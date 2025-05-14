@@ -424,7 +424,10 @@ class OpBase(TrackedBaseModel):
         """
         if getattr(self, "conv", None) is not None:
             quote = quote or self.last_quote
-            self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
+            if getattr(self, "amount", None) is not None:
+                self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+            elif getattr(self, "min_to_receive", None) is not None:
+                self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
         else:
             return
 

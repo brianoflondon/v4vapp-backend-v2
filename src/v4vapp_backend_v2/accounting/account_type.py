@@ -39,6 +39,7 @@ class AssetAccount(Account):
     name: Literal[
         "Customer Deposits Hive",
         "Customer Deposits Lightning",
+        "Escrow Hive",
         "Treasury Hive",
         "Treasury Lightning",
         "Exchange Deposits Hive",
