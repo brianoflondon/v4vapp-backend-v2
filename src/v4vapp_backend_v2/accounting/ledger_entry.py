@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,8 +37,54 @@ class LedgerEntry(BaseModel):
         """
         return self.credit, self.debit
 
-    @property
-    def collection(self) -> str:
+    def __repr__(self) -> str:
+        """
+        Returns a data representation of the LedgerEntry.
+        """
+        return f"LedgerEntry(group_id={self.group_id}, timestamp={self.timestamp}, description={self.description}, amount={self.amount}, unit={self.unit}, debit={self.debit}, credit={self.credit})"
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the LedgerEntry.
+        """
+        return f"{self.timestamp}   , description={self.description}, amount={self.amount}, unit={self.unit}, debit={self.debit}, credit={self.credit})"
+
+    def print_journal_entry(self) -> str:
+        """
+        Prints a formatted journal entry matching the style in the provided image, including the unit of the account.
+
+        Returns:
+            str: A string representation of the journal entry.
+        """
+        # Format the timestamp as "MMM DD, YYYY" (e.g., "May 14, 2025")
+        # formatted_date = self.timestamp.strftime("%b %d, %Y").upper() if self.timestamp else "N/A"
+
+        formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
+
+        # Prepare the account names, ensuring they're properly formatted
+        debit_account = self.debit.name if self.debit else "N/A"
+        credit_account = self.credit.name if self.credit else "N/A"
+
+        # Format the amount with 2 decimal places and include the unit
+        unit_str = f" {self.unit.value}" if self.unit else ""  # e.g., " USD" or empty if no unit
+        formatted_amount = f"{self.amount:.2f}{unit_str}" if self.amount else f"0.00{unit_str}"
+
+        # Create the journal entry string
+        entry = (
+            f"\n"
+            f"J/E NUMBER: {self.group_id or '#####'}\n"
+            f"DATE\n{formatted_date}\n\n"
+            f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"  # Adjusted spacing for unit
+            f"{'-' * 100}\n"  # Adjusted line length to match wider columns
+            f"{debit_account:<40} {self.debit.sub:>20} {formatted_amount:>15} {'':>15}\n"
+            f"{' ' * 4}{credit_account:<40} {self.credit.sub:>20} {'':>15} {formatted_amount:>15}\n\n"
+            f"DESCRIPTION\n{self.description or 'N/A'}"
+            f"\n{'=' * 100}\n"  # Adjusted line length to match wider columns
+        )
+        return entry
+
+    @classmethod
+    def collection(cls) -> str:
         """
         Returns the name of the collection associated with this model.
 
@@ -131,5 +177,3 @@ class LedgerEntry(BaseModel):
         lines.append("=" * total_width)
 
         return "\n".join(lines)
-
-

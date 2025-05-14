@@ -8,8 +8,8 @@ import pytest
 
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_all import (
-    format_all_currencies,
-    format_balance_sheet,
+    balance_sheet_all_currencies_printout,
+    balance_sheet_printout,
     generate_balance_sheet_pandas,
     get_account_balance,
     get_ledger_dataframe,
@@ -82,34 +82,39 @@ async def fill_ledger_database() -> None:
 
 
 async def test_balance_sheet_steps():
+    """
+    Test balance sheet in steps one by one
+    """
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
     for hive_event in load_hive_events("tests/data/hive_models/ledger_actions_log.jsonl"):
         count += 1
-        print(f"Processing event {count} -----------------------------")
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
+        print(f"\n\n\nEvent {count=} {op_tracked.d_memo}")
         ledger_entry = await process_tracked(op_tracked)
+        print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()
         balance_sheet_pandas = generate_balance_sheet_pandas(df)
-        all_currencies = format_all_currencies(balance_sheet_pandas)
+        all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+        balance_sheet = balance_sheet_printout(balance_sheet_pandas, datetime.now(tz=timezone.utc))
         is_balanced = math.isclose(
             balance_sheet_pandas["Assets"]["Total"]["usd"],
-            -1 * balance_sheet_pandas["Liabilities"]["Total"]["usd"],
+            balance_sheet_pandas["Liabilities"]["Total"]["usd"]
+            + balance_sheet_pandas["Equity"]["Total"]["usd"],
             rel_tol=0.01,
         )
         if not is_balanced:
-            print(f"The balance sheet is not balanced. {count}")
-            print(ledger_entry.draw_t_diagram())
-            print(all_currencies)
-        else:
-            pass
-            # print(f"The balance sheet is balanced. {count}")
-        collection = await TrackedBaseModel.db_client.get_collection("ledger")
-        await collection.delete_many({})
+            print(f"***********The balance sheet is not balanced. {count}************")
+        print(all_currencies)
+        print(balance_sheet)
+        # print(f"The balance sheet is balanced. {count}")
+        # if count != 8:
+        #     collection = await TrackedBaseModel.db_client.get_collection("ledger")
+        #     await collection.delete_many({})
 
-    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    # await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
 async def test_process_tracked_and_balance_sheet():
@@ -117,10 +122,10 @@ async def test_process_tracked_and_balance_sheet():
     as_of_date = datetime.now(tz=timezone.utc)
     df = await get_ledger_dataframe()
     balance_sheet_pandas = generate_balance_sheet_pandas(df)
-    fbs = format_balance_sheet(balance_sheet_pandas, as_of_date)
+    fbs = balance_sheet_printout(balance_sheet_pandas, as_of_date)
     print(fbs)
 
-    all_currencies = format_all_currencies(balance_sheet_pandas)
+    all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
     print(all_currencies)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")
