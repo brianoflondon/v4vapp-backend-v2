@@ -115,7 +115,9 @@ async def get_ledger_dataframe(
     return df
 
 
-def generate_balance_sheet_pandas(df: pd.DataFrame, reporting_date: datetime = None) -> Dict:
+async def generate_balance_sheet_pandas(
+    df: pd.DataFrame = pd.DataFrame(), reporting_date: datetime = None
+) -> Dict:
     """
     Generates a GAAP-compliant balance sheet in USD, with supplemental columns for HIVE, HBD, SATS, and msats.
     Includes proper CTA calculation.
@@ -129,6 +131,11 @@ def generate_balance_sheet_pandas(df: pd.DataFrame, reporting_date: datetime = N
         Dict: Balance sheet with primary values in USD and supplemental values in HIVE, HBD, SATS, and msats.
     """
     # Step 1: Determine the reporting date and spot rates
+    if df.empty:
+        df = await get_ledger_dataframe(
+            as_of_date=reporting_date if reporting_date else datetime.now(tz=timezone.utc)
+        )
+
     if df.empty:
         return {
             "Assets": defaultdict(dict),
@@ -730,8 +737,39 @@ def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
 
 def get_account_balance(df: pd.DataFrame, account_name: str, sub_account: str = None) -> str:
     """
-    Calculate the balance for a single account, separated by unit (HIVE, HBD).
-    Returns a formatted string with total amount and converted values per unit (SATS, MSATS, HIVE, HBD, USD).
+    Calculate the balance for a specified account, optionally filtered by sub-account, and present the results
+    in a formatted string. The balance is calculated per unit (e.g., HIVE, HBD) and includes converted values
+    to other units (SATS, MSATS, HIVE, HBD, USD).
+
+    Args:
+        df (pd.DataFrame): A DataFrame containing transaction data with the following columns:
+            - debit_name: Name of the debit account.
+            - credit_name: Name of the credit account.
+            - debit_sub: Sub-account for the debit account.
+            - credit_sub: Sub-account for the credit account.
+            - amount: Transaction amount.
+            - unit: Unit of the transaction (e.g., HIVE, HBD).
+            - conv_hive: Conversion value to HIVE.
+            - conv_hbd: Conversion value to HBD.
+            - conv_usd: Conversion value to USD.
+            - conv_sats: Conversion value to SATS.
+            - conv_msats: Conversion value to MSATS.
+            - timestamp: Timestamp of the transaction.
+        account_name (str): The name of the account for which the balance is calculated.
+        sub_account (str, optional): The name of the sub-account to filter transactions. Defaults to None.
+
+    Returns:
+        str: A formatted string containing the balance details for the specified account and sub-account.
+             The output includes:
+             - Unit of the balance (e.g., HIVE, HBD).
+             - Total amount in the unit.
+             - Converted values to HIVE, HBD, USD, SATS, and MSATS.
+             - Total USD and SATS values across all units.
+
+    Notes:
+        - Debits increase the balance, while credits decrease it.
+        - Only non-zero balances are included in the output.
+        - If no transactions are found or all balances are zero, a message indicating no balances is returned.
     """
     max_width = 95
     # Filter transactions for the account (debit or credit)
@@ -875,5 +913,4 @@ async def list_all_accounts() -> List[dict[str]]:
     accounts = []
     async for account in cursor:
         accounts.append(account)
-    return accounts
     return accounts
