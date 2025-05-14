@@ -63,6 +63,32 @@ def load_hive_events(file_path: str) -> Generator[Dict, None, None]:
                 yield json.loads(line)["transfer"]
 
 
+def get_block_numbers_of_events(file_path: str) -> Generator[int, None, None]:
+    """
+    Get block numbers of events from a JSONL file.
+
+    :param file_path: Path to the JSONL file.
+    :return: List of block numbers.
+    """
+    with open(file_path, "r") as f:
+        for line in f:
+            if "transfer" in line:
+                yield json.loads(line)["transfer"]["block_num"]
+
+
+def test_print_block_numbers_of_events() -> None:
+    """
+    Print block numbers of events from a JSONL file.
+
+    :param file_path: Path to the JSONL file.
+    """
+    block_numbers = get_block_numbers_of_events("tests/data/hive_models/ledger_actions_log.jsonl")
+    print("[")
+    for block_number in block_numbers:
+        print(f"'{block_number}',")
+    print("]")
+
+
 async def fill_ledger_database() -> None:
     """
     Fill the ledger database with data from a JSONL file.
@@ -79,6 +105,7 @@ async def fill_ledger_database() -> None:
             print(ledger_entry.draw_t_diagram())
 
 
+@pytest.mark.asyncio
 async def test_balance_sheet_steps():
     """
     Test balance sheet in steps one by one
@@ -94,7 +121,7 @@ async def test_balance_sheet_steps():
         ledger_entry = await process_tracked(op_tracked)
         print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()
-        balance_sheet_pandas = generate_balance_sheet_pandas(
+        balance_sheet_pandas = await generate_balance_sheet_pandas(
             df, reporting_date=datetime.now(tz=timezone.utc)
         )
         all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
@@ -115,11 +142,11 @@ async def test_balance_sheet_steps():
     # await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
+@pytest.mark.asyncio
 async def test_process_tracked_and_balance_sheet():
     await fill_ledger_database()
     as_of_date = datetime.now(tz=timezone.utc)
-    df = await get_ledger_dataframe()
-    balance_sheet_pandas = generate_balance_sheet_pandas(df)
+    balance_sheet_pandas = await generate_balance_sheet_pandas()
     fbs = balance_sheet_printout(balance_sheet_pandas, as_of_date)
     print(fbs)
 
@@ -129,6 +156,7 @@ async def test_process_tracked_and_balance_sheet():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
+@pytest.mark.asyncio
 async def test_account_balances():
     await fill_ledger_database()
     all_accounts = await list_all_accounts()

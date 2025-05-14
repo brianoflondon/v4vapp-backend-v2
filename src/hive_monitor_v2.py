@@ -56,6 +56,19 @@ icon = "🐝"
 shutdown_event = asyncio.Event()
 
 
+BLOCK_LIST = [
+    "95793083",
+    "95801581",
+    "95802587",
+    "95817721",
+    "95819345",
+    "95819821",
+    "95819830",
+    "95822146",
+    "95822927",
+    "95823857",
+]
+
 def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
