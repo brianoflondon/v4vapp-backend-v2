@@ -433,3 +433,27 @@ def lightning_memo(memo: str) -> str:
     else:
         memo = f"💬{memo}"
     return memo
+
+
+def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
+    """
+    Truncates a given text to a specified maximum length, optionally centering it.
+
+    If the text exceeds the maximum length, it is truncated and appended with '...'.
+    If the `centered` parameter is set to True, the truncated text is centered within
+    the specified maximum length.
+
+    Args:
+        text (str): The input text to be truncated.
+        max_length (int): The maximum allowed length of the text, including the ellipsis.
+        centered (bool, optional): Whether to center the truncated text. Defaults to False.
+
+    Returns:
+        str: The truncated (and optionally centered) text.
+    """
+    if centered:
+        text = text[: max_length - 3] + "..." if len(text) > max_length else text
+        return text.center(max_length)
+    if len(text) > max_length:
+        return text[: max_length - 3] + "..."
+    return text
