@@ -121,10 +121,11 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
 
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts
+    description = op.d_memo if op.d_memo else ""
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
         timestamp=op.timestamp,
-        description=op.d_memo,
+        description=description,
         unit=op.unit,
         amount=op.amount_decimal,
         conv=op.conv,
