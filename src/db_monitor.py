@@ -8,12 +8,12 @@ import typer
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
 from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 ICON = "🏆"
 app = typer.Typer()
@@ -209,9 +209,15 @@ async def process_op(change: Mapping[str, Any], collection: str):
             extra={"notification": False},
         )
         return
-    print(ledger_entry.draw_t_diagram())
+    print(ledger_entry)
+    balance_sheet = await generate_balance_sheet_pandas()
+    if not balance_sheet["is_balanced"]:
+        logger.warning(
+            f"{ICON} The balance sheet is not balanced for {op.group_id_query}",
+            extra={"notification": False},
+        )
+        return
     logger.info(f"Unlocking {op.group_id_query}")
-    await op.unlock_op()
 
 
 async def subscribe_stream(
@@ -231,8 +237,11 @@ async def subscribe_stream(
     #     "_data": "82680A4B16000000012B042C0100296E5A100427C3560459D34841BCB69B20139E3E3F463C6F7065726174696F6E54797065003C696E736572740046646F63756D656E744B65790046645F69640064680A4B1689058837EB259D00000004"
     # }
     logger.info(f"Subscribing to {collection_name} stream...")
+
+    # Use two different mongo clients to avoid shut downs.
     client = get_mongodb_client()
-    TrackedBaseModel.db_client = client
+    TrackedBaseModel.db_client = get_mongodb_client()
+
     collection = await client.get_collection(collection_name)
     resume = ResumeToken(collection=collection_name)
     try:
