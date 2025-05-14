@@ -5,14 +5,17 @@ from typing import Dict, List
 
 import pandas as pd
 
+from v4vapp_backend_v2.accounting.account_type import Account
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
 async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "ledger",
+    filter_by_account: Account | None = None,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date.
@@ -31,11 +34,29 @@ async def get_ledger_entries(
         - Each database entry is validated and converted into a `LedgerEntry` object
           before being added to the result list.
     """
+    query = {"timestamp": {"$lte": as_of_date}}
+
+    # Add account filter if provided
+    if filter_by_account:
+        # Match entries where either debit or credit side matches the account name and sub-account
+        account_filter = {
+            "$or": [
+                {
+                    "debit.name": filter_by_account.name,
+                    "debit.sub": filter_by_account.sub if filter_by_account.sub else "",
+                },
+                {
+                    "credit.name": filter_by_account.name,
+                    "credit.sub": filter_by_account.sub if filter_by_account.sub else "",
+                },
+            ]
+        }
+        query.update(account_filter)
     ledger_entries = []
     async with TrackedBaseModel.db_client as db_client:
         cursor = await db_client.find(
             collection_name=collection_name,
-            query={"timestamp": {"$lte": as_of_date}},
+            query=query,
             projection={
                 "group_id": 1,
                 "timestamp": 1,
@@ -59,12 +80,14 @@ async def get_ledger_entries(
 async def get_ledger_dataframe(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "ledger",
+    filter_by_account: Account | None = None,
 ) -> pd.DataFrame:
     """
     Fetches ledger entries from the database as of a specified date and returns them as a pandas DataFrame.
     Args:
         as_of_date (datetime, optional): The cutoff date for fetching ledger entries. Defaults to the current UTC datetime.
         collection_name (str, optional): The name of the database collection to query. Defaults to "ledger".
+        filter_by_account (Account | None, optional): The account to filter by. Defaults to None.
     Returns:
         pd.DataFrame: A DataFrame containing ledger entry data with the following columns:
             - timestamp: The timestamp of the ledger entry.
@@ -86,7 +109,7 @@ async def get_ledger_dataframe(
     """
 
     ledger_entries = await get_ledger_entries(
-        as_of_date=as_of_date, collection_name=collection_name
+        as_of_date=as_of_date, collection_name=collection_name, filter_by_account=filter_by_account
     )
     data = []
     for entry in ledger_entries:
@@ -711,165 +734,244 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     return "\n".join(output)
 
 
-def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
+async def get_account_balance(
+    account: Account,
+    df: pd.DataFrame = pd.DataFrame(),
+    full_history: bool = False,
+    as_of_date: datetime = None,
+) -> pd.DataFrame:
     """
-    Truncates a given text to a specified maximum length, optionally centering it.
-
-    If the text exceeds the maximum length, it is truncated and appended with '...'.
-    If the `centered` parameter is set to True, the truncated text is centered within
-    the specified maximum length.
-
-    Args:
-        text (str): The input text to be truncated.
-        max_length (int): The maximum allowed length of the text, including the ellipsis.
-        centered (bool, optional): Whether to center the truncated text. Defaults to False.
-
-    Returns:
-        str: The truncated (and optionally centered) text.
-    """
-    if centered:
-        text = text[: max_length - 3] + "..." if len(text) > max_length else text
-        return text.center(max_length)
-    if len(text) > max_length:
-        return text[: max_length - 3] + "..."
-    return text
-
-
-def get_account_balance(df: pd.DataFrame, account_name: str, sub_account: str = None) -> str:
-    """
-    Calculate the balance for a specified account, optionally filtered by sub-account, and present the results
-    in a formatted string. The balance is calculated per unit (e.g., HIVE, HBD) and includes converted values
-    to other units (SATS, MSATS, HIVE, HBD, USD).
+    Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
+    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
+    Properly accounts for assets and liabilities, and includes converted values to other units
+    (SATS, HIVE, HBD, USD, msats).
 
     Args:
         df (pd.DataFrame): A DataFrame containing transaction data with the following columns:
+            - timestamp: Timestamp of the transaction.
+            - description: Description of the transaction.
             - debit_name: Name of the debit account.
             - credit_name: Name of the credit account.
             - debit_sub: Sub-account for the debit account.
             - credit_sub: Sub-account for the credit account.
+            - debit_account_type: Type of the debit account (Asset, Liability, etc.).
+            - credit_account_type: Type of the credit account (Asset, Liability, etc.).
             - amount: Transaction amount.
-            - unit: Unit of the transaction (e.g., HIVE, HBD).
+            - unit: Unit of the transaction (e.g., HIVE, HBD, SATS).
             - conv_hive: Conversion value to HIVE.
             - conv_hbd: Conversion value to HBD.
             - conv_usd: Conversion value to USD.
             - conv_sats: Conversion value to SATS.
             - conv_msats: Conversion value to MSATS.
-            - timestamp: Timestamp of the transaction.
-        account_name (str): The name of the account for which the balance is calculated.
-        sub_account (str, optional): The name of the sub-account to filter transactions. Defaults to None.
+        account (Account): An Account object specifying the account name, type, and optional sub-account.
+        full_history (bool, optional): If True, shows the full transaction history with running balances.
+                                       If False, shows only the closing balance. Defaults to False.
 
     Returns:
-        str: A formatted string containing the balance details for the specified account and sub-account.
-             The output includes:
-             - Unit of the balance (e.g., HIVE, HBD).
-             - Total amount in the unit.
-             - Converted values to HIVE, HBD, USD, SATS, and MSATS.
-             - Total USD and SATS values across all units.
-
-    Notes:
-        - Debits increase the balance, while credits decrease it.
-        - Only non-zero balances are included in the output.
-        - If no transactions are found or all balances are zero, a message indicating no balances is returned.
+        pd.DataFrame: A DataFrame containing either the full transaction history or the closing balance
+                for the specified account and sub-account up as_of_date.
     """
-    max_width = 95
+
+    if df.empty:
+        df = await get_ledger_dataframe(
+            as_of_date=as_of_date,
+            filter_by_account=account,
+        )
+
     # Filter transactions for the account (debit or credit)
-    debit_df = df[df["debit_name"] == account_name].copy()
-    credit_df = df[df["credit_name"] == account_name].copy()
+    debit_df = df[df["debit_name"] == account.name].copy()
+    credit_df = df[df["credit_name"] == account.name].copy()
 
     # Apply sub-account filter if provided
-    if sub_account:
-        debit_df = debit_df[debit_df["debit_sub"] == sub_account]
-        credit_df = credit_df[credit_df["credit_sub"] == sub_account]
+    if account.sub:
+        debit_df = debit_df[debit_df["debit_sub"] == account.sub]
+        credit_df = credit_df[credit_df["credit_sub"] == account.sub]
 
-    # For assets: debits increase balance, credits decrease balance
-    debit_df["signed_amount"] = debit_df["amount"]
-    credit_df["signed_amount"] = -credit_df["amount"]
+    # Prepare debit and credit DataFrames
+    debit_df = debit_df[
+        [
+            "timestamp",
+            "description",
+            "amount",
+            "unit",
+            "conv_hive",
+            "conv_hbd",
+            "conv_usd",
+            "conv_sats",
+            "conv_msats",
+        ]
+    ].copy()
+    credit_df = credit_df[
+        [
+            "timestamp",
+            "description",
+            "amount",
+            "unit",
+            "conv_hive",
+            "conv_hbd",
+            "conv_usd",
+            "conv_sats",
+            "conv_msats",
+        ]
+    ].copy()
+
+    # Add debit/credit columns and signed amounts
+    debit_df["debit"] = debit_df["amount"]
+    debit_df["credit"] = 0.0
+    credit_df["debit"] = 0.0
+    credit_df["credit"] = credit_df["amount"]
+
+    # Determine signed amounts based on account type
+    # For Assets: Debits increase (+), Credits decrease (-)
+    # For Liabilities: Credits increase (+), Debits decrease (-)
+    if account.account_type == "Asset":
+        debit_df["signed_amount"] = debit_df["amount"]
+        credit_df["signed_amount"] = -credit_df["amount"]
+    else:  # Liability
+        debit_df["signed_amount"] = -debit_df["amount"]
+        credit_df["signed_amount"] = credit_df["amount"]
 
     # Combine debits and credits
     combined_df = pd.concat([debit_df, credit_df], ignore_index=True)
 
-    # Group by unit and aggregate
-    balance_df = (
-        combined_df.groupby("unit")
-        .agg(
-            {
-                "signed_amount": "sum",
-                "amount": "last",  # Original amount for scaling
-                "conv_hive": "last",
-                "conv_hbd": "last",
-                "conv_usd": "last",
-                "conv_sats": "last",
-                "conv_msats": "last",
-                "timestamp": "max",  # Ensure latest transaction
-            }
-        )
-        .reset_index()
+    # Sort by timestamp to ensure chronological order (should already be sorted, but ensures correctness)
+    combined_df = combined_df.sort_values(by="timestamp").reset_index(drop=True)
+
+    return combined_df
+
+
+async def get_account_balance_printout(
+    account: Account,
+    df: pd.DataFrame = pd.DataFrame(),
+    full_history: bool = False,
+    as_of_date: datetime = None,
+) -> str:
+    """
+    Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
+    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
+    Properly accounts for assets and liabilities, and includes converted values to other units
+    (SATS, HIVE, HBD, USD, msats).
+
+    Args:
+        df (pd.DataFrame): A DataFrame containing transaction data with the following columns:
+            - timestamp: Timestamp of the transaction.
+            - description: Description of the transaction.
+            - debit_name: Name of the debit account.
+            - credit_name: Name of the credit account.
+            - debit_sub: Sub-account for the debit account.
+            - credit_sub: Sub-account for the credit account.
+            - debit_account_type: Type of the debit account (Asset, Liability, etc.).
+            - credit_account_type: Type of the credit account (Asset, Liability, etc.).
+            - amount: Transaction amount.
+            - unit: Unit of the transaction (e.g., HIVE, HBD, SATS).
+            - conv_hive: Conversion value to HIVE.
+            - conv_hbd: Conversion value to HBD.
+            - conv_usd: Conversion value to USD.
+            - conv_sats: Conversion value to SATS.
+            - conv_msats: Conversion value to MSATS.
+        account (Account): An Account object specifying the account name, type, and optional sub-account.
+        full_history (bool, optional): If True, shows the full transaction history with running balances.
+                                       If False, shows only the closing balance. Defaults to False.
+
+    Returns:
+        str: A formatted string containing either the full transaction history or the closing balance
+             for the specified account and sub-account up to today (May 14, 2025, 18:35 IDT).
+             The output includes:
+             - (If full_history=True) Timestamp, description, debit amount, credit amount, and running balance for each transaction.
+             - Separate sections for each unit (e.g., HIVE, HBD, SATS).
+             - Converted values to HIVE, HBD, USD, SATS, and msats for the final balance per unit.
+             - Total USD and SATS values across all units.
+    """
+    max_width = 110
+
+    combined_df = await get_account_balance(
+        account=account,
+        df=df,
+        full_history=full_history,
+        as_of_date=as_of_date,
     )
 
-    # Rename columns for clarity
-    balance_df = balance_df.rename(
-        columns={
-            "signed_amount": "total_amount",
-            "conv_hive": "base_hive",
-            "conv_hbd": "base_hbd",
-            "conv_usd": "base_usd",
-            "conv_sats": "base_sats",
-            "conv_msats": "base_msats",
-        }
-    )
-
-    # Adjust conversion values to reflect total_amount
-    balance_df["total_hive"] = 0.0
-    balance_df["total_hbd"] = 0.0
-    balance_df["total_usd"] = 0.0
-    balance_df["total_sats"] = 0.0
-    balance_df["total_msats"] = 0.0
-
-    for index, row in balance_df.iterrows():
-        if row["total_amount"] != 0:  # Avoid division by zero
-            # Calculate scaling factor based on original transaction amount
-            factor = row["total_amount"] / row["amount"]
-            balance_df.at[index, "total_hive"] = row["base_hive"] * factor
-            balance_df.at[index, "total_hbd"] = row["base_hbd"] * factor
-            balance_df.at[index, "total_usd"] = row["base_usd"] * factor
-            balance_df.at[index, "total_sats"] = row["base_sats"] * factor
-            balance_df.at[index, "total_msats"] = row["base_msats"] * factor
-
-    # Format output as string
-    title_line = f"Balance for {account_name} (sub: {sub_account if sub_account else 'All'})"
-    output = [title_line]
+    # Group by unit to process each unit separately
+    units = combined_df["unit"].unique()
+    title_line = f"Balance for {account.name} (sub: {account.sub if account.sub else 'All'}) {account.account_type}"
+    output = ["=" * max_width]
+    output.append(title_line)
     output.append("-" * max_width)
-    output.append(
-        f"{'Unit':<10} {'Amount':>10} {'HIVE':>12} {'HBD':>12} {'USD':>12} {'SATS':>12} {'MSATS':>16}"
-    )
-    output.append("-" * max_width)
 
-    if balance_df.empty or balance_df["total_amount"].eq(0).all():
-        output.append("No non-zero balances for this account.")
-    else:
-        for _, row in balance_df.iterrows():
-            if row["total_amount"] != 0:  # Only show non-zero balances
+    if combined_df.empty:
+        output.append("No transactions found for this account up to today.")
+        output.append("=" * max_width)
+        return "\n".join(output)
+
+    total_usd = 0.0
+    total_sats = 0.0
+
+    for unit in units:
+        unit_df = combined_df[combined_df["unit"] == unit].copy()
+        if unit_df.empty:
+            continue
+
+        # Calculate running balance
+        unit_df["running_balance"] = unit_df["signed_amount"].cumsum()
+
+        # Format output for this unit
+        output.append(f"\nUnit: {unit.upper()}")
+        output.append("-" * 10)
+        if full_history:
+            output.append(
+                f"{'Timestamp':<20} {'Description':<45} {'Debit':>12} {'Credit':>12} {'Balance':>12}"
+            )
+            output.append("-" * 10)
+            for _, row in unit_df.iterrows():
+                timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                description = truncate_text(row["description"], 45)
+                debit = row["debit"]
+                credit = row["credit"]
+                balance = row["running_balance"]
                 output.append(
-                    f"{row['unit'].upper():<10} "
-                    f"{row['total_amount']:>10,.2f} "
-                    f"{row['total_hive']:>12,.2f} "
-                    f"{row['total_hbd']:>12,.2f} "
-                    f"{row['total_usd']:>12,.2f} "
-                    f"{row['total_sats']:>12,.0f} "
-                    f"{row['total_msats']:>16,.0f}"
+                    f"{timestamp:<20} "
+                    f"{description:<45} "
+                    f"{debit:>12,.2f} "
+                    f"{credit:>12,.2f} "
+                    f"{balance:>12,.2f}"
                 )
 
-    usd_total = balance_df["total_usd"].sum()
-    sats_total = balance_df["total_sats"].sum()
+        # Get the final balance for this unit and calculate converted values
+        final_balance = unit_df["running_balance"].iloc[-1]
+        if final_balance != 0:
+            # Use the conversion rates from the latest transaction for this unit
+            latest_row = unit_df.iloc[-1]
+            factor = final_balance / latest_row["amount"]
+            total_hive = latest_row["conv_hive"] * factor
+            total_hbd = latest_row["conv_hbd"] * factor
+            total_usd_for_unit = latest_row["conv_usd"] * factor
+            total_sats_for_unit = latest_row["conv_sats"] * factor
+            total_msats = latest_row["conv_msats"] * factor
+
+            output.append("-" * max_width)
+            output.append(f"{'Final Balance':<20} {final_balance:>42,.2f} {unit.upper():>12}")
+            output.append(
+                f"{'Converted Values':<10} "
+                f"{total_hive:>15,.2f} HIVE "
+                f"{total_hbd:>12,.2f} HBD "
+                f"{total_usd_for_unit:>12,.2f} USD "
+                f"{total_sats_for_unit:>12,.0f} SATS "
+                f"{total_msats:>16,.0f} msats"
+            )
+
+            total_usd += total_usd_for_unit
+            total_sats += total_sats_for_unit
+
+    output.append("-" * max_width)
+    output.append(f"Total USD: {total_usd:>19,.2f}")
+    output.append(f"Total SATS: {total_sats:>15,.0f}")
     output.append(title_line)
-    output.append(f"Total USD: {usd_total:>19,.2f}")
-    output.append(f"Total SATS: {sats_total:>15,.0f}")
-    output.append("=" * max_width)
+    output.append("=" * max_width + "\n")
 
     return "\n".join(output)
 
 
-async def list_all_accounts() -> List[dict[str]]:
+async def list_all_accounts() -> List[Account]:
     pipeline = [
         {
             "$project": {
@@ -911,6 +1013,7 @@ async def list_all_accounts() -> List[dict[str]]:
     collection = await TrackedBaseModel.db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
     accounts = []
-    async for account in cursor:
+    async for doc in cursor:
+        account = Account.model_validate(doc)
         accounts.append(account)
     return accounts
