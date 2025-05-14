@@ -1,7 +1,6 @@
-import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Generator
+from typing import Generator
 
 import pytest
 from bson import json_util
@@ -17,7 +16,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.hive_models.op_all import op_any_or_base
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 
 mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
 
@@ -53,7 +52,7 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
-def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[Dict, None, None]:
+def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
     """
     Load hive events from a MongoDB collection.
 
@@ -82,26 +81,16 @@ async def test_fill_ledger_database_from_mongodb_dump() -> None:
         _ = await process_tracked(op)
 
 
-def get_block_numbers_of_events(file_path: str) -> Generator[int, None, None]:
-    """
-    Get block numbers of events from a JSONL file.
-
-    :param file_path: Path to the JSONL file.
-    :return: List of block numbers.
-    """
-    with open(file_path, "r") as f:
-        for line in f:
-            if "transfer" in line:
-                yield json.loads(line)["transfer"]["block_num"]
-
-
 def test_print_block_numbers_of_events() -> None:
     """
     Print block numbers of events from a JSONL file.
 
     :param file_path: Path to the JSONL file.
     """
-    block_numbers = get_block_numbers_of_events(mongodb_export_path)
+    file_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
+    block_numbers = []
+    for op in load_hive_events_from_mongodb_dump(file_path):
+        block_numbers.append(op.block_num)
     print("[")
     for block_number in block_numbers:
         print(f"'{block_number}',")

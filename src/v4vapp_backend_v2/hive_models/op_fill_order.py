@@ -3,6 +3,7 @@ from datetime import datetime
 from nectar.amount import Amount
 from pydantic import Field
 
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
@@ -17,6 +18,7 @@ class FillOrder(OpBase):
     open_owner: str
     open_pays: AmountPyd
     timestamp: datetime
+    conv: CryptoConv = CryptoConv()
     completed_order: bool = Field(
         default=False,
         description="True if the order was completed, False if it was partially filled",
@@ -30,6 +32,12 @@ class FillOrder(OpBase):
 
     def __init__(self, **data: dict):
         super().__init__(**data)
+        self.conv = CryptoConv(
+            conv_from=self.current_pays.unit,
+            value=self.current_pays.amount_decimal,
+            converted_value=self.open_pays.amount_decimal,
+            quote=self.last_quote,
+        )
         # Set the log_internal string to None to force it to be generated
         self.log_internal = self._log_internal()
 
