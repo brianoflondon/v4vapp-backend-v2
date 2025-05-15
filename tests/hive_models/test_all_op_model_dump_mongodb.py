@@ -8,6 +8,7 @@ from tests.load_data import load_hive_events
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -84,7 +85,7 @@ async def test_model_dump_mongodb(op_to_test):
         set_base_config_path (None): Fixture to set the base configuration path.
         op_to_test (dict): Dictionary containing the operation type and collection name.
     """
-
+    await OpBase.update_quote()
     InternalConfig()
     # collection_name = op_to_test["collection_name"]
     collection_name = "all_ops"

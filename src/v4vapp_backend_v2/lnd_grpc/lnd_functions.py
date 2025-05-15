@@ -107,16 +107,16 @@ async def get_node_info(pub_key: str, client: LNDClient) -> lnrpc.NodeInfo:
         return lnrpc.NodeInfo()
 
 
-async def get_invoice_from_pay_request(pay_request: str, lnd_client: LNDClient) -> lnrpc.Invoice:
+async def get_pay_req_from_pay_request(pay_request: str, lnd_client: LNDClient) -> lnrpc.PayReq:
     """
     Retrieve the invoice from a payment request.
 
     Args:
         pay_request (str): The payment request string.
-        client (LNDClient): An instance of the LNDClient.
+        lnd_client (LNDClient): An instance of the LNDClient.
 
     Returns:
-        lnrpc.Invoice: The invoice object.
+        lnrpc.PayReq: The PayReq object.
     """
     if not lnd_client:
         raise ValueError("LNDClient instance is required")
@@ -125,7 +125,7 @@ async def get_invoice_from_pay_request(pay_request: str, lnd_client: LNDClient) 
         # Decode the payment request
         if pay_request == "":
             logger.debug("Empty payment request", extra={"notification": False})
-            return lnrpc.Invoice()
+            return lnrpc.PayReq()
         decode_request = lnrpc.PayReqString(pay_req=pay_request)
         decode_response: lnrpc.PayReq = await lnd_client.call(
             lnd_client.lightning_stub.DecodePayReq,
@@ -134,7 +134,7 @@ async def get_invoice_from_pay_request(pay_request: str, lnd_client: LNDClient) 
         return decode_response
     except Exception as e:
         logger.exception(e)
-        return lnrpc.Invoice()
+        return lnrpc.PayReq()
 
 
 async def get_node_alias_from_pay_request(pay_request: str, client: LNDClient) -> str:

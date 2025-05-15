@@ -1,6 +1,6 @@
 from typing import Any, override
 
-from nectar import Hive
+from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -114,13 +114,11 @@ class TransferBase(OpBase):
         Generates a string representation of the transfer operation, including the
         sender, recipient, amount, and memo.
 
+        Overridden in the sub classes for recurrent_transfer and fill_recurrent_transfer.
+
         Returns:
             str: A formatted string containing details about the transfer.
         """
-        if hasattr(self, "recurrence"):
-            return f" Execution: {self.executions} every {self.recurrence} hours"
-        if hasattr(self, "remaining_executions"):
-            return f" Remaining: {self.remaining_executions}"
         return ""
 
     @property
