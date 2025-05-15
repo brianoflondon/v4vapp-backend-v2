@@ -1,4 +1,7 @@
-from typing import List
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
+from v4vapp_backend_v2.accounting.account_type import Account
 
 
 def list_all_accounts_pipeline() -> List[object]:
@@ -49,3 +52,43 @@ def list_all_accounts_pipeline() -> List[object]:
         {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
     ]
     return pipeline
+
+
+def filter_by_account_as_of_date_query(
+    account: Account | None = None, as_of_date: datetime = datetime.now(tz=timezone.utc)
+) -> Dict[str, Any]:
+    """
+    Generates a MongoDB query to filter documents by a specific account and date.
+
+    This function creates a query that filters documents based on the provided
+    account details (`name` and optionally `sub`) and ensures that the `timestamp`
+    field is less than or equal to the specified `as_of_date`.
+
+    Args:
+        account (Account): The account object containing `name` and optionally `sub`
+            to filter the documents.
+        as_of_date (datetime, optional): The cutoff date for filtering documents.
+            Defaults to the current datetime in UTC.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the MongoDB query.
+    """
+    if account:
+        query = {
+            "timestamp": {"$lte": as_of_date},
+            "$or": [
+                {
+                    "debit.name": account.name,
+                    "debit.sub": account.sub if account.sub else "",
+                },
+                {
+                    "credit.name": account.name,
+                    "credit.sub": account.sub if account.sub else "",
+                },
+            ],
+        }
+    else:
+        query = {
+            "timestamp": {"$lte": as_of_date},
+        }
+    return query

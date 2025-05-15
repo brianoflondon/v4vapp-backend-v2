@@ -47,11 +47,11 @@
   },
   "realm": "marker",
   "trx_id": "block_marker",
-  "block_num": 95906754,
+  "block_num": 95908194,
   "link": "MARKER: block_marker",
   "locked": false,
   "timestamp": {
-    "$date": "2025-05-15T08:47:51.000Z"
+    "$date": "2025-05-15T09:59:51.000Z"
   },
   "type": "block_marker"
 },
@@ -917,5 +917,174 @@
     "$date": "2025-05-15T08:11:54.000Z"
   },
   "trx_id": "cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6",
+  "type": "fill_order"
+},
+{
+  "_id": {
+    "$oid": "6825b9cd370633bec3f36d86"
+  },
+  "realm": "real",
+  "trx_num": 3,
+  "block_num": 95907910,
+  "op_in_trx": 1,
+  "amount": {
+    "amount": "50000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 50,
+    "hbd": 13.235,
+    "usd": 13.235,
+    "sats": 12990,
+    "msats": 12990045,
+    "msats_fee": 270830,
+    "btc": 0.00012990045,
+    "sats_hive": 259.8009,
+    "sats_hbd": 981.4919,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:12.756Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "Testing auto re-balance back to server and auto sell",
+  "from": "devtre.v4vapp",
+  "link": "https://hivehub.dev/tx/4c2699767bdca2a3ac10211f9fb092a596f6a2e5",
+  "locked": true,
+  "memo": "Testing auto re-balance back to server and auto sell",
+  "timestamp": {
+    "$date": "2025-05-15T09:45:39.000Z"
+  },
+  "to": "devser.v4vapp",
+  "trx_id": "4c2699767bdca2a3ac10211f9fb092a596f6a2e5",
+  "type": "transfer"
+},
+{
+  "_id": {
+    "$oid": "6825ba3e370633bec3f36d87"
+  },
+  "op_in_trx": 1,
+  "trx_num": 14,
+  "realm": "real",
+  "block_num": 95908095,
+  "amount_remaining": {
+    "amount": "35471",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "amount_to_sell": {
+    "amount": "9423",
+    "nai": "@@000000013",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 35.471,
+    "hbd": 9.385625,
+    "usd": 9.385625,
+    "sats": 9214,
+    "msats": 9213758,
+    "msats_fee": 206633,
+    "btc": 0.00009213758,
+    "sats_hive": 259.7547,
+    "sats_hbd": 981.6883,
+    "conv_from": "hive",
+    "value": 35.471,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:15.846Z"
+    },
+    "in_limits": true
+  },
+  "expiration": {
+    "$date": "2025-05-22T09:54:52.000Z"
+  },
+  "fill_or_kill": false,
+  "link": "https://hivehub.dev/tx/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
+  "locked": true,
+  "min_to_receive": {
+    "amount": "35471",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "orderid": {
+    "$numberLong": "3353244000"
+  },
+  "owner": "devser.v4vapp",
+  "timestamp": {
+    "$date": "2025-05-15T09:54:54.000Z"
+  },
+  "trx_id": "c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
+  "type": "limit_order_create"
+},
+{
+  "_id": {
+    "$oid": "6825ba40370633bec3f36d88"
+  },
+  "block_num": 95908095,
+  "realm": "virtual",
+  "op_in_trx": 1,
+  "trx_num": 0,
+  "completed_order": true,
+  "credit_conv": {
+    "hive": 35.471,
+    "hbd": 9.423,
+    "usd": 9.409438,
+    "sats": 9233,
+    "msats": 9233000,
+    "btc": 0.00009233,
+    "sats_hive": 260.3253,
+    "sats_hbd": 981.2488,
+    "conv_from": "hbd",
+    "value": 9.423,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T09:56:15.896Z"
+    },
+    "in_limits": true
+  },
+  "current_orderid": {
+    "$numberLong": "3353244000"
+  },
+  "current_owner": "devser.v4vapp",
+  "current_pays": {
+    "amount": "9423",
+    "nai": "@@000000013",
+    "precision": 3
+  },
+  "debit_conv": {
+    "hive": 35.471,
+    "hbd": 9.423,
+    "usd": 9.409438,
+    "sats": 9233,
+    "msats": 9233000,
+    "btc": 0.00009233,
+    "sats_hive": 260.3253,
+    "sats_hbd": 981.2488,
+    "conv_from": "hive",
+    "value": 35.471,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T09:56:15.896Z"
+    },
+    "in_limits": true
+  },
+  "link": "https://hivehub.dev/tx/95908095/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c/1",
+  "locked": true,
+  "open_orderid": {
+    "$numberLong": "3913190081"
+  },
+  "open_owner": "konvik-hbd",
+  "open_pays": {
+    "amount": "35471",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "timestamp": {
+    "$date": "2025-05-15T09:54:51.000Z"
+  },
+  "trx_id": "c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
   "type": "fill_order"
 }]

@@ -103,11 +103,6 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     if isinstance(op, BlockMarker):
         return None
     await op.lock_op()
-    ledger_entry = None
-    server_account = InternalConfig().config.hive.server_account.name
-    treasury_account = InternalConfig().config.hive.treasury_account.name
-    funding_account = InternalConfig().config.hive.funding_account.name
-    exchange_account = InternalConfig().config.hive.exchange_account.name
 
     # Check if a ledger entry with the same group_id already exists
     if TrackedBaseModel.db_client:

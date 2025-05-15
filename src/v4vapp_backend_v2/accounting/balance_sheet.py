@@ -7,7 +7,10 @@ import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_type import Account
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
-from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import list_all_accounts_pipeline
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
+    filter_by_account_as_of_date_query,
+    list_all_accounts_pipeline,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
@@ -40,24 +43,7 @@ async def get_ledger_entries(
           corresponds to the specified account name and sub-account.
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
-    query = {"timestamp": {"$lte": as_of_date}}
-
-    # Add account filter if provided
-    if filter_by_account:
-        account_filter = {
-            "$or": [
-                {
-                    "debit.name": filter_by_account.name,
-                    "debit.sub": filter_by_account.sub if filter_by_account.sub else "",
-                },
-                {
-                    "credit.name": filter_by_account.name,
-                    "credit.sub": filter_by_account.sub if filter_by_account.sub else "",
-                },
-            ]
-        }
-        query.update(account_filter)
-
+    query = filter_by_account_as_of_date_query(account=filter_by_account, as_of_date=as_of_date)
     ledger_entries = []
     async with TrackedBaseModel.db_client as db_client:
         cursor = await db_client.find(
