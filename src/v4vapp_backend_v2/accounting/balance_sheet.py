@@ -7,6 +7,7 @@ import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_type import Account
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import list_all_accounts_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
@@ -997,43 +998,7 @@ async def list_all_accounts() -> List[Account]:
     Returns:
         List[Account]: A list of unique Account objects sorted by account type, name, and sub-account.
     """
-    pipeline = [
-        {
-            "$project": {
-                "accounts": [
-                    {
-                        "account_type": "$debit.account_type",
-                        "name": "$debit.name",
-                        "sub": "$debit.sub",
-                    },
-                    {
-                        "account_type": "$credit.account_type",
-                        "name": "$credit.name",
-                        "sub": "$credit.sub",
-                    },
-                ]
-            }
-        },
-        {"$unwind": "$accounts"},
-        {
-            "$group": {
-                "_id": {
-                    "account_type": "$accounts.account_type",
-                    "name": "$accounts.name",
-                    "sub": "$accounts.sub",
-                }
-            }
-        },
-        {
-            "$project": {
-                "_id": 0,
-                "account_type": "$_id.account_type",
-                "name": "$_id.name",
-                "sub": "$_id.sub",
-            }
-        },
-        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
-    ]
+    pipeline = list_all_accounts_pipeline()
 
     collection = await TrackedBaseModel.db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
