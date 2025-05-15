@@ -1,14 +1,17 @@
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from v4vapp_backend_v2.hive.hive_extras import (
+    CustomJsonSendError,
     call_hive_internal_market,
     decode_memo,
     get_blockchain_instance,
     get_hive_client,
+    send_custom_json,
 )
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 
 
 @pytest.mark.asyncio
@@ -18,7 +21,9 @@ async def test_call_hive_internal_market():
 
 
 HIVE_ACC_TEST = os.environ.get("HIVE_ACC_TEST", "alice")
-HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "TEST_KEY")
+HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "NO_KEY_PROVIDED")
+HIVE_POSTING_TEST_KEY = os.environ.get("HIVE_POSTING_TEST_KEY", "NO_KEY_PROVIDED")
+HIVE_ACTIVE_TEST_KEY = os.environ.get("HIVE_ACTIVE_TEST_KEY", "NO_KEY_PROVIDED")
 
 TEST_MEMO_TRX_ID = [
     {
@@ -64,12 +69,12 @@ def test_decode_memo_from_trx_id(test_data):
 
 
 @pytest.mark.skipif(
-    HIVE_MEMO_TEST_KEY == "TEST_KEY",
+    HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED",
     reason="No test key provided.",
 )
 @pytest.mark.parametrize("test_data", TEST_MEMO_TRX_ID)
 def test_decode_memo_from_memo_text_lookup_hive(test_data):
-    if HIVE_MEMO_TEST_KEY == "TEST_KEY":
+    if HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED":
         pytest.skip("Shouldn't reach this No test key provided.")
     trx_id = test_data["trx_id"]
     expected_plain_text = test_data["plain_text"]
@@ -88,7 +93,7 @@ def test_decode_memo_from_memo_text_lookup_hive(test_data):
 
 
 @pytest.mark.skipif(
-    HIVE_MEMO_TEST_KEY == "TEST_KEY",
+    HIVE_MEMO_TEST_KEY == "NO_KEY_PROVIDED",
     reason="No test key provided.",
 )
 @pytest.mark.parametrize("test_data", TEST_MEMO_TRX_ID)
@@ -116,6 +121,139 @@ async def test_get_hive_client_error():
         with pytest.raises(ValueError) as e:
             _ = get_hive_client(keys=["5JPoEfF4GbrV9QqKYrHDBo3K8n78PdgWtWVaEqyAjZ8teaHVgTq"])
             assert "No working node found" in str(e)
+
+
+@pytest.mark.skipif(
+    HIVE_ACTIVE_TEST_KEY == "NO_KEY_PROVIDED",
+    reason="Active key not provided.",
+)
+@pytest.mark.asyncio
+async def test_send_custom_json_active_key():
+    test_data = KeepsatsTransfer(
+        from_account="alice",
+        to_account="bob",
+        sats=1000,
+        memo="Test message",
+    )
+    dict_data = test_data.model_dump()
+    try:
+        answer = await send_custom_json(
+            hive_client=get_hive_client(keys=[HIVE_ACTIVE_TEST_KEY]),
+            id="test_id",
+            send_account=HIVE_ACC_TEST,
+            json_data=dict_data,
+            active=True,
+            nobroadcast=True,
+        )
+        assert answer is not None
+    except Exception as e:
+        pytest.fail(f"send_custom_json raised an exception: {e}")
+
+@pytest.mark.skipif(
+    HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
+    reason="Active key not provided.",
+)
+@pytest.mark.asyncio
+async def test_send_custom_json_posting_key():
+    test_data = KeepsatsTransfer(
+        from_account="alice",
+        to_account="bob",
+        sats=1000,
+        memo="Test message",
+    )
+    dict_data = test_data.model_dump()
+    try:
+        answer = await send_custom_json(
+            hive_client=get_hive_client(keys=[HIVE_POSTING_TEST_KEY]),
+            id="test_id",
+            send_account=HIVE_ACC_TEST,
+            json_data=dict_data,
+            active=False,
+            nobroadcast=True,
+        )
+        assert answer is not None
+    except Exception as e:
+        pytest.fail(f"send_custom_json raised an exception: {e}")
+
+@pytest.mark.skipif(
+    HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
+    reason="Active key not provided.",
+)
+@pytest.mark.asyncio
+async def test_send_custom_json_fail_posting_key_instead_active():
+    test_data = KeepsatsTransfer(
+        from_account="alice",
+        to_account="bob",
+        sats=1000,
+        memo="Test message",
+    )
+    dict_data = test_data.model_dump()
+    try:
+        answer = await send_custom_json(
+            hive_client=get_hive_client(keys=[HIVE_POSTING_TEST_KEY]),
+            id="test_id",
+            send_account=HIVE_ACC_TEST,
+            json_data=dict_data,
+            active=True,
+            nobroadcast=True,
+        )
+        assert answer is not None
+    except CustomJsonSendError:
+        assert True
+    except Exception as e:
+        pytest.fail(f"send_custom_json raised an exception: {e}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "json_data, send_account, hive_client, keys, expected_exception, match_message",
+    [
+        # Test case: json_data is not a dictionary
+        (None, "test_account", None, [], ValueError, "json_data must be a dictionary"),
+        # Test case: json_data is empty
+        ({}, "test_account", None, [], ValueError, "json_data must not be empty"),
+        # Test case: No hive_client or keys provided
+        (
+            {"key": "value"},
+            "test_account",
+            None,
+            [],
+            ValueError,
+            "No hive_client or keys provided",
+        ),
+        # Test case: UnhandledRPCError
+        (
+            {"key": "value"},
+            "test_account",
+            MagicMock(custom_json=MagicMock(side_effect=Exception("UnhandledRPCError"))),
+            [],
+            CustomJsonSendError,
+            "Error sending custom_json: UnhandledRPCError",
+        ),
+        # Test case: Generic exception
+        (
+            {"key": "value"},
+            "test_account",
+            MagicMock(custom_json=MagicMock(side_effect=Exception("Generic error"))),
+            [],
+            CustomJsonSendError,
+            "Error sending custom_json: Generic error",
+        ),
+    ],
+)
+async def test_send_custom_json_failures(
+    json_data, send_account, hive_client, keys, expected_exception, match_message
+):
+    """
+    Parameterized test for failure scenarios in send_custom_json.
+    """
+    with pytest.raises(expected_exception, match=match_message):
+        await send_custom_json(
+            json_data=json_data,
+            send_account=send_account,
+            hive_client=hive_client,
+            keys=keys,
+        )
 
 
 if __name__ == "__main__":

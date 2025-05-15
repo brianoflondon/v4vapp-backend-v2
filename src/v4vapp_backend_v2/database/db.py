@@ -84,10 +84,17 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         "error": str(e),
                         "retries": retries,
                     }
-                    logger.debug(
-                        f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
-                        extra=extra,
-                    )
+                    if kwargs.get("report_duplicates", False):
+
+                        logger.warning(
+                            f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
+                            extra=extra,
+                        )
+                    else:
+                        logger.debug(
+                            f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
+                            extra=extra,
+                        )
                     raise e
                 except (
                     ConnectionFailure,
@@ -587,13 +594,17 @@ class MongoDBClient:
         return result
 
     @retry_on_failure()
-    async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
+    async def insert_one(
+        self, collection_name: str, document: dict, report_duplicates: bool = False
+    ) -> ObjectId:
         """
         Inserts a single document into the specified collection.
 
         Args:
             collection_name (str): The name of the collection where the document will be inserted.
             document (dict): The document to be inserted into the collection.
+            report_duplicates (bool): Whether to report duplicate documents this is handled in
+            the retry_on_failure decorator.
 
         Returns:
             ObjectId: The ID of the inserted document.

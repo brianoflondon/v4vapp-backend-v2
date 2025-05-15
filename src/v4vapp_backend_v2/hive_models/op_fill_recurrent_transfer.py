@@ -19,3 +19,15 @@ class FillRecurrentTransfer(TransferBase):
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
+
+
+    @property
+    def recurrence_str(self) -> str:
+        """
+        Generates a string representation of the transfer operation, including the
+        sender, recipient, amount, and memo.
+
+        Returns:
+            str: A formatted string containing details about the transfer.
+        """
+        return f" Remaining: {self.remaining_executions}"

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 
 from pydantic import ConfigDict, Field
 
@@ -9,7 +9,7 @@ class RecurrentTransfer(TransferBase):
     executions: int = Field(0, description="Number of executions")
     recurrence: int = Field(0, description="Hours between executions")
     extensions: list[Any] = Field(
-        [], description="List of extensions associated with the recurrent transfer"
+        default=[], description="List of extensions associated with the recurrent transfer"
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -17,6 +17,13 @@ class RecurrentTransfer(TransferBase):
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
 
+
+    @property
+    def recurrence_str(self) -> str:
+        """
+        Returns a string representation of the recurrence details.
+        """
+        return f" Execution: {self.executions} every {self.recurrence} hours"
 
 """
 This change introduces a new element, `pair_id`, which allows distinguishing between

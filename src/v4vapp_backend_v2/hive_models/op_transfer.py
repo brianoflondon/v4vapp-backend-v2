@@ -1,10 +1,8 @@
 from typing import Any, override
 
-from nectar import Hive
+from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
-from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
@@ -15,6 +13,42 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 
 class TransferBase(OpBase):
+    """
+    TransferBase is a subclass of OpBase that represents a transfer operation in the system.
+    It encapsulates details about the transfer, including sender, recipient, amount, memo,
+    and additional metadata. The class provides methods and properties to process and
+    retrieve information about the transfer.
+
+    Attributes:
+        from_account (AccNameType): The account initiating the transfer.
+        to_account (AccNameType): The account receiving the transfer.
+        amount (AmountPyd): The amount being transferred, with precision and unit.
+        memo (str): A memo associated with the transfer, defaulting to an empty string.
+        conv (CryptoConv): A conversion object for cryptocurrency-related operations.
+        d_memo (str): A decoded memo string, if applicable.
+
+    Class Variables:
+        model_config (ConfigDict): Configuration for the model, enabling population by alias.
+
+    Methods:
+        __init__(**hive_event: Any): Initializes the TransferBase object, processes the
+            transfer details, and updates conversion rates if necessary.
+        post_process(hive_inst: Hive): Processes the memo to decode it if it starts with
+            a hash (#) and a Hive instance is provided.
+
+    Properties:
+        amount_decimal (float): Converts the string amount to a decimal with proper precision.
+        unit (Currency): Retrieves the unit of the amount.
+        amount_str (str): Returns the string representation of the amount.
+        recurrence_str (str): Generates a string representation of the transfer's recurrence
+            details, if applicable.
+        log_str (str): A formatted string summarizing the transfer operation for logging
+            purposes. Overrides the base class implementation.
+        notification_str (str): A formatted string summarizing the transfer operation for
+            notifications, including sender, recipient, amount, memo, and additional context.
+            Overrides the base class implementation.
+    """
+
     from_account: AccNameType = Field(alias="from")
     to_account: AccNameType = Field(alias="to")
     amount: AmountPyd = Field(description="Amount being transferred")
@@ -33,11 +67,28 @@ class TransferBase(OpBase):
         super().__init__(**hive_event)
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
-        if self.last_quote.get_age() > 600.0:
-            self.update_quote_sync(AllQuotes().get_binance_quote())
-        self.update_conv()
+        if hive_event.get("update_conv", True):
+            if self.last_quote.get_age() > 600.0:
+                self.update_quote_sync(AllQuotes().get_binance_quote())
+            self.update_conv()
 
     def post_process(self, hive_inst: Hive) -> None:
+        """
+        Post-processes the memo field and decodes it if necessary.
+        This method checks the `d_memo` and `memo` attributes of the instance.
+        If `d_memo` exists and does not start with a "#", the method exits early.
+        Otherwise, if `memo` starts with a "#" and a `Hive` instance is provided,
+        the method decodes the `memo` using the `decode_memo` function and assigns
+        the result to `d_memo`. If these conditions are not met, `d_memo` is set
+        to the value of `memo`.
+        Args:
+            hive_inst (Hive): An instance of the Hive class used for decoding the memo.
+        """
+        if not self.memo:
+            self.d_memo = ""
+            return
+        if self.d_memo and not self.d_memo.startswith("#"):
+            return
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
         else:
@@ -63,13 +114,11 @@ class TransferBase(OpBase):
         Generates a string representation of the transfer operation, including the
         sender, recipient, amount, and memo.
 
+        Overridden in the sub classes for recurrent_transfer and fill_recurrent_transfer.
+
         Returns:
             str: A formatted string containing details about the transfer.
         """
-        if hasattr(self, "recurrence"):
-            return f" Execution: {self.executions} every {self.recurrence} hours"
-        if hasattr(self, "remaining_executions"):
-            return f" Remaining: {self.remaining_executions}"
         return ""
 
     @property
@@ -109,24 +158,6 @@ class TransferBase(OpBase):
             f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
-
-    @override
-    async def process(self) -> None:
-        """
-        Processes the transfer operation. This method is a placeholder and should
-        be overridden in subclasses to provide specific processing logic.
-
-        Returns:
-            None
-        """
-        server_account = InternalConfig().config.hive.server_account.name
-        treasury_account = InternalConfig().config.hive.treasury_account.name
-
-        if self.to_account == server_account:
-            if self.d_memo.startswith("lnbc"):
-                invoice = await decode_any_lightning_string(
-                    input=self.d_memo, ignore_limits=True
-                )
 
 
 class Transfer(TransferBase):

@@ -11,6 +11,7 @@ from nectar.exceptions import MissingKeyError
 from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
+from nectarapi.exceptions import UnhandledRPCError
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
@@ -47,6 +48,20 @@ EXCLUDE_NODES = [
 MAX_HIVE_BATCH_SIZE = 25
 
 HIVE_BLOCK_TIME = 3  # seconds
+
+
+class CustomJsonSendError(Exception):
+    """
+    Custom exception for errors related to sending custom JSON data.
+
+    Args:
+        message (str): Error message.
+        extra (dict): Additional information about the error.
+    """
+
+    def __init__(self, message: str, extra: dict = None):
+        super().__init__(message)
+        self.extra = extra if extra else {}
 
 
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
@@ -359,6 +374,88 @@ def decode_memo(
         logger.error(memo)
         logger.exception(e)
         return memo
+
+
+async def send_custom_json(
+    json_data: dict,
+    send_account: str,
+    hive_client: Hive | None = None,
+    keys: List[str] = [],
+    id: str = "v4vapp_transfer",
+    nobroadcast: bool = False,
+    active: bool = True,
+) -> Dict[str, str]:
+    """
+    Asynchronously sends a custom JSON operation to the Hive blockchain.
+
+    This function allows sending a custom JSON operation with specified parameters
+    to the Hive blockchain. It supports both active and posting authority, and can
+    be configured to either broadcast the transaction or not.
+
+    Args:
+        json_data (dict): The JSON data to be sent. Must be a non-empty dictionary.
+        send_account (str): The Hive account that will send the custom JSON operation.
+        hive_client (Hive | None, optional): An instance of the Hive client. If not provided,
+            a new client will be created using the provided keys. Defaults to None.
+        keys (List[str], optional): A list of private keys to initialize the Hive client
+            if `hive_client` is not provided. Defaults to an empty list.
+        id (str, optional): The custom JSON operation ID. Defaults to "v4vapp_transfer".
+        nobroadcast (bool, optional): If True, the transaction will not be broadcasted.
+            Defaults to False.
+        active (bool, optional): If True, the operation will require active authority.
+            If False, it will require posting authority. Defaults to True.
+
+    Returns:
+        Dict[str, str]: The transaction response from the Hive blockchain.
+
+    Raises:
+        ValueError: If `json_data` is not a dictionary, is empty, or if neither `hive_client`
+            nor `keys` are provided.
+        CustomJsonSendError: If an error occurs while sending the custom JSON operation.
+    """
+    # Need Required_auths not posting auths for a tranfer
+    # test json data is a dict which will become a nice json object:
+    if not isinstance(json_data, dict):
+        raise ValueError("json_data must be a dictionary")
+    if not json_data:
+        raise ValueError("json_data must not be empty")
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+    if not hive_client:
+        hive_client = get_hive_client(keys=keys)
+    try:
+        if active:
+            kwargs = {"required_auths": [send_account]}
+        else:
+            kwargs = {"required_posting_auths": [send_account]}
+
+        trx = hive_client.custom_json(
+            id=id, json_data=json_data, **kwargs, nobroadcast=nobroadcast
+        )
+        return trx
+    except UnhandledRPCError as ex:
+        logger.warning(
+            f"Error sending custom_json: {ex}",
+            extra={"notification": False, "send_account": send_account},
+        )
+        raise CustomJsonSendError(
+            f"Error sending custom_json: {ex}",
+            extra={
+                "json_data": json_data,
+                "send_account": send_account,
+                "nobroadcast": nobroadcast,
+            },
+        )
+    except MissingKeyError as ex:
+        logger.warning(
+            f"Error sending custom_json: MissingKeyError: {ex}",
+            extra={"notification": False, "send_account": send_account},
+        )
+        raise CustomJsonSendError("Wrong key used", extra={"send_account": send_account})
+    except Exception as ex:
+        logger.exception(ex, extra={"notification": False})
+        logger.error(f"{send_account} {ex} {ex.__class__}", extra={"notification": False})
+        raise CustomJsonSendError(f"Error sending custom_json: {ex}")
 
 
 if __name__ == "__main__":

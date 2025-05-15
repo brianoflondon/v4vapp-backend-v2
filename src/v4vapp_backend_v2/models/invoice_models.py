@@ -370,9 +370,5 @@ def protobuf_to_pydantic(message) -> ListInvoiceResponse:
     message_dict = MessageToDict(message, preserving_proto_field_name=True)
     for invoice in message_dict.get("invoices", []):
         invoice = convert_datetime_fields(invoice)
-        # try:
-        #     invoice_model = Invoice.model_validate(invoice)
-        # except Exception as e:
-        #     print(e)
-    return ListInvoiceResponse.model_validate(message_dict)
+
     return ListInvoiceResponse.model_validate(message_dict)

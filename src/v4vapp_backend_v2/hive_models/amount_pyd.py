@@ -1,6 +1,6 @@
-
 from nectar.amount import Amount
 from pydantic import BaseModel
+
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 
@@ -33,9 +33,7 @@ class AmountPyd(BaseModel):
 
     @property
     def beam(self) -> Amount:
-        return Amount(
-            {"amount": self.amount, "nai": self.nai, "precision": self.precision}
-        )
+        return Amount({"amount": self.amount, "nai": self.nai, "precision": self.precision})
 
     def __str__(self) -> str:
         return self.beam.__str__()

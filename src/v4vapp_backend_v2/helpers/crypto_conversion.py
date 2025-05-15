@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from nectar.amount import Amount
@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 class CryptoConv(BaseModel):
@@ -38,6 +39,35 @@ class CryptoConv(BaseModel):
     model_config = ConfigDict(
         use_enum_values=True,  # Serializes enum as its value
     )
+
+    def __init__(self, **data: dict):
+        if data.get("converted_value", None) and data.get("conv_from", None):
+            # If 'converted' is in data, we assume it's a conversion from one currency to another
+            # and we need to set the msats and sats values accordingly.
+            if data["conv_from"] == Currency.HIVE:
+                data["hive"] = data["value"]
+                data["hbd"] = data["converted_value"]
+            elif data["conv_from"] == Currency.HBD:
+                data["hbd"] = data["value"]
+                data["hive"] = data["converted_value"]
+            data["source"] = "Hive Internal Trade"
+            data["fetch_date"] = datetime.now(tz=timezone.utc)
+            quote = data.get("quote", None)
+            if quote and quote.sats_usd > 0:
+                data["sats_hive"] = quote.sats_hive
+                data["sats_hbd"] = quote.sats_hbd
+                data["sats"] = int(data["hive"] * quote.sats_hive)
+                data["msats"] = int(data["sats"] * 1000)
+                data["btc"] = data["msats"] / 100_000_000_000
+                data["usd"] = round(data["sats"] / (quote.sats_usd), 6)
+
+        super().__init__(**data)
+        # If msats is not set, calculate it from the other values
+        if "msats" not in data:
+            self.msats = int(self.sats * 1000)
+        # If sats is not set, calculate it from the msats
+        if "sats" not in data:
+            self.sats = int(self.msats / 1000)
 
     def limit_test(self) -> bool:
         """
@@ -125,6 +155,8 @@ class CryptoConversion(BaseModel):
             self.conv_from = Currency(amount.symbol.lower())
             self.value = amount.amount
             self.original = amount
+            if isinstance(amount, AmountPyd):
+                self.value = amount.amount_decimal
         elif conv_from:
             if isinstance(conv_from, str):
                 self.conv_from = Currency(conv_from.lower())

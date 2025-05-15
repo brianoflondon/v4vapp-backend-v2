@@ -1,5 +1,17 @@
-from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
+
+
+class HiveOperation:
+    def __init__(self, op: OpAllTransfers):
+        self.op = op
+
+        # Business logic to determine the type of operation.
+
+
+class InternalHiveTransfer(HiveOperation):
+    pass
+
 
 class HiveToLnd:
     """
@@ -26,7 +38,6 @@ class HiveToLnd:
         :return: True if the operation is a transfer from Hive to LND, False otherwise.
         """
         return True
-
 
     async def process(self):
         """

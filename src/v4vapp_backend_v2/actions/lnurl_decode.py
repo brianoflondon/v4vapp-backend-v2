@@ -15,8 +15,8 @@ from v4vapp_backend_v2.actions.lnurl_models import (
 )
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_invoice_from_pay_request
-from v4vapp_backend_v2.models.invoice_models import Invoice, protobuf_invoice_to_pydantic
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_pay_req_from_pay_request
+from v4vapp_backend_v2.models.pay_req import PayReq, protobuf_pay_req_to_pydantic
 
 # Get this from the config
 LNURL_BASE_URL = "https://v4v.app/"
@@ -106,8 +106,8 @@ async def decode_any_lightning_string(
     sats: int = 0,
     comment: str = "",
     ignore_limits: bool = False,
-    client: LNDClient = None,
-) -> Invoice:
+    lnd_client: LNDClient = None,
+) -> PayReq:
     """
     Takes in a string and checks if it is a valid LNURL or a valid Lightning Address.
 
@@ -118,7 +118,7 @@ async def decode_any_lightning_string(
         ignore_limits (bool, optional): Whether to ignore limits. Defaults to False.
 
     Returns:
-        Invoice: Returns an Invoice object if the input is a valid Lightning invoice,
+        PayReq: Returns a PayReq object if the input is a valid Lightning invoice,
                   otherwise raises an exception.
 
     Raises:
@@ -135,12 +135,14 @@ async def decode_any_lightning_string(
         input = extras[0]
 
     if input.startswith("lnbc"):
-        ln_invoice = await get_invoice_from_pay_request(pay_request=input, client=client)
+        lnrpc_pay_req = await get_pay_req_from_pay_request(
+            pay_request=input, lnd_client=lnd_client
+        )
         # # Dealing with a zero sat invoice record the amount to be sent.
         # if ln_invoice.zero_sat:
         #     ln_invoice.force_send_sats = sats
-        invoice = protobuf_invoice_to_pydantic(ln_invoice)
-        return invoice
+        pay_req = protobuf_pay_req_to_pydantic(lnrpc_pay_req)
+        return pay_req
 
     data = LnurlProxyData(
         anything=input,
@@ -168,17 +170,19 @@ async def decode_any_lightning_string(
         )
         raise LnurlException(failure=ex.failure)
 
-    with httpx.Client() as client:
+    with httpx.Client() as httpx_client:
         try:
-            response = client.get(str(response.callback), params=params, follow_redirects=True)
+            response = httpx_client.get(
+                str(response.callback), params=params, follow_redirects=True
+            )
             response.raise_for_status()
             response_data = response.json()
             if response_data.get("pr"):
-                invoice = await get_invoice_from_pay_request(
-                    pay_request=response_data["pr"], client=client
+                lnrpc_pay_req = await get_pay_req_from_pay_request(
+                    pay_request=response_data["pr"], lnd_client=lnd_client
                 )
-                if invoice:
-                    return protobuf_invoice_to_pydantic(invoice)
+                if lnrpc_pay_req:
+                    return protobuf_pay_req_to_pydantic(lnrpc_pay_req)
             raise LnurlException("No payment request found in response")
         except (httpx.RequestError, httpx.HTTPStatusError) as ex:
             logger.error(f"HTTP error: {str(ex)}", extra={"notification": False})

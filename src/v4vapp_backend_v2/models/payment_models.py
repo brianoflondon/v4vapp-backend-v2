@@ -154,15 +154,15 @@ class Payment(PaymentExtra):
     value: Optional[BSONInt64] = None
     creation_date: datetime | None = None
     fee: Optional[BSONInt64] = None
-    payment_preimage: str
+    payment_preimage: str | None = None
     value_sat: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     payment_request: str | None = None
     status: PaymentStatus | None = None
     fee_sat: BSONInt64 | None = None
     fee_msat: BSONInt64 | None = None
-    creation_time_ns: datetime
-    payment_index: BSONInt64
+    creation_time_ns: datetime | None = None
+    payment_index: BSONInt64 | None = None
     failure_reason: str | None = None
     htlcs: List[HTLCAttempt] | None = None
 
