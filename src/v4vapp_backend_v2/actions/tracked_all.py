@@ -191,7 +191,7 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
         logger.info(f"Limit order create: {op.orderid}")
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
-        ledger_entry.description = op.notification_str
+        ledger_entry.description = op.ledger_str
         ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
         ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
         ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
@@ -199,13 +199,13 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
         logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
         ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
-        ledger_entry.description = op.notification_str
-        ledger_entry.debit_unit = op.current_pays.unit
-        ledger_entry.credit_unit = op.open_pays.unit
-        ledger_entry.debit_amount = op.current_pays.amount_decimal
-        ledger_entry.credit_amount = op.open_pays.amount_decimal
-        ledger_entry.debit_conv = op.debit_conv
-        ledger_entry.credit_conv = op.credit_conv
+        ledger_entry.description = op.ledger_str
+        ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
+        ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
+        ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE
+        ledger_entry.credit_amount = op.current_pays.amount_decimal  # 6.738 HBD
+        ledger_entry.debit_conv = op.debit_conv  # Conversion for HIVE
+        ledger_entry.credit_conv = op.credit_conv  # Conversion for HBD
     if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
         try:
             await TrackedBaseModel.db_client.insert_one(

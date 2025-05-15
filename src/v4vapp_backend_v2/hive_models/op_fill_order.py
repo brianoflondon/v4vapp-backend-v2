@@ -34,16 +34,18 @@ class FillOrder(OpBase):
 
     def __init__(self, **data: dict):
         super().__init__(**data)
+        # Debit conv should match the debit side in the ledger (open_pays, HIVE received)
         self.debit_conv = CryptoConv(
-            conv_from=self.current_pays.unit,
-            value=self.current_pays.amount_decimal,
-            converted_value=self.open_pays.amount_decimal,
+            conv_from=self.open_pays.unit,  # HIVE
+            value=self.open_pays.amount_decimal,  # 25.052 HIVE
+            converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
             quote=self.last_quote,
         )
+        # Credit conv should match the credit side in the ledger (current_pays, HBD given)
         self.credit_conv = CryptoConv(
-            conv_from=self.open_pays.unit,
-            value=self.open_pays.amount_decimal,
-            converted_value=self.current_pays.amount_decimal,
+            conv_from=self.current_pays.unit,  # HBD
+            value=self.current_pays.amount_decimal,  # 6.738 HBD
+            converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
             quote=self.last_quote,
         )
         # Set the log_internal string to None to force it to be generated
@@ -93,6 +95,18 @@ class FillOrder(OpBase):
     @property
     def notification_str(self) -> str:
         return f"{self._log_internal()} {self.markdown_link}"
+
+    @property
+    def ledger_str(self) -> str:
+        """
+        Returns a string representation of the ledger entry for the transaction.
+        This string is formatted to include the transaction details, including
+        the current and open pays amounts, the order IDs, and the rate.
+        """
+        # return _log_internal but strip the icon from the start
+        return_str = self._log_internal()
+        return_str = return_str.replace("📈", "")
+        return return_str.strip()
 
     def check_open_orders(self) -> str:
         """

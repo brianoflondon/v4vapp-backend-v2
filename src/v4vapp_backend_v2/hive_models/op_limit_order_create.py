@@ -116,7 +116,9 @@ class LimitOrderCreate(OpBase):
         receive = self.min_to_receive.fixed_width_str(15)
         rate_str = f"{self.rate:.3f}"  # HIVE/HBD
         icon = "📈"
-        return f"{icon} {sell} for {receive} {self.owner} created order {self.orderid} {rate_str:>8}"
+        return (
+            f"{icon} {sell} for {receive} {self.owner} created order {self.orderid} {rate_str:>8}"
+        )
 
     @property
     def log_str(self) -> str:
@@ -127,3 +129,15 @@ class LimitOrderCreate(OpBase):
     def notification_str(self) -> str:
         ans = self._log_internal()
         return f"{ans} {self.markdown_link}"
+
+    @property
+    def ledger_str(self) -> str:
+        """
+        Returns a string representation of the ledger entry for the transaction.
+        This string is formatted to include the transaction details, including
+        the current and open pays amounts, the order IDs, and the rate.
+        """
+        # return _log_internal but strip the icon from the start
+        return_str = self._log_internal()
+        return_str = return_str.replace("📈", "")
+        return return_str.strip()
