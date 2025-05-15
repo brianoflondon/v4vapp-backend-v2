@@ -40,7 +40,8 @@ class CryptoConv(BaseModel):
         use_enum_values=True,  # Serializes enum as its value
     )
 
-    def __init__(self, **data: dict):
+    def __init__(self, **data: Any):
+        # Ensure data is a flat dictionary, not a nested one
         if data.get("converted_value", None) and data.get("conv_from", None):
             # If 'converted' is in data, we assume it's a conversion from one currency to another
             # and we need to set the msats and sats values accordingly.
@@ -151,12 +152,15 @@ class CryptoConversion(BaseModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if amount or ("amount" in kwargs and isinstance(kwargs["amount"], Amount)):
-            self.conv_from = Currency(amount.symbol.lower())
-            self.value = amount.amount
-            self.original = amount
-            if isinstance(amount, AmountPyd):
-                self.value = amount.amount_decimal
+        if isinstance(amount, Amount) or (
+            "amount" in kwargs and isinstance(kwargs["amount"], Amount)
+        ):
+            amount_here = kwargs.get("amount", amount)
+            self.conv_from = Currency(amount_here.symbol.lower())
+            self.value = amount_here.amount
+            self.original = amount_here
+            if isinstance(amount_here, AmountPyd):
+                self.value = amount_here.amount_decimal
         elif conv_from:
             if isinstance(conv_from, str):
                 self.conv_from = Currency(conv_from.lower())

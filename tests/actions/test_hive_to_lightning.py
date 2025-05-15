@@ -12,16 +12,17 @@ from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 
-mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
+mongodb_export_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
 
 
 async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
     # Drop the collection and user
     async with MongoDBClient(conn_name, db_name, db_user) as test_client:
-        ans = await test_client.db.drop_collection("startup_collection")
-        assert ans.get("ok") == 1
-        ans = await test_client.drop_user()
-        assert ans.get("ok") == 1
+        if test_client.db is not None:
+            ans = await test_client.db.drop_collection("startup_collection")
+            assert ans.get("ok") == 1
+            ans = await test_client.drop_user()
+            assert ans.get("ok") == 1
     await drop_database(conn_name=conn_name, db_name=db_name)
 
 

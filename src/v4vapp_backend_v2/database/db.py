@@ -85,7 +85,6 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         "retries": retries,
                     }
                     if kwargs.get("report_duplicates", False):
-
                         logger.warning(
                             f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
                             extra=extra,
@@ -194,12 +193,12 @@ class MongoDBClient:
         except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
-                code=DbErrorCode.NO_CONNECTION,
+                code=DbErrorCode.NO_CONNECTION.value,
             )
         except Exception as e:
             raise OperationFailure(
                 error=f"Error in database connection {self.db_conn}: {e}",
-                code=DbErrorCode.NO_CONNECTION,
+                code=DbErrorCode.NO_CONNECTION.value,
             )
 
     def validate_user_db(self):
@@ -208,15 +207,20 @@ class MongoDBClient:
             f"{DATABASE_ICON} {logger.name} "
             f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
         )
+        if not self.db_name or not self.db_user or not self.dbs:
+            raise OperationFailure(
+                error=f"Database {self.db_name} or user {self.db_user} not found",
+                code=DbErrorCode.NO_USER.value,
+            )
         if self.db_name not in self.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
-                code=DbErrorCode.NO_DB,
+                code=DbErrorCode.NO_DB.value,
             )
         if self.db_user not in self.dbs[self.db_name].db_users:
             raise OperationFailure(
                 error=f"No database {self.db_name}",
-                code=DbErrorCode.NO_USER,
+                code=DbErrorCode.NO_USER.value,
             )
         if (
             not bool(self.dbs[self.db_name].db_users[self.db_user].password)
@@ -224,7 +228,7 @@ class MongoDBClient:
         ):
             raise OperationFailure(
                 error=f"No password for user {self.db_user} in {self.db_name}",
-                code=DbErrorCode.NO_PASSWORD,
+                code=DbErrorCode.NO_PASSWORD.value,
             )
 
     @property
@@ -703,13 +707,13 @@ class MongoDBClient:
         ans = await self.admin_client.drop_database(db_name)
         return ans
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MongoDBClient":
         self.start_connection = timer()
         if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
             await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.disconnect()
         self.start_connection = 0
 
