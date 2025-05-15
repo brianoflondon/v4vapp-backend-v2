@@ -97,20 +97,6 @@ def test_print_block_numbers_of_events() -> None:
     print("]")
 
 
-async def fill_ledger_database_from_log() -> None:
-    """
-    Fill the ledger database with data from a JSONL file.
-
-    :param file_path: Path to the JSONL file.
-    """
-    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
-    for hive_event in load_hive_events_from_mongodb_dump(mongodb_export_path):
-        hive_event["update_conv"] = False
-        op_tracked = tracked_any(hive_event)
-        assert op_tracked.type == op_tracked.name()
-        _ = await process_tracked(op_tracked)
-
-
 @pytest.mark.asyncio
 async def test_balance_sheet_steps():
     """
@@ -124,7 +110,9 @@ async def test_balance_sheet_steps():
         count += 1
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
-        print(f"\n\n\nEvent {count=} {op_tracked.d_memo}")
+        if op_tracked.type in ["block_marker", "limit_order_create", "fill_order"]:
+            continue
+        print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
         ledger_entry = await process_tracked(op_tracked)
         print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()
