@@ -69,6 +69,7 @@ BLOCK_LIST = [
     "95823857",
 ]
 
+
 def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
