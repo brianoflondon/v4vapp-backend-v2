@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -20,39 +21,6 @@ app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
-
-# Can't find any way to filter this in the pipeline, will do it in code.
-pipeline_exclude_locked_changes: Sequence[Mapping[str, Any]] = []
-
-payment_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-    {
-        "$project": {
-            "fullDocument.creation_date": 1,
-            "fullDocument.payment_hash": 1,
-            "fullDocument.status": 1,
-            "fullDocument.value_msat": 1,
-        }
-    },
-]
-invoice_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-    {
-        "$project": {
-            "fullDocument.creation_date": 1,
-            "fullDocument.r_hash": 1,
-            "fullDocument.state": 1,
-            "fullDocument.amt_paid_msat": 1,
-            "fullDocument.value_msat": 1,
-            "fullDocument.memo": 1,
-        }
-    },
-]
-hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-    {
-        "$match": {
-            "fullDocument.type": {"$ne": "block_marker"},
-        }
-    }
-]
 
 
 def get_mongodb_client() -> MongoDBClient:
@@ -172,6 +140,19 @@ class ResumeToken(BaseModel):
 
 
 def change_to_locked(change: Mapping[str, Any]) -> bool:
+    """
+    Determines if the "locked" field is present in the updated or removed fields
+    of a database change event.
+
+    Args:
+        change (Mapping[str, Any]): A dictionary representing a database change event.
+            It is expected to contain an "updateDescription" key with details about
+            the updated and removed fields.
+
+    Returns:
+        bool: True if the "locked" field is found in either the "updatedFields" or
+        "removedFields" of the change event, otherwise False.
+    """
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
@@ -233,12 +214,10 @@ async def subscribe_stream(
     Returns:
         None
     """
-    # resume_token = {
-    #     "_data": "82680A4B16000000012B042C0100296E5A100427C3560459D34841BCB69B20139E3E3F463C6F7065726174696F6E54797065003C696E736572740046646F63756D656E744B65790046645F69640064680A4B1689058837EB259D00000004"
-    # }
     logger.info(f"Subscribing to {collection_name} stream...")
 
-    # Use two different mongo clients to avoid shut downs.
+    # Use two different mongo clients, one for the stream and the one for
+    # the rest of the app.
     client = get_mongodb_client()
     TrackedBaseModel.db_client = get_mongodb_client()
 
@@ -306,15 +285,20 @@ async def main_async_start():
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
+    db_pipelines = db_monitor_pipelines()
     try:
         logger.info(f"{ICON} Database Monitor App started.")
         # Simulate some work
         while not shutdown_event.is_set():
             tasks = [
-                asyncio.create_task(subscribe_stream(collection_name="invoices")),
-                asyncio.create_task(subscribe_stream(collection_name="payments")),
                 asyncio.create_task(
-                    subscribe_stream(collection_name="hive_ops", pipeline=hive_ops_pipeline)
+                    subscribe_stream(collection_name="invoices", pipeline=db_pipelines["invoices"])
+                ),
+                asyncio.create_task(
+                    subscribe_stream(collection_name="payments", pipeline=db_pipelines["payments"])
+                ),
+                asyncio.create_task(
+                    subscribe_stream(collection_name="hive_ops", pipeline=db_pipelines["hive_ops"])
                 ),
             ]
             await asyncio.gather(*tasks)

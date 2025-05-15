@@ -39,7 +39,7 @@ class FillOrder(OpBase):
         if self.last_quote.sats_usd == 0:
             logger.warning(
                 f"FillOrder: {self.current_orderid} {self.open_orderid} last_quote.sats_usd is 0",
-                extra={"last_quote": self.last_quote, "fill_order": self},
+                extra={"notification": False, "last_quote": self.last_quote, "fill_order": self},
             )
         self.debit_conv = CryptoConv(
             conv_from=self.open_pays.unit,  # HIVE

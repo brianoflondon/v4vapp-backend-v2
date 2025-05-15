@@ -47,11 +47,11 @@
   },
   "realm": "marker",
   "trx_id": "block_marker",
-  "block_num": 95908194,
+  "block_num": 95911415,
   "link": "MARKER: block_marker",
   "locked": false,
   "timestamp": {
-    "$date": "2025-05-15T09:59:51.000Z"
+    "$date": "2025-05-15T12:41:06.000Z"
   },
   "type": "block_marker"
 },
@@ -1087,4 +1087,47 @@
   },
   "trx_id": "c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
   "type": "fill_order"
+},
+{
+  "_id": {
+    "$oid": "6825e019370633bec3f36dc6"
+  },
+  "realm": "real",
+  "trx_num": 3,
+  "block_num": 95911346,
+  "op_in_trx": 1,
+  "amount": {
+    "amount": "10000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 10,
+    "hbd": 2.662,
+    "usd": 2.662,
+    "sats": 2593,
+    "msats": 2592519,
+    "msats_fee": 94072,
+    "btc": 0.00002592519,
+    "sats_hive": 259.2519,
+    "sats_hbd": 973.8991,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T12:32:43.912Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
+  "from": "v4vapp-test",
+  "link": "https://hivehub.dev/tx/a5f153f96ab572a8260703773d6c530d0dd86e41",
+  "locked": true,
+  "memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
+  "timestamp": {
+    "$date": "2025-05-15T12:37:39.000Z"
+  },
+  "to": "devser.v4vapp",
+  "trx_id": "a5f153f96ab572a8260703773d6c530d0dd86e41",
+  "type": "transfer"
 }]

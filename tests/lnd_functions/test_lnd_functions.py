@@ -136,7 +136,7 @@ async def test_get_invoice_from_pay_request(
                 "v4vapp_backend_v2.lnd_grpc.lnd_client.LNDClient.node_get_info",
                 new_callable=AsyncMock(return_value=mock_node_info),
             ):
-                async with LNDClient(connection_name="example") as client:
+                async with LNDClient(connection_name="example") as lnd_client:
                     payment_request = "lnbc1u1pnhykavpp5egz3h400vl9dh5s3ck6g7w5dhy34hmnq3c34ydnt9d8phzkpj42qdqqcqzpgxqyz5vqsp5z97q3e70kgzn4094ywks9hrvj7msz8xxujd5phkhg7vs72w4cc7s9qxpqysgqmld4mgxw74v9vkg3l8hx2a3afk4xzhl9merh7gup9h9j5rnq0q64c2vx9vktztwlajc9kkluaaelzefyk0c0spcvtzhpcamex6qxwscp6u9hp8"
-                    result = await get_invoice_from_pay_request(payment_request, client)
+                    result = await get_invoice_from_pay_request(payment_request, lnd_client=lnd_client)
                     assert result == mock_response

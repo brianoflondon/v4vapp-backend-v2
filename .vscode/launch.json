@@ -50,7 +50,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Dev Umbrel Monitor",
+            "name": "DEV Umbrel Monitor",
             "type": "debugpy",
             "consoleName": "Dev Umbrel Monitor",
             "request": "launch",

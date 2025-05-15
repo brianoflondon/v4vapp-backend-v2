@@ -1,7 +1,9 @@
+import asyncio
 from typing import Any, Union
 
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
@@ -233,6 +235,8 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         server = op.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
+        # Now we need to see if we can take action for this invoice
+        asyncio.create_task(process_hive_to_lightning(op=op))
     else:
         logger.info(
             f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"

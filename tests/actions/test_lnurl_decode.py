@@ -95,14 +95,14 @@ async def test_decode_any_lightning_string():
     """
     # Test with a valid Lightning Address
 
-    client = LNDClient(connection_name="voltage")
+    lnd_client = LNDClient(connection_name="voltage")
     input = "lightning:lnbc20720n1p5pwchppp5cc7umgmnekpym25sss7tpld8dgn3f8ymcj5wt7hk8xevdsa8myzsdzawc68vctswqhxgetkyp7zqa35wckhsjjstfzjqlpqydf5z4znyqerqdejyp7zqg6ng929xgprgdxy2s2wyq3hvdrkv9c8qcqzzsxqzxgsp57gv9xfay4lmgqgkrtydews0kr88qajj84gf4x4lraz38966rs2yq9qxpqysgqwjqhkuj0g5anqxe0tqun2hckw504q5q9cej6j4vsvav0alkrp3er06qgtxkq8v0d0s0d8jx0ucme5dlu4m77qxlllq5fy0qn3k0ameqp69a6cs"
-    result = await decode_any_lightning_string(input, client=client)
+    result = await decode_any_lightning_string(input, lnd_client=lnd_client)
     assert isinstance(result, Invoice)
 
     input = "brianoflondon@sats.v4v.app"
     sats = 1356
     result = await decode_any_lightning_string(
-        input=input, client=client, sats=sats, comment="test comment"
+        input=input, lnd_client=lnd_client, sats=sats, comment="test comment"
     )
     assert isinstance(result, Invoice)

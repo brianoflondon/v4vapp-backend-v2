@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.account_type import Account
 
 
-def list_all_accounts_pipeline() -> List[object]:
+def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     """
     Returns a MongoDB aggregation pipeline to list all accounts with their details.
     The pipeline performs the following operations:
@@ -92,3 +92,44 @@ def filter_by_account_as_of_date_query(
             "timestamp": {"$lte": as_of_date},
         }
     return query
+
+
+def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
+    # Can't find any way to filter this in the pipeline, will do it in code.
+    pipeline_exclude_locked_changes: list[Mapping[str, Any]] = []
+
+    payments_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {
+            "$project": {
+                "fullDocument.creation_date": 1,
+                "fullDocument.payment_hash": 1,
+                "fullDocument.status": 1,
+                "fullDocument.value_msat": 1,
+            }
+        },
+    ]
+    invoices_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {
+            "$project": {
+                "fullDocument.creation_date": 1,
+                "fullDocument.r_hash": 1,
+                "fullDocument.state": 1,
+                "fullDocument.amt_paid_msat": 1,
+                "fullDocument.value_msat": 1,
+                "fullDocument.memo": 1,
+            }
+        },
+    ]
+    hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {
+            "$match": {
+                "fullDocument.type": {"$ne": "block_marker"},
+            }
+        }
+    ]
+
+    return {
+        "payments": payments_pipeline,
+        "invoices": invoices_pipeline,
+        "hive_ops": hive_ops_pipeline,
+    }

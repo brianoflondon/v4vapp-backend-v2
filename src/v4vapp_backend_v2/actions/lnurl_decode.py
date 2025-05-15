@@ -106,7 +106,7 @@ async def decode_any_lightning_string(
     sats: int = 0,
     comment: str = "",
     ignore_limits: bool = False,
-    client: LNDClient = None,
+    lnd_client: LNDClient = None,
 ) -> Invoice:
     """
     Takes in a string and checks if it is a valid LNURL or a valid Lightning Address.
@@ -135,7 +135,7 @@ async def decode_any_lightning_string(
         input = extras[0]
 
     if input.startswith("lnbc"):
-        ln_invoice = await get_invoice_from_pay_request(pay_request=input, client=client)
+        ln_invoice = await get_invoice_from_pay_request(pay_request=input, lnd_client=lnd_client)
         # # Dealing with a zero sat invoice record the amount to be sent.
         # if ln_invoice.zero_sat:
         #     ln_invoice.force_send_sats = sats
@@ -168,14 +168,16 @@ async def decode_any_lightning_string(
         )
         raise LnurlException(failure=ex.failure)
 
-    with httpx.Client() as client:
+    with httpx.Client() as httpx_client:
         try:
-            response = client.get(str(response.callback), params=params, follow_redirects=True)
+            response = httpx_client.get(
+                str(response.callback), params=params, follow_redirects=True
+            )
             response.raise_for_status()
             response_data = response.json()
             if response_data.get("pr"):
                 invoice = await get_invoice_from_pay_request(
-                    pay_request=response_data["pr"], client=client
+                    pay_request=response_data["pr"], lnd_client=lnd_client
                 )
                 if invoice:
                     return protobuf_invoice_to_pydantic(invoice)
