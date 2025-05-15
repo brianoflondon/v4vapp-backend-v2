@@ -50,6 +50,18 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Dev Umbrel Monitor",
+            "type": "debugpy",
+            "consoleName": "Dev Umbrel Monitor",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "DB Monitor App",
             "type": "debugpy",
             "consoleName": "DB Monitor App",
@@ -95,18 +107,7 @@
             ],
             "console": "integratedTerminal"
         },
-        {
-            "name": "Dev Umbrel Monitor",
-            "type": "debugpy",
-            "consoleName": "Dev Umbrel Monitor",
-            "request": "launch",
-            "program": "src/lnd_monitor_v2.py",
-            "args": [
-                "--config",
-                "devhive.config.yaml"
-            ],
-            "console": "integratedTerminal"
-        },
+
         {
             "name": "VSC Hive Monitor HBD No SALE",
             "type": "debugpy",

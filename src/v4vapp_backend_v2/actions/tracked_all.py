@@ -137,56 +137,8 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
         return None
 
     if isinstance(op, TransferBase):
-        description = op.d_memo if op.d_memo else ""
-        ledger_entry.description = description
-        ledger_entry.credit_unit = ledger_entry.debit_unit = op.unit
-        ledger_entry.credit_amount = ledger_entry.debit_amount = op.amount_decimal
-        ledger_entry.credit_conv = ledger_entry.debit_conv = op.conv
+        ledger_entry = await process_transfer_op(op=op, ledger_entry=ledger_entry)
 
-        if op.from_account == server_account and op.to_account == treasury_account:
-            # MARK: Server to Treasury
-            ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
-            ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
-        elif op.from_account == treasury_account and op.to_account == server_account:
-            # MARK: Treasury to Server
-            ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
-            ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
-        elif op.from_account == funding_account and op.to_account == treasury_account:
-            # MARK: Funding to Treasury
-            ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
-            ledger_entry.credit = LiabilityAccount(
-                name="Owner Loan Payable (funding)", sub=funding_account
-            )
-        elif op.from_account == treasury_account and op.to_account == funding_account:
-            # MARK: Treasury to Funding
-            ledger_entry.debit = LiabilityAccount(
-                name="Owner Loan Payable (funding)", sub=treasury_account
-            )
-            ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=funding_account)
-        elif op.from_account == treasury_account and op.to_account == exchange_account:
-            # MARK: Treasury to Exchange
-            ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
-            ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
-        elif op.from_account == exchange_account and op.to_account == treasury_account:
-            # MARK: Exchange to Treasury
-            ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
-            ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
-        elif op.from_account == server_account:
-            # MARK: Server to customer account withdrawal
-            customer = op.to_account
-            server = op.from_account
-            ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
-            ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        elif op.to_account == server_account:
-            # MARK: Customer account to server account
-            customer = op.from_account
-            server = op.to_account
-            ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
-            ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
-        else:
-            logger.info(
-                f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
-            )
     elif isinstance(op, LimitOrderCreate):
         logger.info(f"Limit order create: {op.orderid}")
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
@@ -221,3 +173,73 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             logger.error(f"Error updating ledger: {e}")
     await op.unlock_op()
     return None
+
+
+async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry:
+    """
+    Processes the transfer operation and creates a ledger entry if applicable.
+
+    This method handles various types of transfers, including those between the server account,
+    treasury account, funding account, exchange account, and customer accounts. It ensures that
+    appropriate debit and credit accounts are assigned based on the transfer type. If a ledger
+    entry with the same group_id already exists, the operation is skipped.
+
+    Returns:
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    """
+    description = op.d_memo if op.d_memo else ""
+    server_account = InternalConfig().config.hive.server_account.name
+    treasury_account = InternalConfig().config.hive.treasury_account.name
+    funding_account = InternalConfig().config.hive.funding_account.name
+    exchange_account = InternalConfig().config.hive.exchange_account.name
+
+    ledger_entry.description = description
+    ledger_entry.credit_unit = ledger_entry.debit_unit = op.unit
+    ledger_entry.credit_amount = ledger_entry.debit_amount = op.amount_decimal
+    ledger_entry.credit_conv = ledger_entry.debit_conv = op.conv
+
+    if op.from_account == server_account and op.to_account == treasury_account:
+        # MARK: Server to Treasury
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
+    elif op.from_account == treasury_account and op.to_account == server_account:
+        # MARK: Treasury to Server
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+    elif op.from_account == funding_account and op.to_account == treasury_account:
+        # MARK: Funding to Treasury
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+        ledger_entry.credit = LiabilityAccount(
+            name="Owner Loan Payable (funding)", sub=funding_account
+        )
+    elif op.from_account == treasury_account and op.to_account == funding_account:
+        # MARK: Treasury to Funding
+        ledger_entry.debit = LiabilityAccount(
+            name="Owner Loan Payable (funding)", sub=treasury_account
+        )
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=funding_account)
+    elif op.from_account == treasury_account and op.to_account == exchange_account:
+        # MARK: Treasury to Exchange
+        ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+    elif op.from_account == exchange_account and op.to_account == treasury_account:
+        # MARK: Exchange to Treasury
+        ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
+        ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
+    elif op.from_account == server_account:
+        # MARK: Server to customer account withdrawal
+        customer = op.to_account
+        server = op.from_account
+        ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
+    elif op.to_account == server_account:
+        # MARK: Customer account to server account
+        customer = op.from_account
+        server = op.to_account
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
+    else:
+        logger.info(
+            f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
+        )
+    return ledger_entry

@@ -14,7 +14,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
-    collection_name: str = "ledger",
+    collection_name: str = "",
     filter_by_account: Account | None = None,
 ) -> list[LedgerEntry]:
     """
@@ -38,6 +38,7 @@ async def get_ledger_entries(
         - If filter_by_account is provided, matches entries where either the debit or credit side
           corresponds to the specified account name and sub-account.
     """
+    collection_name = LedgerEntry.collection() if not collection_name else collection_name
     query = {"timestamp": {"$lte": as_of_date}}
 
     # Add account filter if provided
@@ -65,9 +66,6 @@ async def get_ledger_entries(
                 "group_id": 1,
                 "timestamp": 1,
                 "description": 1,
-                "amount": 1,
-                "unit": 1,
-                "conv": 1,
                 "debit_amount": 1,
                 "debit_unit": 1,
                 "debit_conv": 1,
@@ -89,7 +87,7 @@ async def get_ledger_entries(
 
 async def get_ledger_dataframe(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
-    collection_name: str = "ledger",
+    collection_name: str = "",
     filter_by_account: Account | None = None,
 ) -> pd.DataFrame:
     """
@@ -118,17 +116,12 @@ async def get_ledger_dataframe(
             - credit_account_type: The type of the credit account.
             - credit_sub: The sub-account of the credit account.
     """
+    collection_name = LedgerEntry.collection() if not collection_name else collection_name
     ledger_entries = await get_ledger_entries(
         as_of_date=as_of_date, collection_name=collection_name, filter_by_account=filter_by_account
     )
     data = []
     for entry in ledger_entries:
-        # Handle legacy entries (same currency for debit and credit)
-        # if entry.amount is not None and entry.unit is not None and entry.conv is not None:
-        #     debit_amount = credit_amount = entry.amount
-        #     debit_unit = credit_unit = entry.unit
-        #     debit_conv = credit_conv = entry.conv
-        # else:
         debit_amount = entry.debit_amount
         debit_unit = entry.debit_unit.value if entry.debit_unit else None
         debit_conv = entry.debit_conv
@@ -168,20 +161,13 @@ async def get_ledger_dataframe(
     return df
 
 
+# MARK: Balance Sheet Generation
 async def generate_balance_sheet_pandas(
     df: pd.DataFrame = pd.DataFrame(), reporting_date: datetime = None
 ) -> Dict:
     """
     Generates a GAAP-compliant balance sheet in USD, with supplemental columns for HIVE, HBD, SATS, and msats.
     Includes proper CTA calculation.
-
-    Args:
-        df (pd.DataFrame): Ledger entries DataFrame with columns: timestamp, debit_amount, debit_unit, credit_amount, credit_unit, etc.
-        reporting_date (datetime, optional): The balance sheet date for exchange rate translations.
-            If None, uses the timestamp of the most recent entry in the DataFrame.
-
-    Returns:
-        Dict: Balance sheet with primary values in USD and supplemental values in HIVE, HBD, SATS, and msats.
     """
     # Step 1: Determine the reporting date and spot rates
     if df.empty:
@@ -334,6 +320,17 @@ async def generate_balance_sheet_pandas(
 
     for category in ["Assets", "Liabilities", "Equity"]:
         for account_name in balance_sheet[category]:
+            # Ensure translated_values has an entry for every account, even if empty
+            if not translated_values[category][account_name]:
+                for sub in balance_sheet[category][account_name]:
+                    if sub != "Total":
+                        translated_values[category][account_name][sub] = {
+                            "usd": 0.0,
+                            "hive": 0.0,
+                            "hbd": 0.0,
+                            "sats": 0.0,
+                            "msats": 0.0,
+                        }
             for sub in balance_sheet[category][account_name]:
                 if sub == "Total":
                     continue
@@ -348,7 +345,7 @@ async def generate_balance_sheet_pandas(
                     + sats * spot_rates["sats_to_usd"]
                 )
 
-                # Store translated values
+                # Update translated values
                 translated_values[category][account_name][sub] = {
                     "usd": round(usd, 2),
                     "hive": round(usd / spot_rates["hive_to_usd"], 2)
@@ -367,23 +364,13 @@ async def generate_balance_sheet_pandas(
 
     # Step 6: Update balance sheet with translated values
     for category in ["Assets", "Liabilities", "Equity"]:
-        for account_name in balance_sheet[category].keys():
-            if not translated_values[category][account_name]:
-                for sub in balance_sheet[category][account_name]:
-                    if sub != "Total":
-                        translated_values[category][account_name][sub] = {
-                            "usd": 0.0,
-                            "hive": 0.0,
-                            "hbd": 0.0,
-                            "sats": 0.0,
-                            "msats": 0.0,
-                        }
+        for account_name in balance_sheet[category]:
             for sub in translated_values[category][account_name]:
                 balance_sheet[category][account_name][sub] = translated_values[category][
                     account_name
                 ][sub]
 
-    # Step 7: Calculate totals
+    # Step 7: Calculate totals for each account and category
     for category in ["Assets", "Liabilities", "Equity"]:
         for account_name in balance_sheet[category]:
             sub_accounts = {
@@ -668,7 +655,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     Returns:
         str: A formatted string table displaying balances in SATS, HIVE, HBD, and USD.
     """
-    max_width = 94
+    max_width = 115
     output = ["Balance Sheet in All Currencies"]
     output.append("-" * max_width)
     output.append(f"{'Account':<40} {'Sub':<17} {'SATS':>10} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
@@ -980,22 +967,23 @@ async def get_account_balance_printout(
             total_msats = conv_msats * factor
 
             output.append("-" * max_width)
-            output.append(f"{'Final Balance':<20} {final_balance:>42,.2f} {unit.upper():>12}")
             output.append(
-                f"{'Converted Values':<10} "
+                f"{'Converted    ':<10} "
                 f"{total_hive:>15,.2f} HIVE "
                 f"{total_hbd:>12,.2f} HBD "
                 f"{total_usd_for_unit:>12,.2f} USD "
                 f"{total_sats_for_unit:>12,.0f} SATS "
                 f"{total_msats:>16,.0f} msats"
             )
+            output.append("-" * max_width)
+            output.append(f"{'Final Balance':<10} {final_balance:>15,.2f} {unit.upper():>6}")
 
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>19,.2f}")
-    output.append(f"Total SATS: {total_sats:>15,.0f}")
+    output.append(f"Total SATS: {total_sats:>18,.0f}")
     output.append(title_line)
     output.append("=" * max_width + "\n")
 
