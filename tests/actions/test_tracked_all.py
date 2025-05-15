@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
 
+import pandas as pd
 import pytest
 from bson import json_util
 
@@ -65,21 +66,32 @@ def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None,
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
     for hive_event in json_data:
+        hive_event["update_conv"] = False
         op = op_any_or_base(hive_event)
         yield op
 
 
 @pytest.mark.asyncio
-async def test_fill_ledger_database_from_mongodb_dump() -> None:
+async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     """
     Test loading hive events from a MongoDB dump file.
-
-    :param file_path: Path to the JSONL file.
     """
     file_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    count = 0
+    processed_count = 0
     for op in load_hive_events_from_mongodb_dump(file_path):
-        _ = await process_tracked(op)
+        count += 1
+        ledger_entry = await process_tracked(op)
+        if ledger_entry is not None:
+            processed_count += 1
+            print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+    df = await get_ledger_dataframe()
+    assert len(df) == processed_count
+    print(f"Total events processed: {count}")
+    print(f"Total ledger entries created: {processed_count}")
+    print(f"Total ledger entries in database: {len(df)}")
+    return df
 
 
 def test_print_block_numbers_of_events() -> None:
@@ -127,14 +139,14 @@ async def test_balance_sheet_steps():
         )
         all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
         balance_sheet_print = balance_sheet_printout(
-            balance_sheet_pandas, datetime.now(tz=timezone.utc)
+            balance_sheet_pandas, as_of_date=datetime.now(tz=timezone.utc)
         )
         if not balance_sheet_pandas["is_balanced"]:
+            print(f"***********The balance sheet is not balanced. {count}************")
             print(all_currencies)
             print(balance_sheet_print)
-            print(f"***********The balance sheet is not balanced. {count}************")
             assert False
-    print(balance_sheet_printout)
+    print(balance_sheet_print)
     print(all_currencies)
     # await drop_collection_and_user("conn_1", "test_db", "test_user")
 
@@ -158,15 +170,18 @@ async def test_process_tracked_and_balance_sheet():
     Note:
     Ensure that the necessary test database and user are set up before running this test.
     """
-
-    await test_fill_ledger_database_from_mongodb_dump()
+    # Must update quotes before running this test
+    await OpBase.update_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)
-    balance_sheet_pandas = await generate_balance_sheet_pandas()
-    fbs = balance_sheet_printout(balance_sheet_pandas, as_of_date)
-    print(fbs)
+    df = await test_fill_ledger_database_from_mongodb_dump()
+    balance_sheet_pandas = await generate_balance_sheet_pandas(df=df, reporting_date=as_of_date)
 
     all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
     print(all_currencies)
+    fbs = balance_sheet_printout(balance_sheet=balance_sheet_pandas, as_of_date=as_of_date)
+    print(fbs)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
