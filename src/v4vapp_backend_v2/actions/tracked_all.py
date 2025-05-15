@@ -5,9 +5,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
-from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any
-from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
-from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
@@ -31,7 +29,7 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
 
     if tracked.get("type", None):
         try:
-            return op_any(tracked)
+            return op_any_or_base(tracked)
         except Exception as e:
             raise ValueError(f"Invalid tracked object: {e}")
 
@@ -137,9 +135,10 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     if isinstance(op, TransferBase):
         description = op.d_memo if op.d_memo else ""
         ledger_entry.description = description
-        ledger_entry.unit = op.unit
-        ledger_entry.amount = op.amount_decimal
-        ledger_entry.conv = op.conv
+        ledger_entry.credit_unit = ledger_entry.debit_unit = op.unit
+        ledger_entry.credit_amount = ledger_entry.debit_amount = op.amount_decimal
+        ledger_entry.credit_conv = ledger_entry.debit_conv = op.conv
+
         if op.from_account == server_account and op.to_account == treasury_account:
             # MARK: Server to Treasury
             ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
