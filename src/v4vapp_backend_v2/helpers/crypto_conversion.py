@@ -56,10 +56,10 @@ class CryptoConv(BaseModel):
             if quote and quote.sats_usd > 0:
                 data["sats_hive"] = quote.sats_hive
                 data["sats_hbd"] = quote.sats_hbd
-                data["sats"] = int(data["hive"] * quote.sats_hive * 1000)
+                data["sats"] = int(data["hive"] * quote.sats_hive)
                 data["msats"] = int(data["sats"] * 1000)
                 data["btc"] = data["msats"] / 100_000_000_000
-                data["usd"] = round(data["msats"] / (quote.sats_usd * 1000), 6)
+                data["usd"] = round(data["sats"] / (quote.sats_usd), 6)
 
         super().__init__(**data)
         # If msats is not set, calculate it from the other values

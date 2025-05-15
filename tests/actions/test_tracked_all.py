@@ -17,6 +17,7 @@ from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
 
@@ -101,7 +102,11 @@ def test_print_block_numbers_of_events() -> None:
 async def test_balance_sheet_steps():
     """
     Test balance sheet in steps one by one
+    This also steps through the process of fetching each Hive Event and processing it.
+    It generates a balance sheet in pandas DataFrame format and prints it.
+    It also prints the formatted balance sheet as of the current date.
     """
+    await OpBase.update_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
@@ -110,10 +115,11 @@ async def test_balance_sheet_steps():
         count += 1
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
-        if op_tracked.type in ["block_marker", "limit_order_create", "fill_order"]:
-            continue
         print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
         ledger_entry = await process_tracked(op_tracked)
+        if ledger_entry is None:
+            print(f"ledger_entry is None {count=}")
+            continue
         print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()
         balance_sheet_pandas = await generate_balance_sheet_pandas(
@@ -128,12 +134,8 @@ async def test_balance_sheet_steps():
             print(balance_sheet_print)
             print(f"***********The balance sheet is not balanced. {count}************")
             assert False
-
-        # print(f"The balance sheet is balanced. {count}")
-        # if count != 8:
-        #     collection = await TrackedBaseModel.db_client.get_collection("ledger")
-        #     await collection.delete_many({})
-
+    print(balance_sheet_printout)
+    print(all_currencies)
     # await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 

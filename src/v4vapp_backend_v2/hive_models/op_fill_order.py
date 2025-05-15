@@ -18,7 +18,9 @@ class FillOrder(OpBase):
     open_owner: str
     open_pays: AmountPyd
     timestamp: datetime
-    conv: CryptoConv = CryptoConv()
+    debit_conv: CryptoConv = CryptoConv()
+    credit_conv: CryptoConv = CryptoConv()
+
     completed_order: bool = Field(
         default=False,
         description="True if the order was completed, False if it was partially filled",
@@ -32,10 +34,16 @@ class FillOrder(OpBase):
 
     def __init__(self, **data: dict):
         super().__init__(**data)
-        self.conv = CryptoConv(
+        self.debit_conv = CryptoConv(
             conv_from=self.current_pays.unit,
             value=self.current_pays.amount_decimal,
             converted_value=self.open_pays.amount_decimal,
+            quote=self.last_quote,
+        )
+        self.credit_conv = CryptoConv(
+            conv_from=self.open_pays.unit,
+            value=self.open_pays.amount_decimal,
+            converted_value=self.current_pays.amount_decimal,
             quote=self.last_quote,
         )
         # Set the log_internal string to None to force it to be generated

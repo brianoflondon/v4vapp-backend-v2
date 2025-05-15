@@ -6,6 +6,8 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
@@ -98,6 +100,8 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    if isinstance(op, BlockMarker):
+        return None
     await op.lock_op()
     ledger_entry = None
     server_account = InternalConfig().config.hive.server_account.name
@@ -183,22 +187,25 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             logger.info(
                 f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
             )
-    # elif isinstance(op, LimitOrderCreate):
-    #     logger.info(f"Limit order create: {op.orderid}")
-    #     ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
-    #     ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
-    #     ledger_entry.description = op.log_str
-    #     ledger_entry.unit = op.amount_to_sell.unit
-    #     ledger_entry.amount = op.amount_to_sell.amount_decimal
-    # elif isinstance(op, FillOrder):
-    #     logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
-    #     ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
-    #     ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
-    #     ledger_entry.description = op.log_str
-    #     ledger_entry.debit_unit = op.current_pays.unit
-    #     ledger_entry.credit_unit = op.open_pays.unit
-    #     ledger_entry.debit_amount = op.current_pays.amount_decimal
-    #     ledger_entry.credit_amount = op.open_pays.amount_decimal
+    elif isinstance(op, LimitOrderCreate):
+        logger.info(f"Limit order create: {op.orderid}")
+        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
+        ledger_entry.description = op.notification_str
+        ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
+        ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
+        ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
+    elif isinstance(op, FillOrder):
+        logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
+        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
+        ledger_entry.description = op.notification_str
+        ledger_entry.debit_unit = op.current_pays.unit
+        ledger_entry.credit_unit = op.open_pays.unit
+        ledger_entry.debit_amount = op.current_pays.amount_decimal
+        ledger_entry.credit_amount = op.open_pays.amount_decimal
+        ledger_entry.debit_conv = op.debit_conv
+        ledger_entry.credit_conv = op.credit_conv
     if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
         try:
             await TrackedBaseModel.db_client.insert_one(
