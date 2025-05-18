@@ -168,6 +168,11 @@ class MongoDBClient:
         self.db_name = db_name
         self.db_user = db_user
         self.validate_connection()
+        if not self.dbs:
+            raise OperationFailure(
+                error=f"Database {self.db_name} not found",
+                code=DbErrorCode.NO_DB.value,
+            )
         self.hosts = ",".join(self.db_connection.hosts) if db_conn else "localhost"
         self.validate_user_db()
         self.db_password = self.dbs[self.db_name].db_users[self.db_user].password
@@ -182,6 +187,17 @@ class MongoDBClient:
         self._bulk_write_in_progress = False  # Flag to track bulk write status
 
     def validate_connection(self):
+        """
+        Validates and initializes the database connection configuration.
+        This method retrieves the database configuration using the `InternalConfig` class,
+        selects the appropriate database connection based on `self.db_conn`, and sets the
+        `self.dbs` attribute depending on whether the database name is "admin" or not.
+        Raises:
+            OperationFailure: If the specified database connection is not found or if any
+            other exception occurs during the connection validation process. The error
+            message and code provide details about the failure.
+        """
+
         try:
             self.config = InternalConfig().config
             self.db_connection = self.config.dbs_config.connections[self.db_conn]
@@ -202,6 +218,18 @@ class MongoDBClient:
             )
 
     def validate_user_db(self):
+        """
+        Validates the existence and credentials of a user in the specified database.
+
+        This method performs several checks to ensure that:
+        - The database name, user, and database dictionary are present.
+        - The specified database exists in the database dictionary.
+        - The specified user exists in the user list of the database.
+        - The user has a password set, unless the connection is to a test replica set.
+
+        Raises:
+            OperationFailure: If any of the validation checks fail, with an appropriate error message and code.
+        """
         elapsed_time = timer() - self.start_connection
         logger.debug(
             f"{DATABASE_ICON} {logger.name} "
