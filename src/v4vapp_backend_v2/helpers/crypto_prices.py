@@ -269,7 +269,7 @@ class AllQuotes(BaseModel):
     async def get_all_quotes(self, use_cache: bool = True, timeout: float = 60.0):
         start = timer()
         global_cache = await self.check_global_cache()
-        if global_cache:
+        if use_cache and global_cache:
             logger.debug(
                 f"Quotes fetched from main cache in {timer() - start:.4f} seconds",
             )
