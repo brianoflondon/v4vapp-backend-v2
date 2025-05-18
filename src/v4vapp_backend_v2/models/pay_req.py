@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
@@ -112,6 +113,11 @@ class PayReq(TrackedBaseModel):
     payment_addr: str | None = None
     features: Dict[str, Feature] | None = None
     blinded_paths: List[BlindedPaymentPath] | None = None
+
+    conv: CryptoConv = Field(
+        default_factory=CryptoConv,
+        description="Conversion data for the payment request",
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
