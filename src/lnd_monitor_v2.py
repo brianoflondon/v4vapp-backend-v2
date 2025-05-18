@@ -6,6 +6,7 @@ from typing import Annotated, Any, List
 
 import typer
 from google.protobuf.json_format import MessageToDict
+from grpc.aio import AioRpcError  # type: ignore
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
@@ -67,6 +68,7 @@ async def track_events(
     # The delay is necessary to allow the group to complete because sometimes
     # Invoices and Payments are not received in the right order with the HtlcEvents
     if lnd_events_group.complete_group(event=htlc_event):
+        incoming_invoice = None
         notification = True if isinstance(htlc_event, routerrpc.HtlcEvent) else False
         if (
             isinstance(htlc_event, routerrpc.HtlcEvent)
@@ -187,7 +189,6 @@ async def remove_event_group(
     Returns:
         None
     """
-    logger.debug(f"Removing event group: {MessageToDict(htlc_event)}")
     await asyncio.sleep(10)
     lnd_events_group.remove_group(htlc_event)
 
@@ -213,7 +214,7 @@ def get_mongodb_client() -> MongoDBClient:
 async def db_store_invoice(
     htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
-    db_client: MongoDBClient = None,
+    db_client: MongoDBClient | None = None,
     *args: Any,
     **kwargs,
 ) -> None:
@@ -251,7 +252,7 @@ async def db_store_invoice(
 async def db_store_payment(
     htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
-    db_client: MongoDBClient = None,
+    db_client: MongoDBClient | None = None,
     *args: Any,
     **kwargs,
 ) -> None:
@@ -298,8 +299,8 @@ async def db_store_payment(
 async def invoice_report(
     htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
-    lnd_events_group: LndEventsGroup = None,
-    db_client: MongoDBClient = None,
+    lnd_events_group: LndEventsGroup | None = None,
+    db_client: MongoDBClient | None = None,
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
         htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
@@ -324,7 +325,7 @@ async def payment_report(
     htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
-    db_client: MongoDBClient = None,
+    db_client: MongoDBClient | None = None,
 ) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
@@ -350,7 +351,7 @@ async def htlc_event_report(
     htlc_event: routerrpc.HtlcEvent,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
-    db_client: MongoDBClient = None,
+    db_client: MongoDBClient | None = None,
 ) -> None:
     event_type = (
         routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
@@ -396,7 +397,8 @@ async def invoices_loop(
         await asyncio.sleep(10)
 
     request_sub = lnrpc.InvoiceSubscription(
-        add_index=add_index, settle_index=settle_index
+        add_index=int(add_index) if add_index is not None else 0,
+        settle_index=int(settle_index) if settle_index is not None else 0,
     )
     while True:
         try:
@@ -417,7 +419,10 @@ async def invoices_loop(
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
-                original_error=e.original_error, call_name="SubscribeInvoices"
+                original_error=e.original_error
+                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
+                else None,
+                call_name="SubscribeInvoices",
             )
             pass
         except LNDConnectionError as e:
@@ -458,7 +463,10 @@ async def payments_loop(
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
-                original_error=e.original_error, call_name="TrackPayments"
+                original_error=e.original_error
+                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
+                else None,
+                call_name="TrackPayments",
             )
             pass
         except LNDConnectionError as e:
@@ -493,7 +501,10 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
-                original_error=e.original_error, call_name="SubscribeHtlcEvents"
+                original_error=e.original_error
+                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
+                else None,
+                call_name="SubscribeHtlcEvents",
             )
             pass
         except LNDConnectionError as e:
@@ -755,7 +766,7 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
         return
 
 
-async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
+async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice | None:
     """
     Fetches the most recent invoice from the MongoDB collection.
 
@@ -779,13 +790,17 @@ async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
     async with db_client:
         query = {}
         sort = [("add_index", -1)]
-        collection = db_client.db.get_collection("invoices")
+        collection = await db_client.get_collection("invoices")
         cursor = collection.find(query)
         cursor.sort(sort)
+        invoice = None
         try:
             async for ans in cursor:
                 invoice = Invoice(**ans)
                 break
+            if not invoice:
+                logger.warning("No invoices found, empty database")
+                return None
             logger.info(
                 f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
             )
@@ -796,9 +811,51 @@ async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice:
         return None
 
 
+async def get_most_recent_payment(db_client: MongoDBClient) -> Payment | None:
+    """
+    Fetches the most recent payment from the MongoDB collection.
+
+    This asynchronous function retrieves the most recent payment document
+    from the "payments" collection in the MongoDB database. The payments
+    are sorted by the "creation_date" field in descending order to ensure
+    the latest payment is selected.
+
+    Returns:
+        Payment: An instance of the `Payment` class representing the most
+        recent payment.
+
+    Raises:
+        Exception: If there is an issue with database connectivity or data
+        parsing.
+    """
+    async with db_client:
+        query = {}
+        sort = [("creation_date", -1)]
+        collection = await db_client.get_collection("payments")
+        cursor = collection.find(query)
+        cursor.sort(sort)
+        payment = None
+        try:
+            async for ans in cursor:
+                payment = Payment(**ans)
+                break
+            if not payment:
+                logger.warning("No payments found, empty database")
+                return None
+            logger.info(
+                f"{DATABASE_ICON} Most recent payment: {payment.payment_index} {payment.creation_date}"
+            )
+            if payment:
+                return payment
+        except Exception as e:
+            logger.warning(f"No payments found, empty database {e}")
+        return None
+
+
 async def synchronize_db(
     lnd_client: LNDClient,
     db_client: MongoDBClient,
+    delay: int = 10,
 ) -> None:
     """
     Synchronizes the database with the LND client.
@@ -812,6 +869,8 @@ async def synchronize_db(
             the Lightning Network Daemon.
         db_client (MongoDBClient): The MongoDB client instance used to store
             the invoices.
+        delay (int): The delay in seconds before starting the synchronization
+            process. Default is 10 seconds.
 
     Returns:
         None: This function does not return a value. It performs asynchronous
@@ -821,7 +880,7 @@ async def synchronize_db(
         read_all_invoices(lnd_client, db_client),
         read_all_payments(lnd_client, db_client),
     ]
-    await asyncio.sleep(10)
+    await asyncio.sleep(delay)
     await asyncio.gather(*sync_tasks)
 
 
@@ -834,6 +893,7 @@ async def main_async_start(connection_name: str) -> None:
     Returns:
         None
     """
+    lnd_client = None
     try:
         # Get the current event loop
         loop = asyncio.get_event_loop()
@@ -868,17 +928,24 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             db_client = get_mongodb_client()
+
             tasks = [
-                synchronize_db(
-                    lnd_client=lnd_client,
-                    db_client=db_client,
-                ),
                 invoices_loop(
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
                 ),
                 payments_loop(
                     lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
                 ),
+            ]
+
+            # If we haven't synced for a long time, do the sync first to avoid massive
+            # load on the database
+            pause_for_sync = await pause_for_database_sync()
+            if pause_for_sync:
+                await synchronize_db(lnd_client, db_client, delay=0)
+            else:
+                tasks.append(synchronize_db(lnd_client, db_client, delay=10))
+            tasks += [
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 fill_channel_names(lnd_client, lnd_events_group),
                 check_for_shutdown(),
@@ -887,24 +954,28 @@ async def main_async_start(connection_name: str) -> None:
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("👋 Received signal to stop. Exiting...")
-        if hasattr(lnd_client, "channel") and lnd_client.channel:
+        if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
             await lnd_client.channel.close()
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
-        logger.error(
-            f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
-            extra={"error": e},
-        )
-        if hasattr(lnd_client, "channel") and lnd_client.channel:
-            await lnd_client.channel.close()
-        await asyncio.sleep(0.2)
-        raise e
+        if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
+            logger.error(
+                f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
+                extra={"error": e},
+            )
+            if hasattr(lnd_client, "channel") and lnd_client.channel:
+                await lnd_client.channel.close()
+            await asyncio.sleep(0.2)
+            raise e
 
     finally:
         # Cancel all tasks except the current one
+        if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
+            await lnd_client.channel.close()
+        icon = hasattr(lnd_client, "icon") and lnd_client.icon if lnd_client else ""
         logger.info(
-            f"{lnd_client.icon} ✅ LND gRPC client shutting down. "
+            f"{icon} ✅ LND gRPC client shutting down. "
             f"Monitoring node: {connection_name}. Version: {__version__}",
             extra={"notification": True},
         )
@@ -919,6 +990,30 @@ async def main_async_start(connection_name: str) -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def pause_for_database_sync() -> bool:
+    db_client = get_mongodb_client()
+    await db_client.connect()
+    recent_invoice = await get_most_recent_invoice(db_client)
+    recent_payment = await get_most_recent_payment(db_client)
+    if (
+        recent_invoice
+        and recent_payment
+        and recent_invoice.creation_date
+        and recent_payment.creation_date
+    ):
+        invoice_time_delta = datetime.now(tz=timezone.utc) - recent_invoice.creation_date
+        payment_time_delta = datetime.now(tz=timezone.utc) - recent_payment.creation_date
+        if invoice_time_delta > timedelta(hours=2) or payment_time_delta > timedelta(hours=2):
+            logger.info(
+                f"Database sync needed Invoice: {recent_invoice.creation_date} {invoice_time_delta}"
+            )
+            logger.info(
+                f"Database sync needed Payment: {recent_payment.creation_date} {payment_time_delta}"
+            )
+            return True
+    return False
 
 
 async def check_for_shutdown():
