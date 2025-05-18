@@ -64,59 +64,7 @@ class NodeAlias(BaseModel):
     alias: str
 
 
-class PaymentExtra(TrackedBaseModel):
-    route: list[NodeAlias] | None = []
-
-    @computed_field
-    def destination(self) -> str:
-        """
-        Determines the destination based on the route.
-        Returns:
-            str: The alias of the destination. If the route is empty, returns "Unknown".
-                If the route has only one element, returns the alias of that element.
-                If the last element in the route has an alias of "Unknown",
-                    checks the second to last element:
-                    - If the alias is "magnetron", returns "Muun User".
-                    - If the alias is "ACINQ", returns "Phoenix User".
-                Otherwise, returns the alias of the last element in the route.
-        """
-        if not self.route:
-            return "Unknown"
-        if len(self.route) == 1:
-            return self.route[0].alias
-        if self.route[-1].alias == "Unknown":
-            if self.route[-2].alias == "magnetron":
-                return "Muun User"
-            elif self.route[-2].alias == "ACINQ":
-                return "Phoenix User"
-        return self.route[-1].alias
-
-    @computed_field
-    def route_str(self) -> str:
-        """
-        Returns a string representation of the route with fees in ppm
-
-        Returns:
-            str: A string representation of the route.
-        """
-        if not self.route:
-            return "Unknown"
-
-        route_fees_ppm = self.route_fees_ppm
-        ans = " -> ".join(
-            [
-                (
-                    f"{hop.alias}"
-                    if route_fees_ppm.get(hop.pub_key) is None
-                    else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
-                )
-                for hop in self.route
-            ]
-        )
-        return ans
-
-
-class Payment(PaymentExtra):
+class Payment(TrackedBaseModel):
     """
     Payment model representing a payment transaction.
 
@@ -138,18 +86,14 @@ class Payment(PaymentExtra):
         htlcs (List[HTLCAttempt] | None): The HTLC attempts associated with the payment.
         destination_alias (str | None): The alias of the payment destination
             (needs to be looked up not sent by LND)
-
-    Methods:
-        __init__(lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
-            Initializes a Payment instance with data from an lnrpc.Payment
-                object or provided data.
-
-        destination_pub_keys() -> List[str]:
-            Returns the public keys of the payment hops
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    # Attributes from PaymentExtra
+    route: list[NodeAlias] | None = []
+
+    # Attributes from Payment
     payment_hash: str | None = None
     value: Optional[BSONInt64] = None
     creation_date: datetime | None = None
@@ -174,34 +118,27 @@ class Payment(PaymentExtra):
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
 
-    @property
-    def collection(self) -> str:
+    # Methods from PaymentExtra
+    @computed_field
+    def destination(self) -> str:
         """
-        Returns the collection name for the invoice.
-
-        Returns:
-            str: The collection name for the invoice.
+        Determines the destination based on the route.
         """
-        return "payments"
-
-    @property
-    def group_id_query(self) -> dict:
-        """
-        Returns the query used to identify the group ID in the database.
-
-        Returns:
-            dict: The query used to identify the group ID.
-        """
-        return {"payment_hash": self.payment_hash}
+        if not self.route:
+            return "Unknown"
+        if len(self.route) == 1:
+            return self.route[0].alias
+        if self.route[-1].alias == "Unknown":
+            if self.route[-2].alias == "magnetron":
+                return "Muun User"
+            elif self.route[-2].alias == "ACINQ":
+                return "Phoenix User"
+        return self.route[-1].alias
 
     @property
     def get_succeeded_htlc(self) -> HTLCAttempt | None:
         """
         Retrieves the HTLC attempt with status 'SUCCEEDED'.
-
-        Returns:
-            Optional[HTLCAttempt]: The HTLC attempt with status 'SUCCEEDED', or None
-            if not found.
         """
         if not self.htlcs:
             return None
@@ -211,30 +148,9 @@ class Payment(PaymentExtra):
         return None
 
     @property
-    def destination_pub_keys(self) -> List[str | None]:
-        """
-        Retrieves the public keys of the destination hops in the HTLC route.
-
-        Returns:
-            Tuple[str, str]: A tuple containing the public key of the last hop and
-            the second to last hop in the route. If there is only one hop, the second
-            element of the tuple will be an empty string. If there are no hops,
-            an empty string is returned.
-        """
-        ans = []
-        htlc = self.get_succeeded_htlc
-        if htlc:
-            for pub_key in htlc.route.hops:
-                ans.append(pub_key.pub_key)
-        return ans
-
-    @property
     def route_fees_ppm(self) -> dict[str, float]:
         """
         Calculates the fee in parts per million (ppm) for each hop in the route.
-
-        Returns:
-            dict[str, float]: A dict of fee ppm values for each hop.
         """
         fee_ppm_dict: dict[str, float] = {}
         htlc = self.get_succeeded_htlc
@@ -246,12 +162,51 @@ class Payment(PaymentExtra):
         return fee_ppm_dict
 
     @computed_field
+    def route_str(self) -> str:
+        """
+        Returns a string representation of the route with fees in ppm.
+        """
+        if not self.route:
+            return "Unknown"
+
+        route_fees_ppm = self.route_fees_ppm
+        ans = " -> ".join(
+            [
+                (
+                    f"{hop.alias}"
+                    if route_fees_ppm.get(hop.pub_key) is None
+                    else f"{hop.alias} ({route_fees_ppm.get(hop.pub_key):.0f} ppm)"
+                )
+                for hop in self.route
+            ]
+        )
+        return ans
+
+    # Methods from Payment
+    @property
+    def collection(self) -> str:
+        return "payments"
+
+    @property
+    def group_id_query(self) -> dict:
+        return {"payment_hash": self.payment_hash}
+
+    @property
+    def destination_pub_keys(self) -> List[str | None]:
+        """
+        Retrieves the public keys of the destination hops in the HTLC route.
+        """
+        ans = []
+        htlc = self.get_succeeded_htlc
+        if htlc and htlc.route:
+            for pub_key in htlc.route.hops:
+                ans.append(pub_key.pub_key)
+        return ans
+
+    @computed_field
     def fee_ppm(self) -> int:
         """
         Calculates the fee in parts per million (ppm) for the payment.
-
-        Returns:
-            float: The fee in ppm.
         """
         if self.fee_msat and self.value_msat:
             return int((self.fee_msat / self.value_msat) * 1_000_000)
