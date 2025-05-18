@@ -1,8 +1,8 @@
 import logging
 from dataclasses import dataclass
 
-from nectar import Hive
 from nectar.account import Account
+from nectar.hive import Hive
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
@@ -111,7 +111,8 @@ class VotingPower:
                 break
             except Exception as ex:
                 logging.error(
-                    f"Problem checking proposal votes {ex} {hive.rpc.url} no_preview", exc_info=True
+                    f"Problem checking proposal votes {ex} {hive.rpc.url} no_preview",
+                    exc_info=True,
                 )
                 rpc_node_count -= 1
                 hive.rpc.next()

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
 from typing import ClassVar, Deque, Tuple
 
-from nectar import Hive
+from nectar.hive import Hive
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, format_time_delta
@@ -157,9 +157,15 @@ class BlockCounter:
                 )
                 self.time_diff = check_time_diff(timestamp)
 
-                speed_up_factor = (min(self.marker_point, self.block_count) * HIVE_BLOCK_TIME) / last_marker_time
+                speed_up_factor = (
+                    min(self.marker_point, self.block_count) * HIVE_BLOCK_TIME
+                ) / last_marker_time
 
-                self.marker_point = (15 * 60 / HIVE_BLOCK_TIME) if self.time_diff < TIME_DIFFERENCE_CHECK else (5 * 60 / HIVE_BLOCK_TIME)
+                self.marker_point = (
+                    (15 * 60 / HIVE_BLOCK_TIME)
+                    if self.time_diff < TIME_DIFFERENCE_CHECK
+                    else (5 * 60 / HIVE_BLOCK_TIME)
+                )
                 self.next_marker += self.marker_point
 
                 self.running_time = timer() - self.start

@@ -3,7 +3,7 @@ from asyncio import get_event_loop
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
-from nectar import Hive
+from nectar.hive import Hive
 from pydantic import Field, computed_field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel

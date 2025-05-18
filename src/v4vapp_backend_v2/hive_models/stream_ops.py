@@ -2,9 +2,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
-from nectar import Hive
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
+from nectar.hive import Hive
 from nectarapi.exceptions import NumRetriesReached
 
 from v4vapp_backend_v2.config.setup import logger

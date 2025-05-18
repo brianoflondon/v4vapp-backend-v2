@@ -14,7 +14,11 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     get_ledger_dataframe,
     list_all_accounts,
 )
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
+from v4vapp_backend_v2.actions.tracked_all import (
+    LedgerEntryException,
+    process_tracked,
+    tracked_any,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
@@ -76,16 +80,20 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     """
     Test loading hive events from a MongoDB dump file.
     """
-    file_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
+    file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     count = 0
     processed_count = 0
     for op in load_hive_events_from_mongodb_dump(file_path):
         count += 1
-        ledger_entry = await process_tracked(op)
-        if ledger_entry is not None:
-            processed_count += 1
-            print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+        try:
+            ledger_entry = await process_tracked(op)
+            if ledger_entry is not None:
+                processed_count += 1
+                print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+        except LedgerEntryException as e:
+            print(f"Error processing tracked operation: {e}")
+            continue
     df = await get_ledger_dataframe()
     assert len(df) == processed_count
     print(f"Total events processed: {count}")
@@ -100,7 +108,7 @@ def test_print_block_numbers_of_events() -> None:
 
     :param file_path: Path to the JSONL file.
     """
-    file_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
+    file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     block_numbers = []
     for op in load_hive_events_from_mongodb_dump(file_path):
         block_numbers.append(op.block_num)
@@ -128,9 +136,10 @@ async def test_balance_sheet_steps():
         hive_event["update_conv"] = False
         op_tracked = tracked_any(hive_event)
         print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
-        ledger_entry = await process_tracked(op_tracked)
-        if ledger_entry is None:
-            print(f"ledger_entry is None {count=}")
+        try:
+            ledger_entry = await process_tracked(op_tracked)
+        except LedgerEntryException as e:
+            print(f"Expected error processing tracked operation: {e}")
             continue
         print(ledger_entry.print_journal_entry())
         df = await get_ledger_dataframe()

@@ -1,11 +1,13 @@
 import asyncio
 import json
 import random
+from collections import deque
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from telegram import Bot
-from telegram.error import BadRequest, InvalidToken, TimedOut
+from telegram.error import BadRequest, InvalidToken, RetryAfter, TimedOut
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -31,6 +33,8 @@ class NotificationBadTokenError(NotificationNotSetupError):
 class NotificationBot:
     bot: Bot
     config: NotificationBotConfig
+    _message_history: deque = deque(maxlen=1000)
+    _logged_patterns: set = set()  # Track patterns that have been logged as ignored
 
     def __init__(
         self,
@@ -66,10 +70,7 @@ class NotificationBot:
 
     @classmethod
     def config_paths(cls) -> list[Path]:
-        """Get all config paths in the base config path.
-        Returns:
-            list[Path]: List of config paths.
-        """
+        """Get all config paths in the base config path."""
         config_paths = [
             f
             for f in Path(InternalConfig.base_config_path).glob(f"*{BOT_CONFIG_EXTENSION}")
@@ -118,100 +119,68 @@ class NotificationBot:
         except Exception as e:
             raise NotificationNotSetupError(e)
 
-    async def send_message(self, text: str, retries: int = 3, **kwargs: Any):
-        """Use this method to send text messages, chat_id will be provided.
+    def _clean_message_history(self):
+        """Remove messages older than 60 seconds from the history and update logged patterns."""
+        now = datetime.now()
+        sixty_seconds_ago = now - timedelta(seconds=60)
+        # Collect patterns of messages that will remain
+        remaining_patterns = set()
+        # Remove old messages and track which patterns are still in history
+        while self._message_history and self._message_history[0]["timestamp"] < sixty_seconds_ago:
+            self._message_history.popleft()
+        # Add patterns of remaining messages to remaining_patterns
+        for msg in self._message_history:
+            remaining_patterns.add(msg["pattern"])
+        # Update _logged_patterns to only include patterns still in history
+        self._logged_patterns.intersection_update(remaining_patterns)
 
-        Args:
-            chat_id (:obj:`int` | :obj:`str`): |chat_id_channel|
-            text (:obj:`str`): Text of the message to be sent. Max
-                :tg-const:`telegram.constants.MessageLimit.MAX_TEXT_LENGTH` characters after
-                entities parsing.
-            parse_mode (:obj:`str`): |parse_mode|
-            entities (Sequence[:class:`telegram.MessageEntity`], optional): Sequence of special
-                entities that appear in message text, which can be specified instead of
-                :paramref:`parse_mode`.
-
-                .. versionchanged:: 20.0
-                    |sequenceargs|
-            link_preview_options (:obj:`LinkPreviewOptions`, optional): Link preview generation
-                options for the message. Mutually exclusive with
-                :paramref:`disable_web_page_preview`.
-
-                .. versionadded:: 20.8
-
-            disable_notification (:obj:`bool`, optional): |disable_notification|
-            protect_content (:obj:`bool`, optional): |protect_content|
-
-                .. versionadded:: 13.10
-
-            reply_markup (:class:`InlineKeyboardMarkup` | :class:`ReplyKeyboardMarkup` | \
-                :class:`ReplyKeyboardRemove` | :class:`ForceReply`, optional):
-                Additional interface options. An object for an inline keyboard, custom reply
-                keyboard, instructions to remove reply keyboard or to force a reply from the user.
-            message_thread_id (:obj:`int`, optional): |message_thread_id_arg|
-
-                .. versionadded:: 20.0
-            reply_parameters (:class:`telegram.ReplyParameters`, optional): |reply_parameters|
-
-                .. versionadded:: 20.8
-            business_connection_id (:obj:`str`, optional): |business_id_str|
-
-                .. versionadded:: 21.1
-            message_effect_id (:obj:`str`, optional): |message_effect_id|
-
-                .. versionadded:: 21.3
-            allow_paid_broadcast (:obj:`bool`, optional): |allow_paid_broadcast|
-
-                .. versionadded:: 21.7
-
-        Keyword Args:
-            allow_sending_without_reply (:obj:`bool`, optional): |allow_sending_without_reply|
-                Mutually exclusive with :paramref:`reply_parameters`, which this is a convenience
-                parameter for
-
-                .. versionchanged:: 20.8
-                    Bot API 7.0 introduced :paramref:`reply_parameters` |rtm_aswr_deprecated|
-
-                .. versionchanged:: 21.0
-                    |keyword_only_arg|
-            reply_to_message_id (:obj:`int`, optional): |reply_to_msg_id|
-                Mutually exclusive with :paramref:`reply_parameters`, which this is a convenience
-                parameter for
-
-                .. versionchanged:: 20.8
-                    Bot API 7.0 introduced :paramref:`reply_parameters` |rtm_aswr_deprecated|
-
-                .. versionchanged:: 21.0
-                    |keyword_only_arg|
-            disable_web_page_preview (:obj:`bool`, optional): Disables link previews for links in
-                this message. Convenience parameter for setting :paramref:`link_preview_options`.
-                Mutually exclusive with :paramref:`link_preview_options`.
-
-                .. versionchanged:: 20.8
-                    Bot API 7.0 introduced :paramref:`link_preview_options` replacing this
-                    argument. PTB will automatically convert this argument to that one, but
-                    for advanced options, please use :paramref:`link_preview_options` directly.
-
-                .. versionchanged:: 21.0
-                    |keyword_only_arg|
-
-        Returns:
-            :class:`telegram.Message`: On success, the sent message is returned.
-
-        Raises:
-            :exc:`ValueError`: If both :paramref:`disable_web_page_preview` and
-                :paramref:`link_preview_options` are passed.
-            :class:`telegram.error.TelegramError`: For other errors.
-
+    def _check_message_pattern(self, text: str) -> bool:
         """
+        Check if the last 40 characters of the message have been sent more than 5 times
+        in the last 60 seconds. Returns True if the message should be sent, False if it should be ignored.
+        Logs a warning only the first time a pattern is ignored.
+        """
+        num_chars = 20
+        self._clean_message_history()
+        last_n_chars = text[-num_chars:] if len(text) >= num_chars else text
+
+        # Count messages with the same last 20 characters in the last 60 seconds
+        pattern_count = sum(1 for msg in self._message_history if msg["pattern"] == last_n_chars)
+
+        if pattern_count >= 5:
+            # Log only if this pattern hasn't been logged before
+            if last_n_chars not in self._logged_patterns:
+                logger.warning(
+                    f"Ignoring message with pattern '{last_n_chars}' - already sent {pattern_count} times in last 60s",
+                    extra={"notification": True, "pattern": last_n_chars},
+                )
+                self._logged_patterns.add(last_n_chars)
+            return False
+        return True
+
+    async def send_message(self, text: str, retries: int = 3, **kwargs: Any):
+        """Send text messages, with pattern-based filtering and rate limiting."""
         if not self.bot or not self.config.chat_id:
             raise NotificationNotSetupError(
                 "No chat ID set. Please start the bot first by sending /start"
             )
 
-        text_v2 = None  # Initialize text_v2 to avoid NameError
         text = self.truncate_text(text)
         text_original = text
+
+        # Check if the message should be sent based on pattern frequency
+        if not self._check_message_pattern(text):
+            return
+
+        # Add the message to history before attempting to send
+        self._message_history.append(
+            {
+                "timestamp": datetime.now(),
+                "pattern": text[-20:] if len(text) >= 20 else text,
+            }
+        )
+
+        text_v2 = None
         if text.endswith("no_preview"):
             kwargs["disable_web_page_preview"] = True
             text = text.rstrip("no_preview").strip()
@@ -225,17 +194,24 @@ class NotificationBot:
                 return
             except TimedOut as e:
                 attempt += 1
-                if attempt > retries:
+                if attempt >= retries:
                     logger.exception(
                         f"Error sending [ {text} ] after {retries} retries: {e}",
                         extra={"notification": False, "error": e},
                     )
-                    return  # Fail silently after retries
+                    return
                 logger.warning(
                     f"Timed out while sending message. Retrying {attempt}/{retries}...",
                     extra={"notification": False},
                 )
-                await asyncio.sleep(2**attempt + random.random())  # Exponential backoff
+                await asyncio.sleep(2**attempt + random.random())
+            except RetryAfter as e:
+                retry_after = int(e.retry_after)
+                logger.warning(
+                    f"Flood control exceeded. Retrying in {retry_after} seconds...",
+                    extra={"notification": False},
+                )
+                await asyncio.sleep(retry_after)
             except BadRequest:
                 attempt += 1
                 try:
@@ -266,9 +242,8 @@ class NotificationBot:
                             "sanitized_v2": text_v2,
                         },
                     )
-                    logger.info("Problem in Notification bot Markdwon V2")
+                    logger.info("Problem in Notification bot Markdown V2")
                     return
-
             except Exception as e:
                 attempt += 1
                 text_v2 = text_v2 or "text_v2 not created"
@@ -289,15 +264,12 @@ class NotificationBot:
 
     async def handle_update(self, update):
         if update.message:
-            # Log the chat ID
             logger.info(f"Received message from chat ID: {update.message.chat_id}")
-            logger.info(f"Chat ID: {update.message.chat_id}")  # Print to console for debugging
-            logger.info(f"Message: {update.message.text}")  # Print the message text
-            # print the group chat name
+            logger.info(f"Chat ID: {update.message.chat_id}")
+            logger.info(f"Message: {update.message.text}")
             new_config = None
             if update.message.chat.title:
                 logger.info(f"Group chat name: {update.message.chat.title}")
-                # Check if chat name has changed
                 if update.message.chat_id in NotificationBot.ids_list():
                     logger.info(
                         f"Chat ID: {update.message.chat_id} already exists in config files"
@@ -307,7 +279,6 @@ class NotificationBot:
                         logger.info(
                             f"Chat name has changed from {old_name} to {update.message.chat.title}"
                         )
-                        # Update the config file with the new name
                         new_config = NotificationBotConfig(
                             token=self.config.token,
                             chat_id=update.message.chat_id,
@@ -336,13 +307,10 @@ class NotificationBot:
                     )
             else:
                 logger.info("No group chat name available")
-            # pri   nt the group chat ID
-            # Save the chat ID if it's not already set
             if self.config.chat_id == 0:
                 self.config.chat_id = update.message.chat_id
                 self.save_config()
 
-            # Handle commands
             if update.message.text == "/start":
                 await self.send_menu()
             elif update.message.text == "/menu":
@@ -351,13 +319,10 @@ class NotificationBot:
                 await self.send_message("Bot is running")
 
     def truncate_text(self, text: str, length: int = 1000) -> str:
-        # Check if string exceeds 3000 characters
         if len(text) > length:
-            # Truncate to 3000 characters and add ellipsis to indicate truncation
             truncated_text = text[:length] + "..."
             return truncated_text
-        else:
-            return text
+        return text
 
     async def send_menu(self):
         menu_text = """
@@ -396,15 +361,7 @@ class NotificationBot:
             )
 
     def save_config(self, new_config: NotificationBotConfig | None = None) -> None:
-        """
-        Saves the given bot configuration to a file.
-        Args:
-            bot_config (NotificationBotConfig): The bot configuration to save.
-        Returns:
-            Nothing
-        """
         if new_config:
-            # Saving a new config not this bot
             new_config_file = f"{new_config.name}{BOT_CONFIG_EXTENSION}"
             new_config_file = sanitize_filename(new_config_file)
             new_config_path = Path(InternalConfig.base_config_path, new_config_file)

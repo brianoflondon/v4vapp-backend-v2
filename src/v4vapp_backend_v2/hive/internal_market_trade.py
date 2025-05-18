@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from nectar import Hive
 from nectar.account import Account
 from nectar.amount import Amount
+from nectar.hive import Hive
 from nectar.market import Market
 from nectar.price import Price
 from nectarapi.exceptions import UnhandledRPCError
