@@ -2,8 +2,8 @@ import json
 from datetime import datetime, timezone
 from typing import List
 
-from nectar import Hive
 from nectar.account import Account
+from nectar.hive import Hive
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.config.setup import logger

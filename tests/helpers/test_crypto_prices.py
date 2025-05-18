@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from httpx import Request, Response
-from nectar import Hive
+from nectar.hive import Hive
 from nectar.market import Market
 
 from v4vapp_backend_v2.helpers.crypto_prices import (
@@ -367,10 +367,10 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
 
     # Test the authoritative quote fetch
     quote = all_quotes.quote
-    quote_ages = [quote.age for quote in all_quotes.quotes.values()]
+    quote_ages = [quote.age_p for quote in all_quotes.quotes.values()]
     for age in quote_ages:
-        assert age > 0
-        assert age < 1000
+        assert age > 0.0
+        assert age < 1000.0
     assert quote is not None
     assert quote.error == ""
 

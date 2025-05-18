@@ -5,9 +5,9 @@ from typing import Any, Dict, List
 
 import httpx
 from ecdsa import MalformedPointError  # type: ignore
-from nectar import Hive
 from nectar.blockchain import Blockchain
 from nectar.exceptions import MissingKeyError
+from nectar.hive import Hive
 from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
