@@ -53,7 +53,7 @@ async def process_hive_to_lightning(op: TransferBase) -> None:
             )
             if op.memo:
                 try:
-                    pay_req = await decode_message(op.memo)
+                    pay_req = await decode_incoming_payment_message(op.memo)
                     if pay_req:
                         pass
                     else:
@@ -75,11 +75,24 @@ async def process_hive_to_lightning(op: TransferBase) -> None:
 
 
 
-async def decode_message(message: str) -> PayReq | None:
+async def decode_incoming_payment_message(message: str) -> PayReq | None:
     """
-    Process the payment request.
+    Decodes an incoming Lightning payment message and validates its value and conversion limits.
+
+    Args:
+        message (str): The Lightning payment request string to decode.
+
+    Returns:
+        PayReq | None: The decoded payment request object with conversion details if valid and within limits, otherwise None.
+
+    Logs:
+        - Information about the processing and decoding of the payment request.
+        - Details about the decoded invoice and conversion status.
+
+    Raises:
+        None directly, but may propagate exceptions from called methods if not handled elsewhere.
     """
-    # Placeholder for actual implementation
+
     lnd_config = InternalConfig().config.lnd_config
     logger.info(f"Processing payment request: {message}")
     lnd_client = LNDClient(connection_name=lnd_config.default)
