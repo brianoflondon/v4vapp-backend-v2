@@ -189,11 +189,11 @@ class CryptoConversion(BaseModel):
             raise ValueError("Quote is not available or invalid")
         try:
             if self.conv_from == Currency.HIVE:
-                self.msats = int(self.value * self.quote.sats_hive * 1000)
+                self.msats = int(self.value * self.quote.sats_hive_p * 1000)
             elif self.conv_from == Currency.HBD:
-                self.msats = int(self.value * self.quote.sats_hbd * 1000)
+                self.msats = int(self.value * self.quote.sats_hbd_p * 1000)
             elif self.conv_from == Currency.USD:
-                self.msats = int(self.value * self.quote.sats_usd * 1000)
+                self.msats = int(self.value * self.quote.sats_usd_p * 1000)
             elif self.conv_from == Currency.SATS:
                 self.msats = int(self.value * 1000)
             else:
@@ -204,9 +204,9 @@ class CryptoConversion(BaseModel):
 
             # Step 3: Derive all other values from msats
             self.btc = self.msats / 100_000_000_000  # msats to BTC (1 BTC = 10^11 msats)
-            self.usd = round(self.msats / (self.quote.sats_usd * 1000), 6)
-            self.hbd = round(self.msats / (self.quote.sats_hbd * 1000), 6)
-            self.hive = round(self.msats / (self.quote.sats_hive * 1000), 5)
+            self.usd = round(self.msats / (self.quote.sats_usd_p * 1000.0), 6)
+            self.hbd = round(self.msats / (self.quote.sats_hbd_p * 1000.0), 6)
+            self.hive = round(self.msats / (self.quote.sats_hive_p * 1000.0), 5)
             self.msats_fee = msats_fee(self.msats)
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
