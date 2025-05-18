@@ -12,6 +12,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -97,6 +98,17 @@ class OpBase(TrackedBaseModel):
     # Raw operations as delivered by Nectar
     raw_op: dict[str, Any] = Field(
         default={}, description="Raw operation data from the blockchain", exclude=True
+    )
+
+    amount: AmountPyd | None = Field(
+        default=None,
+        description="Amount associated with the operation, if applicable and overridden",
+        exclude=True,
+    )
+    min_to_receive: AmountPyd | None = Field(
+        default=None,
+        description="Minimum amount to receive, if applicable and overridden",
+        exclude=True,
     )
 
     # Class variables
@@ -352,43 +364,43 @@ class OpBase(TrackedBaseModel):
             await all_quotes.get_all_quotes()
             cls.last_quote = all_quotes.quote
 
-    async def lock_op(self) -> None:
-        """
-        Locks the operation to prevent concurrent processing.
+    # async def lock_op(self) -> None:
+    #     """
+    #     Locks the operation to prevent concurrent processing.
 
-        This method sets the `_locked` attribute to True, indicating that
-        the operation is currently being processed and should not be
-        modified or accessed by other threads or processes.
+    #     This method sets the `_locked` attribute to True, indicating that
+    #     the operation is currently being processed and should not be
+    #     modified or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        self._locked = True
-        if self.db_client:
-            await self.db_client.update_one(
-                collection="hive_ops",
-                query=self.group_id_query,
-                update={"$set": {"_locked": self._locked}},
-            )
+    #     Returns:
+    #         None
+    #     """
+    #     self._locked = True
+    #     if self.db_client:
+    #         await self.db_client.update_one(
+    #             collection="hive_ops",
+    #             query=self.group_id_query,
+    #             update={"$set": {"_locked": self._locked}},
+    #         )
 
-    async def unlock_op(self) -> None:
-        """
-        Unlocks the operation to allow concurrent processing.
+    # async def unlock_op(self) -> None:
+    #     """
+    #     Unlocks the operation to allow concurrent processing.
 
-        This method sets the `_locked` attribute to False, indicating that
-        the operation is no longer being processed and can be modified
-        or accessed by other threads or processes.
+    #     This method sets the `_locked` attribute to False, indicating that
+    #     the operation is no longer being processed and can be modified
+    #     or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        self._locked = False
-        if self.db_client:
-            await self.db_client.update_one(
-                collection="hive_ops",
-                query=self.group_id_query,
-                update={"$set": {"_locked": self._locked}},
-            )
+    #     Returns:
+    #         None
+    #     """
+    #     self._locked = False
+    #     if self.db_client:
+    #         await self.db_client.update_one(
+    #             collection="hive_ops",
+    #             query=self.group_id_query,
+    #             update={"$set": {"_locked": self._locked}},
+    #         )
 
     async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
         """
@@ -423,7 +435,10 @@ class OpBase(TrackedBaseModel):
         """
         if getattr(self, "conv", None) is not None:
             quote = quote or self.last_quote
-            self.conv = CryptoConversion(amount=self.amount.beam, quote=quote).conversion
+            if getattr(self, "amount", None) is not None and self.amount:
+                self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+            elif getattr(self, "min_to_receive", None) is not None and self.min_to_receive:
+                self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
         else:
             return
 

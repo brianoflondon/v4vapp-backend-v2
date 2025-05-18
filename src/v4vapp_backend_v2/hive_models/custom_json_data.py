@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Type, Union
 
-from pydantic import BaseModel, Field, Json
+from pydantic import BaseModel, ConfigDict, Field, Json
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -40,6 +40,8 @@ class KeepsatsTransfer(BaseModel):
     HIVE: float | None = None
     HBD: float | None = None
     invoice_message: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **data: Any):
         if data.get("memo", None) is None:

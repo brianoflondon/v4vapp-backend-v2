@@ -120,6 +120,38 @@ dbs_config:
             test_index2:
               index_key: [["test2", 1], ["test3", -1]]
               unique: false
+        ledger:
+          indexes:
+            ledger_id:
+              index_key: [["group_id", -1]]
+              unique: true
+            timestamp:
+              index_key: [["timestamp", 1]]
+              unique: false
+            debit_account_type:
+              index_key: [["debit.account_type", 1]]
+              unique: false
+            debit_name:
+              index_key: [["debit.name", 1]]
+              unique: false
+            debit_sub:
+              index_key: [["debit.sub", 1]]
+              unique: false
+            credit_account_type:
+              index_key: [["credit.account_type", 1]]
+              unique: false
+            credit_name:
+              index_key: [["credit.name", 1]]
+              unique: false
+            credit_sub:
+              index_key: [["credit.sub", 1]]
+              unique: false
+            debit_compound:
+              index_key: [["debit.account_type", 1], ["debit.name", 1], ["debit.sub", 1]]
+              unique: false
+            credit_compound:
+              index_key: [["credit.account_type", 1], ["credit.name", 1], ["credit.sub", 1]]
+              unique: false
         rates:
           timeseries:
             timeField: "timestamp"
@@ -159,6 +191,9 @@ dbs_config:
             ledger_id:
               index_key: [["group_id", -1]]
               unique: true
+            timestamp:
+              index_key: [["timestamp", 1]]
+              unique: false
 
 
 ########### TEST CONFIG NO SECRETS #################
@@ -176,11 +211,19 @@ binance:
 
 hive:
   hive_accs:
+    devser.v4vapp:
+      role: server
     someaccount:
       role: server
       posting_key: somepostingkey
       active_key: someactive
       memo_key: somememo
+    devtre.v4vapp:
+      role: treasury
+    v4vapp.dhf:
+      role: funding
+    fiction:
+      role: exchange
   proposals_tracked:
     - 342
     - 303

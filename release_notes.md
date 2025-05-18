@@ -1,6 +1,10 @@
 
 ## 2025-04-29
 
+## v0.2.16
+- Accounting systems added but still in test
+- Upgrade to startup of LND Monitor to avoid massive database load if the LND Monitor has not run for more than 2 hours.
+
 ## v0.2.11
 ### V4VAPP Backend V2
 

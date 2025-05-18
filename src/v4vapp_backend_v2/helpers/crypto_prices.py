@@ -117,7 +117,26 @@ class QuoteResponse(BaseModel):
 
     @computed_field
     def sats_hive(self) -> float:
-        """Calculate Satoshis per HIVE based on btc_usd and hive_usd."""
+        """
+        Calculate the number of Satoshis equivalent to one HIVE.
+        Computed property so included in model_dump
+        Returns:
+            float: The number of Satoshis per HIVE, rounded to 4 decimal places.
+        """
+        if self.btc_usd == 0:
+            # raise ValueError("btc_usd cannot be zero")
+            return 0.0
+        sats_per_usd = SATS_PER_BTC / self.btc_usd
+        return round(sats_per_usd * self.hive_usd, 4)
+
+    @property
+    def sats_hive_p(self) -> float:
+        """
+        Helper Property to help with type checking because `@computed_field`
+        is not recognized by some tools.
+        Returns:
+            float: The value of sats_hive.
+        """
         if self.btc_usd == 0:
             # raise ValueError("btc_usd cannot be zero")
             return 0.0
@@ -126,23 +145,57 @@ class QuoteResponse(BaseModel):
 
     @computed_field
     def sats_hbd(self) -> float:
-        """Calculate Satoshis per HBD based on btc_usd and hbd_usd."""
+        """
+        Calculate the number of Satoshis equivalent to one HBD (Hive Backed Dollar).
+        Computed property so included in model_dump
+        Returns:
+            float: The number of Satoshis per HBD, rounded to 4 decimal places.
+        """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
+            return 0.0
+        sats_per_usd = SATS_PER_BTC / self.btc_usd
+        return round(sats_per_usd * self.hbd_usd, 4)
+
+    @property
+    def sats_hbd_p(self) -> float:
+        """
+        Helper Property to help with type checking because `@computed_field`
+        is not recognized by some tools.
+        Returns:
+            float: The value of sats_hbd.
+        """
+        if self.btc_usd == 0:
             return 0.0
         sats_per_usd = SATS_PER_BTC / self.btc_usd
         return round(sats_per_usd * self.hbd_usd, 4)
 
     @property
     def sats_usd(self) -> float:
-        """Calculate Satoshis per USD based on btc_usd."""
+        """
+        Calculate Satoshis per USD based on btc_usd.
+        Computed property so included in model_dump
+        """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
             return 0.0
         return round(SATS_PER_BTC / self.btc_usd, 4)
 
+    @property
+    def sats_usd_p(self) -> float:
+        """
+        Helper Property to help with type checking because `@computed_field`
+        is not recognized by some tools. Added for consistency with other properties.
+        Returns:
+            float: The value of sats_usd.
+        """
+        return self.sats_usd
+
     @computed_field
     def age(self) -> float:
+        """Calculate the age of the quote in seconds."""
+        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
+
+    @property
+    def age_p(self) -> float:
         """Calculate the age of the quote in seconds."""
         return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
 

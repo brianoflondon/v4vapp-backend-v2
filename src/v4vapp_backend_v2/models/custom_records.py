@@ -236,7 +236,7 @@ class KeysendCustomRecord(BaseModel):
         unique_id = re.sub(r"[ /:]", "_", unique_id)
         return unique_id
 
-    def __init__(__pydantic_self__, **data: Any) -> None:
+    def __init__(self, **data: Any) -> None:
         """
         Cludge for Fountain problem 2023-05-15
         This fixes a problem where Fountain sent a string instead of an int

@@ -11,7 +11,7 @@ from v4vapp_backend_v2.actions.lnurl_decode import (
 )
 from v4vapp_backend_v2.actions.lnurl_models import strip_lightning
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.models.invoice_models import Invoice
+from v4vapp_backend_v2.models.pay_req import PayReq
 
 # @pytest.fixture(autouse=True)
 # def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
@@ -95,14 +95,20 @@ async def test_decode_any_lightning_string():
     """
     # Test with a valid Lightning Address
 
-    client = LNDClient(connection_name="voltage")
+    lnd_client = LNDClient(connection_name="voltage")
     input = "lightning:lnbc20720n1p5pwchppp5cc7umgmnekpym25sss7tpld8dgn3f8ymcj5wt7hk8xevdsa8myzsdzawc68vctswqhxgetkyp7zqa35wckhsjjstfzjqlpqydf5z4znyqerqdejyp7zqg6ng929xgprgdxy2s2wyq3hvdrkv9c8qcqzzsxqzxgsp57gv9xfay4lmgqgkrtydews0kr88qajj84gf4x4lraz38966rs2yq9qxpqysgqwjqhkuj0g5anqxe0tqun2hckw504q5q9cej6j4vsvav0alkrp3er06qgtxkq8v0d0s0d8jx0ucme5dlu4m77qxlllq5fy0qn3k0ameqp69a6cs"
-    result = await decode_any_lightning_string(input, client=client)
-    assert isinstance(result, Invoice)
+    result = await decode_any_lightning_string(input, lnd_client=lnd_client)
+    assert isinstance(result, PayReq)
+    assert (
+        result.destination == "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668"
+    )
 
     input = "brianoflondon@sats.v4v.app"
     sats = 1356
     result = await decode_any_lightning_string(
-        input=input, client=client, sats=sats, comment="test comment"
+        input=input, lnd_client=lnd_client, sats=sats, comment="test comment"
     )
-    assert isinstance(result, Invoice)
+    assert isinstance(result, PayReq)
+    assert (
+        result.destination == "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668"
+    )

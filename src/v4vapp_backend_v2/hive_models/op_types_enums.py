@@ -44,6 +44,7 @@ Usage:
 class TransferOpTypes(StrEnum):
     TRANSFER = auto()
     RECURRENT_TRANSFER = auto()
+    TRANSFER_BASE = auto()  # Used in TransferBase
 
 
 class MarketOpTypes(StrEnum):

@@ -26,20 +26,31 @@ class Account(BaseModel):
 class AssetAccount(Account):
     """
     Represents an asset account in the accounting system.
+    Assets INCREASE with a DEBIT and DECREASE with a CREDIT.
+    Attributes:
+        name (Literal): The specific name of the asset account. Must be one of:
+            - "Customer Deposits Hive"
+            - "Customer Deposits Lightning"
+            - "Treasury Hive"
+            - "Treasury Lightning"
+        account_type (Literal[AccountType.ASSET]): The type of account, which is always set to `AccountType.ASSET`.
     """
 
     name: Literal[
         "Customer Deposits Hive",
         "Customer Deposits Lightning",
+        "Escrow Hive",
         "Treasury Hive",
         "Treasury Lightning",
+        "Exchange Deposits Hive",
+        "Exchange Deposits Lightning",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.ASSET):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.ASSET
         self.name = name
         self.sub = sub
@@ -49,6 +60,7 @@ class AssetAccount(Account):
 class LiabilityAccount(Account):
     """
     LiabilityAccount is a subclass of Account that represents a specific type of liability account.
+    Liabilities INCREASE with a CREDIT and DECREASE with a DEBIT.
     Attributes:
         name (Literal): The specific name of the liability account. Must be one of:
             - "Customer Liability Hive"
@@ -64,14 +76,15 @@ class LiabilityAccount(Account):
     name: Literal[
         "Customer Liability Hive",
         "Customer Liability Lightning",
+        "Owner Loan Payable (funding)",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
         AccountType.LIABILITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.LIABILITY):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.LIABILITY
         self.name = name
         self.sub = sub
@@ -79,6 +92,21 @@ class LiabilityAccount(Account):
 
 # MARK: Equity Accounts
 class EquityAccount(Account):
+    """
+    Represents an equity account in the accounting system.
+    Equity accounts INCREASE with a CREDIT and DECREASE with a DEBIT.
+    Attributes:
+        name (Literal): The specific name of the equity account. Must be one of:
+            - "Owner's Capital"
+            - "Retained Earnings"
+            - "Dividends/Distributions"
+        account_type (Literal[AccountType.EQUITY]): The type of account, which is always set to `AccountType.EQUITY`.
+    Methods:
+        __init__(name: str = "", sub: str = ""):
+            Initializes an EquityAccount instance with the specified name and sub-account.
+            Overrides the account_type to `AccountType.EQUITY`.
+    """
+
     name: Literal["Owner's Capital", "Retained Earnings", "Dividends/Distributions"] = Field(
         ..., description="Specific equity account name"
     )
@@ -86,8 +114,8 @@ class EquityAccount(Account):
         AccountType.EQUITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EQUITY):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.EQUITY
         self.name = name
         self.sub = sub
@@ -95,15 +123,15 @@ class EquityAccount(Account):
 
 # MARK: Revenue Accounts
 class RevenueAccount(Account):
-    name: Literal["Fee Income", "DHF Income", "Other Income"] = Field(
+    name: Literal["Fee Income Hive", "Fee Income Lightning", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
     )
     account_type: Literal[AccountType.REVENUE] = Field(
         AccountType.REVENUE, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.REVENUE):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.REVENUE
         self.name = name
         self.sub = sub
@@ -115,13 +143,14 @@ class ExpenseAccount(Account):
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
         "Fee Expenses Lightning",
+        "Fee Expenses Hive",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"
     )
 
-    def __init__(self, name="", sub=""):
-        super().__init__(name=name, sub=sub)
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EXPENSE):
+        super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.EXPENSE
         self.name = name
         self.sub = sub

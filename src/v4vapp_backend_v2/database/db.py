@@ -84,10 +84,16 @@ def retry_on_failure(max_retries=5, initial_delay=1, backoff_factor=2):
                         "error": str(e),
                         "retries": retries,
                     }
-                    logger.debug(
-                        f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
-                        extra=extra,
-                    )
+                    if kwargs.get("report_duplicates", False):
+                        logger.warning(
+                            f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
+                            extra=extra,
+                        )
+                    else:
+                        logger.debug(
+                            f"{DATABASE_ICON} {logger.name} DuplicateKeyError: {e}. Not retrying.",
+                            extra=extra,
+                        )
                     raise e
                 except (
                     ConnectionFailure,
@@ -162,6 +168,11 @@ class MongoDBClient:
         self.db_name = db_name
         self.db_user = db_user
         self.validate_connection()
+        if not self.dbs:
+            raise OperationFailure(
+                error=f"Database {self.db_name} not found",
+                code=DbErrorCode.NO_DB.value,
+            )
         self.hosts = ",".join(self.db_connection.hosts) if db_conn else "localhost"
         self.validate_user_db()
         self.db_password = self.dbs[self.db_name].db_users[self.db_user].password
@@ -176,6 +187,17 @@ class MongoDBClient:
         self._bulk_write_in_progress = False  # Flag to track bulk write status
 
     def validate_connection(self):
+        """
+        Validates and initializes the database connection configuration.
+        This method retrieves the database configuration using the `InternalConfig` class,
+        selects the appropriate database connection based on `self.db_conn`, and sets the
+        `self.dbs` attribute depending on whether the database name is "admin" or not.
+        Raises:
+            OperationFailure: If the specified database connection is not found or if any
+            other exception occurs during the connection validation process. The error
+            message and code provide details about the failure.
+        """
+
         try:
             self.config = InternalConfig().config
             self.db_connection = self.config.dbs_config.connections[self.db_conn]
@@ -187,29 +209,46 @@ class MongoDBClient:
         except KeyError:
             raise OperationFailure(
                 error=f"Database Connection {self.db_conn} not found",
-                code=DbErrorCode.NO_CONNECTION,
+                code=DbErrorCode.NO_CONNECTION.value,
             )
         except Exception as e:
             raise OperationFailure(
                 error=f"Error in database connection {self.db_conn}: {e}",
-                code=DbErrorCode.NO_CONNECTION,
+                code=DbErrorCode.NO_CONNECTION.value,
             )
 
     def validate_user_db(self):
+        """
+        Validates the existence and credentials of a user in the specified database.
+
+        This method performs several checks to ensure that:
+        - The database name, user, and database dictionary are present.
+        - The specified database exists in the database dictionary.
+        - The specified user exists in the user list of the database.
+        - The user has a password set, unless the connection is to a test replica set.
+
+        Raises:
+            OperationFailure: If any of the validation checks fail, with an appropriate error message and code.
+        """
         elapsed_time = timer() - self.start_connection
         logger.debug(
             f"{DATABASE_ICON} {logger.name} "
             f"Validating user {self.db_user} in database {self.db_name} {elapsed_time:.3f}s"
         )
+        if not self.db_name or not self.db_user or not self.dbs:
+            raise OperationFailure(
+                error=f"Database {self.db_name} or user {self.db_user} not found",
+                code=DbErrorCode.NO_USER.value,
+            )
         if self.db_name not in self.dbs:
             raise OperationFailure(
                 error=f"User: {self.db_user} not in {self.db_name}",
-                code=DbErrorCode.NO_DB,
+                code=DbErrorCode.NO_DB.value,
             )
         if self.db_user not in self.dbs[self.db_name].db_users:
             raise OperationFailure(
                 error=f"No database {self.db_name}",
-                code=DbErrorCode.NO_USER,
+                code=DbErrorCode.NO_USER.value,
             )
         if (
             not bool(self.dbs[self.db_name].db_users[self.db_user].password)
@@ -217,7 +256,7 @@ class MongoDBClient:
         ):
             raise OperationFailure(
                 error=f"No password for user {self.db_user} in {self.db_name}",
-                code=DbErrorCode.NO_PASSWORD,
+                code=DbErrorCode.NO_PASSWORD.value,
             )
 
     @property
@@ -587,13 +626,17 @@ class MongoDBClient:
         return result
 
     @retry_on_failure()
-    async def insert_one(self, collection_name: str, document: dict) -> ObjectId:
+    async def insert_one(
+        self, collection_name: str, document: dict, report_duplicates: bool = False
+    ) -> ObjectId:
         """
         Inserts a single document into the specified collection.
 
         Args:
             collection_name (str): The name of the collection where the document will be inserted.
             document (dict): The document to be inserted into the collection.
+            report_duplicates (bool): Whether to report duplicate documents this is handled in
+            the retry_on_failure decorator.
 
         Returns:
             ObjectId: The ID of the inserted document.
@@ -692,13 +735,13 @@ class MongoDBClient:
         ans = await self.admin_client.drop_database(db_name)
         return ans
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MongoDBClient":
         self.start_connection = timer()
         if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
             await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.disconnect()
         self.start_connection = 0
 

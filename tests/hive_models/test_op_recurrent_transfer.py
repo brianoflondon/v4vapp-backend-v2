@@ -1,5 +1,4 @@
 from pathlib import Path
-from pprint import pprint
 
 import pytest
 
@@ -22,13 +21,14 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
     # No need to restore the original value, monkeypatch will handle it
 
-
-def test_find_recurrent_transfers():
+@pytest.mark.asyncio
+async def test_find_recurrent_transfers():
     all_recurrent_ops = [
         "recurrent_transfer",
         "fill_recurrent_transfer",
         "failed_recurrent_transfer",
     ]
+    await OpBase.update_quote()
     OpBase.watch_users = ["spartano", "risingstar2"]
     for hive_event in load_hive_events():
         op = op_any_or_base(hive_event)

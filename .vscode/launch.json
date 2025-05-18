@@ -14,6 +14,54 @@
             "justMyCode": false,
         },
         {
+            "name": "DEV Hive Monitor devser devtre",
+            "type": "debugpy",
+            "consoleName": "DEV Hive Monitor",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "--config-filename",
+                "devhive.config.yaml",
+                // "--start-block",
+                // "95793083",
+                // "95801581",
+                // "95802587",
+                // "95817721",
+                // "95819345",
+                // "95819821",
+                // "95819830",
+                // "95822146",
+                // "95822927",
+                // "95823857",
+                // "95886625"
+            ],
+            "justMyCode": true,
+        },
+        {
+            "name": "DEV DB Monitor App",
+            "type": "debugpy",
+            "consoleName": "DEV DB Monitor App",
+            "request": "launch",
+            "program": "src/db_monitor.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "DEV Umbrel Monitor",
+            "type": "debugpy",
+            "consoleName": "Dev Umbrel Monitor",
+            "request": "launch",
+            "program": "src/lnd_monitor_v2.py",
+            "args": [
+                "--config",
+                "devhive.config.yaml"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "DB Monitor App",
             "type": "debugpy",
             "consoleName": "DB Monitor App",
@@ -59,43 +107,7 @@
             ],
             "console": "integratedTerminal"
         },
-        {
-            "name": "Dev Hive Monitor devser devtre",
-            "type": "debugpy",
-            "consoleName": "Hive Monitor",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
-            "args": [
-                "--config-filename",
-                "devhive.config.yaml",
-                // "--watch-only",
-            ],
-            "justMyCode": true,
-        },
-        {
-            "name": "Dev Umbrel Monitor",
-            "type": "debugpy",
-            "consoleName": "Dev Umbrel Monitor",
-            "request": "launch",
-            "program": "src/lnd_monitor_v2.py",
-            "args": [
-                "--config",
-                "devhive.config.yaml"
-            ],
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "DEV DB Monitor App",
-            "type": "debugpy",
-            "consoleName": "DB Monitor App",
-            "request": "launch",
-            "program": "src/db_monitor.py",
-            "args": [
-                "--config",
-                "devhive.config.yaml"
-            ],
-            "console": "integratedTerminal"
-        },
+
         {
             "name": "VSC Hive Monitor HBD No SALE",
             "type": "debugpy",
