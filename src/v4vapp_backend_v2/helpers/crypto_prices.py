@@ -250,6 +250,7 @@ class AllQuotes(BaseModel):
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     source: str = ""
 
+    fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_client: ClassVar[MongoDBClient | None] = None
 
     def get_binance_quote(self) -> QuoteResponse:
@@ -266,6 +267,13 @@ class AllQuotes(BaseModel):
         return binance_quote
 
     async def get_all_quotes(self, use_cache: bool = True, timeout: float = 60.0):
+        start = timer()
+        global_cache = await self.check_global_cache()
+        if global_cache:
+            logger.debug(
+                f"Quotes fetched from main cache in {timer() - start:.4f} seconds",
+            )
+            return
         all_services = [
             CoinGecko(),
             Binance(),
@@ -273,12 +281,12 @@ class AllQuotes(BaseModel):
             HiveInternalMarket(),
         ]
         self.fetch_date = datetime.now(tz=timezone.utc)
-        start = timer()
+        tasks: dict[str, asyncio.Task] = {}
         try:
             async with asyncio.timeout(timeout):
                 logger.debug(f"Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
-                    tasks = {
+                    tasks: dict[str, asyncio.Task] = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
                         for service in all_services
                     }
@@ -302,7 +310,7 @@ class AllQuotes(BaseModel):
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
         logger.info(
-            f"Quotes fetched successfully in {timer() - start:.2f} seconds",
+            f"Quotes fetched successfully in {timer() - start:.4f} seconds",
             extra={
                 "quotes": self.quotes,
                 "fetch_date": self.fetch_date,
@@ -315,7 +323,68 @@ class AllQuotes(BaseModel):
                     extra={"notification": False, **quote.log_data},
                 )
         self.fetch_date = self.quote.fetch_date
+        AllQuotes.fetch_date_class = self.fetch_date
+        async with V4VAsyncRedis(decode_responses=False) as redis_client:
+            cache_data_pickle = pickle.dumps(self.global_quote_pack())
+            await redis_client.setex("all_quote_class_quote", time=60, value=cache_data_pickle)
         await self.db_store_quote()
+
+    async def check_global_cache(self) -> bool:
+        """
+        Check if the global cache is available and valid.
+
+        Returns:
+            bool: True if the global cache is valid, False otherwise.
+        """
+        async with V4VAsyncRedis(decode_responses=False) as redis_client:
+            cache_data_pickle = await redis_client.get("all_quote_class_quote")
+            if cache_data_pickle:
+                cache_data = pickle.loads(cache_data_pickle)
+                self.fetch_date = cache_data["fetch_date"]
+                self.quotes = self.unpack_quotes(cache_data)
+                self.source = cache_data["source"]
+                return True
+        return False
+
+    def global_quote_pack(self) -> Dict[str, Any]:
+        """
+        Pack the global quotes into a dictionary format.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the packed global quotes.
+        """
+        return {
+            "quotes": self.all_quotes_filtered(),
+            "fetch_date": self.fetch_date,
+            "source": self.source,
+        }
+
+    def all_quotes_filtered(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Filter out quotes with errors and return the remaining valid quotes.
+
+        Returns:
+            Dict[str, QuoteResponse]: A dictionary containing only the valid quotes
+            without errors.
+        """
+        no_error_quotes = {
+            service_name: quote.model_dump(exclude={"raw_response"})
+            for service_name, quote in self.quotes.items()
+            if not quote.error
+        }
+        return no_error_quotes
+
+    def unpack_quotes(self, cache_data: Dict[str, Any]) -> Dict[str, QuoteResponse]:
+        """
+        Unpack the quotes from the AllQuotes instance.
+
+        Returns:
+            Dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
+        """
+        return {
+            service_name: QuoteResponse.model_validate(quote_data)
+            for service_name, quote_data in cache_data.get("quotes", {}).items()
+        }
 
     async def db_store_quote(self):
         """

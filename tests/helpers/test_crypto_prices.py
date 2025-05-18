@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from nectar import Hive
 from httpx import Request, Response
+from nectar import Hive
 from nectar.market import Market
 
 from v4vapp_backend_v2.helpers.crypto_prices import (
@@ -24,9 +24,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import (
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -187,9 +185,7 @@ def mock_hive_internal_market(mocker):
 
     # Mock the get_hive_client function to return a mock Hive instance
     mock_hive = mocker.MagicMock(spec=Hive)
-    mocker.patch(
-        "v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive
-    )
+    mocker.patch("v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive)
 
     # Mock the Market class
     mock_market = mocker.MagicMock(spec=Market)
@@ -218,9 +214,7 @@ async def test_hive_internal_market_service_error(mocker):
 
     # Mock the get_hive_client function to return a mock Hive instance
     mock_hive = mocker.MagicMock(spec=Hive)
-    mocker.patch(
-        "v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive
-    )
+    mocker.patch("v4vapp_backend_v2.hive.hive_extras.get_hive_client", return_value=mock_hive)
 
     # Mock the Market class
     mock_market = mocker.MagicMock(spec=Market)
@@ -260,6 +254,13 @@ async def test_get_all_quotes(mocker, set_base_config_path):
         "v4vapp_backend_v2.helpers.crypto_prices.QuoteService.set_cache",
         return_value=None,
     )
+    # Do not use the redis cache at the object level.
+    mock_redis = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.V4VAsyncRedis")
+    mock_redis_instance = mock_redis.return_value
+    mock_redis_instance.__aenter__.return_value = mock_redis_instance
+    mock_redis_instance.__aexit__.return_value = None
+    mock_redis_instance.setex = AsyncMock(return_value=None)
+    mock_redis_instance.get = AsyncMock(return_value=None)
 
     # Apply the patch
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=mock_get))
@@ -323,9 +324,7 @@ def load_and_mock_responses(mocker, failing_service):
     # Mock Binance
     mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
     if failing_service == "Binance":
-        mock_spot_client.return_value.book_ticker.side_effect = Exception(
-            "Binance API error"
-        )
+        mock_spot_client.return_value.book_ticker.side_effect = Exception("Binance API error")
     else:
         mock_spot_client.return_value.book_ticker.return_value = binance_resp
 
@@ -349,10 +348,17 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
     Test that AllQuotes handles a single service failure correctly while others succeed.
     Parametrized to test each service failing independently.
     """
+    # Do not use the redis cache at the object level.
+    mock_redis = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.V4VAsyncRedis")
+    mock_redis_instance = mock_redis.return_value
+    mock_redis_instance.__aenter__.return_value = mock_redis_instance
+    mock_redis_instance.__aexit__.return_value = None
+    mock_redis_instance.setex = AsyncMock(return_value=None)
+    mock_redis_instance.get = AsyncMock(return_value=None)
 
     # Extracted the setup into this function to avoid code duplication
-    coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp = (
-        load_and_mock_responses(mocker, failing_service)
+    coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp = load_and_mock_responses(
+        mocker, failing_service
     )
 
     # Execute the test

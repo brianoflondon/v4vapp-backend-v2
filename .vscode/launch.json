@@ -118,6 +118,8 @@
                 "--config-filename",
                 "hive.vsc.config.yaml",
                 "--watch-only",
+                // "--start-block",
+                // "95370712"
             ],
             "justMyCode": true,
         },
