@@ -166,7 +166,7 @@ class Payment(PaymentExtra):
     failure_reason: str | None = None
     htlcs: List[HTLCAttempt] | None = None
 
-    def __init__(__pydantic_self__, lnrpc_payment: lnrpc.Payment = None, **data: Any) -> None:
+    def __init__(self, lnrpc_payment: lnrpc.Payment | None = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
             data_dict = MessageToDict(lnrpc_payment, preserving_proto_field_name=True)
             payment_dict = convert_datetime_fields(data_dict)
