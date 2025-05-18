@@ -145,15 +145,17 @@ class CryptoConversion(BaseModel):
 
     def __init__(
         self,
-        amount: Amount | None = None,
+        amount: Amount | AmountPyd | None = None,
         value: float | int = 0.0,
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if isinstance(amount, Amount) or (
-            "amount" in kwargs and isinstance(kwargs["amount"], Amount)
+        if (
+            isinstance(amount, Amount)
+            or isinstance(amount, AmountPyd)
+            or ("amount" in kwargs and isinstance(kwargs["amount"], Amount))
         ):
             amount_here = kwargs.get("amount", amount)
             self.conv_from = Currency(amount_here.symbol.lower())
