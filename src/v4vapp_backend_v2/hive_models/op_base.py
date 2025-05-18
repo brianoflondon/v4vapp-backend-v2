@@ -12,6 +12,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -99,6 +100,16 @@ class OpBase(TrackedBaseModel):
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
 
+    amount: AmountPyd | None = Field(
+        default=None,
+        description="Amount associated with the operation, if applicable and overridden",
+        exclude=True,
+    )
+    min_to_receive: AmountPyd | None = Field(
+        default=None,
+        description="Minimum amount to receive, if applicable and overridden",
+        exclude=True,
+    )
 
     # Class variables
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
@@ -424,9 +435,9 @@ class OpBase(TrackedBaseModel):
         """
         if getattr(self, "conv", None) is not None:
             quote = quote or self.last_quote
-            if getattr(self, "amount", None) is not None:
+            if getattr(self, "amount", None) is not None and self.amount:
                 self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
-            elif getattr(self, "min_to_receive", None) is not None:
+            elif getattr(self, "min_to_receive", None) is not None and self.min_to_receive:
                 self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
         else:
             return
