@@ -232,8 +232,8 @@ class CryptoConversion(BaseModel):
             msats_fee=self.msats_fee,
             btc=self.btc,
             # These two values are floats, they are property functions of quote
-            sats_hive=self.quote.sats_hive,  # type: float
-            sats_hbd=self.quote.sats_hbd,  # type: float
+            sats_hive=self.quote.sats_hive_p,
+            sats_hbd=self.quote.sats_hbd_p,
             conv_from=self.conv_from,
             value=self.value,
             source=self.quote.source,
