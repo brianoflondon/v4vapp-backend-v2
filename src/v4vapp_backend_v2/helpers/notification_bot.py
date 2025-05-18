@@ -1,13 +1,13 @@
 import asyncio
 import json
 import random
-from pathlib import Path
-from typing import Any
 from collections import deque
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 from telegram import Bot
-from telegram.error import BadRequest, InvalidToken, TimedOut, RetryAfter
+from telegram.error import BadRequest, InvalidToken, RetryAfter, TimedOut
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -33,8 +33,8 @@ class NotificationBadTokenError(NotificationNotSetupError):
 class NotificationBot:
     bot: Bot
     config: NotificationBotConfig
-    # Store messages with timestamp and last 20 chars pattern
-    _message_history: deque = deque(maxlen=100)  # Limit history size to prevent memory issues
+    _message_history: deque = deque(maxlen=1000)
+    _logged_patterns: set = set()  # Track patterns that have been logged as ignored
 
     def __init__(
         self,
@@ -120,29 +120,41 @@ class NotificationBot:
             raise NotificationNotSetupError(e)
 
     def _clean_message_history(self):
-        """Remove messages older than 60 seconds from the history."""
+        """Remove messages older than 60 seconds from the history and update logged patterns."""
         now = datetime.now()
         sixty_seconds_ago = now - timedelta(seconds=60)
-        # Keep only messages within the last 60 seconds
+        # Collect patterns of messages that will remain
+        remaining_patterns = set()
+        # Remove old messages and track which patterns are still in history
         while self._message_history and self._message_history[0]["timestamp"] < sixty_seconds_ago:
             self._message_history.popleft()
+        # Add patterns of remaining messages to remaining_patterns
+        for msg in self._message_history:
+            remaining_patterns.add(msg["pattern"])
+        # Update _logged_patterns to only include patterns still in history
+        self._logged_patterns.intersection_update(remaining_patterns)
 
     def _check_message_pattern(self, text: str) -> bool:
         """
-        Check if the last 20 characters of the message have been sent more than 5 times
+        Check if the last 40 characters of the message have been sent more than 5 times
         in the last 60 seconds. Returns True if the message should be sent, False if it should be ignored.
+        Logs a warning only the first time a pattern is ignored.
         """
+        num_chars = 20
         self._clean_message_history()
-        last_20_chars = text[-20:] if len(text) >= 20 else text
+        last_n_chars = text[-num_chars:] if len(text) >= num_chars else text
 
         # Count messages with the same last 20 characters in the last 60 seconds
-        pattern_count = sum(1 for msg in self._message_history if msg["pattern"] == last_20_chars)
+        pattern_count = sum(1 for msg in self._message_history if msg["pattern"] == last_n_chars)
 
         if pattern_count >= 5:
-            logger.warning(
-                f"Ignoring message with pattern '{last_20_chars}' - already sent {pattern_count} times in last 60s",
-                extra={"notification": False, "pattern": last_20_chars},
-            )
+            # Log only if this pattern hasn't been logged before
+            if last_n_chars not in self._logged_patterns:
+                logger.warning(
+                    f"Ignoring message with pattern '{last_n_chars}' - already sent {pattern_count} times in last 60s",
+                    extra={"notification": True, "pattern": last_n_chars},
+                )
+                self._logged_patterns.add(last_n_chars)
             return False
         return True
 
