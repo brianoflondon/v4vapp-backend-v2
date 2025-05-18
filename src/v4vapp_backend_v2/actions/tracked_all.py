@@ -17,6 +17,24 @@ from v4vapp_backend_v2.models.payment_models import Payment
 TrackedAny = Union[OpAny, Invoice, Payment]
 
 
+class LedgerEntryException(Exception):
+    """Custom exception for LedgerEntry errors."""
+
+    pass
+
+
+class LedgerEntryConfigurationException(LedgerEntryException):
+    """Custom exception for LedgerEntry configuration errors."""
+
+    pass
+
+
+class LedgerEntryCreationException(LedgerEntryException):
+    """Custom exception for LedgerEntry creation errors."""
+
+    pass
+
+
 def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     """
     Check if the tracked object is of type OpAny, Invoice, or Payment.
@@ -53,7 +71,7 @@ def tracked_type(tracked: TrackedAny) -> str:
     :return: A dictionary representing the query.
     """
     if isinstance(tracked, OpAny):
-        return tracked.name
+        return tracked.name()
     elif isinstance(tracked, Invoice):
         return "invoice"
     elif isinstance(tracked, Payment):
@@ -79,7 +97,7 @@ async def process_tracked(tracked: TrackedAny) -> LedgerEntry:
         raise ValueError("Invalid tracked object")
 
 
-async def process_lightning_op(op: Union[Invoice | Payment]) -> LedgerEntry:
+async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
     """
     Processes the Lightning operation. This method is a placeholder and should
     be overridden in subclasses to provide specific processing logic.
@@ -87,10 +105,11 @@ async def process_lightning_op(op: Union[Invoice | Payment]) -> LedgerEntry:
     Returns:
         None
     """
+    raise NotImplementedError("process_lightning_op is not implemented yet.")
     pass  # Placeholder for Lightning operation processing logic
 
 
-async def process_hive_op(op: OpAny) -> LedgerEntry:
+async def process_hive_op(op: OpAny) -> LedgerEntry | None:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
 
@@ -133,28 +152,17 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     if isinstance(op, BlockMarker):
         return None
 
-    if isinstance(op, TransferBase):
-        ledger_entry = await process_transfer_op(op=op, ledger_entry=ledger_entry)
+    try:
+        if isinstance(op, TransferBase):
+            ledger_entry = await process_transfer_op(op=op, ledger_entry=ledger_entry)
 
-    elif isinstance(op, LimitOrderCreate):
-        logger.info(f"Limit order create: {op.orderid}")
-        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
-        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
-        ledger_entry.description = op.ledger_str
-        ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
-        ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
-        ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
-    elif isinstance(op, FillOrder):
-        logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
-        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
-        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
-        ledger_entry.description = op.ledger_str
-        ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
-        ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
-        ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE
-        ledger_entry.credit_amount = op.current_pays.amount_decimal  # 6.738 HBD
-        ledger_entry.debit_conv = op.debit_conv  # Conversion for HIVE
-        ledger_entry.credit_conv = op.credit_conv  # Conversion for HBD
+        elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
+            ledger_entry = await process_create_fill_order_op(op=op, ledger_entry=ledger_entry)
+    except LedgerEntryException as e:
+        logger.error(f"Error processing transfer operation: {e}")
+        await op.unlock_op()
+        raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
+
     if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
         try:
             await TrackedBaseModel.db_client.insert_one(
@@ -168,11 +176,14 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             return ledger_entry
         except Exception as e:
             logger.error(f"Error updating ledger: {e}")
+            raise LedgerEntryCreationException(f"Error creating ledger entry: {e}") from e
     await op.unlock_op()
-    return None
+    raise LedgerEntryCreationException(
+        "Ledger entry not created. Missing debit or credit account."
+    )
 
 
-async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry:
+async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry | None:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
 
@@ -185,10 +196,25 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     description = op.d_memo if op.d_memo else ""
-    server_account = InternalConfig().config.hive.server_account.name
-    treasury_account = InternalConfig().config.hive.treasury_account.name
-    funding_account = InternalConfig().config.hive.funding_account.name
-    exchange_account = InternalConfig().config.hive.exchange_account.name
+    hive_config = InternalConfig().config.hive
+    if (
+        not hive_config
+        or not hive_config.server_account
+        or not hive_config.server_account.name
+        or not hive_config.treasury_account
+        or not hive_config.treasury_account.name
+        or not hive_config.funding_account
+        or not hive_config.funding_account.name
+        or not hive_config.exchange_account
+        or not hive_config.exchange_account.name
+    ):
+        raise LedgerEntryCreationException(
+            "Server account, treasury account, funding account, or exchange account not configured."
+        )
+    server_account = hive_config.server_account.name
+    treasury_account = hive_config.treasury_account.name
+    funding_account = hive_config.funding_account.name
+    exchange_account = hive_config.exchange_account.name
 
     ledger_entry.description = description
     ledger_entry.credit_unit = ledger_entry.debit_unit = op.unit
@@ -241,4 +267,43 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         logger.info(
             f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
         )
+        raise LedgerEntryCreationException("Transfer between untracked accounts.")
+    return ledger_entry
+
+
+async def process_create_fill_order_op(
+    op: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
+) -> LedgerEntry:
+    """
+    Processes the create or fill order operation and creates a ledger entry if applicable.
+
+    This method handles various types of orders, including limit orders and fill orders. It ensures that
+    appropriate debit and credit accounts are assigned based on the order type. If a ledger entry with
+    the same group_id already exists, the operation is skipped.
+
+    Returns:
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    """
+    if isinstance(op, LimitOrderCreate):
+        logger.info(f"Limit order create: {op.orderid}")
+        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
+        ledger_entry.description = op.ledger_str
+        ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
+        ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
+        ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
+    elif isinstance(op, FillOrder):
+        logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
+        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
+        ledger_entry.description = op.ledger_str
+        ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
+        ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
+        ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE
+        ledger_entry.credit_amount = op.current_pays.amount_decimal  # 6.738 HBD
+        ledger_entry.debit_conv = op.debit_conv  # Conversion for HIVE
+        ledger_entry.credit_conv = op.credit_conv  # Conversion for HBD
+    else:
+        logger.error(f"Unsupported operation type: {type(op)}")
+        raise LedgerEntryCreationException("Unsupported operation type.")
     return ledger_entry
