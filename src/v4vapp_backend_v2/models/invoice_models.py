@@ -4,13 +4,17 @@ from enum import StrEnum
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.models.custom_records import KeysendCustomRecord, b64_decode
+from v4vapp_backend_v2.models.custom_records import (
+    DecodedCustomRecord,
+    b64_decode,
+    decode_all_custom_records,
+)
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 # This is the regex for finding if a given message is an LND invoice to pay.
@@ -167,9 +171,9 @@ class Invoice(TrackedBaseModel):
     hive_accname: AccNameType | None = Field(
         default=None, description="Hive account name associated with the invoice"
     )
-    custom_record: KeysendCustomRecord | None = Field(
-        default=None,
-        description="Custom record from a podcast streaming payment or boost associated with the invoice",
+
+    custom_records: DecodedCustomRecord | None = Field(
+        default=None, description="Other custom records associated with the invoice"
     )
     expiry_date: datetime | None = Field(
         default=None, description="Expiry date of the invoice (creation_date + expiry)"
@@ -187,9 +191,10 @@ class Invoice(TrackedBaseModel):
         super().__init__(**invoice_dict)
 
         # set the expiry date to the creation date + expiry time
-        self.expiry_date = (
-            self.creation_date + timedelta(seconds=self.expiry) if self.expiry else None
-        )
+        if self.creation_date:
+            self.expiry_date = (
+                self.creation_date + timedelta(seconds=self.expiry) if self.expiry else None
+            )
         # perform my check to see if this invoice can be paid to Hive
         if self.memo:
             match = re.match(LND_INVOICE_TAG, self.memo.lower())
@@ -197,7 +202,7 @@ class Invoice(TrackedBaseModel):
                 self.is_lndtohive = True
 
         self.fill_hive_accname()
-        self.fill_custom_record()
+        self.fill_custom_records()
 
     @property
     def collection(self) -> str:
@@ -255,7 +260,7 @@ class Invoice(TrackedBaseModel):
             self.hive_accname = hive_accname
             self.is_lndtohive = True
 
-    def fill_custom_record(self) -> None:
+    def fill_custom_records(self) -> None:
         """
         Populates the `custom_record` attribute by decoding and validating a custom record
         from the first HTLC's custom records, if available.
@@ -278,25 +283,8 @@ class Invoice(TrackedBaseModel):
             custom_record (KeysendCustomRecord): The validated custom record, if successfully decoded and validated.
         """
         if self.htlcs and self.htlcs[0].custom_records:
-            if value := self.htlcs[0].custom_records.get("7629169"):
-                extracted_value = b64_decode(value)
-                try:
-                    custom_record = KeysendCustomRecord.model_validate(extracted_value)
-                    self.custom_record = custom_record
-                except ValidationError:
-                    self.custom_record = None
-                except Exception as e:
-                    logger.warning(
-                        f"Error in {self.r_hash} {self.memo}", extra={"notification": False}
-                    )
-                    logger.warning(
-                        f"Error validating custom record: {e} ",
-                        extra={
-                            "notification": False,
-                            "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
-                            "extracted_value": extracted_value,
-                        },
-                    )
+            extracted_value = decode_all_custom_records(self.htlcs[0].custom_records)
+            self.custom_records = extracted_value
 
     def invoice_message(self) -> str:
         if self.settled:
