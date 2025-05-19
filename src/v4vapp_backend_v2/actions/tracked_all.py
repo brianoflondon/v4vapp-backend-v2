@@ -87,8 +87,10 @@ async def process_tracked(tracked: TrackedAny) -> LedgerEntry:
     :param tracked: The tracked object to process.
     :return: LedgerEntry
     """
+
     if isinstance(tracked, OpAny):
-        return await process_hive_op(op=tracked)
+        ledger_entry = await process_hive_op(op=tracked)
+        return ledger_entry
     elif isinstance(tracked, Invoice):
         return await process_lightning_op(op=tracked)
     elif isinstance(tracked, Payment):
@@ -109,7 +111,7 @@ async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
     pass  # Placeholder for Lightning operation processing logic
 
 
-async def process_hive_op(op: OpAny) -> LedgerEntry | None:
+async def process_hive_op(op: OpAny) -> LedgerEntry:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
 
@@ -122,7 +124,9 @@ async def process_hive_op(op: OpAny) -> LedgerEntry | None:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     if isinstance(op, BlockMarker):
-        return None
+        raise LedgerEntryCreationException("BlockMarker is not a valid operation.")
+    if not isinstance(op, OpAny):
+        raise LedgerEntryCreationException("Invalid operation type.")
     await op.lock_op()
 
     # Check if a ledger entry with the same group_id already exists
