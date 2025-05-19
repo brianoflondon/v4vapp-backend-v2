@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
@@ -98,8 +99,8 @@ class PayReq(TrackedBaseModel):
 
     destination: str = ""
     payment_hash: str = ""
-    value: BSONInt64 | None = Field(None, alias="num_satoshis")
-    value_msat: BSONInt64 | None = Field(None, alias="num_msat")
+    value: BSONInt64 = Field(BSONInt64(0), alias="num_satoshis")
+    value_msat: BSONInt64 = Field(BSONInt64(0), alias="num_msat")
     timestamp: datetime | None = None
     expiry: int | None = None
     expiry_date: datetime | None = Field(
@@ -118,6 +119,10 @@ class PayReq(TrackedBaseModel):
         default_factory=CryptoConv,
         description="Conversion data for the payment request",
     )
+    pay_req_str: str = Field(
+        default="",
+        description="Original payment request string",
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -125,7 +130,7 @@ class PayReq(TrackedBaseModel):
         extra="allow",  # Allow extra fields to handle potential mismatches
     )
 
-    def __init__(self, lnrpc_payreq: lnrpc.PayReq = None, **data: Any) -> None:
+    def __init__(self, lnrpc_payreq: lnrpc.PayReq | None = None, **data: Any) -> None:
         if lnrpc_payreq and isinstance(lnrpc_payreq, lnrpc.PayReq):
             data_dict = MessageToDict(lnrpc_payreq, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
@@ -171,6 +176,11 @@ class PayReq(TrackedBaseModel):
 
         try:
             super().__init__(**invoice_dict)
+            if self.value == 0 and self.value_msat > 0:
+                self.value = BSONInt64(self.value_msat // 1000)
+            elif self.value_msat == 0 and self.value > 0:
+                self.value_msat = BSONInt64(self.value * 1000)
+
         except ValidationError as e:
             logger.error(f"Validation error in PayReq: {e}", extra={"invoice_dict": invoice_dict})
             raise
@@ -203,9 +213,10 @@ class PayReq(TrackedBaseModel):
         return {"payment_hash": self.payment_hash}
 
 
-def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq) -> PayReq:
+def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq, pay_req_str: str) -> PayReq:
     """
     Converts a protobuf PayReq object to a Pydantic PayReq model.
+    Also passes along the original pay_req_str for later use.
 
     Args:
         pay_req (lnrpc.PayReq): The protobuf PayReq object to be converted.
@@ -218,6 +229,7 @@ def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq) -> PayReq:
     pay_req_dict = convert_datetime_fields(pay_req_dict)
     try:
         pay_req_model = PayReq.model_validate(pay_req_dict)
+        pay_req_model.pay_req_str = pay_req_str
         return pay_req_model
     except Exception as e:
         print(e)
