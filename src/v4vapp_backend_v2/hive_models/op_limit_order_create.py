@@ -13,14 +13,14 @@ from .op_base import OpBase, OpRealm
 
 class LimitOrderCreate(OpBase):
     amount_to_sell: AmountPyd
-    block_num: int
     expiration: datetime
-    fill_or_kill: bool
-    min_to_receive: AmountPyd
+    fill_or_kill: bool = Field(
+        default=False,
+        description="True if the order is fill or kill, False if it is good till canceled",
+    )
+    # min_to_receive: AmountPyd moved to OpBase
     orderid: int
     owner: str
-    timestamp: datetime
-    trx_num: int
 
     conv: CryptoConv = CryptoConv()
 

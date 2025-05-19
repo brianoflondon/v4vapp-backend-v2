@@ -1,11 +1,13 @@
+import asyncio
+
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import send_lightning_to_pay_req
 from v4vapp_backend_v2.models.pay_req import PayReq
+from v4vapp_backend_v2.models.payment_models import Payment
 
 
 class HiveToLightningError(Exception):
@@ -53,14 +55,22 @@ async def process_hive_to_lightning(op: TransferBase) -> None:
             )
             if op.memo:
                 try:
-                    pay_req = await decode_incoming_payment_message(op.memo)
-                    if pay_req:
-                        pass
-                    else:
-                        logger.warning(
-                            "Failed to decode Lightning invoice",
-                            extra={"notification": False, "op": op.model_dump()},
+                    pay_req = await decode_incoming_payment_message(op=op)
+                    if not pay_req:
+                        raise HiveToLightningError("Failed to decode Lightning invoice")
+                    asyncio.create_task(
+                        send_lightning_to_pay_req(
+                            pay_req=pay_req,
+                            lnd_client=LNDClient(connection_name=lnd_config.default),
+                            chat_message="Test chat message on the payment",
+                            group_id="test_group_id",
+                            async_callback=lightning_payment_sent,
+                            callback_args={"op": op},
+                            amount_msat=op.conv.msats - op.conv.msats_fee,
+                            fee_limit_ppm=500,
                         )
+                    )
+
                 except Exception as e:
                     logger.error(
                         f"Error decoding Lightning invoice: {e}",
@@ -74,8 +84,7 @@ async def process_hive_to_lightning(op: TransferBase) -> None:
                 )
 
 
-
-async def decode_incoming_payment_message(message: str) -> PayReq | None:
+async def decode_incoming_payment_message(op: TransferBase) -> PayReq | None:
     """
     Decodes an incoming Lightning payment message and validates its value and conversion limits.
 
@@ -94,23 +103,26 @@ async def decode_incoming_payment_message(message: str) -> PayReq | None:
     """
 
     lnd_config = InternalConfig().config.lnd_config
-    logger.info(f"Processing payment request: {message}")
+    logger.info(f"Processing payment request: {op.memo}")
     lnd_client = LNDClient(connection_name=lnd_config.default)
-    pay_req = await decode_any_lightning_string(input=message, lnd_client=lnd_client)
-    if pay_req and pay_req.value:
-        # This is where we will check the value of the invoice, the amount of Hive sent
-        # The fee and the usage of the user.
-        logger.info(
-            f"Decoded Lightning invoice: {pay_req}",
-            extra={"notification": False, "pay_req": pay_req.model_dump()},
-        )
-        sats_to_send = pay_req.value
-        send_conversion = CryptoConversion(conv_from=Currency.SATS, value=sats_to_send)
-        await send_conversion.get_quote()
-        pay_req.conv = send_conversion.conversion
-        if pay_req.conv.in_limits:
-            logger.info(
-                f"Pay request decoded {pay_req.memo}", extra={"pay_req": pay_req.model_dump()}
-            )
-            return pay_req
-    return None
+    pay_req = await decode_any_lightning_string(input=op.memo, lnd_client=lnd_client)
+    return pay_req
+
+
+async def lightning_payment_sent(payment: Payment, op: TransferBase):
+    """
+    Callback function to be called when a Lightning payment is sent.
+
+    Args:
+        payment (Payment): The Payment object representing the sent payment.
+        op (TransferBase): The TransferBase object representing the operation.
+
+    Returns:
+        None
+    """
+    # Placeholder for actual implementation
+    await op.unlock_op()
+    logger.info(
+        f"Lightning payment sent: {payment.log_str}",
+        extra={"notification": False, "op": op.model_dump(), "payment": payment.model_dump()},
+    )

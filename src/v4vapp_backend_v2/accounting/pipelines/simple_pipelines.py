@@ -99,6 +99,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
     pipeline_exclude_locked_changes: list[Mapping[str, Any]] = []
 
     payments_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {"$match": {"custom_records.v4vapp_group_id": {"$ne": None}}},
         {
             "$project": {
                 "fullDocument.creation_date": 1,

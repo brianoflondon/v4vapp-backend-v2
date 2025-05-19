@@ -15,7 +15,10 @@ from v4vapp_backend_v2.actions.lnurl_models import (
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_pay_req_from_pay_request
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_node_alias_from_pub_key,
+    get_pay_req_from_pay_request,
+)
 from v4vapp_backend_v2.models.pay_req import PayReq, protobuf_pay_req_to_pydantic
 
 # Get this from the config
@@ -146,6 +149,7 @@ async def decode_any_lightning_string(
         # if ln_invoice.zero_sat:
         #     ln_invoice.force_send_sats = sats
         pay_req = protobuf_pay_req_to_pydantic(lnrpc_pay_req, pay_req_str=input)
+        pay_req.dest_alias = await get_node_alias_from_pub_key(pay_req.destination, lnd_client=lnd_client)
         return pay_req
 
     data = LnurlProxyData(

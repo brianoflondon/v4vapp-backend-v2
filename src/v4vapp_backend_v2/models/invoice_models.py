@@ -224,6 +224,15 @@ class Invoice(TrackedBaseModel):
         """
         return {"r_hash": self.r_hash}
 
+    def group_id(self) -> str:
+        """
+        Returns the group ID for the invoice.
+
+        Returns:
+            str: The group ID for the invoice.
+        """
+        return self.r_hash
+
     def fill_hive_accname(self) -> None:
         """
         Extracts and returns the Hive account name associated with the invoice, if available.

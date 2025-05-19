@@ -51,7 +51,7 @@ class TransferBase(OpBase):
 
     from_account: AccNameType = Field(alias="from")
     to_account: AccNameType = Field(alias="to")
-    amount: AmountPyd = Field(description="Amount being transferred")
+    # amount: AmountPyd = Field(description="Amount being transferred") Moved to OpBase
     memo: str = Field("", description="Memo associated with the transfer")
     conv: CryptoConv = CryptoConv()
     d_memo: str = Field("", description="Decoded memo string")

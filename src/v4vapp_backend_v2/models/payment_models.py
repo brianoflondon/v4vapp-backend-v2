@@ -153,9 +153,12 @@ class Payment(TrackedBaseModel):
         Attributes:
             custom_record (KeysendCustomRecord): The validated custom record, if successfully decoded and validated.
         """
+
         if self.htlcs and self.htlcs[0].route and self.htlcs[0].route.hops:
-            if custom_records := self.htlcs[0].route.hops[0].custom_records:
-                self.custom_records = decode_all_custom_records(custom_records=custom_records)
+            for hop in self.htlcs[0].route.hops:
+                if custom_records := hop.custom_records:
+                    self.custom_records = decode_all_custom_records(custom_records=custom_records)
+                    return
 
     # Methods from PaymentExtra
     @computed_field
@@ -229,6 +232,13 @@ class Payment(TrackedBaseModel):
     @property
     def group_id_query(self) -> dict:
         return {"payment_hash": self.payment_hash}
+
+    @property
+    def group_id(self) -> str:
+        """
+        Returns the group ID for the payment.
+        """
+        return self.payment_hash
 
     @property
     def destination_pub_keys(self) -> List[str | None]:

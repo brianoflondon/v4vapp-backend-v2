@@ -35,6 +35,12 @@ class LedgerEntryCreationException(LedgerEntryException):
     pass
 
 
+class LedgerEntryDuplicateException(LedgerEntryException):
+    """Custom exception for LedgerEntry duplicate errors."""
+
+    pass
+
+
 def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     """
     Check if the tracked object is of type OpAny, Invoice, or Payment.
@@ -140,9 +146,11 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
             try:
                 ledger_entry = LedgerEntry.model_validate(existing_entry)
             except Exception as e:
-                logger.error(f"Error validating existing ledger entry: {e}")
-                return None
-            return ledger_entry  # Skip processing if duplicate
+                message = f"Error validating existing ledger entry: {e}"
+                logger.error(message)
+                raise LedgerEntryCreationException(message) from e
+
+            raise LedgerEntryDuplicateException(f"Ledger entry already exists: {ledger_entry}")
 
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts
@@ -154,7 +162,7 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     )
     # MARK: Transfers or Recurrent Transfers
     if isinstance(op, BlockMarker):
-        return None
+        raise LedgerEntryCreationException("BlockMarker is not a valid operation.")
 
     try:
         if isinstance(op, TransferBase):
