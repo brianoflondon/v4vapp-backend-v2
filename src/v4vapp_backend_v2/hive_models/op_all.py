@@ -27,7 +27,7 @@ OpRealOpsLoop = Union[OpAny, OpMarket]
 
 # Important: This list must be kept in sync with the OP_TRACKED list in the
 # op_base.py file.
-OP_MAP: dict[str, OpAny] = {
+OP_MAP: dict[str, Any] = {
     "custom_json": CustomJson,
     "transfer": Transfer,
     "account_witness_vote": AccountWitnessVote,
@@ -49,7 +49,20 @@ def op_tracked(op_type: str) -> bool:
     return False
 
 
-def check_op_tracked() -> bool:
+def is_op_all_transfer(op: OpAny) -> bool:
+    """
+    Check if the operation type is a transfer operation.
+
+    Args:
+        op (OpAny): The operation to check.
+
+    Returns:
+        bool: True if the operation type is a transfer operation, False otherwise.
+    """
+    return op.type in ["transfer", "recurrent_transfer", "fill_recurrent_transfer"]
+
+
+def check_op_tracked():
     # Convert OP_MAP keys and OP_TRACKED to sets
     op_map_keys = set(OP_MAP.keys())
     op_tracked_set = set(OP_TRACKED)
@@ -119,7 +132,7 @@ def op_any_or_base(hive_event: dict) -> OpAny:
             raise ValueError(f"Unknown operation type: {e}") from e
 
 
-def op_query(types: list[str]) -> dict[str, str]:
+def op_query(types: list[str]) -> dict[str, Any]:
     # query = {"type": {"$in": ["transfer", "fill_recurrent_transfer"]}}
     if not types:
         raise ValueError("types list cannot be empty")
