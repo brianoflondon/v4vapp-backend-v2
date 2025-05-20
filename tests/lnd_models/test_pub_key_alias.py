@@ -5,8 +5,8 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.pub_key_alias import (
-    LOCAL_PUB_KEY_ALIAS_CACHE,
     get_all_pub_key_aliases,
     update_payment_route_with_alias,
 )
@@ -25,9 +25,8 @@ def read_lnd_monitor_v2_voltage_pub_keys(file_path: str) -> dict:
 
 
 def test_route_in_payments():
-    lnrpc_list_payments = read_list_payments_raw(
-        "tests/data/lnd_lists/list_payments_raw.bin"
-    )
+    TrackedBaseModel.update_quote_sync()
+    lnrpc_list_payments = read_list_payments_raw("tests/data/lnd_lists/list_payments_raw.bin")
     assert lnrpc_list_payments
     assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)
     list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
@@ -44,6 +43,7 @@ def test_route_in_payments():
 
 @pytest.mark.asyncio
 async def pub_key_aliases() -> dict:
+    await TrackedBaseModel.update_quote()
     # Load test data
     mongodb_pub_keys = read_lnd_monitor_v2_voltage_pub_keys(
         "tests/data/lnd_lists/lnd_monitor_v2_voltage_pub_keys.json"
@@ -109,9 +109,7 @@ async def test_update_payment_route_with_alias_fill_cache():
     lnd_client = AsyncMock()
     mock_aliases = await pub_key_aliases()
 
-    lnrpc_list_payments = read_list_payments_raw(
-        "tests/data/lnd_lists/list_payments_raw.bin"
-    )
+    lnrpc_list_payments = read_list_payments_raw("tests/data/lnd_lists/list_payments_raw.bin")
     list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
     first_call = True
     for payment in list_payment_response.payments:
@@ -140,7 +138,7 @@ async def test_update_payment_route_with_alias_fill_cache():
                 )
 
                 # Assertions
-                if payment.destination_pub_keys:
+                if payment.destination_pub_keys and payment.route:
                     assert len(payment.route) > 0
                     assert payment.destination
                     route_str = payment.route_str

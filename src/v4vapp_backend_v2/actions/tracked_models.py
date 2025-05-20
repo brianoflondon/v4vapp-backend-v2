@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 
@@ -209,19 +209,4 @@ class TrackedBaseModel(BaseModel):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        if getattr(self, "conv", None) is not None:
-            quote = quote or self.last_quote
-            if getattr(self, "amount", None) is not None and self.amount:
-                self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
-            elif getattr(self, "min_to_receive", None) is not None and self.min_to_receive:
-                self.conv = CryptoConversion(value=self.min_to_receive, quote=quote).conversion
-            elif getattr(self, "amt_paid_msat", None) is not None and self.amt_paid_msat:
-                self.conv = CryptoConversion(
-                    value=self.amt_paid_msat, conv_from=Currency.MSATS, quote=quote
-                ).conversion
-            elif getattr(self, "value_msat", None) is not None and self.value_msat:
-                self.conv = CryptoConversion(
-                    value=self.value_msat, conv_from=Currency.MSATS, quote=quote
-                ).conversion
-        else:
-            return
+        raise NotImplementedError("Subclasses must implement the update_conv method.")

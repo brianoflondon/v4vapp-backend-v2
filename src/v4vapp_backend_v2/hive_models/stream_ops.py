@@ -7,6 +7,7 @@ from nectar.exceptions import NectarException
 from nectar.hive import Hive
 from nectarapi.exceptions import NumRetriesReached
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
@@ -27,7 +28,7 @@ class SwitchToLiveStream(Exception):
 
 
 async def stream_ops_async(
-    start: int | None = None,
+    start: int = 0,
     stop: int | None = None,
     stop_now: bool = False,
     look_back: timedelta | None = None,
@@ -102,7 +103,7 @@ async def stream_ops_async(
     last_block = start_block
 
     while last_block < stop_block:
-        await OpBase.update_quote()
+        await TrackedBaseModel.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(

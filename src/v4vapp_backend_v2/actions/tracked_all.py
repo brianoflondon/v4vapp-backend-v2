@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightnin
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -95,8 +96,31 @@ async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
     Returns:
         None
     """
+    ledger_entry = LedgerEntry(
+        group_id=op.group_id,
+        timestamp=op.creation_date,
+        op=op,
+    )
+    if isinstance(op, Invoice):
+        await process_lightning_invoice(op=op, ledger_entry=ledger_entry)
+
     raise NotImplementedError("process_lightning_op is not implemented yet.")
     pass  # Placeholder for Lightning operation processing logic
+
+
+async def process_lightning_invoice(op: Invoice, ledger_entry: LedgerEntry) -> LedgerEntry:
+    # Invoice means we are receiving sats from external.
+    await op.lock_op()
+    ledger_entry.description = op.memo
+    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
+    ledger_entry.credit_amount = ledger_entry.debit_amount = float(op.amt_paid_msat)
+    ledger_entry.credit_conv = ledger_entry.debit_conv = op.conv
+    if "Funding" in op.memo:
+        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+
+        print(op)
+
+    await op.unlock_op()
 
 
 # MARK: Hive Transaction Processing
@@ -201,6 +225,8 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         raise LedgerEntryCreationException(
             "Server account, treasury account, funding account, or exchange account not configured."
         )
+    if not op.conv:
+        raise LedgerEntryCreationException("Conversion not set in operation.")
 
     follow_on_task = None
     ledger_entry.description = description
