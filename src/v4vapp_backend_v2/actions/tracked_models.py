@@ -107,3 +107,16 @@ class TrackedBaseModel(BaseModel):
             )
             return ans
         return None
+
+    
+    def tracked_type(self) -> str:
+        """
+        Returns the tracked type of the operation.
+
+        This method should be overridden in subclasses to provide the
+        specific tracked type.
+
+        Returns:
+            str: The tracked type of the operation.
+        """
+        return self.name()

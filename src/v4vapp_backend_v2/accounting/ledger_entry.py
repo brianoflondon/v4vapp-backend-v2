@@ -1,9 +1,9 @@
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
@@ -14,7 +14,9 @@ class LedgerEntry(BaseModel):
     """
 
     group_id: str = Field("", description="Group ID for the ledger entry")
-    timestamp: datetime = Field(None, description="Timestamp of the ledger entry")
+    timestamp: datetime = Field(
+        datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
+    )
     description: str = Field("", description="Description of the ledger entry")
     # # Legacy fields (for backward compatibility)
     # amount: float = Field(None, description="Amount of the ledger entry (legacy)")
@@ -22,38 +24,31 @@ class LedgerEntry(BaseModel):
     # conv: CryptoConv = Field(None, description="Conversion details for the ledger entry (legacy)")
     # # New fields for multi-currency support
     debit_amount: float = Field(0.0, description="Amount of the debit transaction")
-    debit_unit: Currency = Field(None, description="Unit of the debit transaction")
+    debit_unit: Currency = Field(
+        default=Currency.HIVE, description="Unit of the debit transaction"
+    )
     debit_conv: CryptoConv = Field(
-        None, description="Conversion details for the debit transaction"
+        default_factory=CryptoConv, description="Conversion details for the debit transaction"
     )
     credit_amount: float = Field(0.0, description="Amount of the credit transaction")
-    credit_unit: Currency = Field(None, description="Unit of the credit transaction")
-    credit_conv: CryptoConv = Field(
-        None, description="Conversion details for the credit transaction"
+    credit_unit: Currency = Field(
+        default=Currency.HIVE, description="Unit of the credit transaction"
     )
-    debit: AccountAny = Field(None, description="Account to be debited")
-    credit: AccountAny = Field(None, description="Account to be credited")
-    op: Any = Field(None, description="Associated Hive operation")
+    credit_conv: CryptoConv = Field(
+        default_factory=CryptoConv, description="Conversion details for the credit transaction"
+    )
+    debit: AccountAny | None = Field(None, description="Account to be debited")
+    credit: AccountAny | None = Field(None, description="Account to be credited")
+    # This really should be a Tracked Any object, but that causes circular imports
+    op: TrackedAny = Field(..., description="Associated operation")
 
     model_config = ConfigDict()
 
     def __init__(self, **data):
         super().__init__(**data)
-        # Backward compatibility: If amount, unit, and conv are provided, map them to debit and credit fields
-        # if self.amount is not None and self.unit is not None and self.conv is not None:
-        #     self.debit_amount = self.amount
-        #     self.debit_unit = self.unit
-        #     self.debit_conv = self.conv
-        #     self.credit_amount = self.amount
-        #     self.credit_unit = self.unit
-        #     self.credit_conv = self.conv
-        #     # Clear legacy fields to avoid confusion
-        #     self.amount = None
-        #     self.unit = None
-        #     self.conv = None
 
     @property
-    def credit_debit(self) -> tuple[AccountAny, AccountAny]:
+    def credit_debit(self) -> tuple[AccountAny | None, AccountAny | None]:
         """
         Returns a tuple of the credit and debit accounts.
         """

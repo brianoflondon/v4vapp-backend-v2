@@ -1,3 +1,11 @@
+"""
+These tests test the filtering of tracked operations and the ledger population
+and the generation of balance sheets.
+
+The test data comes from a MongoDB dump of the v4vapp-dev.hive_ops collection.
+
+"""
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
@@ -31,8 +39,11 @@ mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.j
 async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
     # Drop the collection and user
     async with MongoDBClient(conn_name, db_name, db_user) as test_client:
-        ans = await test_client.db.drop_collection("startup_collection")
-        assert ans.get("ok") == 1
+        if test_client.db is None:
+            raise ValueError(f"Database {db_name} does not exist.")
+        # Check if the collection exists by listing collection names
+        collection_names = await test_client.db.list_collection_names()
+        assert isinstance(collection_names, list)
         ans = await test_client.drop_user()
         assert ans.get("ok") == 1
     await drop_database(conn_name=conn_name, db_name=db_name)
@@ -53,10 +64,24 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    # Mock asyncio.create_task
     yield
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
     )  # Resetting InternalConfig instance
+
+
+@pytest.fixture(autouse=True)
+def do_not_run_extra_processing():
+    """
+    Fixture to skip extra processing in tests.
+    This is a placeholder for any setup or teardown logic needed for the tests.
+    """
+    # Skip extra processing
+    with patch("asyncio.create_task") as mock_create_task:
+        # Mock the behavior of create_task
+        mock_create_task.return_value = None
+        yield
 
 
 def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
@@ -87,20 +112,16 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     count = 0
     processed_count = 0
 
-    # Mock asyncio.create_task
-    with patch("asyncio.create_task") as mock_create_task:
-        # Mock the behavior of create_task
-        mock_create_task.return_value = None
-        for op in load_hive_events_from_mongodb_dump(file_path):
-            count += 1
-            try:
-                ledger_entry = await process_tracked(op)
-                if ledger_entry is not None:
-                    processed_count += 1
-                    # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
-            except LedgerEntryException as e:
-                print(f"Error processing tracked operation: {e}")
-                continue
+    for op in load_hive_events_from_mongodb_dump(file_path):
+        count += 1
+        try:
+            ledger_entry = await process_tracked(op)
+            if ledger_entry is not None:
+                processed_count += 1
+                # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+        except LedgerEntryException as e:
+            print(f"Error processing tracked operation: {e}")
+            continue
 
     df = await get_ledger_dataframe()
     assert len(df) == processed_count

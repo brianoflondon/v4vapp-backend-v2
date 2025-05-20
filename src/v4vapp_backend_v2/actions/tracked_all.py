@@ -4,6 +4,7 @@ from typing import Any, Union
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
@@ -13,8 +14,6 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
-
-TrackedAny = Union[OpAny, Invoice, Payment]
 
 
 class LedgerEntryException(Exception):
@@ -69,23 +68,6 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     raise ValueError("Invalid tracked object")
 
 
-def tracked_type(tracked_op: TrackedAny) -> str:
-    """
-    Generate a query for the tracked object.
-
-    :param tracked: The tracked object.
-    :return: A dictionary representing the query.
-    """
-    if isinstance(tracked_op, OpAny):
-        return tracked_op.name()
-    elif isinstance(tracked_op, Invoice):
-        return "invoice"
-    elif isinstance(tracked_op, Payment):
-        return "payment"
-    else:
-        raise ValueError("Invalid tracked object")
-
-
 async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     """
     Process the tracked object.
@@ -115,6 +97,9 @@ async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
     """
     raise NotImplementedError("process_lightning_op is not implemented yet.")
     pass  # Placeholder for Lightning operation processing logic
+
+
+# MARK: Hive Transaction Processing
 
 
 async def process_hive_op(op: OpAny) -> LedgerEntry:
