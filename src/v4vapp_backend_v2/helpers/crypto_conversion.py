@@ -54,6 +54,7 @@ class CryptoConv(BaseModel):
             data["source"] = "Hive Internal Trade"
             data["fetch_date"] = datetime.now(tz=timezone.utc)
             quote = data.get("quote", None)
+            # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
                 data["sats_hive"] = quote.sats_hive
                 data["sats_hbd"] = quote.sats_hbd
@@ -190,14 +191,16 @@ class CryptoConversion(BaseModel):
         if self.quote is None or self.quote.hive_hbd == 0:
             raise ValueError("Quote is not available or invalid")
         try:
-            if self.conv_from == Currency.HIVE:
+            if self.conv_from == Currency.MSATS:
+                self.msats = int(self.value)
+            elif self.conv_from == Currency.SATS:
+                self.msats = int(self.value * 1000)
+            elif self.conv_from == Currency.HIVE:
                 self.msats = int(self.value * self.quote.sats_hive_p * 1000)
             elif self.conv_from == Currency.HBD:
                 self.msats = int(self.value * self.quote.sats_hbd_p * 1000)
             elif self.conv_from == Currency.USD:
                 self.msats = int(self.value * self.quote.sats_usd_p * 1000)
-            elif self.conv_from == Currency.SATS:
-                self.msats = int(self.value * 1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 
