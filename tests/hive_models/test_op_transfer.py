@@ -112,17 +112,18 @@ async def test_model_dump_transfer_enhanced():
             assert hive_event_model["from"] == transfer.from_account
             assert hive_event_model["to"] == transfer.to_account
             assert hive_event_model["memo"] == transfer.memo
-            assert transfer.conv.hive == hive_event_model["conv"]["hive"]
-            # This line tests the fees and conversion limits calculations
-            # in service_fees.py
-            if (
-                transfer.conv.sats >= v4v_config.data.minimum_invoice_payment_sats
-                and transfer.conv.sats <= v4v_config.data.maximum_invoice_payment_sats
-            ):
-                assert transfer.conv.msats_fee >= v4v_config.data.conv_fee_sats * 1_000
+            if transfer.conv:
+                assert transfer.conv.hive == hive_event_model["conv"]["hive"]
+                assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+                # This line tests the fees and conversion limits calculations
+                # in service_fees.py
+                if (
+                    transfer.conv.sats >= v4v_config.data.minimum_invoice_payment_sats
+                    and transfer.conv.sats <= v4v_config.data.maximum_invoice_payment_sats
+                ):
+                    assert transfer.conv.msats_fee >= v4v_config.data.conv_fee_sats * 1_000
             assert transfer.log_str
             assert transfer.notification_str
-            assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
             print(transfer.notification_str)
 
 

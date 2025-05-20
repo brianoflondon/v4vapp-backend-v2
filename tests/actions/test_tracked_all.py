@@ -28,12 +28,14 @@ from v4vapp_backend_v2.actions.tracked_all import (
     process_tracked,
     tracked_any,
 )
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
-mongodb_export_path = Path("tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json")
+mongodb_export_path_hive_ops = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
+mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
 
 
 async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
@@ -84,20 +86,37 @@ def do_not_run_extra_processing():
         yield
 
 
-def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
+def load_tracked_ops_from_mongodb_dump(file_path: str) -> Generator[TrackedAny, None, None]:
     """
-    Load hive events from a MongoDB collection.
+    Load tracked operations from a MongoDB collection.
 
     :param file_path: Path to the JSONL file.
-    :return: List of hive events.
+    :return: List of tracked operations.
     """
 
     with open(file_path, "r") as f:
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
-    for hive_event in json_data:
-        hive_event["update_conv"] = False
-        op = op_any_or_base(hive_event)
+    for tracked_op in json_data:
+        tracked_op["update_conv"] = False
+        op = tracked_any(tracked_op)
+        yield op
+
+
+def load_invoices_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
+    """
+    Load invoices from a MongoDB collection.
+
+    :param file_path: Path to the JSONL file.
+    :return: List of invoices.
+    """
+
+    with open(file_path, "r") as f:
+        raw_data = f.read()
+        json_data = json_util.loads(raw_data)
+    for invoice in json_data:
+        invoice["update_conv"] = False
+        op = op_any_or_base(invoice)
         yield op
 
 
@@ -112,7 +131,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     count = 0
     processed_count = 0
 
-    for op in load_hive_events_from_mongodb_dump(file_path):
+    for op in load_tracked_ops_from_mongodb_dump(file_path):
         count += 1
         try:
             ledger_entry = await process_tracked(op)
@@ -139,7 +158,9 @@ def test_print_block_numbers_of_events() -> None:
     """
     file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     block_numbers = []
-    for op in load_hive_events_from_mongodb_dump(file_path):
+    for op in load_tracked_ops_from_mongodb_dump(file_path):
+        if not isinstance(op, OpBase):
+            continue
         block_numbers.append(op.block_num)
     print("[")
     for block_number in block_numbers:
@@ -148,21 +169,23 @@ def test_print_block_numbers_of_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_balance_sheet_steps():
+async def test_balance_sheet_steps_hive_ops():
     """
     Test balance sheet in steps one by one
     This also steps through the process of fetching each Hive Event and processing it.
     It generates a balance sheet in pandas DataFrame format and prints it.
     It also prints the formatted balance sheet as of the current date.
     """
-    await OpBase.update_quote()
+    await TrackedBaseModel.update_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
+    balance_sheet_print = ""
+    all_currencies = ""
     with patch("asyncio.create_task") as mock_create_task:
         # Mock the behavior of create_task
         mock_create_task.return_value = None
-        for op in load_hive_events_from_mongodb_dump(str(mongodb_export_path)):
+        for op in load_tracked_ops_from_mongodb_dump(mongodb_export_path_hive_ops):
             hive_event = op.model_dump()
             count += 1
             hive_event["update_conv"] = False
@@ -212,7 +235,7 @@ async def test_process_tracked_and_balance_sheet():
     Ensure that the necessary test database and user are set up before running this test.
     """
     # Must update quotes before running this test
-    await OpBase.update_quote()
+    await TrackedBaseModel.update_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)
@@ -240,3 +263,45 @@ async def test_account_balances():
         print(account_balances)
 
     await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+# MARK: Lightning
+
+test_lightning_invoices_r_hash = ["uIst3MZFrpJ3CYH3jwXFrQpyBFyjDrJUyLSmUEusSjU="]
+
+mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
+
+
+@pytest.mark.skip("Work in progress")
+@pytest.mark.asyncio
+async def test_process_lightning_invoices():
+    """
+    Test the process of generating a tracked balance sheet and its printouts.
+    This test performs the following steps:
+    1. Populates the ledger database with data from a MongoDB dump.
+    2. Generates a balance sheet in pandas DataFrame format.
+    3. Prints the formatted balance sheet as of the current date.
+    4. Prints the balance sheet for all currencies.
+    5. Cleans up by dropping the test database and user.
+    Steps:
+    - Calls `test_fill_ledger_database_from_mongodb_dump` to populate the database.
+    - Uses `generate_balance_sheet_pandas` to create the balance sheet.
+    - Formats the balance sheet using `balance_sheet_printout` and prints it.
+    - Prints all currencies using `balance_sheet_all_currencies_printout`.
+    - Cleans up resources using `drop_collection_and_user`.
+    Note:
+    Ensure that the necessary test database and user are set up before running this test.
+    """
+    # Must update quotes before running this test
+    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
+        print(op_tracked.log_str)
+        try:
+            ledger_entry = await process_tracked(op_tracked)
+            print(ledger_entry)
+            print(ledger_entry.draw_t_diagram())
+        except LedgerEntryException as e:
+            print(f"Expected error processing tracked operation: {e}")
+            continue
