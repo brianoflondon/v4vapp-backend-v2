@@ -13,6 +13,7 @@ from pymongo.errors import BulkWriteError
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
@@ -409,6 +410,7 @@ async def invoices_loop(
             ):
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
+                await TrackedBaseModel.update_quote()
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
                     event_name=Events.LND_INVOICE,
@@ -454,6 +456,7 @@ async def payments_loop(
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 lnrpc_payment: lnrpc.Payment
+                await TrackedBaseModel.update_quote()
                 async_publish(
                     event_name=Events.LND_PAYMENT,
                     htlc_event=lnrpc_payment,
@@ -928,6 +931,8 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             db_client = get_mongodb_client()
+            await TrackedBaseModel.update_quote()
+            TrackedBaseModel.db_client = db_client
 
             tasks = [
                 invoices_loop(
