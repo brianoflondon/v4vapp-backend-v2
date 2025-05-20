@@ -5,6 +5,7 @@ from pydantic import Field
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
@@ -157,3 +158,30 @@ class FillOrder(OpBase):
                 self.completed_order = True
                 return f"✅ Order {open_order.orderid} has been filled (xs {amount_remaining})"
         return f"id {self.open_orderid}"
+
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        quote = quote or self.last_quote
+        self.debit_conv = CryptoConv(
+            conv_from=self.open_pays.unit,  # HIVE
+            value=self.open_pays.amount_decimal,  # 25.052 HIVE
+            converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
+            quote=quote,
+        )
+        # Credit conv should match the credit side in the ledger (current_pays, HBD given)
+        self.credit_conv = CryptoConv(
+            conv_from=self.current_pays.unit,  # HBD
+            value=self.current_pays.amount_decimal,  # 6.738 HBD
+            converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
+            quote=quote,
+        )

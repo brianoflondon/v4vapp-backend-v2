@@ -1,10 +1,11 @@
+import re
 from typing import Any, override
 
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -53,7 +54,6 @@ class TransferBase(OpBase):
     to_account: AccNameType = Field(alias="to")
     amount: AmountPyd = Field(description="Amount being transferred")
     memo: str = Field("", description="Memo associated with the transfer")
-    conv: CryptoConv = CryptoConv()
     d_memo: str = Field("", description="Decoded memo string")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -154,12 +154,51 @@ class TransferBase(OpBase):
                  - A markdown link for additional context.
                  - A hashtag indicating no preview.
         """
+        if self.conv:
+            conversion_str = self.conv.notification_str
+        else:
+            conversion_str = ""
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} "
             f"to {self.to_account.markdown_link}{self.recurrence_str} "
-            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
+            f"{conversion_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
+
+    @property
+    def lightning_memo(self) -> str:
+        """
+        Removes and shortens a lightning invoice from a memo for output.
+
+        Returns:
+            str: The shortened memo string.
+        """
+        # Regex pattern to capture 'lnbc' followed by numbers and one letter
+        if not self.d_memo:
+            return ""
+        pattern = r"(lnbc\d+[a-zA-Z])"
+        match = re.search(pattern, self.d_memo)
+        if match:
+            # Replace the entire memo with the matched lnbc pattern
+            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
+        else:
+            memo = f"💬{self.d_memo}"
+        return memo
+
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        quote = quote or self.last_quote
+        self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
 
 
 class Transfer(TransferBase):

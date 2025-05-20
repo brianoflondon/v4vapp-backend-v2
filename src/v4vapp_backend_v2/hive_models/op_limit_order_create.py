@@ -4,8 +4,8 @@ from typing import Any, ClassVar, Dict, List
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -141,3 +141,18 @@ class LimitOrderCreate(OpBase):
         return_str = self._log_internal()
         return_str = return_str.replace("📈", "")
         return return_str.strip()
+
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        quote = quote or self.last_quote
+        self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
