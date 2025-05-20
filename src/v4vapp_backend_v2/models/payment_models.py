@@ -1,12 +1,14 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
@@ -102,18 +104,18 @@ class Payment(TrackedBaseModel):
 
     # Attributes from Payment
     payment_hash: str = ""
-    value: Optional[BSONInt64] = None
+    value: BSONInt64 = BSONInt64(0)
     creation_date: datetime | None = None
-    fee: Optional[BSONInt64] = None
+    fee: BSONInt64 = BSONInt64(0)
     payment_preimage: str = ""
-    value_sat: BSONInt64 | None = None
-    value_msat: BSONInt64 | None = None
+    value_sat: BSONInt64 = BSONInt64(0)
+    value_msat: BSONInt64 = BSONInt64(0)
     payment_request: str = ""
     status: PaymentStatus | None = None
-    fee_sat: BSONInt64 | None = None
-    fee_msat: BSONInt64 | None = None
+    fee_sat: BSONInt64 = BSONInt64(0)
+    fee_msat: BSONInt64 = BSONInt64(0)
     creation_time_ns: datetime | None = None
-    payment_index: BSONInt64 | None = None
+    payment_index: BSONInt64 = BSONInt64(0)
     failure_reason: str = ""
     htlcs: List[HTLCAttempt] | None = None
     first_hop_custom_record: List[FirstHopCustomRecords] | None = None
@@ -129,7 +131,24 @@ class Payment(TrackedBaseModel):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
+        if not self.conv:
+            self.update_conv()
         self.fill_custom_record()
+
+    @override
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion rate for the payment.
+
+        This method retrieves the latest conversion rate and updates the
+        `conv` attribute of the payment instance.
+        """
+        quote = quote or self.last_quote
+        self.conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=float(self.value_msat),
+            quote=quote,
+        ).conversion
 
     def fill_custom_record(self) -> None:
         """

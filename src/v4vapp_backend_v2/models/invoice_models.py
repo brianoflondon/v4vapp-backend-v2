@@ -1,7 +1,7 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
@@ -59,7 +61,7 @@ class InvoiceHTLC(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     chan_id: BSONInt64
-    htlc_index: BSONInt64 | None = None
+    htlc_index: BSONInt64 = BSONInt64(0)
     amt_msat: BSONInt64
     accept_height: int
     accept_time: datetime
@@ -67,7 +69,7 @@ class InvoiceHTLC(BaseModel):
     expiry_height: int
     state: InvoiceHTLCState
     custom_records: Dict[str, str] | None = None
-    mpp_total_amt_msat: BSONInt64 | None = None
+    mpp_total_amt_msat: BSONInt64 = BSONInt64(0)
     amp: dict | None = None
 
 
@@ -136,13 +138,41 @@ class Invoice(TrackedBaseModel):
             Extracts and validates a custom record from the first HTLC's custom records, if available.
     """
 
-    memo: str = ""
-    r_preimage: str = ""
-    r_hash: str = ""
-    value: BSONInt64 | None = None
-    value_msat: BSONInt64 | None = None
-    settled: bool = False
-    creation_date: datetime | None = None
+    memo: str = Field(
+        default="",
+        description="An optional memo to attach along with the invoice.",
+    )
+    r_preimage: str = Field(
+        default="",
+        description=(
+            "The hex-encoded preimage (32 byte) which will allow settling an "
+            "incoming HTLC payable to this preimage. When using REST, this field "
+            "must be encoded as base64."
+        ),
+    )
+    r_hash: str = Field(
+        default="",
+        description=(
+            "The hash of the preimage. When using REST, this field must be encoded as base64. "
+            "Note: Output only, don't specify for creating an invoice."
+        ),
+    )
+    value: BSONInt64 = Field(
+        default=BSONInt64(0),
+        description="The value of this invoice in satoshis The fields value and value_msat are mutually exclusive.",
+    )
+    value_msat: BSONInt64 = Field(
+        default=BSONInt64(0),
+        description="The value of this invoice in millisatoshis. The fields value and value_msat are mutually exclusive.",
+    )
+    settled: bool = Field(
+        default=False,
+        deprecated=True,
+        description="Whether this invoice has been fulfilled. The field is deprecated. Use the state field instead (compare to SETTLED).",
+    )
+    creation_date: datetime = Field(
+        datetime.now(tz=timezone.utc), description="The date this invoice was created."
+    )
     settle_date: datetime | None = None
     payment_request: str = ""
     description_hash: str = ""
@@ -151,11 +181,24 @@ class Invoice(TrackedBaseModel):
     cltv_expiry: int | None = None
     route_hints: List[dict] | None = None
     private: bool | None = None
-    add_index: BSONInt64 | None = None
-    settle_index: BSONInt64 | None = None
-    amt_paid: BSONInt64 | None = None
-    amt_paid_sat: BSONInt64 | None = None
-    amt_paid_msat: BSONInt64 | None = None
+    add_index: BSONInt64 = BSONInt64(0)
+    settle_index: BSONInt64 = BSONInt64(0)
+    amt_paid: BSONInt64 = Field(
+        BSONInt64(0), deprecated=True, description="Deprecated, use amt_paid_sat or amt_paid_msat."
+    )
+    amt_paid_sat: BSONInt64 = Field(
+        BSONInt64(0),
+        description=(
+            "The amount that was accepted for this invoice, in satoshis. "
+            "This will ONLY be set if this invoice has been settled or accepted. "
+            "We provide this field as if the invoice was created with a zero value, "
+            "then we need to record what amount was ultimately accepted. Additionally, "
+            "it's possible that the sender paid MORE that was specified in the original "
+            "invoice. So we'll record that here as well. Note: Output only, don't specify "
+            "for creating an invoice."
+        ),
+    )
+    amt_paid_msat: BSONInt64 = Field(BSONInt64(0), description="The amount paid in millisatoshis.")
     state: InvoiceState | None = None
     htlcs: List[InvoiceHTLC] | None = None
     features: dict[str, Feature] | None = None
@@ -171,7 +214,6 @@ class Invoice(TrackedBaseModel):
     hive_accname: AccNameType | None = Field(
         default=None, description="Hive account name associated with the invoice"
     )
-
     custom_records: DecodedCustomRecord | None = Field(
         default=None, description="Other custom records associated with the invoice"
     )
@@ -189,6 +231,8 @@ class Invoice(TrackedBaseModel):
             invoice_dict = convert_datetime_fields(data)
 
         super().__init__(**invoice_dict)
+        if not self.conv:
+            self.update_conv()
 
         # set the expiry date to the creation date + expiry time
         if self.creation_date:
@@ -203,6 +247,23 @@ class Invoice(TrackedBaseModel):
 
         self.fill_hive_accname()
         self.fill_custom_records()
+
+    @override
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion rate for the payment.
+
+        This method retrieves the latest conversion rate and updates the
+        `conv` attribute of the payment instance.
+        """
+        quote = quote or self.last_quote
+        amount_msat = max(self.amt_paid_msat, self.value_msat)
+
+        self.conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=float(amount_msat),
+            quote=quote,
+        ).conversion
 
     @property
     def collection(self) -> str:
