@@ -18,7 +18,7 @@ class LimitOrderCreate(OpBase):
         default=False,
         description="True if the order is fill or kill, False if it is good till canceled",
     )
-    # min_to_receive: AmountPyd moved to OpBase
+    min_to_receive: AmountPyd
     orderid: int
     owner: str
 

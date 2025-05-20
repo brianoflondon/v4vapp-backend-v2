@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from v4vapp_backend_v2.accounting.account_type import AccountAny
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
-
 # This list needs to be synced with op_all.py
 OP_TRACKED = [
     "custom_json",
@@ -92,7 +91,7 @@ def get_hive_block_explorer_link(
     return markdown_link
 
 
-def op_realm(op_type: str):
+def op_realm(op_type: str) -> OpRealm:
     """
     Determines the operational realm based on the provided operation type.
 
@@ -109,14 +108,13 @@ def op_realm(op_type: str):
                  - None: If the operation type is None or does not match any
                          predefined types.
     """
-    if op_type is not None:
-        if op_type in HIVE_VIRTUAL_OPS:
-            return OpRealm.VIRTUAL
-        elif op_type in HIVE_REAL_OPS:
-            return OpRealm.REAL
-        elif op_type == "block_marker":
-            return OpRealm.MARKER
-    return None
+    if op_type in HIVE_VIRTUAL_OPS:
+        return OpRealm.VIRTUAL
+    elif op_type in HIVE_REAL_OPS:
+        return OpRealm.REAL
+    elif op_type == "block_marker":
+        return OpRealm.MARKER
+    raise ValueError(f"Unknown operation type in op_realm check: {op_type}")
 
 
 class OpLogData(BaseModel):

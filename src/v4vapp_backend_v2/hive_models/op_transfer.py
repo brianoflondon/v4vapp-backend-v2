@@ -51,7 +51,7 @@ class TransferBase(OpBase):
 
     from_account: AccNameType = Field(alias="from")
     to_account: AccNameType = Field(alias="to")
-    # amount: AmountPyd = Field(description="Amount being transferred") Moved to OpBase
+    amount: AmountPyd = Field(description="Amount being transferred")
     memo: str = Field("", description="Memo associated with the transfer")
     conv: CryptoConv = CryptoConv()
     d_memo: str = Field("", description="Decoded memo string")
@@ -71,6 +71,8 @@ class TransferBase(OpBase):
             if self.last_quote.get_age() > 600.0:
                 self.update_quote_sync(AllQuotes().get_binance_quote())
             self.update_conv()
+        if not self.amount:
+            raise ValueError("Amount is required for transfer operations")
 
     def post_process(self, hive_inst: Hive) -> None:
         """

@@ -27,11 +27,11 @@ class SwitchToLiveStream(Exception):
 
 
 async def stream_ops_async(
-    start: int = None,
-    stop: int = None,
+    start: int | None = None,
+    stop: int | None = None,
     stop_now: bool = False,
-    look_back: timedelta = None,
-    hive: Hive = None,
+    look_back: timedelta | None = None,
+    hive: Hive | None = None,
     opNames: list[str] = OP_TRACKED,
     filter_custom_json: bool = True,
 ) -> AsyncGenerator[OpAny, None]:
@@ -72,7 +72,7 @@ async def stream_ops_async(
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
     if opNames:
-        op_realms = [op_realm(op) for op in opNames]
+        op_realms = [op_realm(op_type) for op_type in opNames]
         only_virtual_ops = all(realm == "virtual" for realm in op_realms)
     else:
         only_virtual_ops = False

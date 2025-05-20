@@ -137,17 +137,17 @@ class Invoice(TrackedBaseModel):
     """
 
     memo: str = ""
-    r_preimage: str | None = None
-    r_hash: str | None = None
+    r_preimage: str = ""
+    r_hash: str = ""
     value: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
     settled: bool = False
     creation_date: datetime | None = None
     settle_date: datetime | None = None
-    payment_request: str | None = None
-    description_hash: str | None = None
+    payment_request: str = ""
+    description_hash: str = ""
     expiry: int | None = None
-    fallback_addr: str | None = None
+    fallback_addr: str = ""
     cltv_expiry: int | None = None
     route_hints: List[dict] | None = None
     private: bool | None = None
@@ -160,7 +160,7 @@ class Invoice(TrackedBaseModel):
     htlcs: List[InvoiceHTLC] | None = None
     features: dict[str, Feature] | None = None
     is_keysend: bool = False
-    payment_addr: str | None = None
+    payment_addr: str = ""
     is_amp: bool = False
     amp_invoice_state: dict | None = None
 
@@ -181,7 +181,7 @@ class Invoice(TrackedBaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __init__(self, lnrpc_invoice: lnrpc.Invoice = None, **data: Any) -> None:
+    def __init__(self, lnrpc_invoice: lnrpc.Invoice | None = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
@@ -232,6 +232,16 @@ class Invoice(TrackedBaseModel):
             str: The group ID for the invoice.
         """
         return self.r_hash
+
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the invoice.
+
+        Returns:
+            str: A string representation of the invoice.
+        """
+        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo}"
 
     def fill_hive_accname(self) -> None:
         """

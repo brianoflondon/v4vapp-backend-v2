@@ -100,16 +100,16 @@ class OpBase(TrackedBaseModel):
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
 
-    amount: AmountPyd | None = Field(
-        default=None,
-        description="Amount associated with the operation, if applicable and overridden",
-        exclude=True,
-    )
-    min_to_receive: AmountPyd | None = Field(
-        default=None,
-        description="Minimum amount to receive, if applicable and overridden",
-        exclude=True,
-    )
+    # amount: AmountPyd | None = Field(
+    #     default=None,
+    #     description="Amount associated with the operation, if applicable and overridden",
+    #     exclude=True,
+    # )
+    # min_to_receive: AmountPyd | None = Field(
+    #     default=None,
+    #     description="Minimum amount to receive, if applicable and overridden",
+    #     exclude=True,
+    # )
 
     # Class variables
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
@@ -139,17 +139,17 @@ class OpBase(TrackedBaseModel):
         """
         super().__init__(**data)
         if not hasattr(self, "custom_json_ids_tracked") or self.custom_json_ids_tracked is None:
-            self.custom_json_ids_tracked = all_custom_json_ids()
+            OpBase.custom_json_ids_tracked = all_custom_json_ids()
         self.raw_op = data.copy()
         if (
             self.timestamp.tzinfo is None
             or self.timestamp.tzinfo.utcoffset(self.timestamp) is None
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
-        if data.get("type", None) is not None:
-            self.realm = op_realm(data["type"])
-            if not self.realm:
-                raise ValueError(f"Unknown operation type: {data['type']}")
+        if op_type := data.get("type"):
+            self.realm = op_realm(op_type)
+        else:
+            raise ValueError(f"Unknown op_type for realm: {op_type}")
 
     @property
     def group_id_query(self) -> dict[str, Any]:
@@ -222,9 +222,10 @@ class OpBase(TrackedBaseModel):
         Returns:
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
-        if hasattr(self, "cj_id"):
-            if self.cj_id in self.custom_json_ids_tracked:
-                if custom_json_test_id(self.cj_id):
+        cj_id = getattr(self, "cj_id", None)
+        if cj_id is not None:
+            if cj_id in self.custom_json_ids_tracked:
+                if custom_json_test_id(cj_id):
                     return True
         return False
 
@@ -245,15 +246,20 @@ class OpBase(TrackedBaseModel):
         """
         if not OpBase.watch_users:
             return False
-        if self.type == "custom_json" and hasattr(self, "cj_id"):
-            if not custom_json_test_id(self.get("cj_id")):
+        cj_id = getattr(self, "cj_id", None)
+        if cj_id is not None:
+            if not custom_json_test_id(cj_id):
                 return False
 
         if OpBase.watch_users:
-            if hasattr(self, "to_account") and self.to_account in OpBase.watch_users:
+            # Check if the transfer is to a watched user
+            to_account = getattr(self, "to_account", None)
+            if to_account is not None and to_account in OpBase.watch_users:
                 return True
+
             # Check if the transfer is from a watched user
-            if hasattr(self, "from_account") and self.from_account in OpBase.watch_users:
+            from_account = getattr(self, "from_account", None)
+            if from_account is not None and from_account in OpBase.watch_users:
                 return True
         return False
 

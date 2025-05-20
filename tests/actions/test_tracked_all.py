@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -82,18 +83,25 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     """
     file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
     processed_count = 0
-    for op in load_hive_events_from_mongodb_dump(file_path):
-        count += 1
-        try:
-            ledger_entry = await process_tracked(op)
-            if ledger_entry is not None:
-                processed_count += 1
-                print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
-        except LedgerEntryException as e:
-            print(f"Error processing tracked operation: {e}")
-            continue
+
+    # Mock asyncio.create_task
+    with patch("asyncio.create_task") as mock_create_task:
+        # Mock the behavior of create_task
+        mock_create_task.return_value = None
+        for op in load_hive_events_from_mongodb_dump(file_path):
+            count += 1
+            try:
+                ledger_entry = await process_tracked(op)
+                if ledger_entry is not None:
+                    processed_count += 1
+                    # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+            except LedgerEntryException as e:
+                print(f"Error processing tracked operation: {e}")
+                continue
+
     df = await get_ledger_dataframe()
     assert len(df) == processed_count
     print(f"Total events processed: {count}")
@@ -130,33 +138,36 @@ async def test_balance_sheet_steps():
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
-    for op in load_hive_events_from_mongodb_dump(mongodb_export_path):
-        hive_event = op.model_dump()
-        count += 1
-        hive_event["update_conv"] = False
-        op_tracked = tracked_any(hive_event)
-        print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
-        try:
-            ledger_entry = await process_tracked(op_tracked)
-        except LedgerEntryException as e:
-            print(f"Expected error processing tracked operation: {e}")
-            continue
-        print(ledger_entry.print_journal_entry())
-        df = await get_ledger_dataframe()
-        balance_sheet_pandas = await generate_balance_sheet_pandas(
-            df, reporting_date=datetime.now(tz=timezone.utc)
-        )
-        all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
-        balance_sheet_print = balance_sheet_printout(
-            balance_sheet_pandas, as_of_date=datetime.now(tz=timezone.utc)
-        )
-        if not balance_sheet_pandas["is_balanced"]:
-            print(f"***********The balance sheet is not balanced. {count}************")
-            print(all_currencies)
-            print(balance_sheet_print)
-            assert False
-    print(balance_sheet_print)
-    print(all_currencies)
+    with patch("asyncio.create_task") as mock_create_task:
+        # Mock the behavior of create_task
+        mock_create_task.return_value = None
+        for op in load_hive_events_from_mongodb_dump(str(mongodb_export_path)):
+            hive_event = op.model_dump()
+            count += 1
+            hive_event["update_conv"] = False
+            op_tracked = tracked_any(hive_event)
+            print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
+            try:
+                ledger_entry = await process_tracked(op_tracked)
+            except LedgerEntryException as e:
+                print(f"Expected error processing tracked operation: {e}")
+                continue
+            print(ledger_entry.print_journal_entry())
+            df = await get_ledger_dataframe()
+            balance_sheet_pandas = await generate_balance_sheet_pandas(
+                df, reporting_date=datetime.now(tz=timezone.utc)
+            )
+            all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+            balance_sheet_print = balance_sheet_printout(
+                balance_sheet_pandas, as_of_date=datetime.now(tz=timezone.utc)
+            )
+            if not balance_sheet_pandas["is_balanced"]:
+                print(f"***********The balance sheet is not balanced. {count}************")
+                print(all_currencies)
+                print(balance_sheet_print)
+                assert False
+        print(balance_sheet_print)
+        print(all_currencies)
     # await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 

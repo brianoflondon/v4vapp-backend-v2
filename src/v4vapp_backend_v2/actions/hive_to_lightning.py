@@ -1,6 +1,6 @@
 import asyncio
 
-from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
+from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -71,8 +71,8 @@ async def process_hive_to_lightning(op: TransferBase) -> None:
                         )
                     )
 
-                except Exception as e:
-                    logger.error(
+                except LnurlException as e:
+                    logger.info(
                         f"Error decoding Lightning invoice: {e}",
                         extra={"notification": False, "op": op.model_dump()},
                     )
@@ -105,8 +105,12 @@ async def decode_incoming_payment_message(op: TransferBase) -> PayReq | None:
     lnd_config = InternalConfig().config.lnd_config
     logger.info(f"Processing payment request: {op.memo}")
     lnd_client = LNDClient(connection_name=lnd_config.default)
-    pay_req = await decode_any_lightning_string(input=op.memo, lnd_client=lnd_client)
-    return pay_req
+    try:
+        pay_req = await decode_any_lightning_string(input=op.memo, lnd_client=lnd_client)
+        return pay_req
+    except Exception as e:
+        logger.error(f"Error decoding Lightning invoice: {e}")
+        return None
 
 
 async def lightning_payment_sent(payment: Payment, op: TransferBase):

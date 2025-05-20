@@ -204,6 +204,24 @@ class HiveConfig(BaseConfig):
             acc.name = name
 
     @property
+    def valid_hive_config(self) -> bool:
+        """
+        Check if the Hive configuration is valid and complete.
+
+        Returns:
+            bool: True if the configuration is valid, False otherwise.
+        """
+        if not self.server_account or not self.server_account.name:
+            return False
+        if not self.treasury_account or not self.treasury_account.name:
+            return False
+        if not self.funding_account or not self.funding_account.name:
+            return False
+        if not self.exchange_account or not self.exchange_account.name:
+            return False
+        return True
+
+    @property
     def memo_keys(self) -> List[str]:
         """
         Retrieve the memo keys of all Hive accounts.
@@ -323,6 +341,28 @@ class HiveConfig(BaseConfig):
         """
         return [acc.name for acc in self.treasury_accounts]
 
+    @property
+    def all_account_names(self) -> List[str]:
+        """
+        Retrieve the names of all accounts.
+
+        Returns:
+            List[str]: A list containing the names of all accounts.
+        """
+        if (
+            self.server_account
+            and self.treasury_account
+            and self.funding_account
+            and self.exchange_account
+        ):
+            return [
+                self.server_account.name,
+                self.treasury_account.name,
+                self.funding_account.name,
+                self.exchange_account.name,
+            ]
+        return []
+
 
 class Config(BaseModel):
     """
@@ -371,40 +411,62 @@ class Config(BaseModel):
     min_config_version: ClassVar[str] = "0.2.0"
 
     @model_validator(mode="after")
-    def check_all_defaults(cls, v: "Config") -> "Config":
-        # Check that the default connection is in the list of connections
-        # if it is given.
+    def check_all_defaults(self) -> "Config":
+        """
+        Validates the configuration after the model is initialized.
+        """
         logger.info("Validating the Config file and defaults....")
-        config_version = version.parse(v.version)
-        min_version = version.parse(cls.min_config_version)
+
+        # Check config version
+        config_version = version.parse(self.version)
+        min_version = version.parse(self.min_config_version)
         if config_version < min_version:
             raise ValueError(
-                f"Config version {v.version} is less than the minimum required version {cls.min_config_version}"
+                f"Config version {self.version} is less than the minimum required version {self.min_config_version}"
             )
 
-        if v.lnd_config.default and v.lnd_config.default not in v.lnd_config.connections.keys():
+        # Check default LND connection
+        if self.lnd_config.default and self.lnd_config.default not in self.lnd_config.connections:
             raise ValueError(
-                f"Default lnd connection: {v.lnd_config.default} not found in lnd_connections"
+                f"Default lnd connection: {self.lnd_config.default} not found in lnd_connections"
             )
 
+        # Check default database connection
         if (
-            v.dbs_config.default_connection
-            and v.dbs_config.default_connection not in v.dbs_config.connections.keys()
+            self.dbs_config.default_connection
+            and self.dbs_config.default_connection not in self.dbs_config.connections
         ):
             raise ValueError(
-                f"Default database connection: {v.dbs_config.default_connection} not found in database"
-            )
-        if v.dbs_config.default_name and v.dbs_config.default_name not in v.dbs_config.dbs.keys():
-            raise ValueError(
-                f"Default database name: {v.dbs_config.default_name} not found in dbs"
+                f"Default database connection: {self.dbs_config.default_connection} not found in database"
             )
 
-        # check if two notification bots have the same token
-        tokens = [bot.token for bot in v.notification_bots.values()]
+        # Check default database name
+        if (
+            self.dbs_config.default_name
+            and self.dbs_config.default_name not in self.dbs_config.dbs
+        ):
+            raise ValueError(
+                f"Default database name: {self.dbs_config.default_name} not found in dbs"
+            )
+
+        # Check for duplicate notification bot tokens
+        tokens = [bot.token for bot in self.notification_bots.values()]
         if len(tokens) != len(set(tokens)):
             raise ValueError("Two notification bots have the same token")
 
-        return v
+        return self
+
+    @property
+    def valid_hive_config(self) -> bool:
+        """
+        Check if the Hive configuration is valid.
+
+        Returns:
+            bool: True if the configuration is valid, False otherwise.
+        """
+        if not self.hive:
+            return False
+        return self.hive.valid_hive_config
 
     @property
     def lnd_connections_names(self) -> str:

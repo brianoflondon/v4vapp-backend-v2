@@ -69,24 +69,24 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     raise ValueError("Invalid tracked object")
 
 
-def tracked_type(tracked: TrackedAny) -> str:
+def tracked_type(tracked_op: TrackedAny) -> str:
     """
     Generate a query for the tracked object.
 
     :param tracked: The tracked object.
     :return: A dictionary representing the query.
     """
-    if isinstance(tracked, OpAny):
-        return tracked.name()
-    elif isinstance(tracked, Invoice):
+    if isinstance(tracked_op, OpAny):
+        return tracked_op.name()
+    elif isinstance(tracked_op, Invoice):
         return "invoice"
-    elif isinstance(tracked, Payment):
+    elif isinstance(tracked_op, Payment):
         return "payment"
     else:
         raise ValueError("Invalid tracked object")
 
 
-async def process_tracked(tracked: TrackedAny) -> LedgerEntry:
+async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     """
     Process the tracked object.
 
@@ -94,13 +94,13 @@ async def process_tracked(tracked: TrackedAny) -> LedgerEntry:
     :return: LedgerEntry
     """
 
-    if isinstance(tracked, OpAny):
-        ledger_entry = await process_hive_op(op=tracked)
+    if isinstance(tracked_op, OpAny):
+        ledger_entry = await process_hive_op(op=tracked_op)
         return ledger_entry
-    elif isinstance(tracked, Invoice):
-        return await process_lightning_op(op=tracked)
-    elif isinstance(tracked, Payment):
-        return await process_lightning_op(op=tracked)
+    elif isinstance(tracked_op, Invoice):
+        return await process_lightning_op(op=tracked_op)
+    elif isinstance(tracked_op, Payment):
+        return await process_lightning_op(op=tracked_op)
     else:
         raise ValueError("Invalid tracked object")
 
@@ -209,25 +209,15 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
     """
     description = op.d_memo if op.d_memo else ""
     hive_config = InternalConfig().config.hive
-    if (
-        not hive_config
-        or not hive_config.server_account
-        or not hive_config.server_account.name
-        or not hive_config.treasury_account
-        or not hive_config.treasury_account.name
-        or not hive_config.funding_account
-        or not hive_config.funding_account.name
-        or not hive_config.exchange_account
-        or not hive_config.exchange_account.name
-    ):
+    server_account, treasury_account, funding_account, exchange_account = (
+        hive_config.all_account_names
+    )
+    if not server_account or not treasury_account or not funding_account or not exchange_account:
         raise LedgerEntryCreationException(
             "Server account, treasury account, funding account, or exchange account not configured."
         )
-    server_account = hive_config.server_account.name
-    treasury_account = hive_config.treasury_account.name
-    funding_account = hive_config.funding_account.name
-    exchange_account = hive_config.exchange_account.name
 
+    follow_on_task = None
     ledger_entry.description = description
     ledger_entry.credit_unit = ledger_entry.debit_unit = op.unit
     ledger_entry.credit_amount = ledger_entry.debit_amount = op.amount_decimal
@@ -274,12 +264,18 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
         # Now we need to see if we can take action for this invoice
-        asyncio.create_task(process_hive_to_lightning(op=op))
+        # This will be handled in a separate task
+        follow_on_task = process_hive_to_lightning(op=op)
     else:
         logger.info(
             f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
+
+    if follow_on_task:
+        # If we have a follow-on task, we need to run it in the background
+        asyncio.create_task(follow_on_task)
+
     return ledger_entry
 
 

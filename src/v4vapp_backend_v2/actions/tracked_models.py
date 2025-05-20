@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 
 class TrackedBaseModel(BaseModel):
@@ -23,6 +24,20 @@ class TrackedBaseModel(BaseModel):
         """
         super().__init__(**data)
         self.locked = data.get("locked", False)
+
+    @classmethod
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+
+        This method converts the class name to a snake_case string
+        representation, which is typically used for naming operations
+        or identifiers in a consistent and readable format.
+
+        Returns:
+            str: The snake_case representation of the class name.
+        """
+        return snake_case(cls.__name__)
 
     @property
     def collection(self) -> str:

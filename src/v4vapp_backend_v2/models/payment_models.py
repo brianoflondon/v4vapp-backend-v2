@@ -101,20 +101,20 @@ class Payment(TrackedBaseModel):
     route: list[NodeAlias] | None = []
 
     # Attributes from Payment
-    payment_hash: str | None = None
+    payment_hash: str = ""
     value: Optional[BSONInt64] = None
     creation_date: datetime | None = None
     fee: Optional[BSONInt64] = None
-    payment_preimage: str | None = None
+    payment_preimage: str = ""
     value_sat: BSONInt64 | None = None
     value_msat: BSONInt64 | None = None
-    payment_request: str | None = None
+    payment_request: str = ""
     status: PaymentStatus | None = None
     fee_sat: BSONInt64 | None = None
     fee_msat: BSONInt64 | None = None
     creation_time_ns: datetime | None = None
     payment_index: BSONInt64 | None = None
-    failure_reason: str | None = None
+    failure_reason: str = ""
     htlcs: List[HTLCAttempt] | None = None
     first_hop_custom_record: List[FirstHopCustomRecords] | None = None
 
@@ -261,12 +261,12 @@ class Payment(TrackedBaseModel):
             return int((self.fee_msat / self.value_msat) * 1_000_000)
         return 0
 
-    @computed_field
+    @property
     def log_str(self) -> str:
         """
         Returns a string representation of the payment log.
         """
-        return f"Payment {self.payment_hash} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
 
 
 class ListPaymentsResponse(BaseModel):
@@ -275,11 +275,11 @@ class ListPaymentsResponse(BaseModel):
     payments: List[Payment]
     first_index_offset: BSONInt64
     last_index_offset: BSONInt64
-    total_num_payments: Optional[BSONInt64] = None
+    total_num_payments: BSONInt64 = BSONInt64(0)
 
     def __init__(
         self,
-        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse = None,
+        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse | None = None,
         **data: Any,
     ) -> None:
         if lnrpc_list_payments_response and isinstance(
