@@ -1,9 +1,12 @@
+from asyncio import get_event_loop
 from typing import ClassVar
 
 from pydantic import BaseModel, Field
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 
@@ -13,7 +16,8 @@ class TrackedBaseModel(BaseModel):
         description="Flag to indicate if the operation is locked or being processed",
         exclude=False,
     )
-
+    conv: CryptoConv | None = None
+    last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
 
     def __init__(self, **data):
@@ -108,7 +112,6 @@ class TrackedBaseModel(BaseModel):
             return ans
         return None
 
-    
     def tracked_type(self) -> str:
         """
         Returns the tracked type of the operation.
@@ -120,3 +123,105 @@ class TrackedBaseModel(BaseModel):
             str: The tracked type of the operation.
         """
         return self.name()
+
+    @classmethod
+    def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:
+        """
+        Synchronously updates the last quote for the class.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+
+        Returns:
+            None
+        """
+        if quote:
+            cls.last_quote = quote
+            return
+
+        try:
+            loop = get_event_loop()
+            if loop.is_running():
+                # If the event loop is already running, schedule the coroutine
+                raise RuntimeError(
+                    "update_quote_sync cannot be called in an async context. Use update_quote instead."
+                )
+            else:
+                loop.run_until_complete(cls.update_quote())
+        except RuntimeError as e:
+            # Handle cases where the event loop is already running
+            # logger.error(f"Error in update_quote_sync: {e}")
+            raise e
+
+    @classmethod
+    async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
+        """
+        Asynchronously updates the last quote for the class.
+
+        If a quote is provided, it sets the last quote to the provided quote.
+        If no quote is provided, it fetches all quotes and sets the last quote
+        to the fetched quote.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
+
+        Returns:
+            None
+        """
+        if quote:
+            cls.last_quote = quote
+        else:
+            if cls.db_client:
+                AllQuotes.db_client = cls.db_client
+            all_quotes = AllQuotes()
+            await all_quotes.get_all_quotes()
+            cls.last_quote = all_quotes.quote
+
+    async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Asynchronously updates the last quote for the class.
+
+        If a quote is provided, it sets the last quote to the provided quote.
+        If no quote is provided, it fetches all quotes and sets the last quote
+        to the fetched quote.
+        Uses the new quote to update a `conv` object.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, fetches all quotes.
+
+        Returns:
+            None
+        """
+        await TrackedBaseModel.update_quote(quote)
+        self.update_conv()
+
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        if getattr(self, "conv", None) is not None:
+            quote = quote or self.last_quote
+            if getattr(self, "amount", None) is not None and self.amount:
+                self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+            elif getattr(self, "min_to_receive", None) is not None and self.min_to_receive:
+                self.conv = CryptoConversion(value=self.min_to_receive, quote=quote).conversion
+            elif getattr(self, "amt_paid_msat", None) is not None and self.amt_paid_msat:
+                self.conv = CryptoConversion(
+                    value=self.amt_paid_msat, conv_from=Currency.MSATS, quote=quote
+                ).conversion
+            elif getattr(self, "value_msat", None) is not None and self.value_msat:
+                self.conv = CryptoConversion(
+                    value=self.value_msat, conv_from=Currency.MSATS, quote=quote
+                ).conversion
+        else:
+            return
