@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
@@ -120,6 +120,9 @@ class Payment(TrackedBaseModel):
     htlcs: List[HTLCAttempt] | None = None
     first_hop_custom_record: List[FirstHopCustomRecords] | None = None
 
+    conv_fee: CryptoConv | None = Field(
+        default=None, description="Conversion of the fee for this payment"
+    )
     custom_records: DecodedCustomRecord | None = Field(
         default=None, description="Other custom records associated with the invoice"
     )
@@ -144,6 +147,12 @@ class Payment(TrackedBaseModel):
         `conv` attribute of the payment instance.
         """
         quote = quote or self.last_quote
+        if self.fee_msat:
+            self.conv_fee = CryptoConversion(
+                conv_from=Currency.MSATS,
+                value=float(self.fee_msat),
+                quote=quote,
+            ).conversion
         self.conv = CryptoConversion(
             conv_from=Currency.MSATS,
             value=float(self.value_msat),
