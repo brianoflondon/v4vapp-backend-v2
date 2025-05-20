@@ -285,6 +285,7 @@ class Invoice(TrackedBaseModel):
         """
         return {"r_hash": self.r_hash}
 
+    @property
     def group_id(self) -> str:
         """
         Returns the group ID for the invoice.

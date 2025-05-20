@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightnin
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
@@ -83,18 +84,43 @@ async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     elif isinstance(tracked_op, Invoice):
         return await process_lightning_op(op=tracked_op)
     elif isinstance(tracked_op, Payment):
-        return await process_lightning_op(op=tracked_op)
+        raise NotImplementedError("Payment processing is not implemented yet.")
     else:
         raise ValueError("Invalid tracked object")
 
 
-async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
+async def ledger_entry_to_db(ledger_entry: LedgerEntry) -> None:
     """
-    Processes the Lightning operation. This method is a placeholder and should
-    be overridden in subclasses to provide specific processing logic.
+    Save the ledger entry to the database.
+
+    :param ledger_entry: The ledger entry to save.
+    :return: The saved ledger entry.
+    """
+    if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
+        try:
+            ans = await TrackedBaseModel.db_client.insert_one(
+                collection_name=LedgerEntry.collection(),
+                document=ledger_entry.model_dump(by_alias=True),
+                report_duplicates=True,
+            )
+            return ans
+        except Exception as e:
+            logger.error(f"Error saving ledger entry to database: {e}")
+            raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
+    raise LedgerEntryConfigurationException("Database client not configured.")
+
+
+async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
+    """
+    Processes the Lightning operation and creates a ledger entry if applicable.
+
+    This method handles various types of Lightning operations, including
+    invoices and payments. It ensures that appropriate debit and credit
+    accounts are assigned based on the operation type. If a ledger entry
+    with the same group_id already exists, the operation is skipped.
 
     Returns:
-        None
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
@@ -102,25 +128,33 @@ async def process_lightning_op(op: Union[Invoice, Payment]) -> LedgerEntry:
         op=op,
     )
     if isinstance(op, Invoice):
-        await process_lightning_invoice(op=op, ledger_entry=ledger_entry)
+        ledger_entry = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
+    elif isinstance(op, Payment):
+        raise NotImplementedError("Payment processing is not implemented yet.")
+
+    await ledger_entry_to_db(ledger_entry=ledger_entry)
+    return ledger_entry
+
+
+async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry) -> LedgerEntry:
+    # Invoice means we are receiving sats from external.
+    node_name = InternalConfig().config.lnd_config.default
+
+    await invoice.lock_op()
+    ledger_entry.description = invoice.memo
+    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
+    ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
+    ledger_entry.credit_conv = invoice.conv or CryptoConv()
+    ledger_entry.debit_conv = invoice.conv or CryptoConv()
+    if "Funding" in invoice.memo:
+        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+        ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
+        ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
+        return ledger_entry
+    elif "Exchange" in invoice.memo:
+        print(invoice)
 
     raise NotImplementedError("process_lightning_op is not implemented yet.")
-    pass  # Placeholder for Lightning operation processing logic
-
-
-async def process_lightning_invoice(op: Invoice, ledger_entry: LedgerEntry) -> LedgerEntry:
-    # Invoice means we are receiving sats from external.
-    await op.lock_op()
-    ledger_entry.description = op.memo
-    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
-    ledger_entry.credit_amount = ledger_entry.debit_amount = float(op.amt_paid_msat)
-    ledger_entry.credit_conv = ledger_entry.debit_conv = op.conv
-    if "Funding" in op.memo:
-        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
-
-        print(op)
-
-    await op.unlock_op()
 
 
 # MARK: Hive Transaction Processing
@@ -184,24 +218,8 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
         await op.unlock_op()
         raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
 
-    if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
-        try:
-            await TrackedBaseModel.db_client.insert_one(
-                collection_name=LedgerEntry.collection(),
-                document=ledger_entry.model_dump(
-                    by_alias=True
-                ),  # Ensure model_dump() is called correctly
-                report_duplicates=True,
-            )
-            await op.unlock_op()
-            return ledger_entry
-        except Exception as e:
-            logger.error(f"Error updating ledger: {e}")
-            raise LedgerEntryCreationException(f"Error creating ledger entry: {e}") from e
-    await op.unlock_op()
-    raise LedgerEntryCreationException(
-        "Ledger entry not created. Missing debit or credit account."
-    )
+    await ledger_entry_to_db(ledger_entry=ledger_entry)
+    return ledger_entry
 
 
 async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry | None:

@@ -272,7 +272,7 @@ test_lightning_invoices_r_hash = ["uIst3MZFrpJ3CYH3jwXFrQpyBFyjDrJUyLSmUEusSjU="
 mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
 
 
-@pytest.mark.skip("Work in progress")
+# @pytest.mark.skip("Work in progress")
 @pytest.mark.asyncio
 async def test_process_lightning_invoices():
     """
@@ -296,6 +296,10 @@ async def test_process_lightning_invoices():
     await TrackedBaseModel.update_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
+    as_of_date = datetime.now(tz=timezone.utc)
+    df = await test_fill_ledger_database_from_mongodb_dump()
+    balance_sheet_pandas = await generate_balance_sheet_pandas(df=df, reporting_date=as_of_date)
+
     for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
         print(op_tracked.log_str)
         try:
@@ -305,3 +309,17 @@ async def test_process_lightning_invoices():
         except LedgerEntryException as e:
             print(f"Expected error processing tracked operation: {e}")
             continue
+
+    all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+    print(all_currencies)
+    fbs = balance_sheet_printout(balance_sheet=balance_sheet_pandas, as_of_date=as_of_date)
+    print(fbs)
+
+    all_accounts = await list_all_accounts()
+    for account in all_accounts:
+        account_balances = await get_account_balance_printout(
+            account=account, full_history=True, as_of_date=datetime.now(tz=timezone.utc)
+        )
+        print(account_balances)
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
