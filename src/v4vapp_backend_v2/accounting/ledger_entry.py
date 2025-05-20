@@ -18,11 +18,6 @@ class LedgerEntry(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
     description: str = Field("", description="Description of the ledger entry")
-    # # Legacy fields (for backward compatibility)
-    # amount: float = Field(None, description="Amount of the ledger entry (legacy)")
-    # unit: Currency = Field(None, description="Unit of the ledger entry (legacy)")
-    # conv: CryptoConv = Field(None, description="Conversion details for the ledger entry (legacy)")
-    # # New fields for multi-currency support
     debit_amount: float = Field(0.0, description="Amount of the debit transaction")
     debit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the debit transaction"
@@ -39,13 +34,23 @@ class LedgerEntry(BaseModel):
     )
     debit: AccountAny | None = Field(None, description="Account to be debited")
     credit: AccountAny | None = Field(None, description="Account to be credited")
-    # This really should be a Tracked Any object, but that causes circular imports
     op: TrackedAny = Field(..., description="Associated operation")
 
     model_config = ConfigDict()
 
     def __init__(self, **data):
         super().__init__(**data)
+
+    @property
+    def is_completed(self) -> bool:
+        """
+        Returns True if the LedgerEntry is completed, False otherwise.
+        """
+        if not self.debit and not self.credit:
+            return False
+        if not self.debit_amount and not self.credit_amount:
+            return False
+        return True
 
     @property
     def credit_debit(self) -> tuple[AccountAny | None, AccountAny | None]:
@@ -78,6 +83,13 @@ class LedgerEntry(BaseModel):
         Returns:
             str: A string representation of the journal entry.
         """
+        if not self.is_completed or not self.debit or not self.credit:
+            # If the entry is not completed, show a warning
+            return (
+                f"WARNING: LedgerEntry is not completed. Missing debit or credit account.\n"
+                f"{'=' * 100}\n"
+            )
+            
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
 
         # Prepare the account names
@@ -97,6 +109,7 @@ class LedgerEntry(BaseModel):
             if self.credit_amount
             else f"0.00{credit_unit_str}"
         )
+
 
         # Create the journal entry string
         entry = (
