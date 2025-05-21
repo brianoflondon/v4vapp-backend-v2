@@ -1,16 +1,22 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-from v4vapp_backend_v2.models.custom_records import KeysendCustomRecord, b64_decode
+from v4vapp_backend_v2.models.custom_records import (
+    DecodedCustomRecord,
+    b64_decode,
+    decode_all_custom_records,
+)
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 # This is the regex for finding if a given message is an LND invoice to pay.
@@ -55,7 +61,7 @@ class InvoiceHTLC(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     chan_id: BSONInt64
-    htlc_index: BSONInt64 | None = None
+    htlc_index: BSONInt64 = BSONInt64(0)
     amt_msat: BSONInt64
     accept_height: int
     accept_time: datetime
@@ -63,7 +69,7 @@ class InvoiceHTLC(BaseModel):
     expiry_height: int
     state: InvoiceHTLCState
     custom_records: Dict[str, str] | None = None
-    mpp_total_amt_msat: BSONInt64 | None = None
+    mpp_total_amt_msat: BSONInt64 = BSONInt64(0)
     amp: dict | None = None
 
 
@@ -132,31 +138,72 @@ class Invoice(TrackedBaseModel):
             Extracts and validates a custom record from the first HTLC's custom records, if available.
     """
 
-    memo: str = ""
-    r_preimage: str | None = None
-    r_hash: str | None = None
-    value: BSONInt64 | None = None
-    value_msat: BSONInt64 | None = None
-    settled: bool = False
-    creation_date: datetime | None = None
+    memo: str = Field(
+        default="",
+        description="An optional memo to attach along with the invoice.",
+    )
+    r_preimage: str = Field(
+        default="",
+        description=(
+            "The hex-encoded preimage (32 byte) which will allow settling an "
+            "incoming HTLC payable to this preimage. When using REST, this field "
+            "must be encoded as base64."
+        ),
+    )
+    r_hash: str = Field(
+        default="",
+        description=(
+            "The hash of the preimage. When using REST, this field must be encoded as base64. "
+            "Note: Output only, don't specify for creating an invoice."
+        ),
+    )
+    value: BSONInt64 = Field(
+        default=BSONInt64(0),
+        description="The value of this invoice in satoshis The fields value and value_msat are mutually exclusive.",
+    )
+    value_msat: BSONInt64 = Field(
+        default=BSONInt64(0),
+        description="The value of this invoice in millisatoshis. The fields value and value_msat are mutually exclusive.",
+    )
+    settled: bool = Field(
+        default=False,
+        deprecated=True,
+        description="Whether this invoice has been fulfilled. The field is deprecated. Use the state field instead (compare to SETTLED).",
+    )
+    creation_date: datetime = Field(
+        datetime.now(tz=timezone.utc), description="The date this invoice was created."
+    )
     settle_date: datetime | None = None
-    payment_request: str | None = None
-    description_hash: str | None = None
+    payment_request: str = ""
+    description_hash: str = ""
     expiry: int | None = None
-    fallback_addr: str | None = None
+    fallback_addr: str = ""
     cltv_expiry: int | None = None
     route_hints: List[dict] | None = None
     private: bool | None = None
-    add_index: BSONInt64 | None = None
-    settle_index: BSONInt64 | None = None
-    amt_paid: BSONInt64 | None = None
-    amt_paid_sat: BSONInt64 | None = None
-    amt_paid_msat: BSONInt64 | None = None
+    add_index: BSONInt64 = BSONInt64(0)
+    settle_index: BSONInt64 = BSONInt64(0)
+    amt_paid: BSONInt64 = Field(
+        BSONInt64(0), deprecated=True, description="Deprecated, use amt_paid_sat or amt_paid_msat."
+    )
+    amt_paid_sat: BSONInt64 = Field(
+        BSONInt64(0),
+        description=(
+            "The amount that was accepted for this invoice, in satoshis. "
+            "This will ONLY be set if this invoice has been settled or accepted. "
+            "We provide this field as if the invoice was created with a zero value, "
+            "then we need to record what amount was ultimately accepted. Additionally, "
+            "it's possible that the sender paid MORE that was specified in the original "
+            "invoice. So we'll record that here as well. Note: Output only, don't specify "
+            "for creating an invoice."
+        ),
+    )
+    amt_paid_msat: BSONInt64 = Field(BSONInt64(0), description="The amount paid in millisatoshis.")
     state: InvoiceState | None = None
     htlcs: List[InvoiceHTLC] | None = None
     features: dict[str, Feature] | None = None
     is_keysend: bool = False
-    payment_addr: str | None = None
+    payment_addr: str = ""
     is_amp: bool = False
     amp_invoice_state: dict | None = None
 
@@ -167,9 +214,8 @@ class Invoice(TrackedBaseModel):
     hive_accname: AccNameType | None = Field(
         default=None, description="Hive account name associated with the invoice"
     )
-    custom_record: KeysendCustomRecord | None = Field(
-        default=None,
-        description="Custom record from a podcast streaming payment or boost associated with the invoice",
+    custom_records: DecodedCustomRecord | None = Field(
+        default=None, description="Other custom records associated with the invoice"
     )
     expiry_date: datetime | None = Field(
         default=None, description="Expiry date of the invoice (creation_date + expiry)"
@@ -177,7 +223,7 @@ class Invoice(TrackedBaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __init__(self, lnrpc_invoice: lnrpc.Invoice = None, **data: Any) -> None:
+    def __init__(self, lnrpc_invoice: lnrpc.Invoice | None = None, **data: Any) -> None:
         if lnrpc_invoice and isinstance(lnrpc_invoice, lnrpc.Invoice):
             data_dict = MessageToDict(lnrpc_invoice, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
@@ -185,11 +231,14 @@ class Invoice(TrackedBaseModel):
             invoice_dict = convert_datetime_fields(data)
 
         super().__init__(**invoice_dict)
+        if not self.conv:
+            self.update_conv()
 
         # set the expiry date to the creation date + expiry time
-        self.expiry_date = (
-            self.creation_date + timedelta(seconds=self.expiry) if self.expiry else None
-        )
+        if self.creation_date:
+            self.expiry_date = (
+                self.creation_date + timedelta(seconds=self.expiry) if self.expiry else None
+            )
         # perform my check to see if this invoice can be paid to Hive
         if self.memo:
             match = re.match(LND_INVOICE_TAG, self.memo.lower())
@@ -197,7 +246,24 @@ class Invoice(TrackedBaseModel):
                 self.is_lndtohive = True
 
         self.fill_hive_accname()
-        self.fill_custom_record()
+        self.fill_custom_records()
+
+    @override
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion rate for the payment.
+
+        This method retrieves the latest conversion rate and updates the
+        `conv` attribute of the payment instance.
+        """
+        quote = quote or self.last_quote
+        amount_msat = max(self.amt_paid_msat, self.value_msat)
+
+        self.conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=float(amount_msat),
+            quote=quote,
+        ).conversion
 
     @property
     def collection(self) -> str:
@@ -218,6 +284,26 @@ class Invoice(TrackedBaseModel):
             dict: The query used to identify the group ID.
         """
         return {"r_hash": self.r_hash}
+
+    @property
+    def group_id(self) -> str:
+        """
+        Returns the group ID for the invoice.
+
+        Returns:
+            str: The group ID for the invoice.
+        """
+        return self.r_hash
+
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the invoice.
+
+        Returns:
+            str: A string representation of the invoice.
+        """
+        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo}"
 
     def fill_hive_accname(self) -> None:
         """
@@ -255,7 +341,7 @@ class Invoice(TrackedBaseModel):
             self.hive_accname = hive_accname
             self.is_lndtohive = True
 
-    def fill_custom_record(self) -> None:
+    def fill_custom_records(self) -> None:
         """
         Populates the `custom_record` attribute by decoding and validating a custom record
         from the first HTLC's custom records, if available.
@@ -278,25 +364,8 @@ class Invoice(TrackedBaseModel):
             custom_record (KeysendCustomRecord): The validated custom record, if successfully decoded and validated.
         """
         if self.htlcs and self.htlcs[0].custom_records:
-            if value := self.htlcs[0].custom_records.get("7629169"):
-                extracted_value = b64_decode(value)
-                try:
-                    custom_record = KeysendCustomRecord.model_validate(extracted_value)
-                    self.custom_record = custom_record
-                except ValidationError:
-                    self.custom_record = None
-                except Exception as e:
-                    logger.warning(
-                        f"Error in {self.r_hash} {self.memo}", extra={"notification": False}
-                    )
-                    logger.warning(
-                        f"Error validating custom record: {e} ",
-                        extra={
-                            "notification": False,
-                            "invoice": self.model_dump(exclude_none=True, exclude_unset=True),
-                            "extracted_value": extracted_value,
-                        },
-                    )
+            extracted_value = decode_all_custom_records(self.htlcs[0].custom_records)
+            self.custom_records = extracted_value
 
     def invoice_message(self) -> str:
         if self.settled:

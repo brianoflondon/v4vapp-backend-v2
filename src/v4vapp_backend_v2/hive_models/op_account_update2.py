@@ -1,5 +1,5 @@
 import json
-from typing import Any, List
+from typing import Any
 
 from pydantic import Field
 
@@ -17,9 +17,6 @@ class AccountUpdate2(OpBase):
     posting_json_metadata: dict[str, Any] | None = Field(
         {},
         description="JSON metadata associated with the posting key of the account update",
-    )
-    extensions: List[Any] = Field(
-        [], description="List of extensions associated with the account update"
     )
 
     def __init__(self, **hive_event: Any) -> None:

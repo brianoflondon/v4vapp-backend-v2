@@ -13,6 +13,7 @@ from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -23,7 +24,7 @@ from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
-from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, OpAny
+from v4vapp_backend_v2.hive_models.op_all import OpAny, is_op_all_transfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -253,6 +254,8 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         async for op in stream_ops_async(
             opNames=["producer_reward"], look_back=look_back, stop_now=True
         ):
+            if not isinstance(op, ProducerReward):
+                continue
             op: ProducerReward
             if op.producer == watch_witness:
                 await op.get_witness_details()
@@ -393,9 +396,9 @@ async def all_ops_loop(
                         notification = True
                         db_store = True
 
-                elif isinstance(op, OpAllTransfers):
+                elif is_op_all_transfer(op):
                     if op.is_watched:
-                        await OpBase.update_quote()
+                        await TrackedBaseModel.update_quote()
                         op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             asyncio.create_task(balance_server_hbd_level(op))

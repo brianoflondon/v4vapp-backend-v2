@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, op_any_or_base, OpAllRecurrent
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.hive_models.op_all import OpAllRecurrent, OpAllTransfers, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
@@ -21,6 +22,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
     # No need to restore the original value, monkeypatch will handle it
 
+
 @pytest.mark.asyncio
 async def test_find_recurrent_transfers():
     all_recurrent_ops = [
@@ -28,7 +30,7 @@ async def test_find_recurrent_transfers():
         "fill_recurrent_transfer",
         "failed_recurrent_transfer",
     ]
-    await OpBase.update_quote()
+    await TrackedBaseModel.update_quote()
     OpBase.watch_users = ["spartano", "risingstar2"]
     for hive_event in load_hive_events():
         op = op_any_or_base(hive_event)

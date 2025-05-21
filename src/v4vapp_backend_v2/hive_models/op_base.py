@@ -1,5 +1,3 @@
-import re
-from asyncio import get_event_loop
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
@@ -7,12 +5,8 @@ from nectar.hive import Hive
 from pydantic import Field, computed_field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
-from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
@@ -100,24 +94,13 @@ class OpBase(TrackedBaseModel):
         default={}, description="Raw operation data from the blockchain", exclude=True
     )
 
-    amount: AmountPyd | None = Field(
-        default=None,
-        description="Amount associated with the operation, if applicable and overridden",
-        exclude=True,
-    )
-    min_to_receive: AmountPyd | None = Field(
-        default=None,
-        description="Minimum amount to receive, if applicable and overridden",
-        exclude=True,
-    )
-
     # Class variables
     block_explorer: ClassVar[HiveExp] = HiveExp.HiveHub
     op_tracked: ClassVar[List[str]] = OP_TRACKED
     watch_users: ClassVar[List[str]] = []
     proposals_tracked: ClassVar[List[int]] = []
     custom_json_ids_tracked: ClassVar[List[str]] = []
-    last_quote: ClassVar[QuoteResponse] = QuoteResponse()
+    # last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     hive_inst: ClassVar[Hive | None] = None
     db_client: ClassVar[MongoDBClient | None] = None
 
@@ -139,17 +122,17 @@ class OpBase(TrackedBaseModel):
         """
         super().__init__(**data)
         if not hasattr(self, "custom_json_ids_tracked") or self.custom_json_ids_tracked is None:
-            self.custom_json_ids_tracked = all_custom_json_ids()
+            OpBase.custom_json_ids_tracked = all_custom_json_ids()
         self.raw_op = data.copy()
         if (
             self.timestamp.tzinfo is None
             or self.timestamp.tzinfo.utcoffset(self.timestamp) is None
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
-        if data.get("type", None) is not None:
-            self.realm = op_realm(data["type"])
-            if not self.realm:
-                raise ValueError(f"Unknown operation type: {data['type']}")
+        if op_type := data.get("type"):
+            self.realm = op_realm(op_type)
+        else:
+            raise ValueError(f"Unknown op_type for realm: {op_type}")
 
     @property
     def group_id_query(self) -> dict[str, Any]:
@@ -222,9 +205,10 @@ class OpBase(TrackedBaseModel):
         Returns:
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
-        if hasattr(self, "cj_id"):
-            if self.cj_id in self.custom_json_ids_tracked:
-                if custom_json_test_id(self.cj_id):
+        cj_id = getattr(self, "cj_id", None)
+        if cj_id is not None:
+            if cj_id in self.custom_json_ids_tracked:
+                if custom_json_test_id(cj_id):
                     return True
         return False
 
@@ -245,15 +229,20 @@ class OpBase(TrackedBaseModel):
         """
         if not OpBase.watch_users:
             return False
-        if self.type == "custom_json" and hasattr(self, "cj_id"):
-            if not custom_json_test_id(self.get("cj_id")):
+        cj_id = getattr(self, "cj_id", None)
+        if cj_id is not None:
+            if not custom_json_test_id(cj_id):
                 return False
 
         if OpBase.watch_users:
-            if hasattr(self, "to_account") and self.to_account in OpBase.watch_users:
+            # Check if the transfer is to a watched user
+            to_account = getattr(self, "to_account", None)
+            if to_account is not None and to_account in OpBase.watch_users:
                 return True
+
             # Check if the transfer is from a watched user
-            if hasattr(self, "from_account") and self.from_account in OpBase.watch_users:
+            from_account = getattr(self, "from_account", None)
+            if from_account is not None and from_account in OpBase.watch_users:
                 return True
         return False
 
@@ -310,138 +299,6 @@ class OpBase(TrackedBaseModel):
             log_extra=self.log_extra,
         )
 
-    @classmethod
-    def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:
-        """
-        Synchronously updates the last quote for the class.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-
-        Returns:
-            None
-        """
-        if quote:
-            cls.last_quote = quote
-            return
-
-        try:
-            loop = get_event_loop()
-            if loop.is_running():
-                # If the event loop is already running, schedule the coroutine
-                raise RuntimeError(
-                    "update_quote_sync cannot be called in an async context. Use update_quote instead."
-                )
-            else:
-                loop.run_until_complete(cls.update_quote())
-        except RuntimeError as e:
-            # Handle cases where the event loop is already running
-            logger.error(f"Error in update_quote_sync: {e}")
-            raise e
-
-    @classmethod
-    async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
-        """
-        Asynchronously updates the last quote for the class.
-
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
-
-        Returns:
-            None
-        """
-        if quote:
-            cls.last_quote = quote
-        else:
-            if cls.db_client:
-                AllQuotes.db_client = cls.db_client
-            all_quotes = AllQuotes()
-            await all_quotes.get_all_quotes()
-            cls.last_quote = all_quotes.quote
-
-    # async def lock_op(self) -> None:
-    #     """
-    #     Locks the operation to prevent concurrent processing.
-
-    #     This method sets the `_locked` attribute to True, indicating that
-    #     the operation is currently being processed and should not be
-    #     modified or accessed by other threads or processes.
-
-    #     Returns:
-    #         None
-    #     """
-    #     self._locked = True
-    #     if self.db_client:
-    #         await self.db_client.update_one(
-    #             collection="hive_ops",
-    #             query=self.group_id_query,
-    #             update={"$set": {"_locked": self._locked}},
-    #         )
-
-    # async def unlock_op(self) -> None:
-    #     """
-    #     Unlocks the operation to allow concurrent processing.
-
-    #     This method sets the `_locked` attribute to False, indicating that
-    #     the operation is no longer being processed and can be modified
-    #     or accessed by other threads or processes.
-
-    #     Returns:
-    #         None
-    #     """
-    #     self._locked = False
-    #     if self.db_client:
-    #         await self.db_client.update_one(
-    #             collection="hive_ops",
-    #             query=self.group_id_query,
-    #             update={"$set": {"_locked": self._locked}},
-    #         )
-
-    async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Asynchronously updates the last quote for the class.
-
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-        Uses the new quote to update a `conv` object.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
-
-        Returns:
-            None
-        """
-        await OpBase.update_quote(quote)
-        self.update_conv()
-
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Updates the conversion for the transaction.
-
-        If the subclass has a `conv` object, update it with the latest quote.
-        If a quote is provided, it sets the conversion to the provided quote.
-        If no quote is provided, it uses the last quote to set the conversion.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, uses the last quote.
-        """
-        if getattr(self, "conv", None) is not None:
-            quote = quote or self.last_quote
-            if getattr(self, "amount", None) is not None and self.amount:
-                self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
-            elif getattr(self, "min_to_receive", None) is not None and self.min_to_receive:
-                self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
-        else:
-            return
-
     @computed_field
     def link(self) -> str:
         """
@@ -477,7 +334,8 @@ class OpBase(TrackedBaseModel):
         Returns:
             str: The complete URL with the transaction ID inserted
         """
-
+        prefix = ""
+        path = ""
         if self.realm == OpRealm.REAL:
             prefix = "tx/"
             path = f"{self.trx_id}"
@@ -498,21 +356,3 @@ class OpBase(TrackedBaseModel):
         if not markdown:
             return link_html
         return f"[{OpBase.block_explorer.name}]({link_html})"
-
-    @property
-    def lightning_memo(self) -> str:
-        """
-        Removes and shortens a lightning invoice from a memo for output.
-
-        Returns:
-            str: The shortened memo string.
-        """
-        # Regex pattern to capture 'lnbc' followed by numbers and one letter
-        pattern = r"(lnbc\d+[a-zA-Z])"
-        match = re.search(pattern, self.d_memo)
-        if match:
-            # Replace the entire memo with the matched lnbc pattern
-            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
-        else:
-            memo = f"💬{self.d_memo}"
-        return memo

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 from pytest import raises
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -37,7 +38,7 @@ post2 = {
 
 def test_custom_json_validate():
     OpBase.watch_users = ["v4vapp.dev"]
-    OpBase.update_quote_sync()
+    TrackedBaseModel.update_quote_sync()
     for post in [post1, post2]:
         custom_json = CustomJson.model_validate(post)
         json_data = json.loads(post["json"])
@@ -92,5 +93,3 @@ def test_custom_json_not_valid_2():
         custom_json = CustomJson.model_validate(post5)
     assert "Invalid JSON" in str(exc_info.value)
     assert "json_invalid" in str(exc_info.value)
-
-

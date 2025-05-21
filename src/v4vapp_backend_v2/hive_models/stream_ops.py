@@ -7,6 +7,7 @@ from nectar.exceptions import NectarException
 from nectar.hive import Hive
 from nectarapi.exceptions import NumRetriesReached
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
@@ -27,11 +28,11 @@ class SwitchToLiveStream(Exception):
 
 
 async def stream_ops_async(
-    start: int = None,
-    stop: int = None,
+    start: int = 0,
+    stop: int | None = None,
     stop_now: bool = False,
-    look_back: timedelta = None,
-    hive: Hive = None,
+    look_back: timedelta | None = None,
+    hive: Hive | None = None,
     opNames: list[str] = OP_TRACKED,
     filter_custom_json: bool = True,
 ) -> AsyncGenerator[OpAny, None]:
@@ -72,7 +73,7 @@ async def stream_ops_async(
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
     if opNames:
-        op_realms = [op_realm(op) for op in opNames]
+        op_realms = [op_realm(op_type) for op_type in opNames]
         only_virtual_ops = all(realm == "virtual" for realm in op_realms)
     else:
         only_virtual_ops = False
@@ -102,7 +103,7 @@ async def stream_ops_async(
     last_block = start_block
 
     while last_block < stop_block:
-        await OpBase.update_quote()
+        await TrackedBaseModel.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(

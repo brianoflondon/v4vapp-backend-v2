@@ -1,12 +1,15 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, override
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
@@ -36,6 +39,7 @@ class Hop(BaseModel):
     blinding_point: Optional[bytes] = None
     encrypted_data: Optional[bytes] = None
     total_amt_msat: Optional[BSONInt64] = None
+    custom_records: Dict[str, str] | None = None
 
 
 class Route(BaseModel):
@@ -48,8 +52,6 @@ class Route(BaseModel):
 
 
 class HTLCAttempt(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     attempt_id: BSONInt64
     status: str | None = None
     attempt_time_ns: BSONInt64
@@ -58,10 +60,17 @@ class HTLCAttempt(BaseModel):
     route: Optional[Route] = None
     failure: Optional[dict] = None
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
 
 class NodeAlias(BaseModel):
     pub_key: str
     alias: str
+
+
+class FirstHopCustomRecords(BaseModel):
+    key: BSONInt64
+    value: str | None = None
 
 
 class Payment(TrackedBaseModel):
@@ -94,21 +103,29 @@ class Payment(TrackedBaseModel):
     route: list[NodeAlias] | None = []
 
     # Attributes from Payment
-    payment_hash: str | None = None
-    value: Optional[BSONInt64] = None
+    payment_hash: str = ""
+    value: BSONInt64 = BSONInt64(0)
     creation_date: datetime | None = None
-    fee: Optional[BSONInt64] = None
-    payment_preimage: str | None = None
-    value_sat: BSONInt64 | None = None
-    value_msat: BSONInt64 | None = None
-    payment_request: str | None = None
+    fee: BSONInt64 = BSONInt64(0)
+    payment_preimage: str = ""
+    value_sat: BSONInt64 = BSONInt64(0)
+    value_msat: BSONInt64 = BSONInt64(0)
+    payment_request: str = ""
     status: PaymentStatus | None = None
-    fee_sat: BSONInt64 | None = None
-    fee_msat: BSONInt64 | None = None
+    fee_sat: BSONInt64 = BSONInt64(0)
+    fee_msat: BSONInt64 = BSONInt64(0)
     creation_time_ns: datetime | None = None
-    payment_index: BSONInt64 | None = None
-    failure_reason: str | None = None
+    payment_index: BSONInt64 = BSONInt64(0)
+    failure_reason: str = ""
     htlcs: List[HTLCAttempt] | None = None
+    first_hop_custom_record: List[FirstHopCustomRecords] | None = None
+
+    conv_fee: CryptoConv | None = Field(
+        default=None, description="Conversion of the fee for this payment"
+    )
+    custom_records: DecodedCustomRecord | None = Field(
+        default=None, description="Other custom records associated with the invoice"
+    )
 
     def __init__(self, lnrpc_payment: lnrpc.Payment | None = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
@@ -117,6 +134,59 @@ class Payment(TrackedBaseModel):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
+        if not self.conv:
+            self.update_conv()
+        self.fill_custom_record()
+
+    @override
+    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion rate for the payment.
+
+        This method retrieves the latest conversion rate and updates the
+        `conv` attribute of the payment instance.
+        """
+        quote = quote or self.last_quote
+        if self.fee_msat:
+            self.conv_fee = CryptoConversion(
+                conv_from=Currency.MSATS,
+                value=float(self.fee_msat),
+                quote=quote,
+            ).conversion
+        self.conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=float(self.value_msat),
+            quote=quote,
+        ).conversion
+
+    def fill_custom_record(self) -> None:
+        """
+        Populates the `custom_record` attribute by decoding and validating a custom record
+        from the first HTLC's custom records, if available.
+
+        The method performs the following steps:
+        1. Checks if `htlcs` exists and contains at least one entry with `custom_records`.
+        2. Attempts to retrieve and decode the custom record with the key "7629169".
+        3. Validates the decoded custom record using the `KeysendCustomRecord` model.
+        4. Assigns the validated custom record to the `custom_record` attribute.
+
+        If an error occurs during validation, a warning is logged without raising an exception.
+
+        Raises:
+            None: All exceptions during validation are caught and logged.
+
+        Logs:
+            A warning message if an error occurs during custom record validation.
+
+        Attributes:
+            custom_record (KeysendCustomRecord): The validated custom record, if successfully decoded and validated.
+        """
+
+        if self.htlcs and self.htlcs[0].route and self.htlcs[0].route.hops:
+            for hop in self.htlcs[0].route.hops:
+                if custom_records := hop.custom_records:
+                    self.custom_records = decode_all_custom_records(custom_records=custom_records)
+                    return
 
     # Methods from PaymentExtra
     @computed_field
@@ -192,6 +262,13 @@ class Payment(TrackedBaseModel):
         return {"payment_hash": self.payment_hash}
 
     @property
+    def group_id(self) -> str:
+        """
+        Returns the group ID for the payment.
+        """
+        return self.payment_hash
+
+    @property
     def destination_pub_keys(self) -> List[str | None]:
         """
         Retrieves the public keys of the destination hops in the HTLC route.
@@ -212,6 +289,13 @@ class Payment(TrackedBaseModel):
             return int((self.fee_msat / self.value_msat) * 1_000_000)
         return 0
 
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the payment log.
+        """
+        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+
 
 class ListPaymentsResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -219,11 +303,11 @@ class ListPaymentsResponse(BaseModel):
     payments: List[Payment]
     first_index_offset: BSONInt64
     last_index_offset: BSONInt64
-    total_num_payments: Optional[BSONInt64] = None
+    total_num_payments: BSONInt64 = BSONInt64(0)
 
     def __init__(
-        __pydantic_self__,
-        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse = None,
+        self,
+        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse | None = None,
         **data: Any,
     ) -> None:
         if lnrpc_list_payments_response and isinstance(
@@ -238,5 +322,5 @@ class ListPaymentsResponse(BaseModel):
             super().__init__(**list_payments_dict)
         else:
             super().__init__(**data)
-            if not __pydantic_self__.payments:
-                __pydantic_self__.payments = []
+            if not self.payments:
+                self.payments = []
