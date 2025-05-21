@@ -31,6 +31,8 @@ from v4vapp_backend_v2.actions.tracked_all import (
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 
@@ -130,17 +132,19 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
     processed_count = 0
-
-    for op in load_tracked_ops_from_mongodb_dump(file_path):
-        count += 1
-        try:
-            ledger_entry = await process_tracked(op)
-            if ledger_entry is not None:
-                processed_count += 1
-                # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
-        except LedgerEntryException as e:
-            print(f"Error processing tracked operation: {e}")
-            continue
+    with patch("asyncio.create_task") as mock_create_task:
+        # Mock the behavior of create_task
+        mock_create_task.return_value = None
+        for op in load_tracked_ops_from_mongodb_dump(file_path):
+            count += 1
+            try:
+                ledger_entry = await process_tracked(op)
+                if ledger_entry is not None:
+                    processed_count += 1
+                    # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+            except LedgerEntryException as e:
+                print(f"Error processing tracked operation: {e}")
+                continue
 
     df = await get_ledger_dataframe()
     assert len(df) == processed_count
@@ -293,6 +297,8 @@ async def test_process_lightning_invoices():
     Ensure that the necessary test database and user are set up before running this test.
     """
     # Must update quotes before running this test
+    hive = get_hive_client()
+    hive_config = V4VConfig(server_accname="v4vapp", hive=hive)
     await TrackedBaseModel.update_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
