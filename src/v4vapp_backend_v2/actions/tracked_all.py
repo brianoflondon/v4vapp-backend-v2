@@ -234,6 +234,7 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    expense_accounts = ["privex"]
     description = op.d_memo if op.d_memo else ""
     hive_config = InternalConfig().config.hive
     server_account, treasury_account, funding_account, exchange_account = (
@@ -280,6 +281,10 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         # MARK: Exchange to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
+    elif op.from_account == server_account and op.to_account in expense_accounts:
+        # MARK: Payments to special expense accounts if
+        raise NotImplementedError("External expense accounts not implemented yet")
+        #TODO: #110 Implement the system for expense accounts
     elif op.from_account == server_account:
         # MARK: Server to customer account withdrawal
         customer = op.to_account
