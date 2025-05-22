@@ -16,6 +16,7 @@ class TrackedBaseModel(BaseModel):
         description="Flag to indicate if the operation is locked or being processed",
         exclude=False,
     )
+    outer_type: str = Field(default="", description="Type of the tracked operation", exclude=True)
     conv: CryptoConv | None = None
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None

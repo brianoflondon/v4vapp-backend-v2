@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer

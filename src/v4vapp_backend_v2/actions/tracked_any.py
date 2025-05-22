@@ -6,3 +6,5 @@ from v4vapp_backend_v2.models.payment_models import Payment
 
 TrackedAny = Union[OpAny, Invoice, Payment]
 #TODO: #111 implement discriminator in models to pick the right one
+
+# TrackedAny = Annotated[(OpAny, Invoice, Payment), Tag("tracked_any")]
