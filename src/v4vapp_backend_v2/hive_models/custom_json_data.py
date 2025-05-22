@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Type, Union
 
-from pydantic import BaseModel, ConfigDict, Field, Json
+from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -73,7 +73,7 @@ class KeepsatsTransfer(BaseModel):
         )
 
 
-CustomJsonData = Union[Json, KeepsatsTransfer, VSCTransfer]
+CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
 CUSTOM_JSON_IDS = {
     "v4vapp_transfer": KeepsatsTransfer,
