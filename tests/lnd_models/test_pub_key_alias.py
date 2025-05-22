@@ -63,6 +63,7 @@ async def pub_key_aliases() -> dict:
 @pytest.mark.asyncio
 async def test_get_all_pub_key_aliases(mocker):
     # Load test data
+    TrackedBaseModel.last_quote = last_quote()
     mongodb_pub_keys = read_lnd_monitor_v2_voltage_pub_keys(
         "tests/data/lnd_lists/lnd_monitor_v2_voltage_pub_keys.json"
     )
@@ -106,6 +107,7 @@ async def async_iterable(sync_iterable):
 @pytest.mark.asyncio
 async def test_update_payment_route_with_alias_fill_cache():
     # Mock dependencies
+    TrackedBaseModel.last_quote = last_quote()
     db_client = AsyncMock()
     lnd_client = AsyncMock()
     mock_aliases = await pub_key_aliases()
