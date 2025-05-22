@@ -1,16 +1,17 @@
 import asyncio
 from typing import Any, Union
 
+from pydantic import ValidationError
+
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny
+from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
-from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -42,6 +43,10 @@ class LedgerEntryDuplicateException(LedgerEntryException):
     pass
 
 
+# TrackedAny = Union[OpAny, Invoice, Payment]
+# TODO: #111 implement discriminator in models to pick the right one
+
+
 def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     """
     Check if the tracked object is of type OpAny, Invoice, or Payment.
@@ -49,25 +54,15 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
     :param tracked: The object to check.
     :return: True if the object is of type OpAny, Invoice, or Payment, False otherwise.
     """
-    if not tracked.get("locked", None):
-        tracked["locked"] = False
-    if isinstance(tracked, OpAny):
-        return tracked
-    elif isinstance(tracked, Invoice) or isinstance(tracked, Payment):
-        return tracked
+    if "_id" in tracked:
+        del tracked["_id"]  # Remove _id field if present
 
-    if tracked.get("type", None):
-        try:
-            return op_any_or_base(tracked)
-        except Exception as e:
-            raise ValueError(f"Invalid tracked object: {e}")
-
-    if tracked.get("r_hash", None):
-        return Invoice.model_validate(tracked)
-    if tracked.get("payment_hash", None):
-        return Payment.model_validate(tracked)
-
-    raise ValueError("Invalid tracked object")
+    try:
+        value = {"value": tracked}
+        answer = DiscriminatedTracked.model_validate(value)
+        return answer.value
+    except ValidationError as e:
+        raise ValueError(f"Failed to validate tracked object: {e}") from e
 
 
 async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
@@ -78,7 +73,7 @@ async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     :return: LedgerEntry
     """
 
-    if isinstance(tracked_op, OpAny):
+    if getattr(tracked_op, "type", None):
         ledger_entry = await process_hive_op(op=tracked_op)
         return ledger_entry
     elif isinstance(tracked_op, Invoice):
@@ -160,7 +155,7 @@ async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry)
 # MARK: Hive Transaction Processing
 
 
-async def process_hive_op(op: OpAny) -> LedgerEntry:
+async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
 
@@ -172,12 +167,8 @@ async def process_hive_op(op: OpAny) -> LedgerEntry:
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-    if isinstance(op, BlockMarker):
-        raise LedgerEntryCreationException("BlockMarker is not a valid operation.")
-    if not isinstance(op, OpAny):
-        raise LedgerEntryCreationException("Invalid operation type.")
-    await op.lock_op()
 
+    await op.lock_op()
     # Check if a ledger entry with the same group_id already exists
     if TrackedBaseModel.db_client:
         existing_entry = await TrackedBaseModel.db_client.find_one(
@@ -284,7 +275,7 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
     elif op.from_account == server_account and op.to_account in expense_accounts:
         # MARK: Payments to special expense accounts if
         raise NotImplementedError("External expense accounts not implemented yet")
-        #TODO: #110 Implement the system for expense accounts
+        # TODO: #110 Implement the system for expense accounts
     elif op.from_account == server_account:
         # MARK: Server to customer account withdrawal
         customer = op.to_account

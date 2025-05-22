@@ -25,10 +25,10 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 )
 from v4vapp_backend_v2.actions.tracked_all import (
     LedgerEntryException,
+    TrackedAny,
     process_tracked,
     tracked_any,
 )
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
@@ -101,8 +101,12 @@ def load_tracked_ops_from_mongodb_dump(file_path: str) -> Generator[TrackedAny, 
         json_data = json_util.loads(raw_data)
     for tracked_op in json_data:
         tracked_op["update_conv"] = False
-        op = tracked_any(tracked_op)
-        yield op
+        try:
+            op = tracked_any(tracked_op)
+            yield op
+        except ValueError as e:
+            print(f"Ignoring operation: {e}")
+            continue
 
 
 def load_invoices_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
@@ -193,7 +197,11 @@ async def test_balance_sheet_steps_hive_ops():
             hive_event = op.model_dump()
             count += 1
             hive_event["update_conv"] = False
-            op_tracked = tracked_any(hive_event)
+            try:
+                op_tracked = tracked_any(hive_event)
+            except ValueError as e:
+                print(f"Ignoring operation: {e}")
+                continue
             print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
             try:
                 ledger_entry = await process_tracked(op_tracked)

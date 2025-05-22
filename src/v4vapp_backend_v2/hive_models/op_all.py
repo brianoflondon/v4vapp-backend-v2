@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Union
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
@@ -60,19 +60,17 @@ def get_op_type(value: Any) -> str:
 # Define the discriminated union type using Annotated and Tag for each class
 # Define the discriminated union type using Annotated and Tag for each class
 OpAny = Annotated[
-    Union[
-        Annotated[CustomJson, Tag("custom_json")],
-        Annotated[Transfer, Tag("transfer")],
-        Annotated[AccountWitnessVote, Tag("account_witness_vote")],
-        Annotated[ProducerReward, Tag("producer_reward")],
-        Annotated[FillOrder, Tag("fill_order")],
-        Annotated[LimitOrderCreate, Tag("limit_order_create")],
-        Annotated[UpdateProposalVotes, Tag("update_proposal_votes")],
-        Annotated[AccountUpdate2, Tag("account_update2")],
-        Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")],
-        Annotated[RecurrentTransfer, Tag("recurrent_transfer")],
-        Annotated[OpBase, Tag("op_base")],  # Default case for any other type
-    ],
+    Annotated[CustomJson, Tag("custom_json")]
+    | Annotated[Transfer, Tag("transfer")]
+    | Annotated[AccountWitnessVote, Tag("account_witness_vote")]
+    | Annotated[ProducerReward, Tag("producer_reward")]
+    | Annotated[FillOrder, Tag("fill_order")]
+    | Annotated[LimitOrderCreate, Tag("limit_order_create")]
+    | Annotated[UpdateProposalVotes, Tag("update_proposal_votes")]
+    | Annotated[AccountUpdate2, Tag("account_update2")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[OpBase, Tag("op_base")],  # Default case for any other type
     Discriminator(get_op_type),
 ]
 
