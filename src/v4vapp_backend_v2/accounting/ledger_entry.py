@@ -89,7 +89,7 @@ class LedgerEntry(BaseModel):
                 f"WARNING: LedgerEntry is not completed. Missing debit or credit account.\n"
                 f"{'=' * 100}\n"
             )
-            
+
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
 
         # Prepare the account names
@@ -109,7 +109,6 @@ class LedgerEntry(BaseModel):
             if self.credit_amount
             else f"0.00{credit_unit_str}"
         )
-
 
         # Create the journal entry string
         entry = (
