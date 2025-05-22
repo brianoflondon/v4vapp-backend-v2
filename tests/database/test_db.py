@@ -136,6 +136,10 @@ async def test_get_timeseries(set_base_config_path: None):
         ans2 = await collection.find_one({"rate": "hive_sats"})
         assert ans2 is not None
         assert ans2["value"] == 350
+
+        # Try calling the setup twice
+        await test_client._create_timeseries()
+
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 

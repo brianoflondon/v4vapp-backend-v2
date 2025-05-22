@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, Asyn
 from pymongo import UpdateOne
 from pymongo.errors import (
     BulkWriteError,
+    CollectionInvalid,
     ConnectionFailure,
     DuplicateKeyError,
     InvalidOperation,
@@ -414,9 +415,15 @@ class MongoDBClient:
                 logger.info(
                     f"{DATABASE_ICON} {logger.name} Created time series collection {timeseries_name}"
                 )
+            except CollectionInvalid:
+                logger.debug(
+                    f"{DATABASE_ICON} {logger.name} "
+                    f"Collection {timeseries_name} already exists. "
+                    f"Skipping creation."
+                )
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
-                logger.error(message, exc_info=True)
+                logger.error(message, extra={"notification": False})
 
     async def _check_indexes(self):
         """
@@ -546,7 +553,7 @@ class MongoDBClient:
                 if first_time_check_or_recheck:
                     if self.db_name not in database_names or self.db_user not in database_users:
                         await self._check_create_db()
-                        await self._create_timeseries()
+                    await self._create_timeseries()
 
                 logger.debug(
                     f"{DATABASE_ICON} {logger.name} "
@@ -760,7 +767,11 @@ class MongoDBClient:
 
     async def __aenter__(self) -> "MongoDBClient":
         self.start_connection = timer()
-        if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
+        if getattr(self, "client", None) is None:
+            await self.connect()
+        if getattr(self, "db", None) is None:
+            await self.connect()
+        if self.health_check != MongoDBStatus.CONNECTED:
             await self.connect()
         return self
 

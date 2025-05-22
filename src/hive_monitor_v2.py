@@ -541,7 +541,7 @@ async def main_async_start(
     await TrackedBaseModel.update_quote()
     quote = TrackedBaseModel.last_quote
     logger.info(
-        f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
+        f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive:.0f} fetch date {quote.fetch_date}",
         extra={
             "notification": False,
             "quote": TrackedBaseModel.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
