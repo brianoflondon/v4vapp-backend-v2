@@ -204,12 +204,16 @@ def get_mongodb_client() -> MongoDBClient:
     Returns:
         MongoDBClient: The MongoDB client instance.
     """
-    dbs_config = InternalConfig().config.dbs_config
-    return MongoDBClient(
-        db_conn=dbs_config.default_connection,
-        db_name=dbs_config.default_name,
-        db_user=dbs_config.default_user,
-    )
+    if TrackedBaseModel.db_client:
+        return TrackedBaseModel.db_client
+    else:
+        dbs_config = InternalConfig().config.dbs_config
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=dbs_config.default_connection,
+            db_name=dbs_config.default_name,
+            db_user=dbs_config.default_user,
+        )
+        return TrackedBaseModel.db_client
 
 
 async def db_store_invoice(

@@ -17,6 +17,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
@@ -653,6 +654,11 @@ def main(
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
 
     TrackedBaseModel.db_client = MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    )
+    AllQuotes.db_client = MongoDBClient(
         db_conn=HIVE_DATABASE_CONNECTION,
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,

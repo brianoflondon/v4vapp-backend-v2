@@ -173,7 +173,7 @@ class TrackedBaseModel(BaseModel):
         if quote:
             cls.last_quote = quote
         else:
-            if cls.db_client:
+            if cls.db_client and AllQuotes.db_client is None:
                 AllQuotes.db_client = cls.db_client
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes()
