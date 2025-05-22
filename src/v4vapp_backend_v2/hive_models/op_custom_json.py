@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from typing import List
 
 from pydantic import Field
@@ -20,9 +19,6 @@ class CustomJson(OpBase):
     json_data: CustomJsonData = Field(alias="json")
     required_auths: List[str]
     required_posting_auths: List[str]
-    timestamp: datetime
-    block_num: int
-    trx_num: int
 
     # Extra Fields
     conv: CryptoConv | None = Field(
@@ -58,7 +54,6 @@ class CustomJson(OpBase):
                     json_data = data["json"]
                 json_object = SpecialJsonType.model_validate(json_data)
                 data["json"] = json_object
-
             except ValueError as e:
                 raise ValueError(
                     f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
@@ -69,12 +64,17 @@ class CustomJson(OpBase):
         #     for key, value in self.json_data.items():  # Changed from self.json_data: to self.json_data.items():
         #         if isinstance(value, int) and value > 2**53:
         #             self.json_data[key] = str(value)
-
-        if getattr(self.json_data, "sats", None) is not None:
-            if self.last_quote and not self.last_quote.hive_hbd == 0:
-                self.conv = CryptoConversion(
-                    value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
-                ).conversion
+        # TODO: Another place to use historical rates when we have them
+        if not self.conv:
+            if getattr(self.json_data, "sats", None) is not None:
+                if (
+                    self.last_quote
+                    and not self.last_quote.hive_hbd == 0
+                    and hasattr(self.json_data, "sats")
+                ):
+                    self.conv = CryptoConversion(
+                        value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
+                    ).conversion
 
     @property
     def is_watched(self) -> bool:
