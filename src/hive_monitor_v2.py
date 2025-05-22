@@ -228,7 +228,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
-    async with OpBase.db_client as db_client:
+    async with TrackedBaseModel.db_client as db_client:
         last_good_event = await db_client.find_one(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
@@ -292,6 +292,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         timedelta: The average block time for the specified witness.
     """
     count_back = 10
+
     async with OpBase.db_client as db_client:
         cursor = await db_client.find(
             HIVE_OPS_COLLECTION,
@@ -354,11 +355,6 @@ async def all_ops_loop(
     OpBase.watch_users = watch_users
     OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
     OpBase.custom_json_ids_tracked = InternalConfig().config.hive.custom_json_ids_tracked
-    OpBase.db_client = MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    )
     server_accounts = InternalConfig().config.hive.server_account_names
     if server_accounts:
         v4v_config = V4VConfig(server_accname=server_accounts[0])
@@ -655,6 +651,12 @@ def main(
         HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
+
+    TrackedBaseModel.db_client = MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    )
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",

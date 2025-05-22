@@ -5,7 +5,6 @@ from nectar.hive import Hive
 from pydantic import Field, computed_field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
 from v4vapp_backend_v2.hive_models.op_base_extras import (
@@ -101,7 +100,6 @@ class OpBase(TrackedBaseModel):
     proposals_tracked: ClassVar[List[int]] = []
     custom_json_ids_tracked: ClassVar[List[str]] = []
     hive_inst: ClassVar[Hive | None] = None
-    db_client: ClassVar[MongoDBClient | None] = None
 
     def __init__(self, **data):
         """

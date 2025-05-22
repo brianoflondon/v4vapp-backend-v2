@@ -408,14 +408,31 @@ class AllQuotes(BaseModel):
         if not self.db_client:
             return
         async with self.db_client as db_client:
-            records = [
-                {"timestamp": self.fetch_date, "pair": "hive_usd", "value": self.quote.hive_usd},
-                {"timestamp": self.fetch_date, "pair": "btc_usd", "value": self.quote.btc_usd},
-                {"timestamp": self.fetch_date, "pair": "sats_hive", "value": self.quote.sats_hive},
-                {"timestamp": self.fetch_date, "pair": "hive_hbd", "value": self.quote.hive_hbd},
-            ]
-            db_ans = await db_client.insert_many("hive_rates", records)
-            logger.debug(f"Inserted rates into database: {db_ans}")
+            try:
+                records = [
+                    {
+                        "timestamp": self.fetch_date,
+                        "pair": "hive_usd",
+                        "value": self.quote.hive_usd,
+                    },
+                    {"timestamp": self.fetch_date, "pair": "btc_usd", "value": self.quote.btc_usd},
+                    {
+                        "timestamp": self.fetch_date,
+                        "pair": "sats_hive",
+                        "value": self.quote.sats_hive,
+                    },
+                    {
+                        "timestamp": self.fetch_date,
+                        "pair": "hive_hbd",
+                        "value": self.quote.hive_hbd,
+                    },
+                ]
+                db_ans = await db_client.insert_many("hive_rates", records)
+                logger.debug(f"Inserted rates into database: {db_ans}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to insert rates into database: {e}", extra={"notification": False}
+                )
 
     @property
     def quote(self) -> QuoteResponse:
