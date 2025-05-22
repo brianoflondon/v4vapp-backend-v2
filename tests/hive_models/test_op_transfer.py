@@ -6,7 +6,9 @@ from pprint import pprint
 import pytest
 from nectar.amount import Amount
 
+from tests.get_last_quote import last_quote
 from tests.load_data import load_hive_events
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     is_markdown,
     sanitize_markdown_v1,
@@ -40,6 +42,7 @@ HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 
 
 def test_model_validate_transfer():
+    TrackedBaseModel.last_quote = last_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = TransferBase.model_validate(hive_event)
@@ -48,6 +51,7 @@ def test_model_validate_transfer():
 
 
 def test_op_transfer_watch_list():
+    TrackedBaseModel.last_quote = last_quote()
     OpBase.watch_users = ["john", "paul", "george", "ringo"]
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
@@ -81,6 +85,7 @@ def test_model_validate_transfer_enhanced():
     """
     if not HIVE_MEMO_TEST_KEY:
         pytest.skip("HIVE_MEMO_TEST_KEY is not available in environment variables")
+    TrackedBaseModel.last_quote = last_quote()
     hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
     OpBase.hive_inst = hive_inst
     for hive_event in load_hive_events(op_type=OpTypes.TRANSFER):
@@ -102,6 +107,7 @@ def test_model_validate_transfer_enhanced():
 @pytest.mark.asyncio
 async def test_model_dump_transfer_enhanced():
     v4v_config = V4VConfig()
+    TrackedBaseModel.last_quote = last_quote()
     assert v4v_config.data.conv_fee_sats == 50
     await Transfer.update_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
@@ -138,6 +144,7 @@ async def test_lightning_invoices_replacement():
     3. Checks if the memo contains a lightning invoice and replaces it with a new one.
     4. Asserts that the replaced invoice is not empty and is different from the original memo.
     """
+    TrackedBaseModel.last_quote = last_quote()
     invoice = "lnbc565100n1p5qjqmqpp5r7z5qu9xmqfysuf5gtsp4dyhp6tc7ltmy2pz9axfzsyq47qdauysdqqcqzzsxqzrcrzjqfhv8c6rsvy9rxn4efzfdq32ds0z9yt5l092mm43w3cycdm3ztpnrapyqqqqqqqqmyqqqqqqqqqqqqqq2qsp5alqn0ntzfmh9vhmufqk9ymdqwr8tnaqczd6p4r4mdp7v4c0c0lqq9qxpqysgqqxdxepu42yegdzsfvemjeknrfmmnrx6j0e8my3wmg7d2ryc0s2nxxjpkke4sv7x9y0wwl7gw6z4qwzlj6f7aeslmvplwr2wjpqyvm9qp7fe8k3"
     op_transfer = Transfer(
         from_account="someone",
