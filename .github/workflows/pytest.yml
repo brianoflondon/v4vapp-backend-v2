@@ -79,6 +79,9 @@ jobs:
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 
+      - name: Add project root to PYTHONPATH
+        run: echo "PYTHONPATH=$PYTHONPATH:$(pwd)" >> $GITHUB_ENV
+
       # Run tests
       - name: Test with pytest
         env:
