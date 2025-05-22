@@ -48,14 +48,14 @@ def test_model_validate_transfer():
 
 
 def test_op_transfer_watch_list():
-    OpBase.watch_list = ["john", "paul", "george", "ringo"]
+    OpBase.watch_users = ["john", "paul", "george", "ringo"]
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = TransferBase.model_validate(hive_event)
             assert transfer.trx_id == hive_event["trx_id"]
             assert transfer.amount.amount == hive_event["amount"]["amount"]
-            assert transfer.from_account not in Transfer.watch_list
-            assert transfer.to_account not in Transfer.watch_list
+            assert transfer.from_account not in Transfer.watch_users
+            assert transfer.to_account not in Transfer.watch_users
             print(transfer.to_account)
 
 

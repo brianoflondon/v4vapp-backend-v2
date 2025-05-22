@@ -134,6 +134,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     """
     file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    TrackedBaseModel.last_quote = last_quote()
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
     processed_count = 0
@@ -266,7 +267,7 @@ async def test_process_tracked_and_balance_sheet():
 @pytest.mark.asyncio
 async def test_account_balances():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
-
+    TrackedBaseModel.last_quote = last_quote()
     await test_fill_ledger_database_from_mongodb_dump()
     all_accounts = await list_all_accounts()
     for account in all_accounts:
@@ -307,7 +308,7 @@ async def test_process_lightning_invoices():
     """
     # Must update quotes before running this test
     hive = get_hive_client()
-    hive_config = V4VConfig(server_accname="v4vapp", hive=hive)
+    _ = V4VConfig(server_accname="v4vapp", hive=hive)
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")

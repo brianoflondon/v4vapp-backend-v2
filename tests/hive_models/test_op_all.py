@@ -3,8 +3,10 @@ from pathlib import Path
 import httpx
 import pytest
 
+from tests.get_last_quote import last_quote
 from tests.helpers.test_crypto_prices import mock_binance
 from tests.load_data import load_hive_events
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -24,8 +26,9 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     # No need to restore the original value, monkeypatch will handle it
 
 
-def test_all_validate(mocker):
-    _ = mock_binance(mocker)
+def test_all_validate():
+    TrackedBaseModel.last_quote = last_quote()
+
     with httpx.Client() as httpx_client:
         for hive_event in load_hive_events():
             try:
@@ -44,6 +47,8 @@ def test_all_validate(mocker):
 
 
 def test_op_any_or_base():
+    TrackedBaseModel.last_quote = last_quote()
+
     for hive_event in load_hive_events():
         try:
             op = op_any_or_base(hive_event)
@@ -63,6 +68,8 @@ def test_op_any_or_base():
 
 def test_all_block_explorer_links(mocker):
     _ = mock_binance(mocker)
+    TrackedBaseModel.last_quote = last_quote()
+
     for block_explorer in HiveExp:
         tested_type = []
         OpBase.block_explorer = block_explorer
@@ -90,13 +97,13 @@ def test_all_block_explorer_links(mocker):
 
 def test_hive_account_name_links(mocker):
     _ = mock_binance(mocker)
+    TrackedBaseModel.last_quote = last_quote()
     with httpx.Client() as httpx_client:
         for hive_event in load_hive_events():
             try:
                 op = op_any(hive_event)
                 assert op.type == op.name()
                 if op.type == "transfer":
-                    op: Transfer
                     assert isinstance(op, Transfer)
                     if link_from := op.from_account.link:
                         response = httpx_client.head(link_from)
