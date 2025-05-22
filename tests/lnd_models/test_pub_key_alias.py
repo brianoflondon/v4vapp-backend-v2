@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
+from tests.setup_quote import load_mock_last_quote
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.pub_key_alias import (
@@ -43,7 +44,7 @@ def test_route_in_payments():
 
 @pytest.mark.asyncio
 async def pub_key_aliases() -> dict:
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     # Load test data
     mongodb_pub_keys = read_lnd_monitor_v2_voltage_pub_keys(
         "tests/data/lnd_lists/lnd_monitor_v2_voltage_pub_keys.json"

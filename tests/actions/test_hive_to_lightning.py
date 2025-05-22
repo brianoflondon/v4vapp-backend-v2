@@ -5,6 +5,7 @@ from typing import Generator
 import pytest
 from bson import json_util
 
+from tests.setup_quote import load_mock_last_quote
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -77,7 +78,7 @@ async def test_hive_to_lightning():
     """
     Test the Hive to Lightning processing.
     """
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
 
     # Load hive events from the MongoDB dump
     op_list = list(load_hive_events_from_mongodb_dump(mongodb_export_path))

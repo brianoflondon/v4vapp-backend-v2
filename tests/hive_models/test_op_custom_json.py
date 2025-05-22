@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+import pytest
 from pydantic import ValidationError
 from pytest import raises
 
@@ -58,6 +59,7 @@ def test_custom_json_validate():
             assert not custom_json.is_watched
 
 
+@pytest.mark.skip(reason="Now allows anything to be stored in the json field")
 def test_custom_json_not_valid():
     post3 = post2.copy()
     post3["id"] = "podping"
@@ -83,6 +85,7 @@ post4 = {
 }
 
 
+@pytest.mark.skip(reason="Now allows anything to be stored in the json field")
 def test_custom_json_not_valid_2():
     custom_json = CustomJson.model_validate(post4)
     print(custom_json)

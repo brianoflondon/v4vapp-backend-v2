@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 from bson import json_util
 
+from tests.setup_quote import load_mock_last_quote
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     balance_sheet_printout,
@@ -184,7 +185,7 @@ async def test_balance_sheet_steps_hive_ops():
     It generates a balance sheet in pandas DataFrame format and prints it.
     It also prints the formatted balance sheet as of the current date.
     """
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     count = 0
@@ -247,7 +248,7 @@ async def test_process_tracked_and_balance_sheet():
     Ensure that the necessary test database and user are set up before running this test.
     """
     # Must update quotes before running this test
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)
@@ -307,7 +308,7 @@ async def test_process_lightning_invoices():
     # Must update quotes before running this test
     hive = get_hive_client()
     hive_config = V4VConfig(server_accname="v4vapp", hive=hive)
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)

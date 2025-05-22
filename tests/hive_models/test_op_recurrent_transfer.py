@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from tests.load_data import load_hive_events
+from tests.setup_quote import load_mock_last_quote
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.op_all import OpAllRecurrent, OpAllTransfers, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -30,7 +31,7 @@ async def test_find_recurrent_transfers():
         "fill_recurrent_transfer",
         "failed_recurrent_transfer",
     ]
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     OpBase.watch_users = ["spartano", "risingstar2"]
     for hive_event in load_hive_events():
         op = op_any_or_base(hive_event)

@@ -4,6 +4,7 @@ from timeit import default_timer as timer
 
 import pytest
 
+from tests.setup_quote import load_mock_last_quote
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import op_any_or_base
@@ -41,7 +42,7 @@ async def test_db_collections(collection_name, validator):
     Parameterized test for validating documents in different collections.
     """
     # Initialize the database client
-    await TrackedBaseModel.update_quote()
+    TrackedBaseModel.last_quote = load_mock_last_quote()
     async with MongoDBClient(
         db_conn="conn_1",
         db_name="lnd_monitor_v2_voltage",
