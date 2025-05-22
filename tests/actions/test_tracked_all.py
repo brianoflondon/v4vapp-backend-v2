@@ -144,6 +144,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
         for op in load_tracked_ops_from_mongodb_dump(file_path):
             count += 1
             try:
+                TrackedBaseModel.last_quote = last_quote()
                 ledger_entry = await process_tracked(op)
                 if ledger_entry is not None:
                     processed_count += 1
