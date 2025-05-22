@@ -20,7 +20,7 @@ from pymongo.errors import (
 )
 from pymongo.results import BulkWriteResult, DeleteResult, UpdateResult
 
-from v4vapp_backend_v2.config.setup import InternalConfig, TimeseriesConfig, logger
+from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
 
 
 class MongoDBStatus(StrEnum):
@@ -164,6 +164,7 @@ class MongoDBClient:
         # Sets up self.db_config here.
         self.db_name = db_name
         self.db_user = db_user
+        self.client = None
         self.validate_connection()
         if not self.dbs:
             raise OperationFailure(
@@ -369,6 +370,7 @@ class MongoDBClient:
                     "ans": ans,
                 },
             )
+            await self._check_indexes()
         except OperationFailure as e:
             # If the user already exists, ignore the error
             if e.code not in [11000, 51003]:
@@ -387,6 +389,35 @@ class MongoDBClient:
             )
             pass
 
+    async def _create_timeseries(self):
+        """
+        Asynchronously creates a time series collection in the database.
+
+        This method checks if the database client is connected and if the
+        specified collection exists. If it does not exist, it creates a
+        time series collection with the specified configuration.
+
+        Raises:
+            ConnectionFailure: If the MongoDB client is not connected.
+            OperationFailure: If there is an error creating the collection.
+        """
+        if not self.client:
+            raise ConnectionFailure("Not connected to MongoDB")
+        if self.db is None or self.dbs is None or self.dbs[self.db_name].timeseries is None:
+            return
+        for timeseries_name, config in self.dbs[self.db_name].timeseries.items():
+            try:
+                await self.db.create_collection(
+                    timeseries_name,
+                    timeseries=config.model_dump(),
+                )
+                logger.info(
+                    f"{DATABASE_ICON} {logger.name} Created time series collection {timeseries_name}"
+                )
+            except Exception as ex:
+                message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
+                logger.error(message, exc_info=True)
+
     async def _check_indexes(self):
         """
         Asynchronously checks and creates indexes for the collections in the database.
@@ -399,12 +430,18 @@ class MongoDBClient:
         """
         if not self.client:
             raise ConnectionFailure("Not connected to MongoDB")
-        if self.dbs[self.db_name].collections is None or not self.dbs[self.db_name].collections:
+        if (
+            self.db is None
+            or self.dbs is None
+            or self.dbs[self.db_name].collections is None
+            or not self.dbs[self.db_name].collections
+            or not self.dbs[self.db_name].collections.items()
+        ):
             return
-        for collection_name, collection_config in self.dbs[self.db_name].collections.items():
+        for collection_name, config in self.dbs[self.db_name].collections.items():
             list_indexes = await self.db[collection_name].list_indexes().to_list(length=None)
-            if collection_config and collection_config.indexes:
-                for index_name, index_value in collection_config.indexes.items():
+            if config and isinstance(config, CollectionConfig) and config.indexes:
+                for index_name, index_value in config.indexes.items():
                     if not self._check_index_exists(list_indexes, index_name):
                         try:
                             await self.db[collection_name].create_index(
@@ -418,18 +455,6 @@ class MongoDBClient:
                             )
                         except Exception as ex:
                             logger.error(ex)
-            elif collection_config and isinstance(collection_config, TimeseriesConfig):
-                try:
-                    await self.db.create_collection(
-                        collection_name,
-                        timeseries=collection_config.model_dump(),
-                    )
-                    logger.info(
-                        f"{DATABASE_ICON} {logger.name} Created time series collection {collection_name}"
-                    )
-                except Exception as ex:
-                    message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {collection_name} {ex}"
-                    logger.error(message, exc_info=True)
 
     def _check_index_exists(self, indexes, index_name):
         for index in indexes:
@@ -521,7 +546,8 @@ class MongoDBClient:
                 if first_time_check_or_recheck:
                     if self.db_name not in database_names or self.db_user not in database_users:
                         await self._check_create_db()
-                    await self._check_indexes()
+                        await self._create_timeseries()
+
                 logger.debug(
                     f"{DATABASE_ICON} {logger.name} "
                     f"Connected to MongoDB {self.db_name} "

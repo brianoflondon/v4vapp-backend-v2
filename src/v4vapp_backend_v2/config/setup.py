@@ -97,19 +97,18 @@ class TimeseriesConfig(BaseConfig):
 
 
 class IndexConfig(BaseConfig):
-    index_key: _IndexKeyHint | None = None
+    index_key: _IndexKeyHint
     unique: Optional[bool] = None
 
 
 class CollectionConfig(BaseConfig):
     indexes: Dict[str, IndexConfig] | None = None
-    timeseries: TimeseriesConfig | None = None
 
-    @model_validator(mode="after")
-    def validate_timeseries_and_indexes(self):
-        if self.timeseries and self.indexes:
-            raise ValueError("Indexes cannot be defined for a time-series collection.")
-        return self
+    # @model_validator(mode="after")
+    # def validate_timeseries_and_indexes(self):
+    #     if self.timeseries and self.indexes:
+    #         raise ValueError("Indexes cannot be defined for a time-series collection.")
+    #     return self
 
 
 class DatabaseUserConfig(BaseConfig):
@@ -119,7 +118,8 @@ class DatabaseUserConfig(BaseConfig):
 
 class DatabaseDetailsConfig(BaseConfig):
     db_users: Dict[str, DatabaseUserConfig]
-    collections: Optional[Dict[str, CollectionConfig | TimeseriesConfig | None]] = None
+    collections: Dict[str, CollectionConfig] = {}
+    timeseries: Dict[str, TimeseriesConfig] = {}
 
 
 class DatabaseConnectionConfig(BaseConfig):

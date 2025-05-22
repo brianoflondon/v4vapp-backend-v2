@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from timeit import default_timer as timer
-from unittest.mock import patch
 
 import pytest
 from pymongo import InsertOne
