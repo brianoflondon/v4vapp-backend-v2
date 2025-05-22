@@ -91,8 +91,6 @@ async def test_model_dump_mongodb(op_to_test):
     # collection_name = op_to_test["collection_name"]
     collection_name = "all_ops"
     op_type = op_to_test["op_type"]
-    if op_type == OpTypes.TRANSFER:
-        await Transfer.update_quote()
     async with MongoDBClient(
         db_conn="conn_1", db_name="test_db", db_user="test_user"
     ) as test_client:
