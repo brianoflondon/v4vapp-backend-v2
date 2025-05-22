@@ -100,7 +100,6 @@ class OpBase(TrackedBaseModel):
     watch_users: ClassVar[List[str]] = []
     proposals_tracked: ClassVar[List[int]] = []
     custom_json_ids_tracked: ClassVar[List[str]] = []
-    # last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     hive_inst: ClassVar[Hive | None] = None
     db_client: ClassVar[MongoDBClient | None] = None
 

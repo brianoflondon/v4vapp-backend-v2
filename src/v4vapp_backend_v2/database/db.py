@@ -160,9 +160,6 @@ class MongoDBClient:
         self.start_connection = timer()
         self.health_check: MongoDBStatus = MongoDBStatus.UNKNOWN
         self.first_health_check = MongoDBStatus.UNKNOWN
-        self.db = None
-        self.client = None
-        self.error = None
         self.db_conn = db_conn
         # Sets up self.db_config here.
         self.db_name = db_name

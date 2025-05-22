@@ -4,6 +4,7 @@ from typing import Any, override
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
@@ -68,7 +69,7 @@ class TransferBase(OpBase):
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
         if hive_event.get("update_conv", True):
-            if self.last_quote.get_age() > 600.0:
+            if TrackedBaseModel.last_quote.get_age() > 600.0:
                 self.update_quote_sync(AllQuotes().get_binance_quote())
             self.update_conv()
         if not self.amount:
@@ -197,7 +198,7 @@ class TransferBase(OpBase):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        quote = quote or self.last_quote
+        quote = quote or TrackedBaseModel.last_quote
         self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
 
 

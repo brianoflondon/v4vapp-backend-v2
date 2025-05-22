@@ -3,6 +3,7 @@ from typing import Any, ClassVar, Dict, List
 
 from pydantic import ConfigDict, Field
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
@@ -22,7 +23,7 @@ class LimitOrderCreate(OpBase):
     orderid: int
     owner: str
 
-    conv: CryptoConv = CryptoConv()
+    conv: CryptoConv | None = CryptoConv()
 
     # Used to store the amount remaining to be filled when doing math
     amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
@@ -48,7 +49,7 @@ class LimitOrderCreate(OpBase):
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
         if hive_event.get("update_conv", True):
-            if self.last_quote.get_age() > 600.0:
+            if TrackedBaseModel.last_quote.get_age() > 600.0:
                 self.update_quote_sync(AllQuotes().get_binance_quote())
             self.update_conv()
 
@@ -154,5 +155,6 @@ class LimitOrderCreate(OpBase):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        quote = quote or self.last_quote
-        self.conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
+        quote = quote or TrackedBaseModel.last_quote
+        conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
+        self.conv = conv

@@ -146,7 +146,7 @@ class Payment(TrackedBaseModel):
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
-        quote = quote or self.last_quote
+        quote = quote or TrackedBaseModel.last_quote
         if self.fee_msat:
             self.conv_fee = CryptoConversion(
                 conv_from=Currency.MSATS,

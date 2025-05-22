@@ -256,7 +256,7 @@ class Invoice(TrackedBaseModel):
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
-        quote = quote or self.last_quote
+        quote = quote or TrackedBaseModel.last_quote
         amount_msat = max(self.amt_paid_msat, self.value_msat)
 
         self.conv = CryptoConversion(

@@ -538,13 +538,13 @@ async def main_async_start(
             raise e
         logger.info(f"{icon} Redis connection established")
 
-    await Transfer.update_quote()
-    quote = Transfer.last_quote
+    await TrackedBaseModel.update_quote()
+    quote = TrackedBaseModel.last_quote
     logger.info(
         f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
         extra={
             "notification": False,
-            "quote": Transfer.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
+            "quote": TrackedBaseModel.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
         },
     )
 

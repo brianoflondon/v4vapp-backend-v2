@@ -3,6 +3,7 @@ from typing import List
 
 from pydantic import Field
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import (
@@ -68,12 +69,12 @@ class CustomJson(OpBase):
         if not self.conv:
             if getattr(self.json_data, "sats", None) is not None:
                 if (
-                    self.last_quote
-                    and not self.last_quote.hive_hbd == 0
+                    TrackedBaseModel.last_quote
+                    and not TrackedBaseModel.last_quote.hive_hbd == 0
                     and hasattr(self.json_data, "sats")
                 ):
                     self.conv = CryptoConversion(
-                        value=self.json_data.sats, conv_from=Currency.SATS, quote=self.last_quote
+                        value=self.json_data.sats, conv_from=Currency.SATS, quote=TrackedBaseModel.last_quote
                     ).conversion
 
     @property
