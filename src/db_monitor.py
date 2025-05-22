@@ -181,7 +181,11 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
         )
         return
-    op = tracked_any(full_document)
+    try:
+        op = tracked_any(full_document)
+    except ValueError as e:
+        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
+        return
     logger.info(f"Processing {op.group_id_query}")
     try:
         ledger_entry = await process_tracked(op)
