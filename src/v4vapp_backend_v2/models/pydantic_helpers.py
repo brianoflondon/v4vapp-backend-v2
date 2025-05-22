@@ -2,15 +2,25 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bson import Int64
+from pydantic import GetCoreSchemaHandler, ValidationInfo
+from pydantic_core import CoreSchema, core_schema
 
 
 class BSONInt64(Int64):
     @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        return core_schema.with_info_plain_validator_function(
+            cls.validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda x: int(x),  # Serialize to int for JSON compatibility
+                when_used="json",
+            ),
+        )
 
     @classmethod
-    def validate(cls, value, field):
+    def validate(cls, value: Any, info: ValidationInfo) -> Int64:
         if isinstance(value, str):
             try:
                 value = Int64(value)
@@ -20,7 +30,8 @@ class BSONInt64(Int64):
             value = Int64(value)
         elif not isinstance(value, Int64):
             raise TypeError(f"Value {value} is not a valid Int64")
-            # Check if the value is within the 64-bit integer range
+
+        # Check if the value is within the 64-bit integer range
         if not (-(2**63) <= value < 2**63):
             raise ValueError(f"Value {value} exceeds 64-bit signed integer range")
 
