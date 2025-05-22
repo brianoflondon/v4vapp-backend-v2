@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 
 
-def load_mock_last_quote() -> QuoteResponse:
+def last_quote() -> QuoteResponse:
     """
     Loads a mock last quote for testing purposes.
 

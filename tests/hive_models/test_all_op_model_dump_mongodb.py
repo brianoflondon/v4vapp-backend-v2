@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from pymongo.errors import DuplicateKeyError
 
+from tests.get_last_quote import last_quote
 from tests.load_data import load_hive_events
-from tests.setup_quote import load_mock_last_quote
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -86,7 +86,7 @@ async def test_model_dump_mongodb(op_to_test):
         set_base_config_path (None): Fixture to set the base configuration path.
         op_to_test (dict): Dictionary containing the operation type and collection name.
     """
-    TrackedBaseModel.last_quote = load_mock_last_quote()
+    TrackedBaseModel.last_quote = last_quote()
     InternalConfig()
     # collection_name = op_to_test["collection_name"]
     collection_name = "all_ops"
