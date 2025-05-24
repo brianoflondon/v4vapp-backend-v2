@@ -359,6 +359,8 @@ async def all_ops_loop(
     server_accounts = InternalConfig().config.hive.server_account_names
     if server_accounts:
         v4v_config = V4VConfig(server_accname=server_accounts[0])
+    else:
+        v4v_config = V4VConfig(server_accname="")
     async with asyncio.TaskGroup() as tg:
         for witness in watch_witnesses:
             tg.create_task(witness_first_run(witness))
@@ -469,7 +471,14 @@ async def all_ops_loop(
                 f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url} no_preview",
                 extra={"notification": False},
             )
-            hive_client.rpc.next()
+            if hive_client.rpc:
+                hive_client.rpc.next()
+            else:
+                logger.error(
+                    f"{icon} Hive client not available, re-fetching new hive-client",
+                    extra={"notification": False},
+                )
+                hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
 
 
 async def combined_logging(
@@ -507,6 +516,44 @@ async def combined_logging(
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
 
+async def store_rates() -> None:
+    """
+    Asynchronously stores cryptocurrency rates in the database every 10 minutes.
+
+    This function retrieves the latest cryptocurrency rates and stores them in the database.
+    It wakes up every 10 minutes, but will exit promptly if a shutdown or keyboard event is triggered.
+
+    Returns:
+        None
+    """
+    try:
+        while not shutdown_event.is_set():
+            try:
+                await TrackedBaseModel.update_quote()
+                quote = TrackedBaseModel.last_quote
+                logger.info(
+                    f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive:.0f} fetch date {quote.fetch_date}",
+                    extra={
+                        "notification": False,
+                        "quote": TrackedBaseModel.last_quote.model_dump(
+                            exclude={"raw_response", "raw_op"}
+                        ),
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    f"{icon} Error storing rates: {e}", extra={"error": e, "notification": False}
+                )
+            # Wait for up to 10 minutes, but wake up early if shutdown_event is set
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=600)
+            except asyncio.TimeoutError:
+                continue  # Timeout means 10 minutes passed, so loop again
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info(f"{icon} store_rates cancelled or interrupted, exiting.")
+        return
+
+
 async def main_async_start(
     watch_users: List[str], watch_witnesses: List[str], start_block: int
 ) -> None:
@@ -526,7 +573,9 @@ async def main_async_start(
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-    logger.info(f"{icon} Main Loop: {loop._thread_id}")
+    import threading
+
+    logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
             await redis_client.ping()
@@ -535,21 +584,12 @@ async def main_async_start(
             raise e
         logger.info(f"{icon} Redis connection established")
 
-    await TrackedBaseModel.update_quote()
-    quote = TrackedBaseModel.last_quote
-    logger.info(
-        f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive:.0f} fetch date {quote.fetch_date}",
-        extra={
-            "notification": False,
-            "quote": TrackedBaseModel.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
-        },
-    )
-
     try:
         tasks = [
             all_ops_loop(
                 watch_witnesses=watch_witnesses, watch_users=watch_users, start_block=start_block
             ),
+            store_rates(),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
