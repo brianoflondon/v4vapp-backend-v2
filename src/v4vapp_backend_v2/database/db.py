@@ -410,7 +410,7 @@ class MongoDBClient:
             try:
                 await self.db.create_collection(
                     timeseries_name,
-                    timeseries=config.model_dump(),
+                    timeseries=config.model_dump(exclude_unset=True, exclude_none=True),
                 )
                 logger.info(
                     f"{DATABASE_ICON} {logger.name} Created time series collection {timeseries_name}"
