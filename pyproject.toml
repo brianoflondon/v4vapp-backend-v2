@@ -53,7 +53,14 @@ dev = [
     "hive-nectar>=0.0.3",
     "pre-commit>=4.2.0",
     "pandas-stubs>=2.2.3.250308",
+    "matplotlib>=3.10.3",
+    "jupyter",
+    "ipykernel",
+    "matplotlib>=3.10.3",
+    "pandas-stubs>=2.2.3.250308",
+    "pymongo>=4.13.0",
 ]
+
 
 [build-system]
 requires = ["hatchling"]
