@@ -1,7 +1,7 @@
 import asyncio
 import pickle
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from timeit import default_timer as timer
 from typing import Annotated, Any, ClassVar, Dict, List
@@ -252,6 +252,7 @@ class AllQuotes(BaseModel):
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_client: ClassVar[MongoDBClient | None] = None
+    db_store_timestamp: ClassVar[datetime | None] = None
 
     def get_binance_quote(self) -> QuoteResponse:
         """
@@ -407,6 +408,14 @@ class AllQuotes(BaseModel):
         """
         if not self.db_client:
             return
+        if (
+            AllQuotes.db_store_timestamp
+            and self.fetch_date - AllQuotes.db_store_timestamp < timedelta(seconds=300)
+        ):
+            logger.info(
+                f"Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
+            )
+            return
         async with self.db_client as db_client:
             try:
                 records = [
@@ -415,7 +424,11 @@ class AllQuotes(BaseModel):
                         "pair": "hive_usd",
                         "value": self.quote.hive_usd,
                     },
-                    {"timestamp": self.fetch_date, "pair": "btc_usd", "value": self.quote.btc_usd},
+                    {
+                        "timestamp": self.fetch_date,
+                        "pair": "btc_usd",
+                        "value": self.quote.btc_usd,
+                    },
                     {
                         "timestamp": self.fetch_date,
                         "pair": "sats_hive",
@@ -429,6 +442,16 @@ class AllQuotes(BaseModel):
                 ]
                 db_ans = await db_client.insert_many("hive_rates", records)
                 logger.debug(f"Inserted rates into database: {db_ans}")
+                record = {
+                    "timestamp": self.fetch_date,
+                    "hive_usd": self.quote.hive_usd,
+                    "btc_usd": self.quote.btc_usd,
+                    "sats_hive": self.quote.sats_hive,
+                    "hive_hbd": self.quote.hive_hbd,
+                }
+                db_ans2 = await db_client.insert_one("hive_rates_combined", record)
+                logger.info(f"Inserted combined rates into database: {db_ans2}")
+                AllQuotes.db_store_timestamp = self.fetch_date
             except Exception as e:
                 logger.warning(
                     f"Failed to insert rates into database: {e}", extra={"notification": False}
@@ -459,11 +482,13 @@ class AllQuotes(BaseModel):
                 return ans
             else:
                 self.source = "average"
-                return self.calculate_average_quote()
+                average = self.calculate_average_quote()
+                if average:
+                    return average
 
         return QuoteResponse(error="No valid quote found")
 
-    def calculate_average_quote(self):
+    def calculate_average_quote(self) -> QuoteResponse | None:
         """
         Calculate the average values of various cryptocurrency quotes.
 
@@ -819,64 +844,3 @@ def per_diff(a: float, b: float) -> float:
     if b == 0:
         return 0
     return ((a - b) / b) * 100
-
-
-# class QuoteResponse(BaseModel):
-#     pairs: Any
-
-#     Hive_USD: float = 0
-#     HBD_USD: float = 0
-#     BTC_USD: float = 0
-#     Hive_HBD: float = 0
-#     percentage: bool = False
-#     error: str = ""
-#     fetch_date: datetime = datetime.now(tz=timezone.utc)
-#     quote_age: int = 0
-
-#     def __init__(
-#         self, HIVE_USD: float, HBD_USD: float, BTC_USD: float, HIVE_HBD: float
-#     ) -> None:
-#         super().__init__()
-#         pairs = {
-#             CurrencyPair.HIVE_USD: HIVE_USD,
-#             CurrencyPair.HBD_USD: HBD_USD,
-#             CurrencyPair.BTC_USD: BTC_USD,
-#             CurrencyPair.HIVE_HBD: HIVE_HBD,
-#         }
-
-#         quote_age = datetime.now(tz=timezone.utc) - self.fetch_date
-#         self.quote_age = int(quote_age.total_seconds())
-
-#     def output(self) -> str:
-#         """Produce nicely formatted output for a quote."""
-#         per = "%" if self.percentage else " "
-#         ans = (
-#             f"Hive_USD = {self.Hive_USD:>7.3f}{per} | "
-#             f"HBD_USD = {self.HBD_USD:>7.3f}{per} | "
-#             f"Hive_HBD = {self.Hive_HBD:>7.3f}{per} | "
-#             f"BTC_USD = {self.BTC_USD:>7.1f}{per} | "
-#         )
-#         return ans
-
-#     def divergence(self, other):
-#         """Returns the divergence of two quotes."""
-#         if isinstance(other, QuoteResponse):
-#             return QuoteResponse(
-#                 Hive_USD=per_diff(self.Hive_USD, other.Hive_USD),
-#                 HBD_USD=per_diff(self.HBD_USD, other.HBD_USD),
-#                 BTC_USD=per_diff(self.BTC_USD, other.BTC_USD),
-#                 Hive_HBD=per_diff(self.Hive_HBD, other.Hive_HBD),
-#                 percentage=True,
-#             )
-#         return None
-
-#     def average(self, other):
-#         """Returns the average of two quotes."""
-#         if isinstance(other, QuoteResponse):
-#             return QuoteResponse(
-#                 Hive_USD=(self.Hive_USD + other.Hive_USD) / 2,
-#                 HBD_USD=(self.HBD_USD + other.HBD_USD) / 2,
-#                 BTC_USD=(self.BTC_USD + other.BTC_USD) / 2,
-#                 Hive_HBD=(self.Hive_HBD + other.Hive_HBD) / 2,
-#             )
-#         return None
