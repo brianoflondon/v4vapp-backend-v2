@@ -178,9 +178,6 @@ class CryptoConversion(BaseModel):
         """Fetch the quote and compute all conversions once."""
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
-        for source, quote in all_quotes.quotes.items():
-            print(f"{source} {quote.source} {quote.fetch_date} {quote.error}")
-
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
@@ -188,8 +185,11 @@ class CryptoConversion(BaseModel):
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
         # Step 1: Convert the input value to msats
-        if self.quote is None or self.quote.hive_hbd == 0:
+        if self.quote is None:
+            if self.quote.hive_hbd == 0:
+                raise ValueError("Quote is set but hive_hbd is zero")
             raise ValueError("Quote is not available or invalid")
+
         try:
             if self.conv_from == Currency.MSATS:
                 self.msats = int(self.value)
