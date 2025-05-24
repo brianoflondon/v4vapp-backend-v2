@@ -163,7 +163,7 @@ def change_to_locked(change: Mapping[str, Any]) -> bool:
     return False
 
 
-async def process_op(change: Mapping[str, Any], collection: str):
+async def process_op(change: Mapping[str, Any], collection: str) -> None:
     """
     Creates a ledger entry based on the document and collection name.
 
@@ -181,9 +181,17 @@ async def process_op(change: Mapping[str, Any], collection: str):
             f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
         )
         return
-    op = tracked_any(full_document)
+    try:
+        op = tracked_any(full_document)
+    except ValueError as e:
+        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
+        return
     logger.info(f"Processing {op.group_id_query}")
-    ledger_entry = await process_tracked(op)
+    try:
+        ledger_entry = await process_tracked(op)
+    except NotImplementedError:
+        logger.info(f"{ICON} Operation not implemented for {op.group_id}")
+        return
     if not ledger_entry:
         logger.warning(
             f"{ICON} No ledger entry created for {op.group_id_query}",

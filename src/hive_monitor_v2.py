@@ -10,12 +10,14 @@ from nectar.amount import Amount
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
-from pymongo.results import UpdateResult
+from pymongo.results import BulkWriteResult
 
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
@@ -23,7 +25,7 @@ from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
-from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, OpAny
+from v4vapp_backend_v2.hive_models.op_all import OpAny, is_op_all_transfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -43,7 +45,7 @@ HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 AUTO_BALANCE_SERVER = True
 
 
-COMMAND_LINE_WATCH_USERS = []
+COMMAND_LINE_WATCH_USERS: List[str] = []
 COMMAND_LINE_WATCH_ONLY = False
 
 
@@ -83,7 +85,7 @@ async def db_store_op(
     db_collection: str | None = None,
     *args: Any,
     **kwargs: Any,
-) -> UpdateResult | None:
+) -> List[BulkWriteResult | None]:
     """
     Stores a Hive transaction in the database.
 
@@ -114,7 +116,13 @@ async def db_store_op(
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
-        async with OpBase.db_client as db_client:
+        if not TrackedBaseModel.db_client:
+            TrackedBaseModel.db_client = MongoDBClient(
+                db_conn=HIVE_DATABASE_CONNECTION,
+                db_name=HIVE_DATABASE,
+                db_user=HIVE_DATABASE_USER,
+            )
+        async with TrackedBaseModel.db_client as db_client:
             db_ans = await db_client.update_one_buffer(
                 db_collection,
                 query=op.group_id_query,
@@ -127,11 +135,11 @@ async def db_store_op(
             f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
             extra={"notification": False, "error": e, **op.log_extra},
         )
-        return None
+        return []
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
-        return None
+        return []
 
 
 async def balance_server_hbd_level(transfer: Transfer) -> None:
@@ -186,11 +194,17 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
         int: The last good block.
     """
     try:
-        async with OpBase.db_client as db_client:
+        if not TrackedBaseModel.db_client:
+            TrackedBaseModel.db_client = MongoDBClient(
+                db_conn=HIVE_DATABASE_CONNECTION,
+                db_name=HIVE_DATABASE,
+                db_user=HIVE_DATABASE_USER,
+            )
+        async with TrackedBaseModel.db_client as db_client:
             ans = await db_client.find_one(
                 collection_name=collection, query={}, sort=[("block_num", -1)]
             )
-            if ans:
+            if ans and "block_num" in ans:
                 time_diff = check_time_diff(ans["timestamp"])
                 logger.info(
                     f"{icon} Last good block: {ans['block_num']:,} "
@@ -227,7 +241,13 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
-    async with OpBase.db_client as db_client:
+    if not TrackedBaseModel.db_client:
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
+        )
+    async with TrackedBaseModel.db_client as db_client:
         last_good_event = await db_client.find_one(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
@@ -253,6 +273,8 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         async for op in stream_ops_async(
             opNames=["producer_reward"], look_back=look_back, stop_now=True
         ):
+            if not isinstance(op, ProducerReward):
+                continue
             op: ProducerReward
             if op.producer == watch_witness:
                 await op.get_witness_details()
@@ -289,7 +311,13 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         timedelta: The average block time for the specified witness.
     """
     count_back = 10
-    async with OpBase.db_client as db_client:
+    if not TrackedBaseModel.db_client:
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
+        )
+    async with TrackedBaseModel.db_client as db_client:
         cursor = await db_client.find(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
@@ -351,14 +379,11 @@ async def all_ops_loop(
     OpBase.watch_users = watch_users
     OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
     OpBase.custom_json_ids_tracked = InternalConfig().config.hive.custom_json_ids_tracked
-    OpBase.db_client = MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    )
     server_accounts = InternalConfig().config.hive.server_account_names
     if server_accounts:
         v4v_config = V4VConfig(server_accname=server_accounts[0])
+    else:
+        v4v_config = V4VConfig(server_accname="")
     async with asyncio.TaskGroup() as tg:
         for witness in watch_witnesses:
             tg.create_task(witness_first_run(witness))
@@ -393,9 +418,9 @@ async def all_ops_loop(
                         notification = True
                         db_store = True
 
-                elif isinstance(op, OpAllTransfers):
+                elif is_op_all_transfer(op):
                     if op.is_watched:
-                        await OpBase.update_quote()
+                        await TrackedBaseModel.update_quote()
                         op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             asyncio.create_task(balance_server_hbd_level(op))
@@ -469,7 +494,14 @@ async def all_ops_loop(
                 f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url} no_preview",
                 extra={"notification": False},
             )
-            hive_client.rpc.next()
+            if hive_client.rpc:
+                hive_client.rpc.next()
+            else:
+                logger.error(
+                    f"{icon} Hive client not available, re-fetching new hive-client",
+                    extra={"notification": False},
+                )
+                hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
 
 
 async def combined_logging(
@@ -507,6 +539,44 @@ async def combined_logging(
         logger.info(f"{icon} {op.log_str}", extra=log_extras)
 
 
+async def store_rates() -> None:
+    """
+    Asynchronously stores cryptocurrency rates in the database every 10 minutes.
+
+    This function retrieves the latest cryptocurrency rates and stores them in the database.
+    It wakes up every 10 minutes, but will exit promptly if a shutdown or keyboard event is triggered.
+
+    Returns:
+        None
+    """
+    try:
+        while not shutdown_event.is_set():
+            try:
+                await TrackedBaseModel.update_quote()
+                quote = TrackedBaseModel.last_quote
+                logger.info(
+                    f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive:.0f} fetch date {quote.fetch_date}",
+                    extra={
+                        "notification": False,
+                        "quote": TrackedBaseModel.last_quote.model_dump(
+                            exclude={"raw_response", "raw_op"}
+                        ),
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    f"{icon} Error storing rates: {e}", extra={"error": e, "notification": False}
+                )
+            # Wait for up to 10 minutes, but wake up early if shutdown_event is set
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=600)
+            except asyncio.TimeoutError:
+                continue  # Timeout means 10 minutes passed, so loop again
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info(f"{icon} store_rates cancelled or interrupted, exiting.")
+        return
+
+
 async def main_async_start(
     watch_users: List[str], watch_witnesses: List[str], start_block: int
 ) -> None:
@@ -526,7 +596,9 @@ async def main_async_start(
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-    logger.info(f"{icon} Main Loop: {loop._thread_id}")
+    import threading
+
+    logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
             await redis_client.ping()
@@ -535,21 +607,12 @@ async def main_async_start(
             raise e
         logger.info(f"{icon} Redis connection established")
 
-    await Transfer.update_quote()
-    quote = Transfer.last_quote
-    logger.info(
-        f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive}",
-        extra={
-            "notification": False,
-            "quote": Transfer.last_quote.model_dump(exclude={"raw_response", "raw_op"}),
-        },
-    )
-
     try:
         tasks = [
             all_ops_loop(
                 watch_witnesses=watch_witnesses, watch_users=watch_users, start_block=start_block
             ),
+            store_rates(),
         ]
         await asyncio.gather(*tasks)
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -652,6 +715,17 @@ def main(
         HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
+
+    TrackedBaseModel.db_client = MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    )
+    AllQuotes.db_client = MongoDBClient(
+        db_conn=HIVE_DATABASE_CONNECTION,
+        db_name=HIVE_DATABASE,
+        db_user=HIVE_DATABASE_USER,
+    )
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",

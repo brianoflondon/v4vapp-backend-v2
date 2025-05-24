@@ -1,9 +1,12 @@
+import base64
 import json
 import re
 from base64 import b64decode
-from typing import Any
+from typing import Any, Dict
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+from v4vapp_backend_v2.config.setup import logger
 
 
 def is_json(check_json: str) -> bool:
@@ -264,3 +267,128 @@ class KeysendCustomRecord(BaseModel):
         #     except Exception:
         #         pass
         super().__init__(**data)
+
+
+class DecodedCustomRecord(BaseModel):
+    """
+    Represents a decoded set of custom records, typically extracted from keysend payments or similar sources.
+    Attributes:
+        podcast (KeysendCustomRecord | None): Decoded KeysendCustomRecord object from the field with alias "7629169".
+        keysend_message (str | None): Decoded message from the field with alias "34349334", if available.
+        v4vapp_group_id (str | None): Decoded group ID from the field with alias "1818181818", if available.
+        hive_accname (str | None): Decoded Hive account name from the field with alias "818818", if available.
+        other (Dict[str, Any]): Dictionary containing any additional custom records not mapped to the above fields.
+    Methods:
+        __init__(**data: Any):
+            Initializes the DecodedCustomRecord instance with provided data.
+            Any key-value pairs in `data` whose keys are not among ["7629169", "34349334", "1818181818", "818818"]
+            are added to the `other` dictionary.
+    """
+
+    podcast: KeysendCustomRecord | None = Field(
+        None,
+        description="Decoded KeysendCustomRecord object from the 7629169 field",
+        alias="7629169",
+    )
+    keysend_message: str | None = Field(
+        None,
+        description="Decoded message from the 34349334 field, if available",
+        alias="34349334",
+    )
+    v4vapp_group_id: str | None = Field(
+        None,
+        description="Decoded group ID from the 1818181818 field, if available",
+        alias="1818181818",
+    )
+    hive_accname: str | None = Field(
+        None,
+        description="Decoded Hive account name from the 818818 field, if available",
+        alias="818818",
+    )
+    other: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Other custom records as a dictionary",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    def __init__(self, **data: Any) -> None:
+        """
+        Initializes the object with provided keyword arguments.
+
+        Parameters:
+            **data (Any): Arbitrary keyword arguments representing the data to initialize the object with.
+
+        Behavior:
+            - Calls the superclass initializer with the provided data.
+            - For each key-value pair in data, if the key is not one of ["7629169", "34349334", "1818181818", "818818"],
+              the pair is added to the `self.other` dictionary.
+        """
+        super().__init__(**data)
+        for key, value in data.items():
+            if key not in ["7629169", "34349334", "1818181818", "818818"]:
+                self.other[key] = value
+
+
+def decode_all_custom_records(
+    custom_records: Dict[str, str],
+) -> DecodedCustomRecord:
+    """
+    Decodes a dictionary of custom records, handling specific and generic cases.
+    Args:
+        custom_records (Dict[str, str]): A dictionary where keys are custom record identifiers (as strings)
+            and values are Base64-encoded strings representing the record data.
+    Returns:
+        DecodedCustomRecord: An object containing the decoded custom records, including a parsed
+            podcast custom record (if present) and a dictionary of other decoded records.
+    Behavior:
+        - For the key "7629169", decodes the value from Base64, validates it as a KeysendCustomRecord,
+          and assigns it to the `podcast_custom_record` attribute of the result. Handles validation errors
+          and logs warnings if decoding or validation fails.
+        - For all other keys, decodes the value from Base64, attempts to parse it as JSON, and stores the
+          result (either as a parsed object or string) in the `other_custom_records` dictionary of the result.
+          If decoding fails, stores an error message instead.
+    Raises:
+        Does not raise exceptions; errors are logged and captured in the result object.
+    """
+    result: Dict[str, Any] = {}
+    for key, value in custom_records.items():
+        if key == "7629169":
+            extracted_value = b64_decode(value)
+            try:
+                custom_record = KeysendCustomRecord.model_validate(extracted_value)
+                result["7629169"] = custom_record
+            except ValidationError:
+                pass
+            except Exception as e:
+                logger.warning(
+                    f"Error in custom record: {e}",
+                    extra={"notification": False},
+                )
+                logger.warning(
+                    f"Error validating custom record: {e} ",
+                    extra={
+                        "notification": False,
+                        "custom_records": custom_records,
+                    },
+                )
+        else:
+            try:
+                # Decode the Base64 value
+                decoded_bytes = base64.b64decode(value)
+                decoded_str = decoded_bytes.decode("utf-8")
+
+                # Attempt to parse as JSON
+                try:
+                    decoded_value = json.loads(decoded_str)
+                except json.JSONDecodeError:
+                    decoded_value = decoded_str  # If not JSON, keep as string
+
+                # Add to the result dictionary with integer key
+                result[str(key)] = decoded_value
+            except Exception as _:
+                # Log or handle decoding errors
+                result[str(key)] = "Error decoding value"
+
+    answer = DecodedCustomRecord(**result)
+    return answer

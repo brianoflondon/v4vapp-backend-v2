@@ -1,6 +1,6 @@
 from typing import List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from v4vapp_backend_v2.hive_models.did_name_type import DIDNameType
 
@@ -54,6 +54,13 @@ class VSCActions(BaseModel):
         populate_by_name=True,
     )
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        
+    @model_validator(mode="before")
+    @classmethod
+    def fix_ops_and_cleared_ops(cls, data):
+        # If ops or cleared_ops is an empty string, convert to empty list
+        if isinstance(data, dict):
+            if isinstance(data.get("ops"), str) and data["ops"] == "":
+                data["ops"] = []
+            if isinstance(data.get("cleared_ops"), str) and data["cleared_ops"] == "":
+                data["cleared_ops"] = []
+        return data

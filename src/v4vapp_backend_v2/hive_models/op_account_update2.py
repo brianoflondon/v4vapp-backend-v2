@@ -1,5 +1,5 @@
 import json
-from typing import Any, List
+from typing import Any, Dict, List
 
 from pydantic import Field
 
@@ -10,16 +10,13 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 class AccountUpdate2(OpBase):
     account: AccNameType = Field("", description="Account being updated")
-    json_metadata: dict[str, Any] | None = Field(
+    json_metadata: Dict[str, Any] | List[Any] | None = Field(
         {},
         description="JSON metadata associated with the account update",
     )
-    posting_json_metadata: dict[str, Any] | None = Field(
+    posting_json_metadata: Dict[str, Any] | List[Any] | None = Field(
         {},
         description="JSON metadata associated with the posting key of the account update",
-    )
-    extensions: List[Any] = Field(
-        [], description="List of extensions associated with the account update"
     )
 
     def __init__(self, **hive_event: Any) -> None:

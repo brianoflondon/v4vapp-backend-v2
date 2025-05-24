@@ -54,6 +54,7 @@ class CryptoConv(BaseModel):
             data["source"] = "Hive Internal Trade"
             data["fetch_date"] = datetime.now(tz=timezone.utc)
             quote = data.get("quote", None)
+            # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
                 data["sats_hive"] = quote.sats_hive
                 data["sats_hbd"] = quote.sats_hbd
@@ -177,9 +178,6 @@ class CryptoConversion(BaseModel):
         """Fetch the quote and compute all conversions once."""
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
-        for source, quote in all_quotes.quotes.items():
-            print(f"{source} {quote.source} {quote.fetch_date} {quote.error}")
-
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
@@ -187,17 +185,22 @@ class CryptoConversion(BaseModel):
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
         # Step 1: Convert the input value to msats
-        if self.quote is None or self.quote.hive_hbd == 0:
+        if self.quote is None:
+            if self.quote.hive_hbd == 0:
+                raise ValueError("Quote is set but hive_hbd is zero")
             raise ValueError("Quote is not available or invalid")
+
         try:
-            if self.conv_from == Currency.HIVE:
+            if self.conv_from == Currency.MSATS:
+                self.msats = int(self.value)
+            elif self.conv_from == Currency.SATS:
+                self.msats = int(self.value * 1000)
+            elif self.conv_from == Currency.HIVE:
                 self.msats = int(self.value * self.quote.sats_hive_p * 1000)
             elif self.conv_from == Currency.HBD:
                 self.msats = int(self.value * self.quote.sats_hbd_p * 1000)
             elif self.conv_from == Currency.USD:
                 self.msats = int(self.value * self.quote.sats_usd_p * 1000)
-            elif self.conv_from == Currency.SATS:
-                self.msats = int(self.value * 1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 
