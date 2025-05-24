@@ -10,7 +10,7 @@ from nectar.amount import Amount
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
-from pymongo.results import UpdateResult
+from pymongo.results import BulkWriteResult
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -45,7 +45,7 @@ HIVE_WITNESS_DELAY_FACTOR = 1.2  # 20% over mean block time
 AUTO_BALANCE_SERVER = True
 
 
-COMMAND_LINE_WATCH_USERS = []
+COMMAND_LINE_WATCH_USERS: List[str] = []
 COMMAND_LINE_WATCH_ONLY = False
 
 
@@ -85,7 +85,7 @@ async def db_store_op(
     db_collection: str | None = None,
     *args: Any,
     **kwargs: Any,
-) -> UpdateResult | None:
+) -> List[BulkWriteResult | None]:
     """
     Stores a Hive transaction in the database.
 
@@ -116,7 +116,13 @@ async def db_store_op(
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
-        async with OpBase.db_client as db_client:
+        if not TrackedBaseModel.db_client:
+            TrackedBaseModel.db_client = MongoDBClient(
+                db_conn=HIVE_DATABASE_CONNECTION,
+                db_name=HIVE_DATABASE,
+                db_user=HIVE_DATABASE_USER,
+            )
+        async with TrackedBaseModel.db_client as db_client:
             db_ans = await db_client.update_one_buffer(
                 db_collection,
                 query=op.group_id_query,
@@ -129,11 +135,11 @@ async def db_store_op(
             f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
             extra={"notification": False, "error": e, **op.log_extra},
         )
-        return None
+        return []
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
-        return None
+        return []
 
 
 async def balance_server_hbd_level(transfer: Transfer) -> None:
@@ -188,11 +194,17 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
         int: The last good block.
     """
     try:
-        async with OpBase.db_client as db_client:
+        if not TrackedBaseModel.db_client:
+            TrackedBaseModel.db_client = MongoDBClient(
+                db_conn=HIVE_DATABASE_CONNECTION,
+                db_name=HIVE_DATABASE,
+                db_user=HIVE_DATABASE_USER,
+            )
+        async with TrackedBaseModel.db_client as db_client:
             ans = await db_client.find_one(
                 collection_name=collection, query={}, sort=[("block_num", -1)]
             )
-            if ans:
+            if ans and "block_num" in ans:
                 time_diff = check_time_diff(ans["timestamp"])
                 logger.info(
                     f"{icon} Last good block: {ans['block_num']:,} "
@@ -229,6 +241,12 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
+    if not TrackedBaseModel.db_client:
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
+        )
     async with TrackedBaseModel.db_client as db_client:
         last_good_event = await db_client.find_one(
             HIVE_OPS_COLLECTION,
@@ -293,8 +311,13 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         timedelta: The average block time for the specified witness.
     """
     count_back = 10
-
-    async with OpBase.db_client as db_client:
+    if not TrackedBaseModel.db_client:
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=HIVE_DATABASE_CONNECTION,
+            db_name=HIVE_DATABASE,
+            db_user=HIVE_DATABASE_USER,
+        )
+    async with TrackedBaseModel.db_client as db_client:
         cursor = await db_client.find(
             HIVE_OPS_COLLECTION,
             {"producer": watch_witness},
