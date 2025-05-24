@@ -245,7 +245,9 @@ async def db_store_invoice(
             logger.warning(e)
             return
         query = {"r_hash": invoice_pyd.r_hash}
-        invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        invoice_dict = invoice_pyd.model_dump(
+            exclude_none=True, exclude_unset=True, exclude={"conv"}
+        )
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
         logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} "
@@ -288,7 +290,9 @@ async def db_store_payment(
                 f"{db_client.hex_id} {payment_pyd.route_str}"
             )
             query = {"payment_hash": payment_pyd.payment_hash}
-            payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
+            payment_dict = payment_pyd.model_dump(
+                exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
+            )
             ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
             logger.info(
                 f"{lnd_client.icon}{DATABASE_ICON} "
@@ -604,7 +608,9 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                 index_offset = list_invoices.first_index_offset
                 bulk_updates = []
                 for invoice in list_invoices.invoices:
-                    insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_one = invoice.model_dump(
+                        exclude_none=True, exclude_unset=True, exclude={"conv"}
+                    )
                     query = {"r_hash": invoice.r_hash}
                     read_invoice = await db_client.find_one(
                         collection_name="invoices",
@@ -709,7 +715,9 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                         fill_cache=True,
                         col_pub_keys="pub_keys",
                     )
-                    insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_one = payment.model_dump(
+                        exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
+                    )
                     query = {"payment_hash": payment.payment_hash}
                     read_payment = await db_client.find_one(
                         collection_name="payments",
@@ -717,7 +725,7 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                     )
                     if read_payment:
                         try:
-                            db_payment = Payment(**read_payment)
+                            db_payment = Payment.model_validate(read_payment)
                             if db_payment == payment:
                                 continue
                         except Exception as e:
