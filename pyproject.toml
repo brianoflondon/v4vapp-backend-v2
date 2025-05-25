@@ -59,6 +59,7 @@ dev = [
     "matplotlib>=3.10.3",
     "pandas-stubs>=2.2.3.250308",
     "pymongo>=4.13.0",
+    "nbstripout>=0.8.1",
 ]
 
 

@@ -1449,6 +1449,18 @@ wheels = [
 ]
 
 [[package]]
+name = "nbstripout"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nbformat" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/6e/05d7e0e35598bd0d423167295f978005912a2dcd137c88ebf36e34047dc7/nbstripout-0.8.1.tar.gz", hash = "sha256:eaac8b6b4e729e8dfe1e5df2c0f8ba44abc5a17a65448f0480141f80be230bb1", size = 26399 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/91/93b459c456b0e4389b2b3ddb3b82cd401d022691334a0f06e92c2046e780/nbstripout-0.8.1-py2.py3-none-any.whl", hash = "sha256:79a8c8da488d98c54c112fa87185045f0271a97d84f1d46918d6a3ee561b30e7", size = 16329 },
+]
+
+[[package]]
 name = "nest-asyncio"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2662,6 +2674,7 @@ dev = [
     { name = "matplotlib" },
     { name = "mongomock-motor" },
     { name = "mypy" },
+    { name = "nbstripout" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
     { name = "pymongo" },
@@ -2716,6 +2729,7 @@ dev = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "mongomock-motor", specifier = ">=0.0.35,<1.0.0" },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
+    { name = "nbstripout", specifier = ">=0.8.1" },
     { name = "pandas-stubs", specifier = ">=2.2.3.250308" },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pymongo", specifier = ">=4.13.0" },
