@@ -31,6 +31,8 @@ CACHE_TIMES = {
     "HiveInternalMarket": 60,
 }
 
+DB_RATES_COLLECTION = "rates"
+
 
 class Currency(StrEnum):
     HIVE = "hive"
@@ -48,6 +50,31 @@ class CurrencyPair(StrEnum):
     HIVE_HBD = "hive_hbd"
     SATS_HIVE = "hive_sats"
     SATS_HBD = "hbd_sats"
+
+
+class HiveRatesDB(BaseModel):
+    """
+    HiveRatesDB is a model that represents the database structure for storing
+    cryptocurrency exchange rates.
+
+    Attributes:
+        timestamp (datetime): The timestamp when the rates were fetched.
+        hive_usd (float): The exchange rate of HIVE to USD.
+        btc_usd (float): The exchange rate of BTC to USD.
+        sats_hive (float): The exchange rate of Satoshi to HIVE.
+        sats_usd (float): The exchange rate of Satoshi to USD.
+        sats_hbd (float): The exchange rate of Satoshi to HBD.
+        hive_hbd (float): The exchange rate of HIVE to HBD.
+    """
+
+    timestamp: datetime
+    hive_usd: float
+    hbd_usd: float
+    btc_usd: float
+    hive_hbd: float
+    sats_hive: float
+    sats_usd: float
+    sats_hbd: float
 
 
 # Define the annotated type
@@ -419,22 +446,81 @@ class AllQuotes(BaseModel):
             return
         async with self.db_client as db_client:
             try:
-                record = {
-                    "timestamp": self.fetch_date,
-                    "hive_usd": self.quote.hive_usd,
-                    "btc_usd": self.quote.btc_usd,
-                    "sats_hive": self.quote.sats_hive,
-                    "sats_usd": self.quote.sats_usd,
-                    "sats_hbd": self.quote.sats_hbd,
-                    "hive_hbd": self.quote.hive_hbd,
-                }
-                db_ans = await db_client.insert_one("hive_rates_combined", record)
+                record = HiveRatesDB(
+                    timestamp=self.fetch_date,
+                    hive_usd=self.quote.hive_usd,
+                    hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
+                    btc_usd=self.quote.btc_usd,
+                    sats_hive=self.quote.sats_hive_p,
+                    sats_usd=self.quote.sats_usd,
+                    sats_hbd=self.quote.sats_hbd_p,
+                    hive_hbd=self.quote.hive_hbd,
+                )
+                db_ans = await db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
                 logger.info(f"Inserted combined rates into database: {db_ans}")
                 AllQuotes.db_store_timestamp = self.fetch_date
             except Exception as e:
                 logger.warning(
                     f"Failed to insert rates into database: {e}", extra={"notification": False}
                 )
+
+    @classmethod
+    async def db_find_nearest_quote(
+        cls,
+        timestamp: datetime,
+    ) -> QuoteResponse | None:
+        """
+        Asynchronously finds the nearest quote in the database with a timestamp less than or equal to the provided timestamp.
+
+        Args:
+            timestamp (datetime): The reference datetime to find the nearest quote before or at this time.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the provided timestamp is not a datetime object.
+
+        Side Effects:
+            - Updates self.fetch_date with the timestamp of the found quote.
+            - Updates self.quotes["HiveRatesDB"] with a QuoteResponse object containing the quote data.
+            - Logs information about the found quote or warnings if an error occurs.
+        """
+        if not cls.db_client:
+            return None
+
+        if not isinstance(timestamp, datetime):
+            raise ValueError("timestamp must be a datetime object")
+        async with cls.db_client as db_client:
+            try:
+                # Find the nearest quote by timestamp
+                nearest_quote = await db_client.find_one(
+                    DB_RATES_COLLECTION,
+                    {"timestamp": {"$lte": timestamp}},
+                    sort=[("timestamp", -1)],
+                )
+
+                if nearest_quote:
+                    quote = HiveRatesDB.model_validate(nearest_quote)
+                    quote_response = QuoteResponse(
+                        hive_usd=quote.hive_usd,
+                        hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
+                        btc_usd=quote.btc_usd,
+                        hive_hbd=quote.hive_hbd,
+                        raw_response={},
+                        source="HiveRatesDB",
+                        fetch_date=quote.timestamp,
+                        error="",  # No error in this case
+                        error_details={},
+                    )
+                    logger.info(
+                        f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
+                        extra={"notification": False, "quote": quote.model_dump()},
+                    )
+                    return quote_response
+            except Exception as e:
+                logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
+        return None
 
     @property
     def quote(self) -> QuoteResponse:

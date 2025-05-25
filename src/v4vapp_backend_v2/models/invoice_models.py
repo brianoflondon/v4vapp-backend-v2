@@ -10,8 +10,9 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
@@ -231,8 +232,6 @@ class Invoice(TrackedBaseModel):
             invoice_dict = convert_datetime_fields(data)
 
         super().__init__(**invoice_dict)
-        if not self.conv:
-            self.update_conv()
 
         # set the expiry date to the creation date + expiry time
         if self.creation_date:
@@ -249,13 +248,16 @@ class Invoice(TrackedBaseModel):
         self.fill_custom_records()
 
     @override
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion rate for the payment.
 
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
+        if not quote and self.age > 120:
+            quote = await AllQuotes.db_find_nearest_quote(timestamp=self.timestamp)
+
         quote = quote or TrackedBaseModel.last_quote
         amount_msat = max(self.amt_paid_msat, self.value_msat)
 
@@ -337,7 +339,7 @@ class Invoice(TrackedBaseModel):
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
         if extracted_value:
-            hive_accname = AccNameType(extracted_value)
+            hive_accname = AccName(extracted_value)
             self.hive_accname = hive_accname
             self.is_lndtohive = True
 
@@ -386,6 +388,40 @@ class Invoice(TrackedBaseModel):
             },
         )
 
+    @property
+    def timestamp(self) -> datetime:
+        """
+        Returns the timestamp of the invoice, which is the creation date.
+
+        Returns:
+            datetime: The creation date of the invoice.
+        """
+        timestamp = self.settle_date or self.creation_date
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return timestamp
+
+    @property
+    def age(self) -> float:
+        """
+        Returns the age of the invoice as a float representing the total seconds.
+
+        Returns:
+            float: The age of the invoice in seconds.
+        """
+        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+
+    @property
+    def age_str(self) -> str:
+        """
+        Returns the age of the invoice as a formatted string.
+
+        Returns:
+            str: The age of the invoice in a human-readable format.
+        """
+        age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
+        return age_text
+
 
 class ListInvoiceResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -395,7 +431,7 @@ class ListInvoiceResponse(BaseModel):
 
     def __init__(
         self,
-        lnrpc_list_invoice_response: lnrpc.ListInvoiceResponse = None,
+        lnrpc_list_invoice_response: lnrpc.ListInvoiceResponse | None = None,
         **data: Any,
     ) -> None:
         if lnrpc_list_invoice_response and isinstance(
