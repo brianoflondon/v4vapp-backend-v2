@@ -156,7 +156,6 @@ dbs_config:
       timeseries:
         rates:
           timeField: "timestamp"
-          metaField: "pair"
           granularity: minutes
 
     test_db2:

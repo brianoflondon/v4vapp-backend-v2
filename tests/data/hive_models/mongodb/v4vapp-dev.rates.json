@@ -1,0 +1,3945 @@
+[{
+  "timestamp": {
+    "$date": "2025-05-15T00:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d4"
+  },
+  "hive_usd": 0.2702,
+  "sats_hbd": 966.0999,
+  "sats_hive": 261.0402,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2706,
+  "btc_usd": 103508.96,
+  "sats_usd": 966.0999
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T02:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d5"
+  },
+  "hive_usd": 0.2744,
+  "sats_hbd": 970.4251,
+  "sats_hive": 266.2847,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2742,
+  "btc_usd": 103047.62,
+  "sats_usd": 970.4251
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T04:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d6"
+  },
+  "hive_usd": 0.2776,
+  "sats_hbd": 971.774,
+  "sats_hive": 269.7645,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2771,
+  "btc_usd": 102904.58,
+  "sats_usd": 971.774
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T05:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d7"
+  },
+  "hive_usd": 0.2747,
+  "sats_hbd": 976.1813,
+  "sats_hive": 268.157,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2746,
+  "btc_usd": 102439.99,
+  "sats_usd": 976.1813
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T06:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d8"
+  },
+  "hive_usd": 0.2759,
+  "sats_hbd": 978.3475,
+  "sats_hive": 269.9261,
+  "hbd_usd": 1,
+  "hive_hbd": 0.276,
+  "btc_usd": 102213.17,
+  "sats_usd": 978.3475
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T09:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258d9"
+  },
+  "hive_usd": 0.2717,
+  "sats_hbd": 979.7403,
+  "sats_hive": 266.1955,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2723,
+  "btc_usd": 102067.86,
+  "sats_usd": 979.7403
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T11:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258da"
+  },
+  "hive_usd": 0.2631,
+  "sats_hbd": 978.9721,
+  "sats_hive": 257.5676,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2635,
+  "btc_usd": 102147.96,
+  "sats_usd": 978.9721
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T11:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258db"
+  },
+  "hive_usd": 0.264,
+  "sats_hbd": 977.2247,
+  "sats_hive": 257.9873,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2644,
+  "btc_usd": 102330.61,
+  "sats_usd": 977.2247
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T12:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258dc"
+  },
+  "hive_usd": 0.2665,
+  "sats_hbd": 975.4392,
+  "sats_hive": 259.9546,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2674,
+  "btc_usd": 102517.92,
+  "sats_usd": 975.4392
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T12:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258dd"
+  },
+  "hive_usd": 0.2669,
+  "sats_hbd": 973.8134,
+  "sats_hive": 259.9108,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2676,
+  "btc_usd": 102689.08,
+  "sats_usd": 973.8134
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T12:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258de"
+  },
+  "hive_usd": 0.2681,
+  "sats_hbd": 973.2927,
+  "sats_hive": 260.9398,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2679,
+  "btc_usd": 102744.01,
+  "sats_usd": 973.2927
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T12:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258df"
+  },
+  "hive_usd": 0.2647,
+  "sats_hbd": 974.9304,
+  "sats_hive": 258.0641,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2657,
+  "btc_usd": 102571.42,
+  "sats_usd": 974.9304
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T13:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e0"
+  },
+  "hive_usd": 0.2651,
+  "sats_hbd": 974.1892,
+  "sats_hive": 258.2576,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2656,
+  "btc_usd": 102649.46,
+  "sats_usd": 974.1892
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T14:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e1"
+  },
+  "hive_usd": 0.2509,
+  "sats_hbd": 984.5976,
+  "sats_hive": 247.0355,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2526,
+  "btc_usd": 101564.33,
+  "sats_usd": 984.5976
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T15:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e2"
+  },
+  "hive_usd": 0.2525,
+  "sats_hbd": 979.6339,
+  "sats_hive": 247.3576,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2532,
+  "btc_usd": 102078.95,
+  "sats_usd": 979.6339
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e3"
+  },
+  "hive_usd": 0.2649,
+  "sats_hbd": 968.5043,
+  "sats_hive": 256.5568,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2648,
+  "btc_usd": 103251.99,
+  "sats_usd": 968.5043
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T18:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e4"
+  },
+  "hive_usd": 0.2641,
+  "sats_hbd": 965.6036,
+  "sats_hive": 255.0159,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2653,
+  "btc_usd": 103562.17,
+  "sats_usd": 965.6036
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T18:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e5"
+  },
+  "hive_usd": 0.2611,
+  "sats_hbd": 968.8539,
+  "sats_hive": 252.9677,
+  "hbd_usd": 1,
+  "hive_hbd": 0.263,
+  "btc_usd": 103214.74,
+  "sats_usd": 968.8539
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T19:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e6"
+  },
+  "hive_usd": 0.2602,
+  "sats_hbd": 971.2414,
+  "sats_hive": 252.717,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2614,
+  "btc_usd": 102961.01,
+  "sats_usd": 971.2414
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T19:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e7"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 970.8913,
+  "sats_hive": 253.4026,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2622,
+  "btc_usd": 102998.14,
+  "sats_usd": 970.8913
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T20:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e8"
+  },
+  "hive_usd": 0.2629,
+  "sats_hbd": 967.7373,
+  "sats_hive": 254.4181,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2638,
+  "btc_usd": 103333.83,
+  "sats_usd": 967.7373
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T20:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258e9"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 970.7241,
+  "sats_hive": 253.359,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2625,
+  "btc_usd": 103015.88,
+  "sats_usd": 970.7241
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T20:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ea"
+  },
+  "hive_usd": 0.2621,
+  "sats_hbd": 967.7165,
+  "sats_hive": 253.6385,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2635,
+  "btc_usd": 103336.05,
+  "sats_usd": 967.7165
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T20:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258eb"
+  },
+  "hive_usd": 0.2617,
+  "sats_hbd": 966.6396,
+  "sats_hive": 252.9696,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2636,
+  "btc_usd": 103451.17,
+  "sats_usd": 966.6396
+},
+{
+  "timestamp": {
+    "$date": "2025-05-15T23:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ec"
+  },
+  "hive_usd": 0.2596,
+  "sats_hbd": 962.8611,
+  "sats_hive": 249.9587,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2604,
+  "btc_usd": 103857.14,
+  "sats_usd": 962.8611
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T00:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ed"
+  },
+  "hive_usd": 0.2601,
+  "sats_hbd": 962.0582,
+  "sats_hive": 250.2313,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2615,
+  "btc_usd": 103943.82,
+  "sats_usd": 962.0582
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T01:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ee"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 963.7197,
+  "sats_hive": 248.7361,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2596,
+  "btc_usd": 103764.61,
+  "sats_usd": 963.7197
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T04:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ef"
+  },
+  "hive_usd": 0.2656,
+  "sats_hbd": 960.5584,
+  "sats_hive": 255.1243,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2674,
+  "btc_usd": 104106.11,
+  "sats_usd": 960.5584
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T04:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f0"
+  },
+  "hive_usd": 0.2647,
+  "sats_hbd": 962.2467,
+  "sats_hive": 254.7067,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2664,
+  "btc_usd": 103923.45,
+  "sats_usd": 962.2467
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f1"
+  },
+  "hive_usd": 0.2642,
+  "sats_hbd": 966.627,
+  "sats_hive": 255.3829,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2652,
+  "btc_usd": 103452.52,
+  "sats_usd": 966.627
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T09:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f2"
+  },
+  "hive_usd": 0.2646,
+  "sats_hbd": 965.1038,
+  "sats_hive": 255.3665,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2655,
+  "btc_usd": 103615.8,
+  "sats_usd": 965.1038
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T09:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f3"
+  },
+  "hive_usd": 0.266,
+  "sats_hbd": 964.0237,
+  "sats_hive": 256.4303,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2671,
+  "btc_usd": 103731.89,
+  "sats_usd": 964.0237
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T12:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f4"
+  },
+  "hive_usd": 0.2702,
+  "sats_hbd": 964.8783,
+  "sats_hive": 260.7101,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2711,
+  "btc_usd": 103640.01,
+  "sats_usd": 964.8783
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T13:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f5"
+  },
+  "hive_usd": 0.2762,
+  "sats_hbd": 962.546,
+  "sats_hive": 265.8552,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2765,
+  "btc_usd": 103891.14,
+  "sats_usd": 962.546
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T14:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f6"
+  },
+  "hive_usd": 0.2748,
+  "sats_hbd": 964.2221,
+  "sats_hive": 264.9682,
+  "hbd_usd": 1,
+  "hive_hbd": 0.275,
+  "btc_usd": 103710.55,
+  "sats_usd": 964.2221
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T14:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f7"
+  },
+  "hive_usd": 0.2726,
+  "sats_hbd": 965.8102,
+  "sats_hive": 263.2799,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2726,
+  "btc_usd": 103540.01,
+  "sats_usd": 965.8102
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T15:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f8"
+  },
+  "hive_usd": 0.2737,
+  "sats_hbd": 960.7341,
+  "sats_hive": 262.9529,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2745,
+  "btc_usd": 104087.07,
+  "sats_usd": 960.7341
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T16:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258f9"
+  },
+  "hive_usd": 0.2741,
+  "sats_hbd": 959.8278,
+  "sats_hive": 263.0888,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2744,
+  "btc_usd": 104185.35,
+  "sats_usd": 959.8278
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T16:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258fa"
+  },
+  "hive_usd": 0.274,
+  "sats_hbd": 958.4237,
+  "sats_hive": 262.6081,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2743,
+  "btc_usd": 104337.99,
+  "sats_usd": 958.4237
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258fb"
+  },
+  "hive_usd": 0.2729,
+  "sats_hbd": 961.0985,
+  "sats_hive": 262.2838,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2742,
+  "btc_usd": 104047.61,
+  "sats_usd": 961.0985
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T16:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258fc"
+  },
+  "hive_usd": 0.2721,
+  "sats_hbd": 961.7036,
+  "sats_hive": 261.6796,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2721,
+  "btc_usd": 103982.14,
+  "sats_usd": 961.7036
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258fd"
+  },
+  "hive_usd": 0.2712,
+  "sats_hbd": 962.4038,
+  "sats_hive": 261.0039,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2719,
+  "btc_usd": 103906.49,
+  "sats_usd": 962.4038
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258fe"
+  },
+  "hive_usd": 0.2717,
+  "sats_hbd": 961.3312,
+  "sats_hive": 261.1937,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2719,
+  "btc_usd": 104022.42,
+  "sats_usd": 961.3312
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a258ff"
+  },
+  "hive_usd": 0.2708,
+  "sats_hbd": 962.0379,
+  "sats_hive": 260.5199,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2718,
+  "btc_usd": 103946.01,
+  "sats_usd": 962.0379
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4e7893f09545a25900"
+  },
+  "hive_usd": 0.2717,
+  "sats_hbd": 961.4825,
+  "sats_hive": 261.2348,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2717,
+  "btc_usd": 104006.05,
+  "sats_usd": 961.4825
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25901"
+  },
+  "hive_usd": 0.2713,
+  "sats_hbd": 963.0119,
+  "sats_hive": 261.2651,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2715,
+  "btc_usd": 103840.88,
+  "sats_usd": 963.0119
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T18:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25902"
+  },
+  "hive_usd": 0.2713,
+  "sats_hbd": 963.7067,
+  "sats_hive": 261.4536,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2716,
+  "btc_usd": 103766.01,
+  "sats_usd": 963.7067
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T19:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25903"
+  },
+  "hive_usd": 0.2712,
+  "sats_hbd": 964.1878,
+  "sats_hive": 261.4877,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2718,
+  "btc_usd": 103714.24,
+  "sats_usd": 964.1878
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T19:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25904"
+  },
+  "hive_usd": 0.2712,
+  "sats_hbd": 964.2085,
+  "sats_hive": 261.4933,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2715,
+  "btc_usd": 103712.01,
+  "sats_usd": 964.2085
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T20:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25905"
+  },
+  "hive_usd": 0.2743,
+  "sats_hbd": 962.1387,
+  "sats_hive": 263.9146,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2742,
+  "btc_usd": 103935.12,
+  "sats_usd": 962.1387
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T20:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25906"
+  },
+  "hive_usd": 0.2744,
+  "sats_hbd": 962.4064,
+  "sats_hive": 264.0843,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2742,
+  "btc_usd": 103906.21,
+  "sats_usd": 962.4064
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T20:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25907"
+  },
+  "hive_usd": 0.2732,
+  "sats_hbd": 962.8701,
+  "sats_hive": 263.0561,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2736,
+  "btc_usd": 103856.17,
+  "sats_usd": 962.8701
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T21:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25908"
+  },
+  "hive_usd": 0.2746,
+  "sats_hbd": 966.1835,
+  "sats_hive": 265.314,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2759,
+  "btc_usd": 103500.01,
+  "sats_usd": 966.1835
+},
+{
+  "timestamp": {
+    "$date": "2025-05-16T22:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25909"
+  },
+  "hive_usd": 0.2741,
+  "sats_hbd": 966.5666,
+  "sats_hive": 264.9359,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2736,
+  "btc_usd": 103458.99,
+  "sats_usd": 966.5666
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T00:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590a"
+  },
+  "hive_usd": 0.2752,
+  "sats_hbd": 969.199,
+  "sats_hive": 266.7236,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2749,
+  "btc_usd": 103177.99,
+  "sats_usd": 969.199
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T00:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590b"
+  },
+  "hive_usd": 0.2765,
+  "sats_hbd": 967.3449,
+  "sats_hive": 267.4709,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2767,
+  "btc_usd": 103375.74,
+  "sats_usd": 967.3449
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T01:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590c"
+  },
+  "hive_usd": 0.2724,
+  "sats_hbd": 971.6981,
+  "sats_hive": 264.6906,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2727,
+  "btc_usd": 102912.62,
+  "sats_usd": 971.6981
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T01:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590d"
+  },
+  "hive_usd": 0.268,
+  "sats_hbd": 973.6151,
+  "sats_hive": 260.9289,
+  "hbd_usd": 1,
+  "hive_hbd": 0.269,
+  "btc_usd": 102709.99,
+  "sats_usd": 973.6151
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T01:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590e"
+  },
+  "hive_usd": 0.2749,
+  "sats_hbd": 972.0416,
+  "sats_hive": 267.2142,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2753,
+  "btc_usd": 102876.26,
+  "sats_usd": 972.0416
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T03:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2590f"
+  },
+  "hive_usd": 0.2819,
+  "sats_hbd": 965.9658,
+  "sats_hive": 272.3058,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2816,
+  "btc_usd": 103523.33,
+  "sats_usd": 965.9658
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T05:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25910"
+  },
+  "hive_usd": 0.2786,
+  "sats_hbd": 965.2992,
+  "sats_hive": 268.9324,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2784,
+  "btc_usd": 103594.82,
+  "sats_usd": 965.2992
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T08:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25911"
+  },
+  "hive_usd": 0.2634,
+  "sats_hbd": 966.9992,
+  "sats_hive": 254.7076,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2647,
+  "btc_usd": 103412.7,
+  "sats_usd": 966.9992
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25912"
+  },
+  "hive_usd": 0.262,
+  "sats_hbd": 967.8989,
+  "sats_hive": 253.5895,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2619,
+  "btc_usd": 103316.58,
+  "sats_usd": 967.8989
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T09:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25913"
+  },
+  "hive_usd": 0.2602,
+  "sats_hbd": 969.2289,
+  "sats_hive": 252.1934,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2613,
+  "btc_usd": 103174.8,
+  "sats_usd": 969.2289
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T09:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25914"
+  },
+  "hive_usd": 0.2605,
+  "sats_hbd": 971.5354,
+  "sats_hive": 253.085,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2617,
+  "btc_usd": 102929.86,
+  "sats_usd": 971.5354
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T10:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25915"
+  },
+  "hive_usd": 0.2641,
+  "sats_hbd": 970.9602,
+  "sats_hive": 256.4306,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2649,
+  "btc_usd": 102990.83,
+  "sats_usd": 970.9602
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T14:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25916"
+  },
+  "hive_usd": 0.2575,
+  "sats_hbd": 970.1163,
+  "sats_hive": 249.805,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2577,
+  "btc_usd": 103080.42,
+  "sats_usd": 970.1163
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T15:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25917"
+  },
+  "hive_usd": 0.2603,
+  "sats_hbd": 970.212,
+  "sats_hive": 252.5462,
+  "hbd_usd": 1,
+  "hive_hbd": 0.261,
+  "btc_usd": 103070.26,
+  "sats_usd": 970.212
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25918"
+  },
+  "hive_usd": 0.2546,
+  "sats_hbd": 972.4974,
+  "sats_hive": 247.5978,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2567,
+  "btc_usd": 102828.04,
+  "sats_usd": 972.4974
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T16:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25919"
+  },
+  "hive_usd": 0.2538,
+  "sats_hbd": 972.6416,
+  "sats_hive": 246.8564,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2552,
+  "btc_usd": 102812.79,
+  "sats_usd": 972.6416
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T17:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591a"
+  },
+  "hive_usd": 0.2573,
+  "sats_hbd": 968.917,
+  "sats_hive": 249.3024,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2586,
+  "btc_usd": 103208.01,
+  "sats_usd": 968.917
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T18:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591b"
+  },
+  "hive_usd": 0.2571,
+  "sats_hbd": 969.3014,
+  "sats_hive": 249.2074,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2589,
+  "btc_usd": 103167.08,
+  "sats_usd": 969.3014
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591c"
+  },
+  "hive_usd": 0.2542,
+  "sats_hbd": 969.0076,
+  "sats_hive": 246.3217,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2557,
+  "btc_usd": 103198.36,
+  "sats_usd": 969.0076
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T20:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591d"
+  },
+  "hive_usd": 0.2541,
+  "sats_hbd": 968.9604,
+  "sats_hive": 246.2128,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2553,
+  "btc_usd": 103203.39,
+  "sats_usd": 968.9604
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T21:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591e"
+  },
+  "hive_usd": 0.2567,
+  "sats_hbd": 967.742,
+  "sats_hive": 248.4194,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2585,
+  "btc_usd": 103333.33,
+  "sats_usd": 967.742
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T23:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2591f"
+  },
+  "hive_usd": 0.2574,
+  "sats_hbd": 969.8458,
+  "sats_hive": 249.6383,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2586,
+  "btc_usd": 103109.17,
+  "sats_usd": 969.8458
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T23:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25920"
+  },
+  "hive_usd": 0.258,
+  "sats_hbd": 969.3528,
+  "sats_hive": 250.093,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2592,
+  "btc_usd": 103161.61,
+  "sats_usd": 969.3528
+},
+{
+  "timestamp": {
+    "$date": "2025-05-17T23:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25921"
+  },
+  "hive_usd": 0.258,
+  "sats_hbd": 969,
+  "sats_hive": 250.002,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2592,
+  "btc_usd": 103199.17,
+  "sats_usd": 969
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T00:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25922"
+  },
+  "hive_usd": 0.2558,
+  "sats_hbd": 969.0919,
+  "sats_hive": 247.8937,
+  "hbd_usd": 1,
+  "hive_hbd": 0.257,
+  "btc_usd": 103189.39,
+  "sats_usd": 969.0919
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T00:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25923"
+  },
+  "hive_usd": 0.2548,
+  "sats_hbd": 968.4835,
+  "sats_hive": 246.7696,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2569,
+  "btc_usd": 103254.21,
+  "sats_usd": 968.4835
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T00:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25924"
+  },
+  "hive_usd": 0.2568,
+  "sats_hbd": 967.6981,
+  "sats_hive": 248.5049,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2578,
+  "btc_usd": 103338.01,
+  "sats_usd": 967.6981
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T01:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25925"
+  },
+  "hive_usd": 0.2629,
+  "sats_hbd": 968.2867,
+  "sats_hive": 254.5626,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2629,
+  "btc_usd": 103275.2,
+  "sats_usd": 968.2867
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T03:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25926"
+  },
+  "hive_usd": 0.2621,
+  "sats_hbd": 967.538,
+  "sats_hive": 253.5917,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2631,
+  "btc_usd": 103355.11,
+  "sats_usd": 967.538
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T03:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25927"
+  },
+  "hive_usd": 0.2595,
+  "sats_hbd": 968.4785,
+  "sats_hive": 251.3202,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2604,
+  "btc_usd": 103254.74,
+  "sats_usd": 968.4785
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T04:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25928"
+  },
+  "hive_usd": 0.2633,
+  "sats_hbd": 967.3687,
+  "sats_hive": 254.7082,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2629,
+  "btc_usd": 103373.2,
+  "sats_usd": 967.3687
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T08:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25929"
+  },
+  "hive_usd": 0.2716,
+  "sats_hbd": 962.3301,
+  "sats_hive": 261.3688,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2714,
+  "btc_usd": 103914.45,
+  "sats_usd": 962.3301
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592a"
+  },
+  "hive_usd": 0.2731,
+  "sats_hbd": 961.8158,
+  "sats_hive": 262.6719,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 103970.01,
+  "sats_usd": 961.8158
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T10:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592b"
+  },
+  "hive_usd": 0.2704,
+  "sats_hbd": 962.3431,
+  "sats_hive": 260.2176,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2706,
+  "btc_usd": 103913.04,
+  "sats_usd": 962.3431
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T11:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592c"
+  },
+  "hive_usd": 0.268,
+  "sats_hbd": 962.2767,
+  "sats_hive": 257.8902,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2689,
+  "btc_usd": 103920.21,
+  "sats_usd": 962.2767
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T12:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592d"
+  },
+  "hive_usd": 0.266,
+  "sats_hbd": 962.4208,
+  "sats_hive": 256.0039,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2663,
+  "btc_usd": 103904.65,
+  "sats_usd": 962.4208
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T14:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592e"
+  },
+  "hive_usd": 0.268,
+  "sats_hbd": 954.14,
+  "sats_hive": 255.7095,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2684,
+  "btc_usd": 104806.42,
+  "sats_usd": 954.14
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T14:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2592f"
+  },
+  "hive_usd": 0.2683,
+  "sats_hbd": 953.8818,
+  "sats_hive": 255.9265,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2686,
+  "btc_usd": 104834.79,
+  "sats_usd": 953.8818
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T16:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25930"
+  },
+  "hive_usd": 0.2697,
+  "sats_hbd": 948.5865,
+  "sats_hive": 255.8338,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2697,
+  "btc_usd": 105420.01,
+  "sats_usd": 948.5865
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T16:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25931"
+  },
+  "hive_usd": 0.269,
+  "sats_hbd": 949.2483,
+  "sats_hive": 255.3478,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2697,
+  "btc_usd": 105346.52,
+  "sats_usd": 949.2483
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25932"
+  },
+  "hive_usd": 0.2685,
+  "sats_hbd": 948.938,
+  "sats_hive": 254.7899,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2695,
+  "btc_usd": 105380.96,
+  "sats_usd": 948.938
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T16:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25933"
+  },
+  "hive_usd": 0.2688,
+  "sats_hbd": 946.5111,
+  "sats_hive": 254.4222,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2686,
+  "btc_usd": 105651.17,
+  "sats_usd": 946.5111
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T17:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25934"
+  },
+  "hive_usd": 0.2661,
+  "sats_hbd": 950.209,
+  "sats_hive": 252.8506,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2672,
+  "btc_usd": 105240.01,
+  "sats_usd": 950.209
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T18:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25935"
+  },
+  "hive_usd": 0.2628,
+  "sats_hbd": 956.5658,
+  "sats_hive": 251.3855,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2636,
+  "btc_usd": 104540.64,
+  "sats_usd": 956.5658
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25936"
+  },
+  "hive_usd": 0.2601,
+  "sats_hbd": 959.6024,
+  "sats_hive": 249.5926,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2604,
+  "btc_usd": 104209.83,
+  "sats_usd": 959.6024
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T20:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25937"
+  },
+  "hive_usd": 0.2572,
+  "sats_hbd": 963.8184,
+  "sats_hive": 247.8941,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2575,
+  "btc_usd": 103753.99,
+  "sats_usd": 963.8184
+},
+{
+  "timestamp": {
+    "$date": "2025-05-18T22:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25938"
+  },
+  "hive_usd": 0.2622,
+  "sats_hbd": 960.3221,
+  "sats_hive": 251.7965,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2624,
+  "btc_usd": 104131.73,
+  "sats_usd": 960.3221
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T02:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25939"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 955.7427,
+  "sats_hive": 246.6772,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2592,
+  "btc_usd": 104630.67,
+  "sats_usd": 955.7427
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T03:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593a"
+  },
+  "hive_usd": 0.2582,
+  "sats_hbd": 956.247,
+  "sats_hive": 246.903,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2583,
+  "btc_usd": 104575.49,
+  "sats_usd": 956.247
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T03:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593b"
+  },
+  "hive_usd": 0.2571,
+  "sats_hbd": 960.3734,
+  "sats_hive": 246.912,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2582,
+  "btc_usd": 104126.17,
+  "sats_usd": 960.3734
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T03:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593c"
+  },
+  "hive_usd": 0.2545,
+  "sats_hbd": 962.7638,
+  "sats_hive": 245.0234,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2554,
+  "btc_usd": 103867.64,
+  "sats_usd": 962.7638
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T04:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593d"
+  },
+  "hive_usd": 0.2541,
+  "sats_hbd": 967.9144,
+  "sats_hive": 245.9471,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2544,
+  "btc_usd": 103314.92,
+  "sats_usd": 967.9144
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T04:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593e"
+  },
+  "hive_usd": 0.2526,
+  "sats_hbd": 966.4457,
+  "sats_hive": 244.1242,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2535,
+  "btc_usd": 103471.93,
+  "sats_usd": 966.4457
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T06:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2593f"
+  },
+  "hive_usd": 0.2512,
+  "sats_hbd": 971.3575,
+  "sats_hive": 244.005,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2514,
+  "btc_usd": 102948.71,
+  "sats_usd": 971.3575
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T06:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25940"
+  },
+  "hive_usd": 0.2483,
+  "sats_hbd": 976.9135,
+  "sats_hive": 242.5676,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2489,
+  "btc_usd": 102363.21,
+  "sats_usd": 976.9135
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T08:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25941"
+  },
+  "hive_usd": 0.2492,
+  "sats_hbd": 968.7709,
+  "sats_hive": 241.4177,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2504,
+  "btc_usd": 103223.58,
+  "sats_usd": 968.7709
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T08:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25942"
+  },
+  "hive_usd": 0.2495,
+  "sats_hbd": 969.0767,
+  "sats_hive": 241.7846,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2503,
+  "btc_usd": 103191.01,
+  "sats_usd": 969.0767
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T08:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25943"
+  },
+  "hive_usd": 0.249,
+  "sats_hbd": 970.0816,
+  "sats_hive": 241.5503,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2496,
+  "btc_usd": 103084.11,
+  "sats_usd": 970.0816
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25944"
+  },
+  "hive_usd": 0.248,
+  "sats_hbd": 970.5185,
+  "sats_hive": 240.6886,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2494,
+  "btc_usd": 103037.71,
+  "sats_usd": 970.5185
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T09:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25945"
+  },
+  "hive_usd": 0.2489,
+  "sats_hbd": 969.5841,
+  "sats_hive": 241.3295,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2493,
+  "btc_usd": 103137.01,
+  "sats_usd": 969.5841
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T09:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25946"
+  },
+  "hive_usd": 0.2488,
+  "sats_hbd": 968.8726,
+  "sats_hive": 241.0555,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2493,
+  "btc_usd": 103212.74,
+  "sats_usd": 968.8726
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T12:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25947"
+  },
+  "hive_usd": 0.2476,
+  "sats_hbd": 976.3382,
+  "sats_hive": 241.7414,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2488,
+  "btc_usd": 102423.52,
+  "sats_usd": 976.3382
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T13:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25948"
+  },
+  "hive_usd": 0.2495,
+  "sats_hbd": 975.4588,
+  "sats_hive": 243.377,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2497,
+  "btc_usd": 102515.86,
+  "sats_usd": 975.4588
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T13:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25949"
+  },
+  "hive_usd": 0.251,
+  "sats_hbd": 971.8402,
+  "sats_hive": 243.9319,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2519,
+  "btc_usd": 102897.57,
+  "sats_usd": 971.8402
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T13:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594a"
+  },
+  "hive_usd": 0.2516,
+  "sats_hbd": 969.4627,
+  "sats_hive": 243.9168,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2528,
+  "btc_usd": 103149.92,
+  "sats_usd": 969.4627
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T14:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594b"
+  },
+  "hive_usd": 0.2511,
+  "sats_hbd": 968.5874,
+  "sats_hive": 243.2123,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2525,
+  "btc_usd": 103243.14,
+  "sats_usd": 968.5874
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T14:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594c"
+  },
+  "hive_usd": 0.2525,
+  "sats_hbd": 965.7004,
+  "sats_hive": 243.8393,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2527,
+  "btc_usd": 103551.79,
+  "sats_usd": 965.7004
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594d"
+  },
+  "hive_usd": 0.2535,
+  "sats_hbd": 954.2166,
+  "sats_hive": 241.8939,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2545,
+  "btc_usd": 104798.01,
+  "sats_usd": 954.2166
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T18:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594e"
+  },
+  "hive_usd": 0.2562,
+  "sats_hbd": 948.5647,
+  "sats_hive": 243.0223,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2568,
+  "btc_usd": 105422.43,
+  "sats_usd": 948.5647
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T18:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2594f"
+  },
+  "hive_usd": 0.255,
+  "sats_hbd": 950.7834,
+  "sats_hive": 242.4498,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2566,
+  "btc_usd": 105176.43,
+  "sats_usd": 950.7834
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T18:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25950"
+  },
+  "hive_usd": 0.2544,
+  "sats_hbd": 954.6333,
+  "sats_hive": 242.8587,
+  "hbd_usd": 1,
+  "hive_hbd": 0.256,
+  "btc_usd": 104752.27,
+  "sats_usd": 954.6333
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T18:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25951"
+  },
+  "hive_usd": 0.2554,
+  "sats_hbd": 953.4748,
+  "sats_hive": 243.5175,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2562,
+  "btc_usd": 104879.54,
+  "sats_usd": 953.4748
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T19:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25952"
+  },
+  "hive_usd": 0.2545,
+  "sats_hbd": 955.1097,
+  "sats_hive": 243.0754,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2553,
+  "btc_usd": 104700.01,
+  "sats_usd": 955.1097
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T19:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25953"
+  },
+  "hive_usd": 0.255,
+  "sats_hbd": 952.813,
+  "sats_hive": 242.9673,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2555,
+  "btc_usd": 104952.39,
+  "sats_usd": 952.813
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25954"
+  },
+  "hive_usd": 0.2555,
+  "sats_hbd": 947.4184,
+  "sats_hive": 242.0654,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2564,
+  "btc_usd": 105549.99,
+  "sats_usd": 947.4184
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T20:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25955"
+  },
+  "hive_usd": 0.2556,
+  "sats_hbd": 949.0833,
+  "sats_hive": 242.5857,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2569,
+  "btc_usd": 105364.83,
+  "sats_usd": 949.0833
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T21:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25956"
+  },
+  "hive_usd": 0.2554,
+  "sats_hbd": 948.2759,
+  "sats_hive": 242.1897,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2562,
+  "btc_usd": 105454.54,
+  "sats_usd": 948.2759
+},
+{
+  "timestamp": {
+    "$date": "2025-05-19T21:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25957"
+  },
+  "hive_usd": 0.2544,
+  "sats_hbd": 951.5247,
+  "sats_hive": 242.0679,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2554,
+  "btc_usd": 105094.49,
+  "sats_usd": 951.5247
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T00:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25958"
+  },
+  "hive_usd": 0.2564,
+  "sats_hbd": 946.401,
+  "sats_hive": 242.6572,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2567,
+  "btc_usd": 105663.46,
+  "sats_usd": 946.401
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T01:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25959"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 943.3963,
+  "sats_hive": 243.4906,
+  "hbd_usd": 1,
+  "hive_hbd": 0.258,
+  "btc_usd": 105999.99,
+  "sats_usd": 943.3963
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T03:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595a"
+  },
+  "hive_usd": 0.2604,
+  "sats_hbd": 942.0435,
+  "sats_hive": 245.3081,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2601,
+  "btc_usd": 106152.21,
+  "sats_usd": 942.0435
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T03:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595b"
+  },
+  "hive_usd": 0.26,
+  "sats_hbd": 947.3885,
+  "sats_hive": 246.321,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2598,
+  "btc_usd": 105553.32,
+  "sats_usd": 947.3885
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T04:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595c"
+  },
+  "hive_usd": 0.2611,
+  "sats_hbd": 946.6438,
+  "sats_hive": 247.1687,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2607,
+  "btc_usd": 105636.36,
+  "sats_usd": 946.6438
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T04:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595d"
+  },
+  "hive_usd": 0.2606,
+  "sats_hbd": 946.2527,
+  "sats_hive": 246.5935,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2603,
+  "btc_usd": 105680.01,
+  "sats_usd": 946.2527
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T04:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595e"
+  },
+  "hive_usd": 0.2607,
+  "sats_hbd": 943.8201,
+  "sats_hive": 246.0539,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 105952.39,
+  "sats_usd": 943.8201
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T04:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2595f"
+  },
+  "hive_usd": 0.2606,
+  "sats_hbd": 943.449,
+  "sats_hive": 245.8628,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 105994.07,
+  "sats_usd": 943.449
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T05:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25960"
+  },
+  "hive_usd": 0.2611,
+  "sats_hbd": 940.082,
+  "sats_hive": 245.4554,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2605,
+  "btc_usd": 106373.7,
+  "sats_usd": 940.082
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25961"
+  },
+  "hive_usd": 0.2586,
+  "sats_hbd": 949.6945,
+  "sats_hive": 245.591,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2579,
+  "btc_usd": 105297.02,
+  "sats_usd": 949.6945
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T12:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25962"
+  },
+  "hive_usd": 0.254,
+  "sats_hbd": 955.1365,
+  "sats_hive": 242.6047,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2547,
+  "btc_usd": 104697.08,
+  "sats_usd": 955.1365
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T12:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25963"
+  },
+  "hive_usd": 0.2544,
+  "sats_hbd": 954.9031,
+  "sats_hive": 242.9273,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2546,
+  "btc_usd": 104722.67,
+  "sats_usd": 954.9031
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T12:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25964"
+  },
+  "hive_usd": 0.2541,
+  "sats_hbd": 955.2372,
+  "sats_hive": 242.7258,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2544,
+  "btc_usd": 104686.04,
+  "sats_usd": 955.2372
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T15:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25965"
+  },
+  "hive_usd": 0.2549,
+  "sats_hbd": 953.5435,
+  "sats_hive": 243.0582,
+  "hbd_usd": 1,
+  "hive_hbd": 0.255,
+  "btc_usd": 104871.99,
+  "sats_usd": 953.5435
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T15:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25966"
+  },
+  "hive_usd": 0.2542,
+  "sats_hbd": 955.2799,
+  "sats_hive": 242.8322,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2552,
+  "btc_usd": 104681.36,
+  "sats_usd": 955.2799
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T16:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25967"
+  },
+  "hive_usd": 0.2551,
+  "sats_hbd": 950.0873,
+  "sats_hive": 242.3673,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2561,
+  "btc_usd": 105253.49,
+  "sats_usd": 950.0873
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25968"
+  },
+  "hive_usd": 0.2555,
+  "sats_hbd": 948.9276,
+  "sats_hive": 242.451,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2563,
+  "btc_usd": 105382.12,
+  "sats_usd": 948.9276
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T19:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25969"
+  },
+  "hive_usd": 0.2559,
+  "sats_hbd": 939.9266,
+  "sats_hive": 240.5272,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2556,
+  "btc_usd": 106391.29,
+  "sats_usd": 939.9266
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596a"
+  },
+  "hive_usd": 0.2577,
+  "sats_hbd": 936.0298,
+  "sats_hive": 241.2149,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2572,
+  "btc_usd": 106834.21,
+  "sats_usd": 936.0298
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T22:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596b"
+  },
+  "hive_usd": 0.2591,
+  "sats_hbd": 937.8472,
+  "sats_hive": 242.9962,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2591,
+  "btc_usd": 106627.18,
+  "sats_usd": 937.8472
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T22:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596c"
+  },
+  "hive_usd": 0.2583,
+  "sats_hbd": 940.6646,
+  "sats_hive": 242.9737,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2588,
+  "btc_usd": 106307.82,
+  "sats_usd": 940.6646
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T22:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596d"
+  },
+  "hive_usd": 0.2573,
+  "sats_hbd": 940.5729,
+  "sats_hive": 242.0094,
+  "hbd_usd": 1,
+  "hive_hbd": 0.258,
+  "btc_usd": 106318.18,
+  "sats_usd": 940.5729
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T22:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596e"
+  },
+  "hive_usd": 0.258,
+  "sats_hbd": 938.5666,
+  "sats_hive": 242.1502,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2578,
+  "btc_usd": 106545.45,
+  "sats_usd": 938.5666
+},
+{
+  "timestamp": {
+    "$date": "2025-05-20T23:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2596f"
+  },
+  "hive_usd": 0.2588,
+  "sats_hbd": 934.1835,
+  "sats_hive": 241.7667,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2587,
+  "btc_usd": 107045.35,
+  "sats_usd": 934.1835
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T00:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25970"
+  },
+  "hive_usd": 0.2576,
+  "sats_hbd": 936.8991,
+  "sats_hive": 241.3452,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2586,
+  "btc_usd": 106735.08,
+  "sats_usd": 936.8991
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T02:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25971"
+  },
+  "hive_usd": 0.2561,
+  "sats_hbd": 937.0796,
+  "sats_hive": 239.9861,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2559,
+  "btc_usd": 106714.52,
+  "sats_usd": 937.0796
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T03:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25972"
+  },
+  "hive_usd": 0.2576,
+  "sats_hbd": 934.7633,
+  "sats_hive": 240.795,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2574,
+  "btc_usd": 106978.95,
+  "sats_usd": 934.7633
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T04:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25973"
+  },
+  "hive_usd": 0.2577,
+  "sats_hbd": 936.0884,
+  "sats_hive": 241.23,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2595,
+  "btc_usd": 106827.52,
+  "sats_usd": 936.0884
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T04:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25974"
+  },
+  "hive_usd": 0.2591,
+  "sats_hbd": 931.0894,
+  "sats_hive": 241.2453,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2601,
+  "btc_usd": 107401.07,
+  "sats_usd": 931.0894
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T06:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25975"
+  },
+  "hive_usd": 0.26,
+  "sats_hbd": 927.7198,
+  "sats_hive": 241.2071,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2605,
+  "btc_usd": 107791.17,
+  "sats_usd": 927.7198
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T07:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25976"
+  },
+  "hive_usd": 0.2584,
+  "sats_hbd": 933.6032,
+  "sats_hive": 241.2431,
+  "hbd_usd": 1,
+  "hive_hbd": 0.26,
+  "btc_usd": 107111.89,
+  "sats_usd": 933.6032
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25977"
+  },
+  "hive_usd": 0.2577,
+  "sats_hbd": 939.1886,
+  "sats_hive": 242.0289,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2586,
+  "btc_usd": 106474.89,
+  "sats_usd": 939.1886
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T13:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25978"
+  },
+  "hive_usd": 0.2585,
+  "sats_hbd": 936.9845,
+  "sats_hive": 242.2105,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2589,
+  "btc_usd": 106725.35,
+  "sats_usd": 936.9845
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T14:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25979"
+  },
+  "hive_usd": 0.2597,
+  "sats_hbd": 932.4358,
+  "sats_hive": 242.1536,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2599,
+  "btc_usd": 107245.99,
+  "sats_usd": 932.4358
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T14:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597a"
+  },
+  "hive_usd": 0.2609,
+  "sats_hbd": 918.2736,
+  "sats_hive": 239.5776,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 108900.01,
+  "sats_usd": 918.2736
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T15:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597b"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 915.5003,
+  "sats_hive": 238.9456,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 109229.89,
+  "sats_usd": 915.5003
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T15:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597c"
+  },
+  "hive_usd": 0.2607,
+  "sats_hbd": 919.1243,
+  "sats_hive": 239.6157,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 108799.21,
+  "sats_usd": 919.1243
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T15:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597d"
+  },
+  "hive_usd": 0.2609,
+  "sats_hbd": 917.8007,
+  "sats_hive": 239.4542,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2607,
+  "btc_usd": 108956.12,
+  "sats_usd": 917.8007
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T16:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597e"
+  },
+  "hive_usd": 0.2615,
+  "sats_hbd": 917.6696,
+  "sats_hive": 239.9706,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2614,
+  "btc_usd": 108971.68,
+  "sats_usd": 917.6696
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2597f"
+  },
+  "hive_usd": 0.2658,
+  "sats_hbd": 913.4822,
+  "sats_hive": 242.8036,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2657,
+  "btc_usd": 109471.21,
+  "sats_usd": 913.4822
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T16:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25980"
+  },
+  "hive_usd": 0.2656,
+  "sats_hbd": 912.8657,
+  "sats_hive": 242.4571,
+  "hbd_usd": 1,
+  "hive_hbd": 0.266,
+  "btc_usd": 109545.14,
+  "sats_usd": 912.8657
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T17:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25981"
+  },
+  "hive_usd": 0.2591,
+  "sats_hbd": 936.5961,
+  "sats_hive": 242.672,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2589,
+  "btc_usd": 106769.61,
+  "sats_usd": 936.5961
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T19:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25982"
+  },
+  "hive_usd": 0.2603,
+  "sats_hbd": 931.6191,
+  "sats_hive": 242.5004,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2606,
+  "btc_usd": 107340.01,
+  "sats_usd": 931.6191
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25983"
+  },
+  "hive_usd": 0.2612,
+  "sats_hbd": 923.0271,
+  "sats_hive": 241.0947,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 108339.18,
+  "sats_usd": 923.0271
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T20:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25984"
+  },
+  "hive_usd": 0.2609,
+  "sats_hbd": 922.3824,
+  "sats_hive": 240.6496,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2609,
+  "btc_usd": 108414.9,
+  "sats_usd": 922.3824
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T20:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25985"
+  },
+  "hive_usd": 0.2607,
+  "sats_hbd": 923.1845,
+  "sats_hive": 240.6742,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2611,
+  "btc_usd": 108320.71,
+  "sats_usd": 923.1845
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T20:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25986"
+  },
+  "hive_usd": 0.2603,
+  "sats_hbd": 924.8195,
+  "sats_hive": 240.7305,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 108129.21,
+  "sats_usd": 924.8195
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T21:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25987"
+  },
+  "hive_usd": 0.2603,
+  "sats_hbd": 924.4319,
+  "sats_hive": 240.6296,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2612,
+  "btc_usd": 108174.54,
+  "sats_usd": 924.4319
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T22:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25988"
+  },
+  "hive_usd": 0.2611,
+  "sats_hbd": 921.0241,
+  "sats_hive": 240.4794,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2613,
+  "btc_usd": 108574.79,
+  "sats_usd": 921.0241
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T22:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25989"
+  },
+  "hive_usd": 0.2607,
+  "sats_hbd": 919.6332,
+  "sats_hive": 239.7484,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2608,
+  "btc_usd": 108739.01,
+  "sats_usd": 919.6332
+},
+{
+  "timestamp": {
+    "$date": "2025-05-21T23:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598a"
+  },
+  "hive_usd": 0.2629,
+  "sats_hbd": 913.0183,
+  "sats_hive": 240.0325,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2635,
+  "btc_usd": 109526.83,
+  "sats_usd": 913.0183
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T01:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598b"
+  },
+  "hive_usd": 0.2649,
+  "sats_hbd": 907.2763,
+  "sats_hive": 240.3375,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2646,
+  "btc_usd": 110220.01,
+  "sats_usd": 907.2763
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T02:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598c"
+  },
+  "hive_usd": 0.2652,
+  "sats_hbd": 903.826,
+  "sats_hive": 239.6946,
+  "hbd_usd": 1,
+  "hive_hbd": 0.265,
+  "btc_usd": 110640.77,
+  "sats_usd": 903.826
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T06:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598d"
+  },
+  "hive_usd": 0.268,
+  "sats_hbd": 900.9822,
+  "sats_hive": 241.4632,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2673,
+  "btc_usd": 110989.99,
+  "sats_usd": 900.9822
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T06:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598e"
+  },
+  "hive_usd": 0.2686,
+  "sats_hbd": 902.0773,
+  "sats_hive": 242.298,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2677,
+  "btc_usd": 110855.24,
+  "sats_usd": 902.0773
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T07:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2598f"
+  },
+  "hive_usd": 0.2686,
+  "sats_hbd": 900.3279,
+  "sats_hive": 241.8281,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2682,
+  "btc_usd": 111070.64,
+  "sats_usd": 900.3279
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T08:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25990"
+  },
+  "hive_usd": 0.2701,
+  "sats_hbd": 904.3964,
+  "sats_hive": 244.2775,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2695,
+  "btc_usd": 110570.98,
+  "sats_usd": 904.3964
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25991"
+  },
+  "hive_usd": 0.2702,
+  "sats_hbd": 905.099,
+  "sats_hive": 244.5578,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2703,
+  "btc_usd": 110485.15,
+  "sats_usd": 905.099
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T09:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25992"
+  },
+  "hive_usd": 0.2714,
+  "sats_hbd": 903.6688,
+  "sats_hive": 245.2557,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2703,
+  "btc_usd": 110660.01,
+  "sats_usd": 903.6688
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T09:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25993"
+  },
+  "hive_usd": 0.2716,
+  "sats_hbd": 903.8773,
+  "sats_hive": 245.4931,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2712,
+  "btc_usd": 110634.49,
+  "sats_usd": 903.8773
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T09:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25994"
+  },
+  "hive_usd": 0.2705,
+  "sats_hbd": 904.028,
+  "sats_hive": 244.5396,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2706,
+  "btc_usd": 110616.04,
+  "sats_usd": 904.028
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T10:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25995"
+  },
+  "hive_usd": 0.271,
+  "sats_hbd": 902.4281,
+  "sats_hive": 244.558,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2706,
+  "btc_usd": 110812.15,
+  "sats_usd": 902.4281
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T11:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25996"
+  },
+  "hive_usd": 0.2704,
+  "sats_hbd": 903.8967,
+  "sats_hive": 244.4137,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2699,
+  "btc_usd": 110632.11,
+  "sats_usd": 903.8967
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T15:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25997"
+  },
+  "hive_usd": 0.2717,
+  "sats_hbd": 901.8272,
+  "sats_hive": 245.0264,
+  "hbd_usd": 1,
+  "hive_hbd": 0.271,
+  "btc_usd": 110885.99,
+  "sats_usd": 901.8272
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25998"
+  },
+  "hive_usd": 0.2721,
+  "sats_hbd": 899.2176,
+  "sats_hive": 244.6771,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2723,
+  "btc_usd": 111207.79,
+  "sats_usd": 899.2176
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T17:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a25999"
+  },
+  "hive_usd": 0.2732,
+  "sats_hbd": 897.7024,
+  "sats_hive": 245.2523,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2725,
+  "btc_usd": 111395.49,
+  "sats_usd": 897.7024
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T17:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599a"
+  },
+  "hive_usd": 0.2733,
+  "sats_hbd": 895.193,
+  "sats_hive": 244.6562,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2725,
+  "btc_usd": 111707.76,
+  "sats_usd": 895.193
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T17:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599b"
+  },
+  "hive_usd": 0.2729,
+  "sats_hbd": 896.6518,
+  "sats_hive": 244.6963,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2727,
+  "btc_usd": 111526.01,
+  "sats_usd": 896.6518
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T18:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599c"
+  },
+  "hive_usd": 0.2727,
+  "sats_hbd": 897.6846,
+  "sats_hive": 244.7986,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2724,
+  "btc_usd": 111397.7,
+  "sats_usd": 897.6846
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T18:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599d"
+  },
+  "hive_usd": 0.273,
+  "sats_hbd": 895.9045,
+  "sats_hive": 244.5819,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2731,
+  "btc_usd": 111619.04,
+  "sats_usd": 895.9045
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T18:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599e"
+  },
+  "hive_usd": 0.2731,
+  "sats_hbd": 894.8547,
+  "sats_hive": 244.3848,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2731,
+  "btc_usd": 111749.99,
+  "sats_usd": 894.8547
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T18:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a2599f"
+  },
+  "hive_usd": 0.273,
+  "sats_hbd": 894.3867,
+  "sats_hive": 244.1676,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2731,
+  "btc_usd": 111808.46,
+  "sats_usd": 894.3867
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T18:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a0"
+  },
+  "hive_usd": 0.2732,
+  "sats_hbd": 894.2458,
+  "sats_hive": 244.3079,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 111826.08,
+  "sats_usd": 894.2458
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T19:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a1"
+  },
+  "hive_usd": 0.2729,
+  "sats_hbd": 893.8734,
+  "sats_hive": 243.938,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 111872.67,
+  "sats_usd": 893.8734
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T19:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a2"
+  },
+  "hive_usd": 0.2724,
+  "sats_hbd": 897.7362,
+  "sats_hive": 244.5433,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 111391.3,
+  "sats_usd": 897.7362
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T19:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a3"
+  },
+  "hive_usd": 0.2722,
+  "sats_hbd": 899.5009,
+  "sats_hive": 244.8442,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 111172.76,
+  "sats_usd": 899.5009
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T20:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a4"
+  },
+  "hive_usd": 0.2721,
+  "sats_hbd": 900.6064,
+  "sats_hive": 245.055,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2732,
+  "btc_usd": 111036.3,
+  "sats_usd": 900.6064
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T22:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a5"
+  },
+  "hive_usd": 0.2713,
+  "sats_hbd": 900.2407,
+  "sats_hive": 244.2353,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2716,
+  "btc_usd": 111081.4,
+  "sats_usd": 900.2407
+},
+{
+  "timestamp": {
+    "$date": "2025-05-22T22:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a6"
+  },
+  "hive_usd": 0.271,
+  "sats_hbd": 900.2743,
+  "sats_hive": 243.9743,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2717,
+  "btc_usd": 111077.26,
+  "sats_usd": 900.2743
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T00:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a7"
+  },
+  "hive_usd": 0.2727,
+  "sats_hbd": 895.4051,
+  "sats_hive": 244.177,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2733,
+  "btc_usd": 111681.29,
+  "sats_usd": 895.4051
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T03:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a8"
+  },
+  "hive_usd": 0.277,
+  "sats_hbd": 899.1574,
+  "sats_hive": 249.0666,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2767,
+  "btc_usd": 111215.23,
+  "sats_usd": 899.1574
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T03:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259a9"
+  },
+  "hive_usd": 0.278,
+  "sats_hbd": 899.7661,
+  "sats_hive": 250.135,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2782,
+  "btc_usd": 111139.99,
+  "sats_usd": 899.7661
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T04:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259aa"
+  },
+  "hive_usd": 0.2752,
+  "sats_hbd": 903.1199,
+  "sats_hive": 248.5386,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2757,
+  "btc_usd": 110727.27,
+  "sats_usd": 903.1199
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T07:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ab"
+  },
+  "hive_usd": 0.2726,
+  "sats_hbd": 902.8926,
+  "sats_hive": 246.1285,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2736,
+  "btc_usd": 110755.14,
+  "sats_usd": 902.8926
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ac"
+  },
+  "hive_usd": 0.2754,
+  "sats_hbd": 901.2108,
+  "sats_hive": 248.1935,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2755,
+  "btc_usd": 110961.83,
+  "sats_usd": 901.2108
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T11:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ad"
+  },
+  "hive_usd": 0.2655,
+  "sats_hbd": 912.367,
+  "sats_hive": 242.2334,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2671,
+  "btc_usd": 109605.02,
+  "sats_usd": 912.367
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T12:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ae"
+  },
+  "hive_usd": 0.263,
+  "sats_hbd": 919.2184,
+  "sats_hive": 241.7544,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2635,
+  "btc_usd": 108788.07,
+  "sats_usd": 919.2184
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T12:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259af"
+  },
+  "hive_usd": 0.2631,
+  "sats_hbd": 921.7439,
+  "sats_hive": 242.5108,
+  "hbd_usd": 1,
+  "hive_hbd": 0.264,
+  "btc_usd": 108490.01,
+  "sats_usd": 921.7439
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T14:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b0"
+  },
+  "hive_usd": 0.2686,
+  "sats_hbd": 910.3521,
+  "sats_hive": 244.5206,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2697,
+  "btc_usd": 109847.61,
+  "sats_usd": 910.3521
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T15:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b1"
+  },
+  "hive_usd": 0.2676,
+  "sats_hbd": 915.2023,
+  "sats_hive": 244.9081,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2685,
+  "btc_usd": 109265.46,
+  "sats_usd": 915.2023
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b2"
+  },
+  "hive_usd": 0.2678,
+  "sats_hbd": 918.6955,
+  "sats_hive": 246.0267,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2681,
+  "btc_usd": 108849.99,
+  "sats_usd": 918.6955
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T18:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b3"
+  },
+  "hive_usd": 0.2672,
+  "sats_hbd": 918.1728,
+  "sats_hive": 245.3358,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2681,
+  "btc_usd": 108911.96,
+  "sats_usd": 918.1728
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T18:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b4"
+  },
+  "hive_usd": 0.267,
+  "sats_hbd": 918.5252,
+  "sats_hive": 245.2462,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2679,
+  "btc_usd": 108870.17,
+  "sats_usd": 918.5252
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T19:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b5"
+  },
+  "hive_usd": 0.2666,
+  "sats_hbd": 916.874,
+  "sats_hive": 244.4386,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2679,
+  "btc_usd": 109066.24,
+  "sats_usd": 916.874
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T19:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b6"
+  },
+  "hive_usd": 0.2665,
+  "sats_hbd": 918.0004,
+  "sats_hive": 244.6471,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2679,
+  "btc_usd": 108932.42,
+  "sats_usd": 918.0004
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T19:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b7"
+  },
+  "hive_usd": 0.2663,
+  "sats_hbd": 917.7269,
+  "sats_hive": 244.3907,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2675,
+  "btc_usd": 108964.88,
+  "sats_usd": 917.7269
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T19:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b8"
+  },
+  "hive_usd": 0.2663,
+  "sats_hbd": 918.4837,
+  "sats_hive": 244.5922,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2675,
+  "btc_usd": 108875.1,
+  "sats_usd": 918.4837
+},
+{
+  "timestamp": {
+    "$date": "2025-05-23T22:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259b9"
+  },
+  "hive_usd": 0.2629,
+  "sats_hbd": 923.6397,
+  "sats_hive": 242.8249,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2643,
+  "btc_usd": 108267.32,
+  "sats_usd": 923.6397
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T01:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ba"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 927.5619,
+  "sats_hive": 239.4037,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2581,
+  "btc_usd": 107809.52,
+  "sats_usd": 927.5619
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T01:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259bb"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 928.2869,
+  "sats_hive": 239.5908,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2581,
+  "btc_usd": 107725.32,
+  "sats_usd": 928.2869
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T05:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259bc"
+  },
+  "hive_usd": 0.2606,
+  "sats_hbd": 923.9816,
+  "sats_hive": 240.7896,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2607,
+  "btc_usd": 108227.26,
+  "sats_usd": 923.9816
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T06:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259bd"
+  },
+  "hive_usd": 0.2593,
+  "sats_hbd": 927.9939,
+  "sats_hive": 240.6288,
+  "hbd_usd": 1,
+  "hive_hbd": 0.26,
+  "btc_usd": 107759.33,
+  "sats_usd": 927.9939
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T07:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259be"
+  },
+  "hive_usd": 0.2602,
+  "sats_hbd": 925.9277,
+  "sats_hive": 240.9264,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2602,
+  "btc_usd": 107999.79,
+  "sats_usd": 925.9277
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T07:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259bf"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 924.3984,
+  "sats_hive": 241.268,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2609,
+  "btc_usd": 108178.46,
+  "sats_usd": 924.3984
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T09:00:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c0"
+  },
+  "hive_usd": 0.2596,
+  "sats_hbd": 923.398,
+  "sats_hive": 239.7141,
+  "hbd_usd": 1,
+  "hive_hbd": 0.26,
+  "btc_usd": 108295.67,
+  "sats_usd": 923.398
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T09:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c1"
+  },
+  "hive_usd": 0.2606,
+  "sats_hbd": 924.1007,
+  "sats_hive": 240.8206,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2609,
+  "btc_usd": 108213.32,
+  "sats_usd": 924.1007
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T11:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c2"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 915.4781,
+  "sats_hive": 238.9398,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2614,
+  "btc_usd": 109232.54,
+  "sats_usd": 915.4781
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T12:10:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c3"
+  },
+  "hive_usd": 0.2601,
+  "sats_hbd": 919.1945,
+  "sats_hive": 239.0825,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2609,
+  "btc_usd": 108790.9,
+  "sats_usd": 919.1945
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T12:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c4"
+  },
+  "hive_usd": 0.261,
+  "sats_hbd": 918.3173,
+  "sats_hive": 239.6808,
+  "hbd_usd": 1,
+  "hive_hbd": 0.261,
+  "btc_usd": 108894.82,
+  "sats_usd": 918.3173
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T12:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c5"
+  },
+  "hive_usd": 0.2609,
+  "sats_hbd": 918.9755,
+  "sats_hive": 239.7607,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2605,
+  "btc_usd": 108816.83,
+  "sats_usd": 918.9755
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T13:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c6"
+  },
+  "hive_usd": 0.2606,
+  "sats_hbd": 918.4327,
+  "sats_hive": 239.3436,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2605,
+  "btc_usd": 108881.14,
+  "sats_usd": 918.4327
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T14:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c7"
+  },
+  "hive_usd": 0.2602,
+  "sats_hbd": 919.0612,
+  "sats_hive": 239.1397,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2615,
+  "btc_usd": 108806.68,
+  "sats_usd": 919.0612
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T15:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c8"
+  },
+  "hive_usd": 0.2596,
+  "sats_hbd": 918.5803,
+  "sats_hive": 238.4635,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2612,
+  "btc_usd": 108863.64,
+  "sats_usd": 918.5803
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T15:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259c9"
+  },
+  "hive_usd": 0.2596,
+  "sats_hbd": 918.7462,
+  "sats_hive": 238.5065,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2612,
+  "btc_usd": 108843.99,
+  "sats_usd": 918.7462
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T16:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ca"
+  },
+  "hive_usd": 0.259,
+  "sats_hbd": 919.4197,
+  "sats_hive": 238.1297,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2606,
+  "btc_usd": 108764.26,
+  "sats_usd": 919.4197
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T17:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259cb"
+  },
+  "hive_usd": 0.259,
+  "sats_hbd": 917.814,
+  "sats_hive": 237.7138,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2599,
+  "btc_usd": 108954.54,
+  "sats_usd": 917.814
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T17:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259cc"
+  },
+  "hive_usd": 0.2589,
+  "sats_hbd": 917.0407,
+  "sats_hive": 237.4218,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2598,
+  "btc_usd": 109046.42,
+  "sats_usd": 917.0407
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T18:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259cd"
+  },
+  "hive_usd": 0.2595,
+  "sats_hbd": 917.3913,
+  "sats_hive": 238.063,
+  "hbd_usd": 1,
+  "hive_hbd": 0.26,
+  "btc_usd": 109004.74,
+  "sats_usd": 917.3913
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T18:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259ce"
+  },
+  "hive_usd": 0.2581,
+  "sats_hbd": 919.2736,
+  "sats_hive": 237.2645,
+  "hbd_usd": 1,
+  "hive_hbd": 0.259,
+  "btc_usd": 108781.54,
+  "sats_usd": 919.2736
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T20:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259cf"
+  },
+  "hive_usd": 0.2583,
+  "sats_hbd": 917.722,
+  "sats_hive": 237.0476,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2586,
+  "btc_usd": 108965.46,
+  "sats_usd": 917.722
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T22:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d0"
+  },
+  "hive_usd": 0.2568,
+  "sats_hbd": 924.9837,
+  "sats_hive": 237.5358,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2573,
+  "btc_usd": 108110.01,
+  "sats_usd": 924.9837
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T22:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d1"
+  },
+  "hive_usd": 0.2572,
+  "sats_hbd": 923.3974,
+  "sats_hive": 237.4978,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2576,
+  "btc_usd": 108295.73,
+  "sats_usd": 923.3974
+},
+{
+  "timestamp": {
+    "$date": "2025-05-24T23:40:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d2"
+  },
+  "hive_usd": 0.2577,
+  "sats_hbd": 926.5881,
+  "sats_hive": 238.7818,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2579,
+  "btc_usd": 107922.82,
+  "sats_usd": 926.5881
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T00:50:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d3"
+  },
+  "hive_usd": 0.2541,
+  "sats_hbd": 930.9214,
+  "sats_hive": 236.5471,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2562,
+  "btc_usd": 107420.45,
+  "sats_usd": 930.9214
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T01:20:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d4"
+  },
+  "hive_usd": 0.2528,
+  "sats_hbd": 929.0541,
+  "sats_hive": 234.8649,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2544,
+  "btc_usd": 107636.36,
+  "sats_usd": 929.0541
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T01:30:00.000Z"
+  },
+  "_id": {
+    "$oid": "6832de4f7893f09545a259d5"
+  },
+  "hive_usd": 0.2535,
+  "sats_hbd": 928.0411,
+  "sats_hive": 235.2584,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2546,
+  "btc_usd": 107753.85,
+  "sats_usd": 928.0411
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T08:37:57.096Z"
+  },
+  "_id": {
+    "$oid": "6832d6e9b0d3ab9692312234"
+  },
+  "hive_usd": 0.2515,
+  "sats_hbd": 930.9393,
+  "sats_hive": 234.1312,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2534,
+  "btc_usd": 107418.39,
+  "sats_usd": 930.9393
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T08:48:02.779Z"
+  },
+  "_id": {
+    "$oid": "6832d949b0d3ab969231224b"
+  },
+  "hive_usd": 0.2511,
+  "sats_hbd": 932.4155,
+  "sats_hive": 234.1295,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2525,
+  "btc_usd": 107248.33,
+  "sats_usd": 932.4155
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T08:58:12.884Z"
+  },
+  "_id": {
+    "$oid": "6832dba6b0d3ab9692312264"
+  },
+  "hive_usd": 0.2504,
+  "sats_hbd": 934.1011,
+  "sats_hive": 233.8989,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2522,
+  "btc_usd": 107054.79,
+  "sats_usd": 934.1011
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T09:08:19.349Z"
+  },
+  "_id": {
+    "$oid": "6832de04b0d3ab969231227b"
+  },
+  "hive_usd": 0.2499,
+  "sats_hbd": 934.5302,
+  "sats_hive": 233.5391,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2518,
+  "btc_usd": 107005.64,
+  "sats_usd": 934.5302
+},
+{
+  "timestamp": {
+    "$date": "2025-05-25T09:13:36.655Z"
+  },
+  "_id": {
+    "$oid": "6832df4199097f26e54dd117"
+  },
+  "hive_usd": 0.251,
+  "sats_hbd": 932.5006,
+  "sats_hive": 234.0576,
+  "hbd_usd": 1,
+  "hive_hbd": 0.2522,
+  "btc_usd": 107238.54,
+  "sats_usd": 932.5006
+}]

@@ -32,6 +32,7 @@ from v4vapp_backend_v2.actions.tracked_all import (
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
@@ -285,6 +286,22 @@ async def test_account_balances():
 test_lightning_invoices_r_hash = ["uIst3MZFrpJ3CYH3jwXFrQpyBFyjDrJUyLSmUEusSjU="]
 
 mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
+mongodb_export_path_rates = "tests/data/hive_models/mongodb/v4vapp-dev.rates.json"
+
+
+async def fill_rates_db():
+    """
+    Fill the rates database with quotes.
+    This function is a placeholder for filling the rates database.
+    It should be implemented to fetch and store quotes in the database.
+    """
+    # Placeholder for filling the rates database
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    with open(mongodb_export_path_rates, "r") as f:
+        raw_data = f.read()
+        json_data = json_util.loads(raw_data)
+    async with TrackedBaseModel.db_client as db_client:
+        await db_client.insert_many("rates", json_data)
 
 
 # @pytest.mark.skip("Work in progress")
@@ -312,11 +329,13 @@ async def test_process_lightning_invoices():
     _ = V4VConfig(server_accname="v4vapp", hive=hive)
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    AllQuotes.db_client = TrackedBaseModel.db_client
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)
     df = await test_fill_ledger_database_from_mongodb_dump()
     balance_sheet_pandas = await generate_balance_sheet_pandas(df=df, reporting_date=as_of_date)
 
+    await fill_rates_db()
     for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
         print(op_tracked.log_str)
         try:
