@@ -387,6 +387,7 @@ class AllQuotes(BaseModel):
             for service_name, quote_data in cache_data.get("quotes", {}).items()
         }
 
+    # MARK: DB Store Quote
     async def db_store_quote(self):
         """
         Store cryptocurrency quotes in the database.
@@ -418,39 +419,17 @@ class AllQuotes(BaseModel):
             return
         async with self.db_client as db_client:
             try:
-                records = [
-                    {
-                        "timestamp": self.fetch_date,
-                        "pair": "hive_usd",
-                        "value": self.quote.hive_usd,
-                    },
-                    {
-                        "timestamp": self.fetch_date,
-                        "pair": "btc_usd",
-                        "value": self.quote.btc_usd,
-                    },
-                    {
-                        "timestamp": self.fetch_date,
-                        "pair": "sats_hive",
-                        "value": self.quote.sats_hive,
-                    },
-                    {
-                        "timestamp": self.fetch_date,
-                        "pair": "hive_hbd",
-                        "value": self.quote.hive_hbd,
-                    },
-                ]
-                db_ans = await db_client.insert_many("hive_rates", records)
-                logger.debug(f"Inserted rates into database: {db_ans}")
                 record = {
                     "timestamp": self.fetch_date,
                     "hive_usd": self.quote.hive_usd,
                     "btc_usd": self.quote.btc_usd,
                     "sats_hive": self.quote.sats_hive,
+                    "sats_usd": self.quote.sats_usd,
+                    "sats_hbd": self.quote.sats_hbd,
                     "hive_hbd": self.quote.hive_hbd,
                 }
-                db_ans2 = await db_client.insert_one("hive_rates_combined", record)
-                logger.info(f"Inserted combined rates into database: {db_ans2}")
+                db_ans = await db_client.insert_one("hive_rates_combined", record)
+                logger.info(f"Inserted combined rates into database: {db_ans}")
                 AllQuotes.db_store_timestamp = self.fetch_date
             except Exception as e:
                 logger.warning(
