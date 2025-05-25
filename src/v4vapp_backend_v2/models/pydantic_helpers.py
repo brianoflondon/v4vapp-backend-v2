@@ -77,12 +77,19 @@ def convert_datetime_fields(item: dict) -> dict:
 
     def convert_field(value: Any) -> datetime:
         if isinstance(value, datetime):
+            # Always return as UTC tz-aware
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
             return value
         if isinstance(value, (int, float)):
             return convert_timestamp_to_datetime(value)
         if isinstance(value, str):
             try:
-                return datetime.fromisoformat(value)
+                # Parse ISO string and force UTC
+                dt = datetime.fromisoformat(value)
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(timezone.utc)
             except ValueError:
                 pass
             bsonint60 = BSONInt64.validate(value, None)
@@ -96,15 +103,26 @@ def convert_datetime_fields(item: dict) -> dict:
                 return convert_timestamp_to_datetime(float(value))
             except ValueError:
                 pass
+        # Always return a UTC tz-aware datetime as fallback
         return datetime.now(tz=timezone.utc)
 
-    keys = ["creation_date", "settle_date", "creation_time_ns"]
-
+    keys = [
+        "creation_date",
+        "settle_date",
+        "creation_time_ns",
+        "resolve_time_ns",
+        "attempt_time_ns",
+    ]
     for key in keys:
         value = item.get(key)
-        if not value or isinstance(value, datetime):
+        if not value:
             continue
-        if key == "creation_time_ns":
+        if isinstance(value, datetime):
+            # Ensure datetime is UTC tz-aware
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            continue
+        if key in ["creation_time_ns", "resolve_time_ns", "attempt_time_ns"]:
             value = float(value) / 1e9
         item[key] = convert_field(value)
 
@@ -114,7 +132,7 @@ def convert_datetime_fields(item: dict) -> dict:
     for htlc in item.get("htlcs") or []:
         for key in keys:
             value = htlc.get(key)
-            if not value or isinstance(value, datetime):
+            if not value:
                 continue
             htlc[key] = convert_field(value)
     return item

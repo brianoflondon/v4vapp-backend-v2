@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Dict, List, Optional, override
 
@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
@@ -54,13 +55,17 @@ class Route(BaseModel):
 class HTLCAttempt(BaseModel):
     attempt_id: BSONInt64
     status: str | None = None
-    attempt_time_ns: BSONInt64
-    resolve_time_ns: Optional[BSONInt64] = None
+    attempt_time_ns: datetime | None = None
+    resolve_time_ns: datetime | None = None
     preimage: Optional[str] = None
     route: Optional[Route] = None
     failure: Optional[dict] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def __init__(self, **data: Any) -> None:
+        htlc_attempt_data = convert_datetime_fields(data)
+        super().__init__(**htlc_attempt_data)
 
 
 class NodeAlias(BaseModel):
@@ -76,6 +81,10 @@ class FirstHopCustomRecords(BaseModel):
 class Payment(TrackedBaseModel):
     """
     Payment model representing a payment transaction.
+
+    **Note**: in order to use a `conv` object you need to call `update_conv` method
+    after initializing the object with a `QuoteResponse` or `None`.
+    This model extends `TrackedBaseModel` and includes additional fields
 
     Attributes:
         payment_hash (str | None): The hash of the payment.
@@ -105,7 +114,7 @@ class Payment(TrackedBaseModel):
     # Attributes from Payment
     payment_hash: str = ""
     value: BSONInt64 = BSONInt64(0)
-    creation_date: datetime | None = None
+    creation_date: datetime = datetime.now(tz=timezone.utc)
     fee: BSONInt64 = BSONInt64(0)
     payment_preimage: str = ""
     value_sat: BSONInt64 = BSONInt64(0)
@@ -114,7 +123,7 @@ class Payment(TrackedBaseModel):
     status: PaymentStatus | None = None
     fee_sat: BSONInt64 = BSONInt64(0)
     fee_msat: BSONInt64 = BSONInt64(0)
-    creation_time_ns: datetime | None = None
+    creation_time_ns: datetime | None = None  # This is a datetime object, not an int
     payment_index: BSONInt64 = BSONInt64(0)
     failure_reason: str = ""
     htlcs: List[HTLCAttempt] | None = None
@@ -134,18 +143,19 @@ class Payment(TrackedBaseModel):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
-        if not self.conv:
-            self.update_conv()
         self.fill_custom_record()
 
     @override
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion rate for the payment.
 
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
+        if not quote and self.age > 120:
+            quote = await AllQuotes.db_find_nearest_quote(timestamp=self.timestamp)
+
         quote = quote or TrackedBaseModel.last_quote
         if self.fee_msat:
             self.conv_fee = CryptoConversion(
@@ -295,6 +305,40 @@ class Payment(TrackedBaseModel):
         Returns a string representation of the payment log.
         """
         return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+
+    @property
+    def timestamp(self) -> datetime:
+        """
+        Returns the timestamp of the invoice, which is the creation date.
+
+        Returns:
+            datetime: The creation date of the invoice.
+        """
+        timestamp = self.creation_date
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return timestamp
+
+    @property
+    def age(self) -> float:
+        """
+        Returns the age of the invoice as a float representing the total seconds.
+
+        Returns:
+            float: The age of the invoice in seconds.
+        """
+        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+
+    @property
+    def age_str(self) -> str:
+        """
+        Returns the age of the invoice as a formatted string.
+
+        Returns:
+            str: The age of the invoice in a human-readable format.
+        """
+        age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
+        return age_text
 
 
 class ListPaymentsResponse(BaseModel):

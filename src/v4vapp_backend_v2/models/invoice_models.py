@@ -91,6 +91,10 @@ class Invoice(TrackedBaseModel):
     invoice-related data. It is designed to work with data from the Lightning Network Daemon (LND)
     and includes functionality for extracting Hive account information and custom records.
 
+    **Note**: in order to use a `conv` object you need to call `update_conv` method
+    after initializing the object with a `QuoteResponse` or `None`.
+    This model extends `TrackedBaseModel` and includes additional fields
+
     Based on :
     https://github.com/lightningnetwork/lnd/blob/7e50b8438ef5f88841002c4a8c23510928cfe64b/lnrpc/lightning.proto#L3768
 
