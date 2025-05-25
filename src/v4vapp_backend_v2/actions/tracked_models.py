@@ -196,9 +196,9 @@ class TrackedBaseModel(BaseModel):
             None
         """
         await TrackedBaseModel.update_quote(quote)
-        self.update_conv()
+        await self.update_conv()
 
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion for the transaction.
 

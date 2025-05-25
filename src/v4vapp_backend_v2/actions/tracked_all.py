@@ -136,6 +136,7 @@ async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry)
     node_name = InternalConfig().config.lnd_config.default
 
     await invoice.lock_op()
+    await invoice.update_conv()
     ledger_entry.description = invoice.memo
     ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
     ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
