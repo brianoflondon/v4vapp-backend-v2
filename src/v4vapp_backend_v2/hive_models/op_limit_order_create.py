@@ -5,8 +5,8 @@ from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -51,7 +51,7 @@ class LimitOrderCreate(OpBase):
         if hive_event.get("update_conv", True):
             if TrackedBaseModel.last_quote.get_age() > 600.0:
                 self.update_quote_sync(AllQuotes().get_binance_quote())
-            self.update_conv()
+            # self.update_conv()
 
     @property
     def log_extra(self) -> Dict[str, Any]:
@@ -70,7 +70,7 @@ class LimitOrderCreate(OpBase):
         return False
 
     @classmethod
-    def expire_orders(self) -> None:
+    def expire_orders(cls) -> None:
         """
         Expires orders that have passed their expiration date.
 
@@ -83,14 +83,14 @@ class LimitOrderCreate(OpBase):
         """
         expired_orders: List[int] = []
         for orderid, order in LimitOrderCreate.open_order_ids.items():
-            if self.watch_users and order.owner not in self.watch_users:
+            if cls.watch_users and order.owner not in cls.watch_users:
                 expired_orders.append(orderid)
                 continue
             if order.expiration < datetime.now(tz=timezone.utc):
                 expired_orders.append(orderid)
         for orderid in expired_orders:
             LimitOrderCreate.open_order_ids.pop(orderid)
-        self._maintain_order_limit()
+        cls._maintain_order_limit()
 
     @classmethod
     def _maintain_order_limit(cls) -> None:
@@ -143,18 +143,18 @@ class LimitOrderCreate(OpBase):
         return_str = return_str.replace("📈", "")
         return return_str.strip()
 
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Updates the conversion for the transaction.
+    # async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    #     """
+    #     Updates the conversion for the transaction.
 
-        If the subclass has a `conv` object, update it with the latest quote.
-        If a quote is provided, it sets the conversion to the provided quote.
-        If no quote is provided, it uses the last quote to set the conversion.
+    #     If the subclass has a `conv` object, update it with the latest quote.
+    #     If a quote is provided, it sets the conversion to the provided quote.
+    #     If no quote is provided, it uses the last quote to set the conversion.
 
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, uses the last quote.
-        """
-        quote = quote or TrackedBaseModel.last_quote
-        conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
-        self.conv = conv
+    #     Args:
+    #         quote (QuoteResponse | None): The quote to update.
+    #             If None, uses the last quote.
+    #     """
+    #     quote = quote or TrackedBaseModel.last_quote
+    #     conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
+    #     self.conv = conv

@@ -40,22 +40,41 @@ class CryptoConv(BaseModel):
         use_enum_values=True,  # Serializes enum as its value
     )
 
-    def __init__(self, **data: Any):
-        # Ensure data is a flat dictionary, not a nested one
-        if data.get("converted_value", None) and data.get("conv_from", None):
-            # If 'converted' is in data, we assume it's a conversion from one currency to another
-            # and we need to set the msats and sats values accordingly.
-            if data["conv_from"] == Currency.HIVE:
-                data["hive"] = data["value"]
-                data["hbd"] = data["converted_value"]
-            elif data["conv_from"] == Currency.HBD:
-                data["hbd"] = data["value"]
-                data["hive"] = data["converted_value"]
+    def __init__(
+        self,
+        recalc_conv_from: Currency | None = None,
+        conv_from: Currency | None = None,
+        value: float | None = None,
+        converted_value: float | None = None,
+        timestamp: datetime | None = None,
+        quote: QuoteResponse | None = None,
+        **data: Any,
+    ):
+        if recalc_conv_from and value and quote:
+            # If recalc_conv_from and value are provided, we assume it's a conversion from one currency to another
+            conversion = CryptoConversion(
+                conv_from=recalc_conv_from,
+                value=value,
+                quote=quote,
+            )
+            data = conversion.c_dict
+
+        if data.get("converted_value", converted_value) and data.get("conv_from", conv_from):
+            # If 'converted' is in data, we assume it's a conversion from one Hive to HBD or vice versa,
+            # and we need to set the hive and hbd values accordingly using the internal market rates.
+            if data.get("conv_from", conv_from) == Currency.HIVE:
+                data["hive"] = data.get("value", value)
+                data["hbd"] = data.get("converted_value", converted_value)
+            elif data.get("conv_from", conv_from) == Currency.HBD:
+                data["hbd"] = data.get("value", value)
+                data["hive"] = data.get("converted_value", converted_value)
             data["source"] = "Hive Internal Trade"
-            data["fetch_date"] = datetime.now(tz=timezone.utc)
+            data["fetch_date"] = data.get("fetch_date", timestamp) or datetime.now(tz=timezone.utc)
             quote = data.get("quote", None)
             # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
+                data["source"] = quote.source
+                data["fetch_date"] = quote.fetch_date or datetime.now(tz=timezone.utc)
                 data["sats_hive"] = quote.sats_hive
                 data["sats_hbd"] = quote.sats_hbd
                 data["sats"] = int(data["hive"] * quote.sats_hive)
@@ -70,6 +89,23 @@ class CryptoConv(BaseModel):
         # If sats is not set, calculate it from the msats
         if "sats" not in data:
             self.sats = int(self.msats / 1000)
+
+    def is_unset(self) -> bool:
+        """
+        Check if the conversion values are unset (zero).
+
+        Returns:
+            bool: True if all conversion values are zero, False otherwise.
+        """
+        return (
+            self.hive == 0.0
+            and self.hbd == 0.0
+            and self.usd == 0.0
+            and self.sats == 0
+            and self.msats == 0
+            and self.btc == 0.0
+            and self.msats_fee == 0
+        )
 
     def limit_test(self) -> bool:
         """

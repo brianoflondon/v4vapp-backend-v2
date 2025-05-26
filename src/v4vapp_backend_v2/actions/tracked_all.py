@@ -11,7 +11,7 @@ from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedA
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -340,6 +340,17 @@ async def process_create_fill_order_op(
     """
     if isinstance(op, LimitOrderCreate):
         logger.info(f"Limit order create: {op.orderid}")
+        if not op.conv or op.conv.is_unset():
+            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
+            if not quote:
+                quote = TrackedBaseModel.last_quote
+            op.conv = CryptoConv(
+                conv_from=op.amount_to_sell.unit,  # HIVE
+                value=op.amount_to_sell.amount_decimal,  # 25.052 HIVE
+                converted_value=op.min_to_receive.amount_decimal,  # 6.738 HBD
+                quote=quote,
+                timestamp=op.timestamp,
+            )
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
         ledger_entry.description = op.ledger_str
@@ -348,6 +359,29 @@ async def process_create_fill_order_op(
         ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
     elif isinstance(op, FillOrder):
         logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
+        if not op.debit_conv or op.debit_conv.is_unset():
+            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
+            if not quote:
+                quote = TrackedBaseModel.last_quote
+            op.debit_conv = CryptoConv(
+                conv_from=op.open_pays.unit,  # HIVE
+                value=op.open_pays.amount_decimal,  # 25.052 HIVE
+                converted_value=op.current_pays.amount_decimal,  # 6.738 HBD
+                quote=quote,
+                timestamp=op.timestamp,
+            )
+        if not op.credit_conv or op.credit_conv.is_unset():
+            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
+            if not quote:
+                quote = TrackedBaseModel.last_quote
+            op.credit_conv = CryptoConv(
+                conv_from=op.current_pays.unit,  # HBD
+                value=op.current_pays.amount_decimal,  # 6.738 HBD
+                converted_value=op.open_pays.amount_decimal,  # 25.052 HIVE
+                quote=quote,
+                timestamp=op.timestamp,
+            )
+
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
         ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
         ledger_entry.description = op.ledger_str

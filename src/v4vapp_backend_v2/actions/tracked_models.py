@@ -118,6 +118,7 @@ class TrackedBaseModel(BaseModel):
                 collection_name=self.collection,
                 query=self.group_id_query,
                 update={"$unset": {"locked": ""}},
+                upsert=True,
             )
             return ans
         return None

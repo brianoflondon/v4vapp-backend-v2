@@ -494,14 +494,31 @@ class AllQuotes(BaseModel):
         async with cls.db_client as db_client:
             try:
                 # Find the nearest quote by timestamp
-                nearest_quote = await db_client.find_one(
-                    DB_RATES_COLLECTION,
-                    {"timestamp": {"$lte": timestamp}},
-                    sort=[("timestamp", -1)],
+                collection = await db_client.get_collection(DB_RATES_COLLECTION)
+                cursor = collection.aggregate(
+                    [
+                        {"$match": {"timestamp": {"$exists": True}}},
+                        {
+                            "$project": {
+                                "originalDoc": "$$ROOT",
+                                "time_diff_ms": {"$abs": {"$subtract": ["$timestamp", timestamp]}},
+                            }
+                        },
+                        {"$sort": {"time_diff_ms": 1}},
+                        {"$limit": 1},
+                        {"$replaceRoot": {"newRoot": "$originalDoc"}},
+                    ]
                 )
+                nearest_quote = await cursor.to_list(length=1)
+
+                # nearest_quote = await db_client.find_one(
+                #     DB_RATES_COLLECTION,
+                #     {"timestamp": {"$lte": timestamp}},
+                #     sort=[("timestamp", -1)],
+                # )
 
                 if nearest_quote:
-                    quote = HiveRatesDB.model_validate(nearest_quote)
+                    quote = HiveRatesDB.model_validate(nearest_quote[0])
                     quote_response = QuoteResponse(
                         hive_usd=quote.hive_usd,
                         hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
