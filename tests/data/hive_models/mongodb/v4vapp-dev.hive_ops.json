@@ -32,7 +32,7 @@
   "d_memo": "Opening Balance for testing v2 backend",
   "from": "v4vapp.dhf",
   "link": "https://hivehub.dev/tx/8fc6b78d32c8c8050aae9117915b3c17757f65b6",
-  "locked": true,
+  "locked": false,
   "memo": "Opening Balance for testing v2 backend",
   "timestamp": {
     "$date": "2025-05-11T09:58:00.000Z"
@@ -89,7 +89,7 @@
   "d_memo": "Opening Balance for testing v2 backend HBD",
   "from": "v4vapp.dhf",
   "link": "https://hivehub.dev/tx/3284a7bf2900835e8b0d6d25fd235f38192f2dee",
-  "locked": true,
+  "locked": false,
   "memo": "Opening Balance for testing v2 backend HBD",
   "timestamp": {
     "$date": "2025-05-11T17:03:15.000Z"
@@ -132,7 +132,7 @@
   "d_memo": "Send opening balance to Live Server",
   "from": "devtre.v4vapp",
   "link": "https://hivehub.dev/tx/6472af41e3236308d08318594e977e18e4de572b",
-  "locked": true,
+  "locked": false,
   "memo": "Send opening balance to Live Server",
   "timestamp": {
     "$date": "2025-05-11T17:53:45.000Z"
@@ -261,7 +261,7 @@
   "d_memo": "Reset for checks",
   "from": "devser.v4vapp",
   "link": "https://hivehub.dev/tx/d9c8d42fb805739faf5da9840e8615e58a6c19e6",
-  "locked": true,
+  "locked": false,
   "memo": "Reset for checks",
   "timestamp": {
     "$date": "2025-05-12T08:16:12.000Z"
@@ -390,7 +390,7 @@
   "d_memo": "Test refund",
   "from": "devser.v4vapp",
   "link": "https://hivehub.dev/tx/6951255d4ec6ea02643ec99d21ec626f04e4f78f",
-  "locked": true,
+  "locked": false,
   "memo": "#DBewWVb9heaRBhSd1u6TJ3uDk5JZJqCcPfWMik3QQofynQEFb7Y2tC878Ahnwi4ifeJDBSDRU63DncfZyrUFA6s8MLCCeJzoRNNXyBsQxR4kwMKV2VxaStohrFPeX1tjb",
   "timestamp": {
     "$date": "2025-05-12T10:51:42.000Z"
@@ -433,7 +433,7 @@
   "d_memo": "Another test with a private memo",
   "from": "v4vapp-test",
   "link": "https://hivehub.dev/tx/6d29b5e169bfef10461c7831693de50362b02464",
-  "locked": true,
+  "locked": false,
   "memo": "#5w5N2Q7rgz8KnhnD6V4N6SkFTJLJg1yan8n6p8U4UBeLEsuGiWCnSURXM8ZAc3mbGkQtdw12CQWPZZz671EMjD6t7Gg26nb3AXa9MVRwqokxgyRYHVuYvrkhq5ecCi5foxCmGwA4pRaneJ5sK13poUQ7vTA6oAe8RsX6fr9xBCDFT",
   "timestamp": {
     "$date": "2025-05-12T11:38:15.000Z"
@@ -519,7 +519,7 @@
   "d_memo": "More funds treasury to server",
   "from": "devtre.v4vapp",
   "link": "https://hivehub.dev/tx/17ed634e4adc4db35137f37df84dfdaba12e95ee",
-  "locked": true,
+  "locked": false,
   "memo": "More funds treasury to server",
   "timestamp": {
     "$date": "2025-05-14T16:47:00.000Z"
@@ -551,7 +551,7 @@
   },
   "fill_or_kill": false,
   "link": "https://hivehub.dev/tx/8444006ec7b5a545b198fb5f5b051e3a4055e159",
-  "locked": true,
+  "locked": false,
   "min_to_receive": {
     "amount": "55643",
     "nai": "@@000000021",
@@ -586,7 +586,7 @@
     "precision": 3
   },
   "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/2",
-  "locked": true,
+  "locked": false,
   "open_orderid": 496766945,
   "open_owner": "honeybot",
   "open_pays": {
@@ -619,7 +619,7 @@
     "precision": 3
   },
   "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/4",
-  "locked": true,
+  "locked": false,
   "open_orderid": 241406113,
   "open_owner": "voltix",
   "open_pays": {
@@ -652,7 +652,7 @@
     "precision": 3
   },
   "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/1",
-  "locked": true,
+  "locked": false,
   "open_orderid": 2024336831,
   "open_owner": "quicktrades",
   "open_pays": {
@@ -773,7 +773,7 @@
   },
   "fill_or_kill": true,
   "link": "https://hivehub.dev/tx/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6",
-  "locked": true,
+  "locked": false,
   "min_to_receive": {
     "amount": "9376",
     "nai": "@@000000013",
@@ -838,7 +838,7 @@
     "in_limits": true
   },
   "link": "https://hivehub.dev/tx/95906035/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6/1",
-  "locked": true,
+  "locked": false,
   "open_orderid": 700850858,
   "open_owner": "quicktrades",
   "open_pays": {
@@ -903,7 +903,7 @@
     "in_limits": true
   },
   "link": "https://hivehub.dev/tx/95906035/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6/2",
-  "locked": true,
+  "locked": false,
   "open_orderid": {
     "$numberLong": "3915464607"
   },
@@ -953,7 +953,7 @@
   "d_memo": "Testing auto re-balance back to server and auto sell",
   "from": "devtre.v4vapp",
   "link": "https://hivehub.dev/tx/4c2699767bdca2a3ac10211f9fb092a596f6a2e5",
-  "locked": true,
+  "locked": false,
   "memo": "Testing auto re-balance back to server and auto sell",
   "timestamp": {
     "$date": "2025-05-15T09:45:39.000Z"
@@ -1003,7 +1003,7 @@
   },
   "fill_or_kill": false,
   "link": "https://hivehub.dev/tx/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
-  "locked": true,
+  "locked": false,
   "min_to_receive": {
     "amount": "35471",
     "nai": "@@000000021",
@@ -1072,7 +1072,7 @@
     "in_limits": true
   },
   "link": "https://hivehub.dev/tx/95908095/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c/1",
-  "locked": true,
+  "locked": false,
   "open_orderid": {
     "$numberLong": "3913190081"
   },
@@ -1122,7 +1122,7 @@
   "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
   "from": "v4vapp-test",
   "link": "https://hivehub.dev/tx/a5f153f96ab572a8260703773d6c530d0dd86e41",
-  "locked": true,
+  "locked": false,
   "memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
   "timestamp": {
     "$date": "2025-05-15T12:37:39.000Z"
