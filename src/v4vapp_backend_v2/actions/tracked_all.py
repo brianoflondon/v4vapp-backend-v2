@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Union
 
 from pydantic import ValidationError
+from pymongo.results import InsertOneResult
 
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
@@ -72,19 +73,19 @@ async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     :param tracked: The tracked object to process.
     :return: LedgerEntry
     """
+    async with tracked_op:
+        if getattr(tracked_op, "type", None):
+            ledger_entry = await process_hive_op(op=tracked_op)
+            return ledger_entry
+        elif isinstance(tracked_op, Invoice):
+            return await process_lightning_op(op=tracked_op)
+        elif isinstance(tracked_op, Payment):
+            raise NotImplementedError("Payment processing is not implemented yet.")
+        else:
+            raise ValueError("Invalid tracked object")
 
-    if getattr(tracked_op, "type", None):
-        ledger_entry = await process_hive_op(op=tracked_op)
-        return ledger_entry
-    elif isinstance(tracked_op, Invoice):
-        return await process_lightning_op(op=tracked_op)
-    elif isinstance(tracked_op, Payment):
-        raise NotImplementedError("Payment processing is not implemented yet.")
-    else:
-        raise ValueError("Invalid tracked object")
 
-
-async def ledger_entry_to_db(ledger_entry: LedgerEntry) -> None:
+async def ledger_entry_to_db(ledger_entry: LedgerEntry) -> InsertOneResult:
     """
     Save the ledger entry to the database.
 
@@ -132,6 +133,27 @@ async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
 
 
 async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry) -> LedgerEntry:
+    """
+    Processes a Lightning Network invoice and updates the corresponding ledger entry.
+
+    This function handles incoming Lightning invoices, updating the ledger entry with
+    the appropriate credit and debit information based on the invoice details. If the
+    invoice memo contains specific keywords (e.g., "Funding"), it assigns the correct
+    asset and liability accounts. For other cases, it raises a NotImplementedError.
+
+    Special: If the memo contains "Funding", it treats this as an incoming
+    Owner's loan Funding to Treasury Lightning, updating the ledger entry accordingly.
+
+    Args:
+        invoice (Invoice): The Lightning invoice object containing payment details.
+        ledger_entry (LedgerEntry): The ledger entry to be updated based on the invoice.
+
+    Returns:
+        LedgerEntry: The updated ledger entry reflecting the processed invoice.
+
+    Raises:
+        NotImplementedError: If the invoice memo does not match implemented cases.
+    """
     # Invoice means we are receiving sats from external.
     node_name = InternalConfig().config.lnd_config.default
 
@@ -168,8 +190,6 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-
-    await op.lock_op()
     # Check if a ledger entry with the same group_id already exists
     if TrackedBaseModel.db_client:
         existing_entry = await TrackedBaseModel.db_client.find_one(
@@ -177,7 +197,6 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
         )
         if existing_entry:
             logger.warning(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
-            await op.unlock_op()
             try:
                 ledger_entry = LedgerEntry.model_validate(existing_entry)
             except Exception as e:
@@ -205,16 +224,17 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
 
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(op=op, ledger_entry=ledger_entry)
+        ans = await ledger_entry_to_db(ledger_entry=ledger_entry)
+        if not ans:
+            raise LedgerEntryCreationException("Failed to save ledger entry to database.")
+        return ledger_entry
+
     except LedgerEntryException as e:
         logger.error(f"Error processing transfer operation: {e}")
-        await op.unlock_op()
         raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
 
-    await ledger_entry_to_db(ledger_entry=ledger_entry)
-    return ledger_entry
 
-
-async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry | None:
+async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> LedgerEntry:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
 

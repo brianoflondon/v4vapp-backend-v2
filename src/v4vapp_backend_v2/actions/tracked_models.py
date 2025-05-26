@@ -1,5 +1,5 @@
 from asyncio import get_event_loop
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 from pymongo.results import UpdateResult
@@ -29,6 +29,15 @@ class TrackedBaseModel(BaseModel):
         """
         super().__init__(**data)
         self.locked = data.get("locked", False)
+
+    async def __aenter__(self) -> "TrackedBaseModel":
+        await self.lock_op()
+        return self
+
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
+    ) -> None:
+        await self.unlock_op()
 
     @classmethod
     def name(cls) -> str:
