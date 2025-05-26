@@ -371,7 +371,6 @@ class MongoDBClient:
                     "ans": ans,
                 },
             )
-            await self._check_indexes()
         except OperationFailure as e:
             # If the user already exists, ignore the error
             if e.code not in [11000, 51003]:
@@ -553,6 +552,7 @@ class MongoDBClient:
                 if first_time_check_or_recheck:
                     if self.db_name not in database_names or self.db_user not in database_users:
                         await self._check_create_db()
+                    await self._check_indexes()
                     await self._create_timeseries()
 
                 logger.debug(
