@@ -1097,13 +1097,13 @@
     "btc": 0.00002592519,
     "sats_hive": 259.2519,
     "sats_hbd": 973.8991,
-    "conv_from": "hive",
-    "value": 10,
     "source": "Binance",
     "fetch_date": {
       "$date": "2025-05-15T12:32:43.912Z"
     },
-    "in_limits": true
+    "in_limits": true,
+    "conv_from": "hive",
+    "value": "10"
   },
   "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
   "from": "v4vapp-test",
@@ -1114,7 +1114,8 @@
   },
   "to": "devser.v4vapp",
   "trx_id": "a5f153f96ab572a8260703773d6c530d0dd86e41",
-  "type": "transfer"
+  "type": "transfer",
+  "reply_id": "d8920a72a413da24fe0970b00ce898f95e8b0723"
 },
 {
   "_id": {
@@ -1122,11 +1123,11 @@
   },
   "realm": "marker",
   "trx_id": "block_marker",
-  "block_num": 96257195,
+  "block_num": 96263179,
   "link": "MARKER: block_marker",
   "locked": false,
   "timestamp": {
-    "$date": "2025-05-27T13:07:33.000Z"
+    "$date": "2025-05-27T18:07:06.000Z"
   },
   "type": "block_marker"
 },
@@ -1157,7 +1158,9 @@
     "fetch_date": {
       "$date": "2025-05-26T10:35:13.199Z"
     },
-    "in_limits": true
+    "in_limits": true,
+    "conv_from": "hive",
+    "value": "16.213"
   },
   "d_memo": "",
   "from": "devser.v4vapp",
@@ -1168,8 +1171,7 @@
   },
   "to": "devtre.v4vapp",
   "trx_id": "4fb71999f130fc6ead36171d938f64fa3fd00b8e",
-  "type": "transfer",
-  "locked": false
+  "type": "transfer"
 },
 {
   "_id": {
@@ -1198,12 +1200,13 @@
     "fetch_date": {
       "$date": "2025-05-27T13:57:50.593Z"
     },
-    "in_limits": true
+    "in_limits": true,
+    "conv_from": "hive",
+    "value": "10"
   },
   "d_memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
   "from": "devser.v4vapp",
   "link": "https://hivehub.dev/tx/222616bceed2f9abbc36ff990cca3cf2eeb80768",
-  "locked": false,
   "memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
   "timestamp": {
     "$date": "2025-05-27T11:56:45.000Z"
