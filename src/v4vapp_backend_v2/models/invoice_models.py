@@ -10,7 +10,7 @@ import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.models.custom_records import (
@@ -259,10 +259,8 @@ class Invoice(TrackedBaseModel):
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
-        if not quote and self.age > 120:
-            quote = await AllQuotes.db_find_nearest_quote(timestamp=self.timestamp)
-
-        quote = quote or TrackedBaseModel.last_quote
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         amount_msat = max(self.amt_paid_msat, self.value_msat)
 
         self.conv = CryptoConversion(

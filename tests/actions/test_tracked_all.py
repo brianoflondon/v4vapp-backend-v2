@@ -28,7 +28,7 @@ from v4vapp_backend_v2.actions.tracked_all import (
     LedgerEntryException,
     TrackedAny,
     process_tracked,
-    tracked_any,
+    tracked_any_filter,
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -118,9 +118,8 @@ def load_tracked_ops_from_mongodb_dump(file_path: str) -> Generator[TrackedAny, 
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
     for tracked_op in json_data:
-        tracked_op["update_conv"] = False
         try:
-            op = tracked_any(tracked_op)
+            op = tracked_any_filter(tracked_op)
             yield op
         except ValueError as e:
             print(f"Ignoring operation: {e}")
@@ -139,7 +138,6 @@ def load_invoices_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, No
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
     for invoice in json_data:
-        invoice["update_conv"] = False
         op = op_any_or_base(invoice)
         yield op
 
@@ -172,7 +170,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     for op in load_tracked_ops_from_mongodb_dump(file_path):
         count += 1
         try:
-            quote = await AllQuotes.db_find_nearest_quote(op.timestamp)
+            quote = await TrackedBaseModel.nearest_quote(op.timestamp)
             TrackedBaseModel.last_quote = quote or last_quote()
             ledger_entry = await process_tracked(op)
             if ledger_entry is not None:
@@ -228,9 +226,8 @@ async def test_balance_sheet_steps_hive_ops():
         for op in load_tracked_ops_from_mongodb_dump(mongodb_export_path_hive_ops):
             hive_event = op.model_dump()
             count += 1
-            hive_event["update_conv"] = False
             try:
-                op_tracked = tracked_any(hive_event)
+                op_tracked = tracked_any_filter(hive_event)
             except ValueError as e:
                 print(f"Ignoring operation: {e}")
                 continue

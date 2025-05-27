@@ -65,7 +65,6 @@ def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None,
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
     for hive_event in json_data:
-        hive_event["update_conv"] = False
         op = op_any_or_base(hive_event)
         yield op
 

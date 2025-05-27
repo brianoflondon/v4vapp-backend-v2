@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
@@ -153,10 +153,8 @@ class Payment(TrackedBaseModel):
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
         """
-        if not quote and self.age > 120:
-            quote = await AllQuotes.db_find_nearest_quote(timestamp=self.timestamp)
-
-        quote = quote or TrackedBaseModel.last_quote
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         if self.fee_msat:
             self.conv_fee = CryptoConversion(
                 conv_from=Currency.MSATS,
