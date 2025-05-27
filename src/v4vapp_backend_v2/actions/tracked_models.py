@@ -1,12 +1,14 @@
 from asyncio import get_event_loop
+from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 from pymongo.results import UpdateResult
 
+from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 
@@ -16,8 +18,8 @@ class TrackedBaseModel(BaseModel):
         description="Flag to indicate if the operation is locked or being processed",
         exclude=False,
     )
-    outer_type: str = Field(default="", description="Type of the tracked operation", exclude=True)
     conv: CryptoConv | None = None
+
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
 
@@ -221,3 +223,86 @@ class TrackedBaseModel(BaseModel):
                 If None, uses the last quote.
         """
         raise NotImplementedError("Subclasses must implement the update_conv method.")
+
+    @classmethod
+    async def nearest_quote(
+        cls,
+        timestamp: datetime,
+    ) -> QuoteResponse:
+        """
+        Asynchronously finds the nearest quote in the database with a timestamp less than or equal to the provided timestamp.
+
+        Args:
+            timestamp (datetime): The reference datetime to find the nearest quote before or at this time.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the provided timestamp is not a datetime object.
+
+        Side Effects:
+            - Updates self.fetch_date with the timestamp of the found quote.
+            - Updates self.quotes["HiveRatesDB"] with a QuoteResponse object containing the quote data.
+            - Logs information about the found quote or warnings if an error occurs.
+        """
+        if not cls.db_client:
+            logger.warning(
+                "No database client available for HiveRatesDB", extra={"notification": False}
+            )
+            return cls.last_quote
+
+        if not isinstance(timestamp, datetime):
+            raise ValueError("timestamp must be a datetime object")
+
+        if datetime.now(tz=timezone.utc) - timestamp < timedelta(seconds=600):
+            await cls.update_quote()
+            return cls.last_quote
+
+        async with cls.db_client as db_client:
+            try:
+                # Find the nearest quote by timestamp
+                collection = await db_client.get_collection(DB_RATES_COLLECTION)
+                cursor = collection.aggregate(
+                    [
+                        {"$match": {"timestamp": {"$exists": True}}},
+                        {
+                            "$project": {
+                                "originalDoc": "$$ROOT",
+                                "time_diff_ms": {"$abs": {"$subtract": ["$timestamp", timestamp]}},
+                            }
+                        },
+                        {"$sort": {"time_diff_ms": 1}},
+                        {"$limit": 1},
+                        {"$replaceRoot": {"newRoot": "$originalDoc"}},
+                    ]
+                )
+                nearest_quote = await cursor.to_list(length=1)
+
+                if nearest_quote:
+                    quote = HiveRatesDB.model_validate(nearest_quote[0])
+                    quote_response = QuoteResponse(
+                        hive_usd=quote.hive_usd,
+                        hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
+                        btc_usd=quote.btc_usd,
+                        hive_hbd=quote.hive_hbd,
+                        raw_response={},
+                        source="HiveRatesDB",
+                        fetch_date=quote.timestamp,
+                        error="",  # No error in this case
+                        error_details={},
+                    )
+                    logger.info(
+                        f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
+                        extra={"notification": False, "quote": quote.model_dump()},
+                    )
+                    return quote_response
+                else:
+                    logger.warning(
+                        f"No quotes found for timestamp {timestamp}",
+                        extra={"notification": False},
+                    )
+                    return cls.last_quote
+            except Exception as e:
+                logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
+        return None
