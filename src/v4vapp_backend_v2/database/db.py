@@ -890,3 +890,21 @@ class MongoDBClient:
                 return results
 
         return None
+
+
+def get_mongodb_client_defaults() -> MongoDBClient:
+    """
+    Returns a MongoDB client instance using the defaults from the config.
+
+    This function creates a MongoDB client instance using the default connection
+    and database name from the configuration.
+
+    Returns:
+        MongoDBClient: The MongoDB client instance.
+    """
+    dbs_config = InternalConfig().config.dbs_config
+    return MongoDBClient(
+        db_conn=dbs_config.default_connection,
+        db_name=dbs_config.default_name,
+        db_user=dbs_config.default_user,
+    )
