@@ -25,7 +25,7 @@ shutdown_event = asyncio.Event()
 
 def get_mongodb_client() -> MongoDBClient:
     """
-    Returns a MongoDB client instance.
+    Returns a MongoDB client instance using the defaults from the config.
 
     This function creates a MongoDB client instance using the default connection
     and database name from the configuration.
