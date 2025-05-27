@@ -1,7 +1,7 @@
 import asyncio
 import base64
-from collections.abc import Awaitable, Callable
-from typing import Any, Mapping
+from collections.abc import Callable
+from typing import Any, Coroutine, Mapping
 
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import AioRpcError
@@ -21,6 +21,15 @@ LIGHTNING_FEE_LIMIT_PPM = 1
 
 
 class LNDPaymentError(Exception):
+    pass
+
+
+class LNDPaymentExpired(LNDPaymentError):
+    """
+    Exception raised when a Lightning payment has expired.
+    This is a custom exception to handle specific payment expiration scenarios.
+    """
+
     pass
 
 
@@ -226,7 +235,7 @@ async def send_lightning_to_pay_req(
     amount_msat: int = 0,
     fee_limit_ppm: int = LIGHTNING_FEE_LIMIT_PPM,
     callback: Callable | None = None,
-    async_callback: Callable[..., Awaitable[Any]] | None = None,
+    async_callback: Callable[..., "Coroutine[Any, Any, Any]"] | None = None,
     callback_args: Mapping[str, Any] = {},
 ) -> None:
     """
@@ -332,9 +341,11 @@ async def send_lightning_to_pay_req(
                 raise LNDPaymentError(f"Payment validation error: {e}")
         raise LNDPaymentError(f"{lnd_client.icon} Payment failed {failure_reason}")
     except AioRpcError as e:
-        logger.exception(
+        logger.info(
             f"{lnd_client.icon} Problem paying Lightning invoice", extra={"notification": False}
         )
+        if e.details() and "invoice expired" in str(e.details()).lower():
+            raise LNDPaymentExpired(f"{lnd_client.icon} Payment expired: {e.details()}")
         raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
 
     except Exception as e:

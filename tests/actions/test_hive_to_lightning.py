@@ -1,6 +1,8 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Generator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from bson import json_util
@@ -9,7 +11,7 @@ from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defaults
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 
@@ -73,21 +75,38 @@ def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None,
     os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
 )
 @pytest.mark.asyncio
-async def test_hive_to_lightning():
+async def test_hive_to_lightning_invoice_expired():
     """
     Test the Hive to Lightning processing.
     """
     TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = get_mongodb_client_defaults()
 
     # Load hive events from the MongoDB dump
     op_list = list(load_hive_events_from_mongodb_dump(mongodb_export_path))
 
-    # Process each hive event
-    for op in op_list:
-        if isinstance(op, TransferBase):
-            print(op.d_memo)
-            if op.d_memo.startswith("lnbc"):
-                await process_hive_to_lightning(op=op)
+    # Process each hive event trx_id = "a5f153f96ab572a8260703773d6c530d0dd86e41"
+
+    # create async_mock for repay_hive_to_lightning
+    with patch(
+        "v4vapp_backend_v2.actions.hive_to_lightning.repay_hive_to_lightning", new_callable=AsyncMock
+    ) as mock_repay_hive_to_lightning:
+
+        for op in op_list:
+            if not isinstance(op, TransferBase):
+                continue
+            if op.trx_id == "a5f153f96ab572a8260703773d6c530d0dd86e41":
+                print(op.d_memo)
+                if op.d_memo.startswith("lnbc"):
+                    await process_hive_to_lightning(op=op)
+
+        # Wait for all tasks to complete
+        while asyncio.all_tasks():
+            if len(asyncio.all_tasks()) == 1:
+                break
+            await asyncio.sleep(0.1)
+
+        assert mock_repay_hive_to_lightning.call_count == 1
 
 
 # type: ignore[arg-type]
