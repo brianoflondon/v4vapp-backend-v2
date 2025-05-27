@@ -1097,13 +1097,13 @@
     "btc": 0.00002592519,
     "sats_hive": 259.2519,
     "sats_hbd": 973.8991,
+    "value": 10,
     "source": "Binance",
     "fetch_date": {
       "$date": "2025-05-15T12:32:43.912Z"
     },
     "in_limits": true,
-    "conv_from": "hive",
-    "value": "10"
+    "conv_from": "hive"
   },
   "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
   "from": "v4vapp-test",
@@ -1115,7 +1115,7 @@
   "to": "devser.v4vapp",
   "trx_id": "a5f153f96ab572a8260703773d6c530d0dd86e41",
   "type": "transfer",
-  "reply_id": "d8920a72a413da24fe0970b00ce898f95e8b0723"
+  "reply_id": "209a30ae1a74f9792e15874dc23ed0bd58ed23a4"
 },
 {
   "_id": {
@@ -1123,11 +1123,11 @@
   },
   "realm": "marker",
   "trx_id": "block_marker",
-  "block_num": 96263179,
+  "block_num": 96264013,
   "link": "MARKER: block_marker",
   "locked": false,
   "timestamp": {
-    "$date": "2025-05-27T18:07:06.000Z"
+    "$date": "2025-05-27T18:48:48.000Z"
   },
   "type": "block_marker"
 },
