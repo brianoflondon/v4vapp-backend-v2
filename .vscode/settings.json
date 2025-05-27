@@ -28,6 +28,7 @@
         "protos",
         "pycache",
         "pyyaml",
+        "recalc",
         "routerrpc",
         "routerstub",
         "setex",

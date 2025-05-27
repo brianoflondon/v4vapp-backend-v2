@@ -155,6 +155,9 @@ class LnurlProxyData(BaseModel):
     )
     anything: Union[EmailStr, str] | None = Field("", description="Will try to figure it out")
 
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+
 
 class LnurlResponseModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
