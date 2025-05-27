@@ -72,8 +72,8 @@
                 "--config-filename",
                 "config.yaml",
                 "--watch-only",
-                "--start-block",
-                "96228302"
+                // "--start-block",
+                // "96228302"
             ],
             "justMyCode": true,
         },

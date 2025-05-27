@@ -275,7 +275,6 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         ):
             if not isinstance(op, ProducerReward):
                 continue
-            op: ProducerReward
             if op.producer == watch_witness:
                 await op.get_witness_details()
                 op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
@@ -453,7 +452,7 @@ async def all_ops_loop(
                         op.mean, last_witness_timestamp = await witness_average_block_time(
                             op.producer
                         )
-                        op.delta = op.timestamp - last_witness_timestamp
+                        op.delta = abs(op.timestamp - last_witness_timestamp)
                         log_it = True
                         db_store = True
 
