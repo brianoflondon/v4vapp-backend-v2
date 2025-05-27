@@ -27,6 +27,8 @@ DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
+DB_RATES_COLLECTION = "rates"
+
 """
 These classes need to match the structure of the config.yaml file
 
