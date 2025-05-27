@@ -70,7 +70,7 @@ class CryptoConv(BaseModel):
                 data["hive"] = data.get("converted_value", converted_value)
             data["source"] = "Hive Internal Trade"
             data["fetch_date"] = data.get("fetch_date", timestamp) or datetime.now(tz=timezone.utc)
-            quote = data.get("quote", None)
+            quote = data.get("quote", quote)
             # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
                 data["source"] = quote.source

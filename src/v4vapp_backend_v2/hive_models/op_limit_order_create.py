@@ -5,8 +5,8 @@ from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -48,10 +48,6 @@ class LimitOrderCreate(OpBase):
                     f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
-        if hive_event.get("update_conv", True):
-            if TrackedBaseModel.last_quote.get_age() > 600.0:
-                self.update_quote_sync(AllQuotes().get_binance_quote())
-            # self.update_conv()
 
     @property
     def log_extra(self) -> Dict[str, Any]:
@@ -143,18 +139,19 @@ class LimitOrderCreate(OpBase):
         return_str = return_str.replace("📈", "")
         return return_str.strip()
 
-    # async def update_conv(self, quote: QuoteResponse | None = None) -> None:
-    #     """
-    #     Updates the conversion for the transaction.
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
 
-    #     If the subclass has a `conv` object, update it with the latest quote.
-    #     If a quote is provided, it sets the conversion to the provided quote.
-    #     If no quote is provided, it uses the last quote to set the conversion.
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
 
-    #     Args:
-    #         quote (QuoteResponse | None): The quote to update.
-    #             If None, uses the last quote.
-    #     """
-    #     quote = quote or TrackedBaseModel.last_quote
-    #     conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
-    #     self.conv = conv
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+        conv = CryptoConversion(amount=self.min_to_receive, quote=quote).conversion
+        self.conv = conv

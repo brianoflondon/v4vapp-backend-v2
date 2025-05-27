@@ -5,7 +5,8 @@ from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -67,10 +68,6 @@ class TransferBase(OpBase):
         super().__init__(**hive_event)
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
-        if hive_event.get("update_conv", True):
-            if TrackedBaseModel.last_quote.get_age() > 600.0:
-                self.update_quote_sync(AllQuotes().get_binance_quote())
-            # self.update_conv()
         if not self.amount:
             raise ValueError("Amount is required for transfer operations")
 
@@ -185,20 +182,21 @@ class TransferBase(OpBase):
             memo = f"💬{self.d_memo}"
         return memo
 
-    # def update_conv(self, quote: QuoteResponse | None = None) -> None:
-    #     """
-    #     Updates the conversion for the transaction.
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
 
-    #     If the subclass has a `conv` object, update it with the latest quote.
-    #     If a quote is provided, it sets the conversion to the provided quote.
-    #     If no quote is provided, it uses the last quote to set the conversion.
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
 
-    #     Args:
-    #         quote (QuoteResponse | None): The quote to update.
-    #             If None, uses the last quote.
-    #     """
-    #     quote = quote or TrackedBaseModel.last_quote
-    #     self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+
+        quote = quote or TrackedBaseModel.last_quote
+        self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
 
 
 class Transfer(TransferBase):

@@ -166,7 +166,7 @@ class FillOrder(OpBase):
                 return f"✅ Order {open_order.orderid} has been filled (xs {amount_remaining})"
         return f"id {self.open_orderid}"
 
-    def update_conv(self, quote: QuoteResponse | None = None) -> None:
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion for the transaction.
 
@@ -178,7 +178,8 @@ class FillOrder(OpBase):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        quote = quote or TrackedBaseModel.last_quote
+        if quote is None:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         self.debit_conv = CryptoConv(
             conv_from=self.open_pays.unit,  # HIVE
             value=self.open_pays.amount_decimal,  # 25.052 HIVE
