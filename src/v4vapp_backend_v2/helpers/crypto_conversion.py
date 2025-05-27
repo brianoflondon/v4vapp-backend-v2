@@ -58,7 +58,12 @@ class CryptoConv(BaseModel):
                 quote=quote,
             )
             data = conversion.c_dict
-
+        if value is not None:
+            # If value is provided, we set it as the original value
+            data["value"] = value
+        if conv_from is not None:
+            # If conv_from is provided, we set it as the conversion source
+            data["conv_from"] = conv_from
         if data.get("converted_value", converted_value) and data.get("conv_from", conv_from):
             # If 'converted' is in data, we assume it's a conversion from one Hive to HBD or vice versa,
             # and we need to set the hive and hbd values accordingly using the internal market rates.
