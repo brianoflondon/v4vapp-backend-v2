@@ -514,6 +514,14 @@ class MongoDBClient:
             - If the database or user does not exist, it will attempt to create them.
             - Logs detailed information about connection attempts and errors.
         """
+
+        def first_time_check_or_recheck() -> bool:
+            return (
+                self.first_health_check == MongoDBStatus.UNKNOWN
+                and not self.client
+                and self.health_check != MongoDBStatus.CONNECTED
+            )
+
         error_code = ""
         count = 0
         while True:
@@ -521,11 +529,6 @@ class MongoDBClient:
                 self.kwargs["serverSelectionTimeoutMS"] = 10000
             if "socketTimeoutMS" not in self.kwargs:
                 self.kwargs["socketTimeoutMS"] = 10000
-            first_time_check_or_recheck = (
-                self.first_health_check == MongoDBStatus.UNKNOWN
-                and not self.client
-                and self.health_check != MongoDBStatus.CONNECTED
-            )
             try:
                 count += 1
                 self.client = AsyncIOMotorClient(
@@ -538,7 +541,7 @@ class MongoDBClient:
                     tz_aware=True,
                     **self.kwargs,
                 )
-                if first_time_check_or_recheck:
+                if first_time_check_or_recheck():
                     logger.info(
                         f"{DATABASE_ICON} {logger.name} Attempting to connect to MongoDB for the first time or after failure."
                     )
@@ -549,11 +552,12 @@ class MongoDBClient:
                 self.db = self.client[self.db_name]
                 database_names = await self.admin_client.list_database_names()
                 database_users = await self.list_users()
-                if first_time_check_or_recheck:
+                if first_time_check_or_recheck():
                     if self.db_name not in database_names or self.db_user not in database_users:
                         await self._check_create_db()
-                    await self._check_indexes()
-                    await self._create_timeseries()
+                    if first_time_check_or_recheck():
+                        await self._check_indexes()
+                        await self._create_timeseries()
 
                 logger.debug(
                     f"{DATABASE_ICON} {logger.name} "
