@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
+from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any_filter
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -182,7 +182,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         )
         return
     try:
-        op = tracked_any(full_document)
+        op = tracked_any_filter(full_document)
     except ValueError as e:
         logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
         return

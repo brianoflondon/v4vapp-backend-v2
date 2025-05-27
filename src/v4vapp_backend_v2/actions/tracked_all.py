@@ -11,7 +11,7 @@ from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedA
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -48,12 +48,23 @@ class LedgerEntryDuplicateException(LedgerEntryException):
 # TODO: #111 implement discriminator in models to pick the right one
 
 
-def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
+def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
     """
-    Check if the tracked object is of type OpAny, Invoice, or Payment.
+    Validates and filters a tracked object, ensuring it is of type OpAny, Invoice, or Payment.
 
-    :param tracked: The object to check.
-    :return: True if the object is of type OpAny, Invoice, or Payment, False otherwise.
+    Removes the '_id' field from the input dictionary if present, then attempts to validate
+    the object using the DiscriminatedTracked model. If validation is successful, returns
+    the validated object as a TrackedAny type. Raises a ValueError if validation fails.
+
+    Args:
+        tracked (dict[str, Any]): The tracked object to validate and filter.
+
+    Returns:
+        TrackedAny: The validated tracked object of type OpAny, Invoice, or Payment.
+
+    Raises:
+        ValueError: If the object cannot be validated as one of the expected types.
+
     """
     if "_id" in tracked:
         del tracked["_id"]  # Remove _id field if present
@@ -64,6 +75,10 @@ def tracked_any(tracked: dict[str, Any]) -> TrackedAny:
         return answer.value
     except ValidationError as e:
         raise ValueError(f"Failed to validate tracked object: {e}") from e
+    except ValueError as e:
+        raise ValueError(
+            f"Invalid tracked object type: {tracked}. Expected OpAny, Invoice, or Payment. {e}"
+        ) from e
 
 
 async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
@@ -341,9 +356,7 @@ async def process_create_fill_order_op(
     if isinstance(op, LimitOrderCreate):
         logger.info(f"Limit order create: {op.orderid}")
         if not op.conv or op.conv.is_unset():
-            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
-            if not quote:
-                quote = TrackedBaseModel.last_quote
+            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
             op.conv = CryptoConv(
                 conv_from=op.amount_to_sell.unit,  # HIVE
                 value=op.amount_to_sell.amount_decimal,  # 25.052 HIVE
@@ -351,6 +364,7 @@ async def process_create_fill_order_op(
                 quote=quote,
                 timestamp=op.timestamp,
             )
+        ledger_entry.op = op
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
         ledger_entry.description = op.ledger_str
@@ -360,9 +374,7 @@ async def process_create_fill_order_op(
     elif isinstance(op, FillOrder):
         logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
         if not op.debit_conv or op.debit_conv.is_unset():
-            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
-            if not quote:
-                quote = TrackedBaseModel.last_quote
+            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
             op.debit_conv = CryptoConv(
                 conv_from=op.open_pays.unit,  # HIVE
                 value=op.open_pays.amount_decimal,  # 25.052 HIVE
@@ -371,9 +383,7 @@ async def process_create_fill_order_op(
                 timestamp=op.timestamp,
             )
         if not op.credit_conv or op.credit_conv.is_unset():
-            quote = await AllQuotes.db_find_nearest_quote(timestamp=op.timestamp)
-            if not quote:
-                quote = TrackedBaseModel.last_quote
+            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
             op.credit_conv = CryptoConv(
                 conv_from=op.current_pays.unit,  # HBD
                 value=op.current_pays.amount_decimal,  # 6.738 HBD
@@ -381,7 +391,7 @@ async def process_create_fill_order_op(
                 quote=quote,
                 timestamp=op.timestamp,
             )
-
+        ledger_entry.op = op
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
         ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
         ledger_entry.description = op.ledger_str
