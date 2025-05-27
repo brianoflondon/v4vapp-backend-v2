@@ -33,6 +33,8 @@ CACHE_TIMES = {
 
 DB_RATES_COLLECTION = "rates"
 
+ICON = "$"
+
 
 class Currency(StrEnum):
     HIVE = "hive"
@@ -299,7 +301,7 @@ class AllQuotes(BaseModel):
         global_cache = await self.check_global_cache()
         if use_cache and global_cache:
             logger.debug(
-                f"Quotes fetched from main cache in {timer() - start:.4f} seconds",
+                f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
             )
             return
         all_services = [
@@ -312,7 +314,7 @@ class AllQuotes(BaseModel):
         tasks: dict[str, asyncio.Task] = {}
         try:
             async with asyncio.timeout(timeout):
-                logger.debug(f"Fetching quotes with timeout of {timeout} seconds")
+                logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
                     tasks: dict[str, asyncio.Task] = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
@@ -325,7 +327,7 @@ class AllQuotes(BaseModel):
                 for service in all_services
             }
             logger.error(
-                f"Quote fetching exceeded timeout of {timeout} seconds",
+                f"{ICON} Quote fetching exceeded timeout of {timeout} seconds",
                 extra={"timeout": timeout, "error": e},
             )
 
@@ -338,7 +340,7 @@ class AllQuotes(BaseModel):
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
         logger.info(
-            f"Quotes fetched successfully in {timer() - start:.4f} seconds",
+            f"{ICON} Quotes fetched successfully in {timer() - start:.4f} seconds",
             extra={
                 "quotes": self.quotes,
                 "fetch_date": self.fetch_date,
@@ -347,7 +349,7 @@ class AllQuotes(BaseModel):
         for quote in self.quotes.values():
             if quote.error:
                 logger.error(
-                    f"Error in quote from {quote.source}: {quote.error}",
+                    f"{ICON} Error in quote from {quote.source}: {quote.error}",
                     extra={"notification": False, **quote.log_data},
                 )
         self.fetch_date = self.quote.fetch_date
@@ -441,7 +443,7 @@ class AllQuotes(BaseModel):
             and self.fetch_date - AllQuotes.db_store_timestamp < timedelta(seconds=300)
         ):
             logger.info(
-                f"Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
+                f"{ICON} Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
             )
             return
         async with self.db_client as db_client:
@@ -457,11 +459,12 @@ class AllQuotes(BaseModel):
                     hive_hbd=self.quote.hive_hbd,
                 )
                 db_ans = await db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
-                logger.info(f"Inserted combined rates into database: {db_ans}")
+                logger.info(f"{ICON} Inserted combined rates into database: {db_ans}")
                 AllQuotes.db_store_timestamp = self.fetch_date
             except Exception as e:
                 logger.warning(
-                    f"Failed to insert rates into database: {e}", extra={"notification": False}
+                    f"{ICON} Failed to insert rates into database: {e}",
+                    extra={"notification": False},
                 )
 
     # @classmethod
@@ -793,7 +796,7 @@ class Binance(QuoteService):
             # calc hive to btc price based on hiveusdt and btcusdt
             hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
             # check
-            logger.debug(f"Binance Hive to BTC price : {hive_sats:.1f}")
+            logger.debug(f"{ICON} Binance Hive to BTC price : {hive_sats:.1f}")
 
             quote_response = QuoteResponse(
                 hive_usd=hive_usd,
