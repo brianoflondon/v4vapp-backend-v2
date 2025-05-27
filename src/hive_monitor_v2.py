@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
 from typing import Annotated, Any, List, Tuple
@@ -28,7 +29,6 @@ from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitness
 from v4vapp_backend_v2.hive_models.op_all import OpAny, is_op_all_transfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -421,7 +421,7 @@ async def all_ops_loop(
                 elif is_op_all_transfer(op):
                     if op.is_watched:
                         await TrackedBaseModel.update_quote()
-                        op.update_conv()
+                        await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
@@ -429,7 +429,6 @@ async def all_ops_loop(
                         notification = True
 
                 elif op.known_custom_json:
-                    op: CustomJson
                     notification = True
                     if not op.conv:
                         await op.update_quote_conv()
@@ -439,6 +438,8 @@ async def all_ops_loop(
                 elif (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
+                    await TrackedBaseModel.update_quote()
+                    await op.update_conv()
                     notification = (
                         False if isinstance(op, FillOrder) and not op.completed_order else True
                     )
@@ -596,8 +597,6 @@ async def main_async_start(
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-    import threading
-
     logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
     async with V4VAsyncRedis(decode_responses=False) as redis_client:
         try:
@@ -721,11 +720,7 @@ def main(
         db_name=HIVE_DATABASE,
         db_user=HIVE_DATABASE_USER,
     )
-    AllQuotes.db_client = MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    )
+    AllQuotes.db_client = TrackedBaseModel.db_client
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
