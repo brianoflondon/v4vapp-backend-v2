@@ -157,6 +157,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     """
     Test loading hive events from a MongoDB dump file.
     """
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
     file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     TrackedBaseModel.last_quote = last_quote()
@@ -333,7 +334,7 @@ async def fill_rates_db():
 
 # @pytest.mark.skip("Work in progress")
 @pytest.mark.asyncio
-async def test_process_lightning_invoices():
+async def test_process_hive_ops_invoices():
     """
     Test the process of generating a tracked balance sheet and its printouts.
     This test performs the following steps:
@@ -389,9 +390,9 @@ async def test_process_lightning_invoices():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
-# @pytest.mark.run_extra_processing
+@pytest.mark.run_extra_processing
 @pytest.mark.asyncio
-async def test_process_one_hive_to_lightning_op():
+async def test_process_one_lightning_invoice_funding_umbrel():
     """
     Test processing a single Hive to Lightning operation.
     This test processes a single Hive to Lightning operation and verifies the

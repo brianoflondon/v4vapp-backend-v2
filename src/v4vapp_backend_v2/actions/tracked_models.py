@@ -18,6 +18,9 @@ class TrackedBaseModel(BaseModel):
         description="Flag to indicate if the operation is locked or being processed",
         exclude=False,
     )
+    reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
+    reply_error: Any | None = Field(None, description="Error in the reply, if any", exclude=False)
+
     conv: CryptoConv | None = None
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
@@ -145,6 +148,25 @@ class TrackedBaseModel(BaseModel):
                 upsert=True,
             )
             return ans
+        return None
+
+    async def save(self) -> UpdateResult | None:
+        """
+        Saves the current state of the operation to the database.
+
+        This method should be overridden in subclasses to provide the
+        specific saving logic for the operation.
+
+        Returns:
+            UpdateResult | None: The result of the update operation, or None if no database client is available.
+        """
+        if self.db_client:
+            return await self.db_client.update_one(
+                collection_name=self.collection,
+                query=self.group_id_query,
+                update=self.model_dump(exclude_unset=True, exclude_none=True, by_alias=True),
+                upsert=True,
+            )
         return None
 
     def tracked_type(self) -> str:

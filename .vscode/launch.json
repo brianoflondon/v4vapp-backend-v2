@@ -22,8 +22,8 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
-                "--start-block",
-                "96224872"
+                // "--start-block",
+                // "96224872"
                 // "95793083",
                 // "95801581",
                 // "95802587",
