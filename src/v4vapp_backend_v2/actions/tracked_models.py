@@ -33,12 +33,34 @@ class TrackedBaseModel(BaseModel):
         self.locked = data.get("locked", False)
 
     async def __aenter__(self) -> "TrackedBaseModel":
+        """
+        Asynchronously acquires a lock and returns the current instance.
+
+        This method is intended to be used as part of an asynchronous context manager
+        protocol. Upon entering the context, it ensures that the necessary lock is
+        acquired before proceeding.
+
+        Returns:
+            TrackedBaseModel: The current instance with the lock acquired.
+        """
         await self.lock_op()
         return self
 
     async def __aexit__(
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
     ) -> None:
+        """
+        Asynchronous context manager exit method.
+        This method is called when exiting the async context. It ensures that any necessary cleanup is performed,
+        such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
+        was raised within the context.
+        Args:
+            exc_type (type[BaseException] | None): The type of exception raised, if any.
+            exc_val (BaseException | None): The exception instance raised, if any.
+            exc_tb (Any): The traceback object associated with the exception, if any.
+        Returns:
+            None
+        """
         await self.unlock_op()
 
     @classmethod
