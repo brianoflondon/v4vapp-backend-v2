@@ -38,6 +38,43 @@ class LedgerEntryDuplicateException(LedgerEntryException):
     pass
 
 
+class LedgerEntryNotFoundException(LedgerEntryException):
+    """Custom exception for LedgerEntry not found errors."""
+
+    pass
+
+
+async def get_ledger_entry(group_id: str) -> "LedgerEntry":
+    """
+    Retrieves a LedgerEntry from the database by its group_id.
+
+    Args:
+        group_id (str): The group ID of the ledger entry to retrieve.
+
+    Returns:
+        LedgerEntry: The retrieved ledger entry.
+
+    Raises:
+        LedgerEntryConfigurationException: If the database client is not configured.
+    """
+
+    if not LedgerEntry.db_client:
+        raise LedgerEntryConfigurationException("Database client is not configured.")
+
+    entry_data = await LedgerEntry.db_client.find_one(
+        collection_name=LedgerEntry.collection(),
+        query={"group_id": group_id},
+    )
+    if not entry_data:
+        raise LedgerEntryNotFoundException(f"LedgerEntry with group_id {group_id} not found.")
+
+    ledger_entry = LedgerEntry.model_validate(
+        entry_data,
+        by_alias=True,
+    )
+    return ledger_entry
+
+
 class LedgerEntry(BaseModel):
     """
     Represents a ledger entry in the accounting system, supporting multi-currency transactions.
@@ -76,7 +113,6 @@ class LedgerEntry(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self.op_type = get_tracked_any_type(self.op)
-
 
     @property
     def is_completed(self) -> bool:
@@ -208,6 +244,8 @@ class LedgerEntry(BaseModel):
         )
         return entry
 
+    # MARK: DB Database Methods
+
     @classmethod
     def collection(cls) -> str:
         """
@@ -236,7 +274,6 @@ class LedgerEntry(BaseModel):
         if not self.db_client:
             raise LedgerEntryConfigurationException("Database client is not configured.")
 
-    # TODO: This needs work
     async def update(self) -> UpdateResult:
         """
         Asynchronously updates the ledger entry in the database. This should only be called after the LedgerEntry is completed.
@@ -282,6 +319,7 @@ class LedgerEntry(BaseModel):
 
         """
         self.db_checks()
+        assert self.db_client is not None
         try:
             ans = await self.db_client.insert_one(
                 collection_name=LedgerEntry.collection(),
