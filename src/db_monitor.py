@@ -189,6 +189,9 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     logger.info(f"Processing {op.group_id_query}")
     try:
         ledger_entry = await process_tracked(op)
+    except ValueError as e:
+        logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
+        return
     except NotImplementedError:
         logger.info(f"{ICON} Operation not implemented for {op.group_id}")
         return
