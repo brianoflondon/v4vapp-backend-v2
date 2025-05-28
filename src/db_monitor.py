@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any_filter
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -195,12 +196,10 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     except NotImplementedError:
         logger.info(f"{ICON} Operation not implemented for {op.group_id}")
         return
-    if not ledger_entry:
-        logger.warning(
-            f"{ICON} No ledger entry created for {op.group_id_query}",
-            extra={"notification": False},
-        )
+    except LedgerEntryException as e:
+        logger.warning(f"{ICON} Ledger entry error: {e}", extra={"error": e})
         return
+
     print(ledger_entry)
     balance_sheet = await generate_balance_sheet_pandas()
     if not balance_sheet["is_balanced"]:
