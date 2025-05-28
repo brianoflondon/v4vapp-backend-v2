@@ -1,11 +1,41 @@
 from datetime import datetime, timezone
+from typing import Any, ClassVar, Dict
 
+from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
+from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+
+
+class LedgerEntryException(Exception):
+    """Custom exception for LedgerEntry errors."""
+
+    pass
+
+
+class LedgerEntryCreationException(LedgerEntryException):
+    """Custom exception for LedgerEntry creation errors."""
+
+    pass
+
+
+class LedgerEntryConfigurationException(LedgerEntryException):
+    """Custom exception for LedgerEntry configuration errors."""
+
+    pass
+
+
+class LedgerEntryDuplicateException(LedgerEntryException):
+    """Custom exception for LedgerEntry duplicate errors."""
+
+    pass
 
 
 class LedgerEntry(BaseModel):
@@ -35,11 +65,18 @@ class LedgerEntry(BaseModel):
     debit: AccountAny | None = Field(None, description="Account to be debited")
     credit: AccountAny | None = Field(None, description="Account to be credited")
     op: TrackedAny = Field(..., description="Associated operation")
+    op_type: str = Field(
+        default="ledger_entry",
+        description="Type of the operation, defaults to 'ledger_entry'",
+    )
 
+    db_client: ClassVar[MongoDBClient | None] = None
     model_config = ConfigDict()
 
     def __init__(self, **data):
         super().__init__(**data)
+        self.op_type = get_tracked_any_type(self.op)
+
 
     @property
     def is_completed(self) -> bool:
@@ -75,6 +112,53 @@ class LedgerEntry(BaseModel):
         Returns a string representation of the LedgerEntry.
         """
         return self.print_journal_entry()
+
+    @classmethod
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+
+        This method converts the class name to a snake_case string
+        representation, which is typically used for naming operations
+        or identifiers in a consistent and readable format.
+
+        Returns:
+            str: The snake_case representation of the class name.
+        """
+        return snake_case(cls.__name__)
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Generates a dictionary containing additional logging information.
+        Usage: in a log entry use as an unpacked dictionary like this:
+        `logger.info(f"{op.block_num} | {op.log_str}", extra={**op.log_extra})`
+
+        Returns:
+            Dict[str, Any]: A dictionary where the key is the name of the current instance
+            and the value is the serialized representation of the instance, excluding the
+            "raw_op" field.
+        """
+        return {self.name(): self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)}
+
+    @property
+    def group_id_query(self) -> dict[str, Any]:
+        """
+        Returns a Mongodb Query for this record.
+
+        This method is used to determine the key in the database where
+        the operation data will be stored. It is typically used for
+        database operations and indexing.
+
+        The mongodb is a compound of these three fields (and also the realm)
+
+        Returns:
+            dict: A dictionary containing the group_id for the ledger entry.
+        """
+        ans = {
+            "group_id": self.group_id,
+        }
+        return ans
 
     def print_journal_entry(self) -> str:
         """
@@ -136,6 +220,78 @@ class LedgerEntry(BaseModel):
             str: The name of the collection.
         """
         return "ledger"
+
+    def db_checks(self) -> None:
+        """
+        Performs database checks to ensure the LedgerEntry is valid for saving.
+        This method checks if the LedgerEntry is completed and if the database client is configured.
+        It raises exceptions if the checks fail.
+
+        Raises:
+            LedgerEntryCreationException: If the ledger entry is not completed or if an error occurs during checks.
+            LedgerEntryConfigurationException: If the database client is not configured.
+        """
+        if not self.is_completed:
+            raise LedgerEntryCreationException("LedgerEntry is not completed.")
+        if not self.db_client:
+            raise LedgerEntryConfigurationException("Database client is not configured.")
+
+    # TODO: This needs work
+    async def update(self) -> UpdateResult:
+        """
+        Asynchronously updates the ledger entry in the database. This should only be called after the LedgerEntry is completed.
+        This method updates the ledger entry in the database with the current state of the LedgerEntry object.
+        It raises an exception if the ledger entry is not completed or if the database client is not configured.
+
+        Raises:
+            LedgerEntryCreationException: If the ledger entry is not completed or if an error occurs during the update.
+            LedgerEntryConfigurationException: If the database client is not configured.
+
+        Returns:
+            UpdateResult: The result of the database update operation.
+        """
+        self.db_checks()
+        try:
+            ans = await self.db_client.update_one(
+                collection_name=LedgerEntry.collection(),
+                query=self.group_id_query,
+                update={
+                    "$set": {
+                        "op": self.op.model_dump(
+                            by_alias=True, exclude_none=True, exclude_unset=True
+                        )
+                    }
+                },
+            )
+            return ans
+        except Exception as e:
+            logger.error(f"Error saving ledger entry to database: {e}")
+            raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
+
+    async def save(self) -> ObjectId:
+        """
+        Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
+        and once. If it is called again, it will raise a duplicate exception.
+
+        Raises:
+            LedgerEntryCreationException: If the ledger entry is not completed or if an error occurs during saving.
+            LedgerEntryConfigurationException: If the database client is not configured.
+            LedgerEntryDuplicateException: If a duplicate ledger entry is detected.
+        Returns:
+            ObjectId: The ID of the saved ledger entry.
+
+        """
+        self.db_checks()
+        try:
+            ans = await self.db_client.insert_one(
+                collection_name=LedgerEntry.collection(),
+                document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
+                report_duplicates=True,
+            )
+            return ans
+        except Exception as e:
+            logger.error(f"Error saving ledger entry to database: {e}")
+            raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
 
     def draw_t_diagram(self) -> str:
         """
