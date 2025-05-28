@@ -384,6 +384,12 @@ async def test_process_hive_ops_invoices():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
 
+@pytest.fixture
+def no_extra_processing(monkeypatch):
+    # This fixture does nothing, effectively disables the autouse fixture for this test
+    pass
+
+
 @pytest.mark.run_extra_processing
 @pytest.mark.asyncio
 async def test_process_one_lightning_invoice_funding_umbrel():
