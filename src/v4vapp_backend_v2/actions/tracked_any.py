@@ -33,9 +33,14 @@ def get_tracked_any_type(value: Any) -> str:
             "fill_recurrent_transfer",
         ]:
             return op_type
-        add_index = value.get("add_index")
+        add_index = value.get("add_index", None)
         if add_index and add_index != 0:
             return "invoice"
+        r_hash = value.get("r_hash")
+        if r_hash and not value.get("status") == "settled":
+            # This is an unpaid Lightning invoice
+            raise ValueError(f"Unpaid Lightning invoice detected: {r_hash}")
+
         payment_index = value.get("payment_index")
         if payment_index and payment_index != 0:
             return "payment"

@@ -11,6 +11,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
+from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -55,36 +56,54 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
     except ValidationError as e:
         raise ValueError(f"Failed to validate tracked object: {e}") from e
     except ValueError as e:
+        logger.warning(
+            f"Parsing as OpAny, Invoice, or Payment. {e}",
+            extra={"notification": False, "tracked": tracked},
+        )
         raise ValueError(
-            f"Invalid tracked object type: {tracked}. Expected OpAny, Invoice, or Payment. {e}"
+            f"Invalid tracked object type: Expected OpAny, Invoice, or Payment. {e}"
         ) from e
 
 
 async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     """
-    Process the tracked object.
-
-    :param tracked: The tracked object to process.
-    :return: LedgerEntry
+    Processes a tracked operation and creates a ledger entry if applicable.
+    This method handles various types of tracked operations, including
+    Hive operations (transfers, limit orders, fill orders) and Lightning
+    operations (invoices, payments). It ensures that appropriate debit and
+    credit accounts are assigned based on the operation type. If a ledger
+    entry with the same group_id already exists, the operation is skipped.
+    Args:
+        tracked_op (TrackedAny): The tracked operation to process, which can be
+            an OpAny, Invoice, or Payment.
+    Returns:
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    Raises:
+        LedgerEntryCreationException: If the ledger entry cannot be created.
+        LedgerEntryException: If there is an error processing the tracked operation.
     """
+    try:
+        async with tracked_op:
+            if getattr(tracked_op, "type", None):
+                ledger_entry = await process_hive_op(op=tracked_op)
+            elif isinstance(tracked_op, Invoice):
+                ledger_entry = await process_lightning_op(op=tracked_op)
+            elif isinstance(tracked_op, Payment):
+                ledger_entry = await process_lightning_op(op=tracked_op)
+            else:
+                raise ValueError("Invalid tracked object")
 
-    async with tracked_op:
-        if getattr(tracked_op, "type", None):
-            ledger_entry = await process_hive_op(op=tracked_op)
-        elif isinstance(tracked_op, Invoice):
-            ledger_entry = await process_lightning_op(op=tracked_op)
-        elif isinstance(tracked_op, Payment):
-            raise NotImplementedError("Payment processing is not implemented yet.")
-        else:
-            raise ValueError("Invalid tracked object")
-
-        if ledger_entry is None:
-            raise LedgerEntryCreationException("Ledger entry cannot be created.")
-        ans = await ledger_entry.save()
-        logger.info(
-            f"Ledger entry saved: {ans}", extra={**ledger_entry.log_extra, "notification": False}
-        )
-        return ledger_entry
+            if ledger_entry is None:
+                raise LedgerEntryCreationException("Ledger entry cannot be created.")
+            ans = await ledger_entry.save()
+            logger.info(
+                f"Ledger entry saved: {ans}",
+                extra={**ledger_entry.log_extra, "notification": False},
+            )
+            return ledger_entry
+    except LedgerEntryException as e:
+        logger.error(f"Error processing tracked operation: {e}")
+        raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
 
 
 async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
@@ -107,7 +126,7 @@ async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
     if isinstance(op, Invoice):
         ledger_entry = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
     elif isinstance(op, Payment):
-        raise NotImplementedError("Payment processing is not implemented yet.")
+        ledger_entry = await process_lightning_payment(payment=op, ledger_entry=ledger_entry)
 
     return ledger_entry
 
@@ -137,22 +156,62 @@ async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry)
     # Invoice means we are receiving sats from external.
     node_name = InternalConfig().config.lnd_config.default
 
-    await invoice.lock_op()
-    await invoice.update_conv()
-    ledger_entry.description = invoice.memo
-    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
-    ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
-    ledger_entry.credit_conv = invoice.conv or CryptoConv()
-    ledger_entry.debit_conv = invoice.conv or CryptoConv()
-    if "Funding" in invoice.memo:
-        # Treat this as an incoming Owner's loan Funding to Treasury Lightning
-        ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
-        ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
-        return ledger_entry
-    elif "Exchange" in invoice.memo:
-        print(invoice)
+    async with invoice:
+        if not invoice.conv or invoice.conv.is_unset():
+            await invoice.update_conv()
+        ledger_entry.description = invoice.memo
+        ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
+        ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
+        ledger_entry.credit_conv = invoice.conv or CryptoConv()
+        ledger_entry.debit_conv = invoice.conv or CryptoConv()
+        if "Funding" in invoice.memo:
+            # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+            ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
+            ledger_entry.credit = LiabilityAccount(
+                name="Owner Loan Payable (funding)", sub=node_name
+            )
+            return ledger_entry
+        if invoice.is_lndtohive:
+            await process_lightning_to_hive(invoice=invoice)
+        elif "Exchange" in invoice.memo:
+            print(invoice)
 
     raise NotImplementedError("process_lightning_op is not implemented yet.")
+
+
+async def process_lightning_payment(payment: Payment, ledger_entry: LedgerEntry) -> LedgerEntry:
+    """
+    Processes a Lightning Network payment and updates the corresponding ledger entry.
+
+    This function handles outgoing Lightning payments, updating the ledger entry with
+    the appropriate credit and debit information based on the payment details. If the
+    payment memo contains specific keywords (e.g., "Funding"), it assigns the correct
+    asset and liability accounts. For other cases, it raises a NotImplementedError.
+
+    Args:
+        payment (Payment): The Lightning payment object containing payment details.
+        ledger_entry (LedgerEntry): The ledger entry to be updated based on the payment.
+
+    Returns:
+        LedgerEntry: The updated ledger entry reflecting the processed payment.
+
+    Raises:
+        NotImplementedError: If the payment memo does not match implemented cases.
+    """
+    async with payment:
+        if not payment.conv or payment.conv.is_unset():
+            await payment.update_conv()
+        v4vapp_group_id = ""
+        if payment.custom_records:
+            v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
+            keysend_message = payment.custom_records.keysend_message or ""
+            raise NotImplementedError(f"Not implemented yet {v4vapp_group_id} {keysend_message}")
+
+        if not v4vapp_group_id:
+            raise LedgerEntryCreationException(
+                "Payment does not have a valid v4vapp_group_id in custom records."
+            )
+    raise NotImplementedError(f"Not implemented yet for Payment: {payment.group_id}.")
 
 
 # MARK: Hive Transaction Processing
