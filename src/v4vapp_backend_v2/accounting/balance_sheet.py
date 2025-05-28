@@ -752,7 +752,7 @@ async def get_account_balance(
     account: Account,
     df: pd.DataFrame = pd.DataFrame(),
     full_history: bool = False,
-    as_of_date: datetime = None,
+    as_of_date: datetime | None = None,
 ) -> pd.DataFrame:
     """
     Calculate the balance for a specified account (and optional sub-account) from the DataFrame.
@@ -771,6 +771,8 @@ async def get_account_balance(
         pd.DataFrame: A DataFrame containing either the full transaction history or the closing balance
                       for the specified account and sub-account up to as_of_date.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     if df.empty:
         df = await get_ledger_dataframe(
             as_of_date=as_of_date,
@@ -845,7 +847,7 @@ async def get_account_balance_printout(
     account: Account,
     df: pd.DataFrame = pd.DataFrame(),
     full_history: bool = False,
-    as_of_date: datetime = None,
+    as_of_date: datetime | None = None,
 ) -> str:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
