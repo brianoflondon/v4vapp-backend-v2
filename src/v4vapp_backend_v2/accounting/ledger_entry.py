@@ -11,7 +11,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 
 
 class LedgerEntryException(Exception):
@@ -195,54 +195,6 @@ class LedgerEntry(BaseModel):
             "group_id": self.group_id,
         }
         return ans
-
-    def print_journal_entry(self) -> str:
-        """
-        Prints a formatted journal entry, showing different currencies for debit and credit if applicable.
-
-        Returns:
-            str: A string representation of the journal entry.
-        """
-        if not self.is_completed or not self.debit or not self.credit:
-            # If the entry is not completed, show a warning
-            return (
-                f"WARNING: LedgerEntry is not completed. Missing debit or credit account.\n"
-                f"{'=' * 100}\n"
-            )
-
-        formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
-
-        # Prepare the account names
-        debit_account = self.debit.name if self.debit else "N/A"
-        credit_account = self.credit.name if self.credit else "N/A"
-
-        # Format the amounts with 2 decimal places and include the units
-        debit_unit_str = f" {self.debit_unit.value}" if self.debit_unit else ""
-        credit_unit_str = f" {self.credit_unit.value}" if self.credit_unit else ""
-        formatted_debit_amount = (
-            f"{self.debit_amount:.2f}{debit_unit_str}"
-            if self.debit_amount
-            else f"0.00{debit_unit_str}"
-        )
-        formatted_credit_amount = (
-            f"{self.credit_amount:.2f}{credit_unit_str}"
-            if self.credit_amount
-            else f"0.00{credit_unit_str}"
-        )
-
-        # Create the journal entry string
-        entry = (
-            f"\n"
-            f"J/E NUMBER: {self.group_id or '#####'}\n"
-            f"DATE\n{formatted_date}\n\n"
-            f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
-            f"{'-' * 100}\n"
-            f"{debit_account:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
-            f"{' ' * 4}{credit_account:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
-            f"DESCRIPTION\n{self.description or 'N/A'}"
-            f"\n{'=' * 100}\n"
-        )
-        return entry
 
     # MARK: DB Database Methods
 
@@ -438,3 +390,51 @@ class LedgerEntry(BaseModel):
         lines.append("=" * total_width)
 
         return "\n".join(lines)
+
+    def print_journal_entry(self) -> str:
+        """
+        Prints a formatted journal entry, showing different currencies for debit and credit if applicable.
+
+        Returns:
+            str: A string representation of the journal entry.
+        """
+        if not self.is_completed or not self.debit or not self.credit:
+            # If the entry is not completed, show a warning
+            return (
+                f"WARNING: LedgerEntry is not completed. Missing debit or credit account.\n"
+                f"{'=' * 100}\n"
+            )
+
+        formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
+
+        # Prepare the account names
+        debit_account = self.debit.name if self.debit else "N/A"
+        credit_account = self.credit.name if self.credit else "N/A"
+
+        # Format the amounts with 2 decimal places and include the units
+        debit_unit_str = f" {self.debit_unit.value}" if self.debit_unit else ""
+        credit_unit_str = f" {self.credit_unit.value}" if self.credit_unit else ""
+        formatted_debit_amount = (
+            f"{self.debit_amount:.2f}{debit_unit_str}"
+            if self.debit_amount
+            else f"0.00{debit_unit_str}"
+        )
+        formatted_credit_amount = (
+            f"{self.credit_amount:.2f}{credit_unit_str}"
+            if self.credit_amount
+            else f"0.00{credit_unit_str}"
+        )
+
+        description = lightning_memo(self.description)
+        entry = (
+            f"\n"
+            f"J/E NUMBER: {self.group_id or '#####'}\n"
+            f"DATE\n{formatted_date}\n\n"
+            f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
+            f"{'-' * 100}\n"
+            f"{debit_account:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
+            f"{' ' * 4}{credit_account:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
+            f"DESCRIPTION\n{description or 'N/A'}"
+            f"\n{'=' * 100}\n"
+        )
+        return entry
