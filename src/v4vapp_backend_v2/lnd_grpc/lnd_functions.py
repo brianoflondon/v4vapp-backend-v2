@@ -327,14 +327,15 @@ async def send_lightning_to_pay_req(
                     f"{lnd_client.icon} {payment.log_str}",
                     extra={
                         "notification": False,
-                        "payment": payment.model_dump(),
+                        **payment.log_extra,
                     },
                 )
-                if callback:
-                    callback(payment, **callback_args)
-                if async_callback:
-                    asyncio.create_task(async_callback(payment, **callback_args))
-                else:
+                if payment.status == lnrpc.Payment.SUCCEEDED:
+                    if callback:
+                        callback(payment, **callback_args)
+
+                    if async_callback:
+                        asyncio.create_task(async_callback(payment, **callback_args))
                     return
             except ValidationError as e:
                 logger.error(f"{lnd_client.icon} Payment validation error: {e}")
