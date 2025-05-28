@@ -1097,13 +1097,13 @@
     "btc": 0.00002592519,
     "sats_hive": 259.2519,
     "sats_hbd": 973.8991,
+    "conv_from": "hive",
     "value": 10,
     "source": "Binance",
     "fetch_date": {
       "$date": "2025-05-15T12:32:43.912Z"
     },
-    "in_limits": true,
-    "conv_from": "hive"
+    "in_limits": true
   },
   "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
   "from": "v4vapp-test",
@@ -1115,7 +1115,9 @@
   "to": "devser.v4vapp",
   "trx_id": "a5f153f96ab572a8260703773d6c530d0dd86e41",
   "type": "transfer",
-  "reply_id": "209a30ae1a74f9792e15874dc23ed0bd58ed23a4"
+  "reply_id": "028aa0bb90a8a106d09d57bd6f2e2562d73b496f",
+  "group_id": "95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real",
+  "reply_error": "Database client is not configured."
 },
 {
   "_id": {
@@ -1123,13 +1125,14 @@
   },
   "realm": "marker",
   "trx_id": "block_marker",
-  "block_num": 96264013,
+  "block_num": 96283094,
   "link": "MARKER: block_marker",
   "locked": false,
   "timestamp": {
-    "$date": "2025-05-27T18:48:48.000Z"
+    "$date": "2025-05-28T10:43:48.000Z"
   },
-  "type": "block_marker"
+  "type": "block_marker",
+  "group_id": "96283094_block_marker_1_marker"
 },
 {
   "_id": {
@@ -1214,4 +1217,48 @@
   "to": "v4vapp-test",
   "trx_id": "222616bceed2f9abbc36ff990cca3cf2eeb80768",
   "type": "transfer"
+},
+{
+  "_id": {
+    "$oid": "6836e5b98257e3a4298a9c62"
+  },
+  "realm": "real",
+  "op_in_trx": 1,
+  "block_num": 96282823,
+  "trx_num": 12,
+  "amount": {
+    "amount": "14000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "from": "v4vapp-test",
+  "group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+  "link": "https://hivehub.dev/tx/05ed707763de2738e09d259de2e566f7fd3fcc0f",
+  "memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:12.000Z"
+  },
+  "to": "devser.v4vapp",
+  "trx_id": "05ed707763de2738e09d259de2e566f7fd3fcc0f",
+  "type": "transfer",
+  "reply_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d"
 }]
