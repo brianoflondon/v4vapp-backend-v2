@@ -269,8 +269,15 @@ class Payment(TrackedBaseModel):
     def group_id_query(self) -> dict:
         return {"payment_hash": self.payment_hash}
 
-    @property
+    @computed_field
     def group_id(self) -> str:
+        """
+        Returns the group ID for the payment.
+        """
+        return self.payment_hash
+
+    @property
+    def group_id_p(self) -> str:
         """
         Returns the group ID for the payment.
         """
@@ -303,6 +310,20 @@ class Payment(TrackedBaseModel):
         Returns a string representation of the payment log.
         """
         return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+
+    @property
+    def log_extra(self) -> dict:
+        """
+        Returns a dictionary containing additional information for logging.
+
+        Returns:
+            dict: A dictionary with additional information for logging.
+        """
+        return {
+            self.name: self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "group_id": self.payment_hash,
+            "log_str": self.log_str,
+        }
 
     @property
     def timestamp(self) -> datetime:

@@ -1,6 +1,8 @@
 import asyncio
 
+from v4vapp_backend_v2.accounting.ledger_entry import get_ledger_entry
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, get_hive_client, send_transfer
 from v4vapp_backend_v2.hive_models.op_all import OpAny
@@ -34,18 +36,19 @@ async def can_attempt_to_pay(pay_req: PayReq) -> bool:
     Check the status of the invoice.
     """
     # Placeholder for actual implementation
+    assert TransferBase.db_client, "Database client is not initialized"
     async with TransferBase.db_client as db_client:
         invoice = await db_client.find_one("invoices", {"payment_request": pay_req.pay_req_str})
         if not invoice:
             logger.info(
                 f"Invoice {pay_req.pay_req_str} not found in the database.",
-                extra={"notification": False, "pay_req": pay_req.model_dump()},
+                extra={"notification": False, **pay_req.log_extra},
             )
             return True
         if invoice.status != "open":
             logger.warning(
                 f"Invoice {pay_req.pay_req_str} is not open, current status: {invoice.status}.",
-                extra={"notification": False, "pay_req": pay_req.model_dump()},
+                extra={"notification": False, **pay_req.log_extra},
             )
             return False
     return True
@@ -129,8 +132,8 @@ async def process_hive_to_lightning(op: TransferBase, nobroadcast: bool = False)
                         await send_lightning_to_pay_req(
                             pay_req=pay_req,
                             lnd_client=LNDClient(connection_name=lnd_config.default),
-                            chat_message=op.group_id,
-                            group_id=op.group_id,
+                            chat_message=op.group_id_p,
+                            group_id=op.group_id_p,
                             async_callback=lightning_payment_sent,
                             callback_args={"op": op},
                             amount_msat=op.conv.msats - op.conv.msats_fee,
@@ -210,11 +213,24 @@ async def lightning_payment_sent(payment: Payment, op: TransferBase):
     )
 
 
-async def return_hive_transfer(op: TransferBase, reason: str, nobroadcast: bool = False) -> None:
+async def return_hive_transfer(
+    op: TrackedTransfer, reason: str, nobroadcast: bool = False
+) -> None:
     """
-    Repay the Hive to Lightning operation.
-    This function is called when a Lightning payment fails or expires.
-    It attempts to repay the Hive operation by sending the funds back to the original sender.
+    Repay a Hive to Lightning transfer by returning funds to the original sender.
+    This asynchronous function is invoked when a Lightning payment associated with a Hive to Lightning operation fails or expires.
+    It attempts to repay the original Hive sender by transferring the funds back to their account.
+    Args:
+        op (TransferBase): The original transfer operation containing details of the Hive to Lightning transaction.
+        reason (str): The reason for repayment, included in the memo of the repayment transaction.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcast to the Hive network. Defaults to False.
+    Raises:
+        HiveToLightningError: If required Hive server account configuration or keys are missing, or if the repayment transfer fails.
+    Side Effects:
+        - Logs the repayment attempt and result.
+        - Updates the original operation with the reply transaction ID or error.
+        - Sends a Hive transfer to the original sender if possible.
+
     """
     # Placeholder for actual implementation
     logger.info(
@@ -246,6 +262,7 @@ async def return_hive_transfer(op: TransferBase, reason: str, nobroadcast: bool 
             memo=f"{reason} - {op.group_id}{MEMO_FOOTER}",
         )
         if trx:
+            # MARK: UPDATE ORIGINAL OPERATION
             # Need to updated the original operation with the reply transactions
             op.reply_id = trx.get("trx_id", "")
             save_result = await op.save()
@@ -258,6 +275,17 @@ async def return_hive_transfer(op: TransferBase, reason: str, nobroadcast: bool 
                     **op.log_extra,
                 },
             )
+            # Find the original Ledger Entry for this operation
+            original_ledger_entry = await get_ledger_entry(group_id=op.group_id_p)
+            if original_ledger_entry:
+                # Update the OP (ONLY) in the original Ledger Entry
+                original_ledger_entry.op = op
+                ans = await original_ledger_entry.update()
+                logger.info(
+                    f"Updated original Ledger Entry with OP: {ans}",
+                    extra={**op.log_extra, **original_ledger_entry.log_extra},
+                )
+
     except HiveTransferError as e:
         op.reply_error = e
         await op.save()
@@ -266,6 +294,15 @@ async def return_hive_transfer(op: TransferBase, reason: str, nobroadcast: bool 
             extra={"notification": False, "op": op.model_dump()},
         )
         raise HiveToLightningError(f"Failed to repay Hive to Lightning operation: {e}")
+
+    except Exception as e:
+        op.reply_error = str(e)
+        await op.save()
+        logger.error(
+            f"Unexpected error during Hive to Lightning repayment: {e}",
+            extra={"notification": False, **op.log_extra},
+        )
+        raise HiveToLightningError(f"Unexpected error during Hive to Lightning repayment: {e}")
     # Logic to repay the Hive operation
     # This could involve creating a new TransferBase operation to send the funds back
     # to the original sender or handling it according to your application's logic.

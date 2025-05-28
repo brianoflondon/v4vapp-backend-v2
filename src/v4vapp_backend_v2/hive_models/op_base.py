@@ -169,7 +169,7 @@ class OpBase(TrackedBaseModel):
         """
         return "hive_ops"
 
-    @property
+    @computed_field
     def group_id(self) -> str:
         """
         Returns a group ID for this record. This is a string used to uniquely identify
@@ -177,6 +177,15 @@ class OpBase(TrackedBaseModel):
         The group ID is a combination of the block number, transaction number,
         operation index in the transaction, and realm.
         This is used to determine the key in the database where the operation
+        """
+        group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
+        return group_id
+
+    @property
+    def group_id_p(self) -> str:
+        """
+        Returns the group ID for the payment as a property instead of a @computed_field
+        to fix type checking issues with mypy.
         """
         group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
         return group_id
@@ -256,7 +265,7 @@ class OpBase(TrackedBaseModel):
             and the value is the serialized representation of the instance, excluding the
             "raw_op" field.
         """
-        return {self.name(): self.model_dump(exclude={"raw_op"})}
+        return {self.name(): self.model_dump(exclude={"raw_op"}, by_alias=True)}
 
     @property
     def log_str(self) -> str:
@@ -355,9 +364,7 @@ class OpBase(TrackedBaseModel):
             return link_html
         return f"[{OpBase.block_explorer.name}]({link_html})"
 
-    async def update_conv(
-        self, quote: QuoteResponse | None = None
-    ) -> None:
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Sub classes should implement this method to update the conversion
         for the transaction. If the subclass has a `conv` object

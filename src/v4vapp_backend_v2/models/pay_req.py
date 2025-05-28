@@ -257,6 +257,23 @@ class PayReq(BaseModel):
         """
         return f"PayReq(destination={self.dest_alias or self.destination}, payment_hash={self.payment_hash}, value={self.value}, value_msat={self.value_msat}, expiry_date={self.expiry_date}, memo={self.memo})"
 
+    @property
+    def name(self) -> str:
+        return "pay_req"
+
+    @property
+    def log_extra(self) -> dict:
+        """
+        Returns a dictionary containing additional information for logging.
+
+        Returns:
+            dict: A dictionary with additional information for logging.
+        """
+        return {
+            self.name: self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "log_str": self.log_str,
+        }
+
 
 def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq, pay_req_str: str) -> PayReq:
     """

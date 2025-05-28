@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 from .amount_pyd import AmountPyd
@@ -22,8 +22,6 @@ class LimitOrderCreate(OpBase):
     min_to_receive: AmountPyd
     orderid: int
     owner: str
-
-    conv: CryptoConv | None = CryptoConv()
 
     # Used to store the amount remaining to be filled when doing math
     amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
@@ -48,10 +46,6 @@ class LimitOrderCreate(OpBase):
                     f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
-
-    @property
-    def log_extra(self) -> Dict[str, Any]:
-        return {self.name(): self.model_dump()}
 
     @property
     def is_watched(self) -> bool:

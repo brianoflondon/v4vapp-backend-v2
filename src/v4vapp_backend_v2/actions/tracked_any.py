@@ -63,6 +63,13 @@ TrackedAny = Annotated[
     Discriminator(get_tracked_any_type),
 ]
 
+TrackedTransfer = Annotated[
+    Annotated[Transfer, Tag("transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")],
+    Discriminator(get_tracked_any_type),
+]
+
 
 class DiscriminatedTracked(BaseModel):
     value: TrackedAny

@@ -8,6 +8,7 @@ import pytest
 from bson import json_util
 
 from tests.get_last_quote import last_quote
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     HiveToLightningError,
     process_hive_to_lightning,
@@ -98,12 +99,13 @@ async def test_hive_to_lightning_invoice_expired():
     TrackedBaseModel.db_client = get_mongodb_client_defaults()
 
     op_dict = get_op_dict()
-    # create async_mock for repay_hive_to_lightning
+    # create async_mock for return_hive_transfer
     with patch(
-        "v4vapp_backend_v2.actions.hive_to_lightning.repay_hive_to_lightning",
+        "v4vapp_backend_v2.actions.hive_to_lightning.return_hive_transfer",
         new_callable=AsyncMock,
-    ) as mock_repay_hive_to_lightning:
+    ) as mock_return_hive_transfer:
         if op := op_dict.get("a5f153f96ab572a8260703773d6c530d0dd86e41"):
+            op.reply_id = None
             await process_hive_to_lightning(op)
 
         # Wait for all tasks to complete
@@ -112,8 +114,8 @@ async def test_hive_to_lightning_invoice_expired():
                 break
             await asyncio.sleep(0.1)
 
-        assert mock_repay_hive_to_lightning.call_count == 1
-        assert mock_repay_hive_to_lightning.call_args_list[0][1]["op"] == op
+        assert mock_return_hive_transfer.call_count == 1
+        assert mock_return_hive_transfer.call_args_list[0][1]["op"] == op
 
 
 @pytest.mark.skipif(
@@ -126,6 +128,7 @@ async def test_hive_to_lightning_pay_refund():
     """
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = get_mongodb_client_defaults()
+    LedgerEntry.db_client = TrackedBaseModel.db_client
 
     op_dict = get_op_dict()
     # This specific transaction is an expired lightning invoice so will trigger a refund.

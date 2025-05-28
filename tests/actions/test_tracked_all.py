@@ -24,12 +24,8 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     get_ledger_dataframe,
     list_all_accounts,
 )
-from v4vapp_backend_v2.actions.tracked_all import (
-    LedgerEntryException,
-    TrackedAny,
-    process_tracked,
-    tracked_any_filter,
-)
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
+from v4vapp_backend_v2.actions.tracked_all import TrackedAny, process_tracked, tracked_any_filter
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
@@ -100,12 +96,6 @@ def do_not_run_extra_processing(request):
         yield
 
 
-@pytest.fixture
-def no_extra_processing(monkeypatch):
-    # This fixture does nothing, effectively disables the autouse fixture for this test
-    pass
-
-
 def load_tracked_ops_from_mongodb_dump(file_path: str) -> Generator[TrackedAny, None, None]:
     """
     Load tracked operations from a MongoDB collection.
@@ -162,6 +152,7 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     TrackedBaseModel.last_quote = last_quote()
     AllQuotes.db_client = TrackedBaseModel.db_client
+    LedgerEntry.db_client = TrackedBaseModel.db_client
     await fill_rates_db()
     count = 0
     processed_count = 0
@@ -218,6 +209,9 @@ async def test_balance_sheet_steps_hive_ops():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+    AllQuotes.db_client = TrackedBaseModel.db_client
+    await fill_rates_db()
     count = 0
     balance_sheet_print = ""
     all_currencies = ""
@@ -403,6 +397,8 @@ async def test_process_one_lightning_invoice_funding_umbrel():
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
     AllQuotes.db_client = TrackedBaseModel.db_client
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+    await fill_rates_db()
     await drop_collection_and_user("conn_1", "test_db", "test_user")
 
     # Load a single Hive to Lightning operation

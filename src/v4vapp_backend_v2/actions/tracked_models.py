@@ -21,7 +21,7 @@ class TrackedBaseModel(BaseModel):
     reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
     reply_error: Any | None = Field(None, description="Error in the reply, if any", exclude=False)
 
-    conv: CryptoConv | None = None
+    conv: CryptoConv | None = CryptoConv()
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
@@ -94,7 +94,7 @@ class TrackedBaseModel(BaseModel):
         raise NotImplementedError("Subclasses must implement this method.")
 
     @property
-    def group_id_query(self) -> dict:
+    def group_id_query(self) -> dict[str, Any]:
         """
         Returns the query used to identify the group ID in the database.
 
@@ -161,12 +161,29 @@ class TrackedBaseModel(BaseModel):
             UpdateResult | None: The result of the update operation, or None if no database client is available.
         """
         if self.db_client:
+            # doc = await self.db_client.find_one(
+            #     collection_name="ledger", query=self.group_id_query
+            # )
+            # ledger_entry = LedgerEntry.model_validate(doc) if doc else None
+            # if ledger_entry:
+            #     ledger_entry.op = self
+            #     ledger_update = self.db_client.update_one(
+            #         collection_name="ledger",
+            #         query=self.group_id_query,
+            #         update=ledger_entry.model_dump(exclude_unset=True, exclude_none=True, by_alias=True),
+            #         upsert=True,
+            #     )
+
             return await self.db_client.update_one(
                 collection_name=self.collection,
                 query=self.group_id_query,
                 update=self.model_dump(exclude_unset=True, exclude_none=True, by_alias=True),
                 upsert=True,
             )
+        logger.warning(
+            "No database client available for saving the operation",
+            extra={"notification": False},
+        )
         return None
 
     def tracked_type(self) -> str:
@@ -349,4 +366,4 @@ class TrackedBaseModel(BaseModel):
                     return cls.last_quote
             except Exception as e:
                 logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
-        return None
+        return cls.last_quote

@@ -2,10 +2,14 @@ import asyncio
 from typing import Any, Union
 
 from pydantic import ValidationError
-from pymongo.results import InsertOneResult
 
 from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry import (
+    LedgerEntry,
+    LedgerEntryCreationException,
+    LedgerEntryDuplicateException,
+    LedgerEntryException,
+)
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
 from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -18,31 +22,6 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
-
-
-class LedgerEntryException(Exception):
-    """Custom exception for LedgerEntry errors."""
-
-    pass
-
-
-class LedgerEntryConfigurationException(LedgerEntryException):
-    """Custom exception for LedgerEntry configuration errors."""
-
-    pass
-
-
-class LedgerEntryCreationException(LedgerEntryException):
-    """Custom exception for LedgerEntry creation errors."""
-
-    pass
-
-
-class LedgerEntryDuplicateException(LedgerEntryException):
-    """Custom exception for LedgerEntry duplicate errors."""
-
-    pass
-
 
 # TrackedAny = Union[OpAny, Invoice, Payment]
 # TODO: #111 implement discriminator in models to pick the right one
@@ -88,37 +67,24 @@ async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
     :param tracked: The tracked object to process.
     :return: LedgerEntry
     """
+
     async with tracked_op:
         if getattr(tracked_op, "type", None):
             ledger_entry = await process_hive_op(op=tracked_op)
-            return ledger_entry
         elif isinstance(tracked_op, Invoice):
-            return await process_lightning_op(op=tracked_op)
+            ledger_entry = await process_lightning_op(op=tracked_op)
         elif isinstance(tracked_op, Payment):
             raise NotImplementedError("Payment processing is not implemented yet.")
         else:
             raise ValueError("Invalid tracked object")
 
-
-async def ledger_entry_to_db(ledger_entry: LedgerEntry) -> InsertOneResult:
-    """
-    Save the ledger entry to the database.
-
-    :param ledger_entry: The ledger entry to save.
-    :return: The saved ledger entry.
-    """
-    if ledger_entry and ledger_entry.debit and ledger_entry.credit and TrackedBaseModel.db_client:
-        try:
-            ans = await TrackedBaseModel.db_client.insert_one(
-                collection_name=LedgerEntry.collection(),
-                document=ledger_entry.model_dump(by_alias=True),
-                report_duplicates=True,
-            )
-            return ans
-        except Exception as e:
-            logger.error(f"Error saving ledger entry to database: {e}")
-            raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
-    raise LedgerEntryConfigurationException("Database client not configured.")
+        if ledger_entry is None:
+            raise LedgerEntryCreationException("Ledger entry cannot be created.")
+        ans = await ledger_entry.save()
+        logger.info(
+            f"Ledger entry saved: {ans}", extra={**ledger_entry.log_extra, "notification": False}
+        )
+        return ledger_entry
 
 
 async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
@@ -143,7 +109,6 @@ async def process_lightning_op(op: Invoice | Payment) -> LedgerEntry:
     elif isinstance(op, Payment):
         raise NotImplementedError("Payment processing is not implemented yet.")
 
-    await ledger_entry_to_db(ledger_entry=ledger_entry)
     return ledger_entry
 
 
@@ -239,9 +204,6 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
 
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(op=op, ledger_entry=ledger_entry)
-        ans = await ledger_entry_to_db(ledger_entry=ledger_entry)
-        if not ans:
-            raise LedgerEntryCreationException("Failed to save ledger entry to database.")
         return ledger_entry
 
     except LedgerEntryException as e:

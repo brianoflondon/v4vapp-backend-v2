@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -289,13 +289,20 @@ class Invoice(TrackedBaseModel):
         """
         return {"r_hash": self.r_hash}
 
-    @property
+    @computed_field
     def group_id(self) -> str:
         """
         Returns the group ID for the invoice.
 
         Returns:
             str: The group ID for the invoice.
+        """
+        return self.r_hash
+
+    @property
+    def group_id_p(self) -> str:
+        """
+        Returns the group ID for the payment.
         """
         return self.r_hash
 
@@ -308,6 +315,20 @@ class Invoice(TrackedBaseModel):
             str: A string representation of the invoice.
         """
         return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo}"
+
+    @property
+    def log_extra(self) -> dict:
+        """
+        Returns a dictionary containing additional information for logging.
+
+        Returns:
+            dict: A dictionary with additional information for logging.
+        """
+        return {
+            "invoice": self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "group_id": self.r_hash,
+            "log_str": self.log_str,
+        }
 
     def fill_hive_accname(self) -> None:
         """
