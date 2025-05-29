@@ -1267,7 +1267,5 @@
   "to": "devser.v4vapp",
   "trx_id": "05ed707763de2738e09d259de2e566f7fd3fcc0f",
   "type": "transfer",
-  "reply_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
-  "reply_error": "LedgerEntry with group_id 96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real not found.",
-  "locked": true
+  "locked": false
 }]

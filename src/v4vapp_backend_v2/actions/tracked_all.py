@@ -347,7 +347,7 @@ async def process_transfer_op(op: TransferBase, ledger_entry: LedgerEntry) -> Le
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
-        follow_on_task = process_hive_to_lightning(op=op)
+        follow_on_task = process_hive_to_lightning(hive_transfer=op)
     else:
         logger.info(
             f"Transfer between two different accounts: {op.from_account} -> {op.to_account}"

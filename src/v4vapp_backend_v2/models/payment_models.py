@@ -312,7 +312,7 @@ class Payment(TrackedBaseModel):
         return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
 
     @property
-    def log_extra(self) -> dict:
+    def log_extra(self) -> dict[str, Any]:
         """
         Returns a dictionary containing additional information for logging.
 
@@ -320,7 +320,7 @@ class Payment(TrackedBaseModel):
             dict: A dictionary with additional information for logging.
         """
         return {
-            self.name: self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "payment": self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
             "group_id": self.payment_hash,
             "log_str": self.log_str,
         }

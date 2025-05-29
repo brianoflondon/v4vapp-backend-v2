@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -197,6 +198,8 @@ class CryptoConversion(BaseModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if isinstance(value, Decimal):
+            value = float(value)
         if (
             isinstance(amount, Amount)
             or isinstance(amount, AmountPyd)

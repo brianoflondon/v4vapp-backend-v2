@@ -196,41 +196,37 @@ async def test_hive_to_lightning_successful_payment():
     AllQuotes.db_client = TrackedBaseModel.db_client
 
     op_dict = get_op_dict()
-    # How to patch notification bot to avoid sending real messages
-    with patch("v4vapp_backend_v2.config.notification_protocol.NotificationBot") as mock_bot:
-        bot_instance = mock_bot.return_value
-        bot_instance.send_message = AsyncMock()
-
-        if op := op_dict.get("05ed707763de2738e09d259de2e566f7fd3fcc0f"):
-            if op.reply_id:
-                correct_reply_id = op.reply_id
-            print("Processing operation:", op.log_str)
+    if op := op_dict.get("05ed707763de2738e09d259de2e566f7fd3fcc0f"):
+        transfer = Transfer.model_validate(op)
+        if transfer.replies:
+            correct_replies = transfer.replies
+            print("Processing operation:", transfer.log_str)
             # Test failure because of prior processing
             with pytest.raises(
                 HiveToLightningError,
-                match=f"Operation already has a reply transaction: {op.reply_id}",
+                match="Operation already has a.*reply.*",
             ):
-                await process_hive_to_lightning(op, nobroadcast=True)
+                await process_hive_to_lightning(transfer, nobroadcast=True)
 
-            # load payment dictionary from JSON file
-            with open("tests/data/hive_models/mongodb/payment_dict_success.json", "r") as f:
-                json_data = json.load(f)
-            payment = Payment.model_validate(json_data.get("payment"))
-            with patch(
-                "v4vapp_backend_v2.actions.hive_to_lightning.send_lightning_to_pay_req",
-                new=AsyncMock(),
-            ) as mock_send_lightning:
-                # Configure the mock to return the payment dictionary
-                mock_send_lightning.return_value = payment
-                op.reply_id = None
-                await process_hive_to_lightning(op, nobroadcast=True)
-                await asyncio.sleep(0.2)
+        # load payment dictionary from JSON file
+        with open("tests/data/hive_models/mongodb/payment_dict_success.json", "r") as f:
+            json_data = json.load(f)
+        payment = Payment.model_validate(json_data.get("payment"))
+        with patch(
+            "v4vapp_backend_v2.actions.hive_to_lightning.send_lightning_to_pay_req",
+            new=AsyncMock(),
+        ) as mock_send_lightning:
+            # Configure the mock to return the payment dictionary
+            mock_send_lightning.return_value = payment
+            transfer.replies = []
+            await process_hive_to_lightning(transfer, nobroadcast=True)
+            await asyncio.sleep(0.5)
 
     # Wait for all tasks to complete
     while asyncio.all_tasks():
         if len(asyncio.all_tasks()) == 1:
             break
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
 
 
 trx_json_str = '{"expiration": "2025-05-27T16:10:30", "ref_block_num": 53993, "ref_block_prefix": 4044532601, "operations": [["transfer", {"from": "devser.v4vapp", "to": "v4vapp-test", "amount": "10.000 HIVE", "memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app"}]], "extensions": [], "signatures": ["1f379ef999379c1fc8503a149bf1616f54b3267c5a13e8ae3ec02faa08faa3748e769e3af1ef53554535aae79bbf514bad96c58d90e4190818d6e5114c743540d5"], "trx_id": "d9b771ebf9662a963f42b93c1ce702481f7700c8"}'

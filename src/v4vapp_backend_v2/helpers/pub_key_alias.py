@@ -6,6 +6,8 @@ from v4vapp_backend_v2.models.payment_models import NodeAlias, Payment
 
 LOCAL_PUB_KEY_ALIAS_CACHE = {}
 
+#
+
 
 async def get_all_pub_key_aliases(
     db_client: MongoDBClient, col_pub_keys: str = "pub_keys"
@@ -31,11 +33,11 @@ async def update_payment_route_with_alias(
     db_client: MongoDBClient,
     lnd_client: LNDClient,
     payment: Payment,
-    pub_keys: list[str] | None = None,
+    pub_keys: list[str] = [],
     fill_cache: bool = False,
     force_update: bool = False,
     col_pub_keys: str = "pub_keys",
-):
+) -> None:
     """
     Update the payment route with the alias of the public key.
 
@@ -91,10 +93,12 @@ async def update_payment_route_with_alias(
             )
             logger.debug(
                 f"Updated alias for {pub_key} to {hop_alias.alias}",
-                extra={"pub_key": pub_key, "alias": hop_alias.alias, db_ans: db_ans},
+                extra={"pub_key": pub_key, "alias": hop_alias.alias, "db_ans": db_ans},
             )
             LOCAL_PUB_KEY_ALIAS_CACHE[pub_key] = hop_alias.alias
         else:
             hop_alias = NodeAlias(pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key])
         # Update the payment route with the alias.
+        if not payment.route:
+            payment.route = []
         payment.route.append(hop_alias)

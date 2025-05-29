@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar, Dict, Tuple
 
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field
@@ -73,6 +73,32 @@ async def get_ledger_entry(group_id: str) -> "LedgerEntry":
         by_alias=True,
     )
     return ledger_entry
+
+
+async def update_ledger_entry_op(
+    group_id: str, op: TrackedAny
+) -> Tuple["LedgerEntry", UpdateResult]:
+    """
+    Updates the operation associated with a LedgerEntry in the database.
+
+    Args:
+        group_id (str): The group ID of the ledger entry to update.
+        op (TrackedAny): The operation to associate with the ledger entry.
+
+    Returns:
+        Tuple[LedgerEntry, UpdateResult]: A tuple containing the updated LedgerEntry
+            and the result of the database update operation.
+
+    Raises:
+        LedgerEntryConfigurationException: If the database client is not configured.
+    """
+    if not LedgerEntry.db_client:
+        raise LedgerEntryConfigurationException("Database client is not configured.")
+
+    ledger_entry = await get_ledger_entry(group_id)
+    ledger_entry.op = op
+    ans = await ledger_entry.update_op()
+    return ledger_entry, ans
 
 
 class LedgerEntry(BaseModel):

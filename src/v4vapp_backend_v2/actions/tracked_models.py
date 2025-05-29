@@ -24,6 +24,11 @@ class ReplyModel(BaseModel):
         description="Transaction type of the reply, i.e. 'transfer' 'invoice' 'payment'",
         exclude=False,
     )
+    reply_msat: int = Field(
+        0,
+        description="Msats amount of the reply, if any",
+        exclude=False,
+    )
     reply_message: str | None = Field(
         None,
         description="Message associated with the reply, if any",
@@ -41,6 +46,7 @@ class ReplyModel(BaseModel):
         # TODO: We could automatically determine the reply_type based on the reply_id
         self.reply_id = data.get("reply_id", "")
         self.reply_type = data.get("reply_type", None)
+        self.reply_msat = data.get("reply_msat", None)
         self.reply_error = data.get("reply_error", None)
         self.reply_message = data.get("reply_message", None)
 
@@ -115,7 +121,12 @@ class TrackedBaseModel(BaseModel):
         return [reply.reply_id for reply in self.replies if reply.reply_id]
 
     def add_reply(
-        self, reply_id: str, reply_type: str, reply_message: str = "", reply_error: Any = None
+        self,
+        reply_id: str,
+        reply_type: str,
+        reply_msat: int = 0,
+        reply_message: str = "",
+        reply_error: Any = None,
     ) -> None:
         """
         Adds a reply to the list of replies.
@@ -133,6 +144,7 @@ class TrackedBaseModel(BaseModel):
         reply = ReplyModel(
             reply_id=reply_id,
             reply_type=reply_type,
+            reply_msat=reply_msat,
             reply_message=reply_message,
             reply_error=reply_error,
         )
