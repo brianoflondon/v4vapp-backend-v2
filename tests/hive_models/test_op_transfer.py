@@ -113,6 +113,7 @@ async def test_model_dump_transfer_enhanced():
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = Transfer.model_validate(hive_event)
+            await transfer.update_conv()
             hive_event_model = transfer.model_dump(by_alias=True)
             assert hive_event_model["d_memo"] == transfer.d_memo
             assert hive_event_model["from"] == transfer.from_account
@@ -120,7 +121,9 @@ async def test_model_dump_transfer_enhanced():
             assert hive_event_model["memo"] == transfer.memo
             if transfer.conv:
                 assert transfer.conv.hive == hive_event_model["conv"]["hive"]
-                assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+                assert (
+                    transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+                ), f"Failure in {transfer.trx_id}"
                 # This line tests the fees and conversion limits calculations
                 # in service_fees.py
                 if (

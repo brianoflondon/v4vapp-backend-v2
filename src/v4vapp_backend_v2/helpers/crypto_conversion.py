@@ -184,6 +184,9 @@ class CryptoConversion(BaseModel):
     # model_config = ConfigDict(
     #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
     # )
+    model_config = ConfigDict(
+        use_enum_values=True,  # Serializes enum as its value
+    )
 
     def __init__(
         self,

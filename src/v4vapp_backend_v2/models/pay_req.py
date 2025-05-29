@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
@@ -233,7 +233,7 @@ class PayReq(BaseModel):
         Returns:
             bool: True if the payment request is expired, False otherwise.
         """
-        return self.expiry_date is not None and datetime.now() > self.expiry_date + timedelta(
+        return self.expiry_date is not None and datetime.now(tz=timezone.utc) > self.expiry_date + timedelta(
             seconds=0
         )
 

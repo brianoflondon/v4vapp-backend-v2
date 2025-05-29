@@ -1,8 +1,8 @@
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
-from typing import Any, ClassVar
+from typing import Any, ClassVar, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, logger
@@ -12,14 +12,52 @@ from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, Quot
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 
 
+class ReplyModel(BaseModel):
+    """
+    Base model for operations that can have replies.
+    This model is used to track the reply ID, type, and any errors associated with the reply.
+    """
+
+    reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
+    reply_type: str | None = Field(
+        None,
+        description="Transaction type of the reply, i.e. 'transfer' 'invoice' 'payment'",
+        exclude=False,
+    )
+    reply_message: str | None = Field(
+        None,
+        description="Message associated with the reply, if any",
+        exclude=False,
+    )
+    reply_error: Any | None = Field(None, description="Error in the reply, if any", exclude=False)
+
+    def __init__(self, **data):
+        """
+        Initialize the ReplyModel with the provided data.
+
+        :param data: The data to initialize the model with.
+        """
+        super().__init__(**data)
+        # TODO: We could automatically determine the reply_type based on the reply_id
+        self.reply_id = data.get("reply_id", "")
+        self.reply_type = data.get("reply_type", None)
+        self.reply_error = data.get("reply_error", None)
+        self.reply_message = data.get("reply_message", None)
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
 class TrackedBaseModel(BaseModel):
     locked: bool = Field(
         default=False,
         description="Flag to indicate if the operation is locked or being processed",
         exclude=False,
     )
-    reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
-    reply_error: Any | None = Field(None, description="Error in the reply, if any", exclude=False)
+    replies: List[ReplyModel] = Field(
+        default_factory=list,
+        description="List of replies to the operation",
+        exclude=False,
+    )
 
     conv: CryptoConv | None = CryptoConv()
 
@@ -66,6 +104,61 @@ class TrackedBaseModel(BaseModel):
         """
         await self.unlock_op()
 
+    # MARK: Reply Management
+
+    def reply_ids(self) -> List[str]:
+        """
+        Returns a list of reply IDs from the replies.
+
+        :return: A list of reply IDs.
+        """
+        return [reply.reply_id for reply in self.replies if reply.reply_id]
+
+    def add_reply(
+        self, reply_id: str, reply_type: str, reply_message: str = "", reply_error: Any = None
+    ) -> None:
+        """
+        Adds a reply to the list of replies.
+
+        :param reply_id: The ID of the reply.
+        :param reply_type: The type of the reply (optional).
+        :param reply_error: Any error associated with the reply (optional).
+        """
+        if reply_id in self.reply_ids():
+            logger.warning(
+                f"Reply with ID {reply_id} already exists in {self.name()}",
+                extra={"notification": False},
+            )
+            raise ValueError(f"Reply with ID {reply_id} already exists")
+        reply = ReplyModel(
+            reply_id=reply_id,
+            reply_type=reply_type,
+            reply_message=reply_message,
+            reply_error=reply_error,
+        )
+        self.replies.append(reply)
+
+    def get_reply(self, reply_id: str) -> ReplyModel | None:
+        """
+        Retrieves a reply by its ID.
+
+        :param reply_id: The ID of the reply to retrieve.
+        :return: The ReplyModel instance if found, otherwise None.
+        """
+        for reply in self.replies:
+            if reply.reply_id == reply_id:
+                return reply
+        return None
+
+    def get_replies_by_type(self, reply_type: str) -> list[ReplyModel]:
+        """
+        Retrieves all replies of a specific type.
+
+        :param reply_type: The type of replies to retrieve.
+        :return: A list of ReplyModel instances matching the specified type.
+        """
+        return [reply for reply in self.replies if reply.reply_type == reply_type]
+
     @classmethod
     def name(cls) -> str:
         """
@@ -97,6 +190,19 @@ class TrackedBaseModel(BaseModel):
     def group_id_query(self) -> dict[str, Any]:
         """
         Returns the query used to identify the group ID in the database.
+
+        This method should be overridden in subclasses to provide the
+        specific query for the group ID.
+
+        Returns:
+            dict: The query used to identify the group ID.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    @property
+    def group_id_p(self) -> str:
+        """
+        Returns the group ID as a string.
 
         This method should be overridden in subclasses to provide the
         specific query for the group ID.
@@ -150,7 +256,9 @@ class TrackedBaseModel(BaseModel):
             return ans
         return None
 
-    async def save(self) -> UpdateResult | None:
+    async def save(
+        self, exclude_unset: bool = True, exclude_none: bool = True, **kwargs: Any
+    ) -> UpdateResult | None:
         """
         Saves the current state of the operation to the database.
 
@@ -161,23 +269,12 @@ class TrackedBaseModel(BaseModel):
             UpdateResult | None: The result of the update operation, or None if no database client is available.
         """
         if self.db_client:
-            # doc = await self.db_client.find_one(
-            #     collection_name="ledger", query=self.group_id_query
-            # )
-            # ledger_entry = LedgerEntry.model_validate(doc) if doc else None
-            # if ledger_entry:
-            #     ledger_entry.op = self
-            #     ledger_update = self.db_client.update_one(
-            #         collection_name="ledger",
-            #         query=self.group_id_query,
-            #         update=ledger_entry.model_dump(exclude_unset=True, exclude_none=True, by_alias=True),
-            #         upsert=True,
-            #     )
-
             return await self.db_client.update_one(
                 collection_name=self.collection,
                 query=self.group_id_query,
-                update=self.model_dump(exclude_unset=True, exclude_none=True, by_alias=True),
+                update=self.model_dump(
+                    exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+                ),
                 upsert=True,
             )
         logger.warning(
@@ -197,6 +294,8 @@ class TrackedBaseModel(BaseModel):
             str: The tracked type of the operation.
         """
         return self.name()
+
+    # MARK: Quote Management
 
     @classmethod
     def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:

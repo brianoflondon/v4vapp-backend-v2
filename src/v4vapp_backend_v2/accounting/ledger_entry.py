@@ -226,7 +226,7 @@ class LedgerEntry(BaseModel):
         if not self.db_client:
             raise LedgerEntryConfigurationException("Database client is not configured.")
 
-    async def update(self) -> UpdateResult:
+    async def update_op(self) -> UpdateResult:
         """
         Asynchronously updates the ledger entry in the database. This should only be called after the LedgerEntry is completed.
         This method updates the ledger entry in the database with the current state of the LedgerEntry object.
@@ -244,13 +244,7 @@ class LedgerEntry(BaseModel):
             ans = await self.db_client.update_one(
                 collection_name=LedgerEntry.collection(),
                 query=self.group_id_query,
-                update={
-                    "$set": {
-                        "op": self.op.model_dump(
-                            by_alias=True, exclude_none=True, exclude_unset=True
-                        )
-                    }
-                },
+                update={"$set": {"op": self.op.model_dump(by_alias=True)}},
             )
             return ans
         except Exception as e:

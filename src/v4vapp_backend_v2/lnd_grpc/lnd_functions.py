@@ -1,7 +1,6 @@
-import asyncio
 import base64
 from collections.abc import Callable
-from typing import Any, Coroutine, Mapping
+from typing import Any, Coroutine
 
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import AioRpcError
@@ -236,8 +235,7 @@ async def send_lightning_to_pay_req(
     fee_limit_ppm: int = LIGHTNING_FEE_LIMIT_PPM,
     callback: Callable | None = None,
     async_callback: Callable[..., "Coroutine[Any, Any, Any]"] | None = None,
-    callback_args: Mapping[str, Any] = {},
-) -> None:
+) -> Payment:
     """
     Send a payment to a Lightning Network invoice using the provided payment request.
 
@@ -316,7 +314,7 @@ async def send_lightning_to_pay_req(
                 f"Failure {lnrpc.PaymentFailureReason.Name(payment_resp.failure_reason)}",
                 extra={
                     "notification": False,
-                    "payment": payment_dict,
+                    "payment_dict": payment_dict,
                 },
             )
             failure_reason = payment_dict.get("failure_reason", "Unknown Failure")
@@ -331,12 +329,8 @@ async def send_lightning_to_pay_req(
                     },
                 )
                 if payment.status == lnrpc.Payment.SUCCEEDED:
-                    if callback:
-                        callback(payment, **callback_args)
+                    return payment
 
-                    if async_callback:
-                        asyncio.create_task(async_callback(payment, **callback_args))
-                    return
             except ValidationError as e:
                 logger.error(f"{lnd_client.icon} Payment validation error: {e}")
                 raise LNDPaymentError(f"Payment validation error: {e}")
