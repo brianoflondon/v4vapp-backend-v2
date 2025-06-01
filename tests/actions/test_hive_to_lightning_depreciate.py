@@ -190,6 +190,10 @@ async def test_hive_to_lightning_pay_refund():
 )
 @pytest.mark.asyncio
 async def test_hive_to_lightning_successful_payment():
+    """
+    This test alters the dev database.
+
+    """
     TrackedBaseModel.last_quote = last_quote()
     TrackedBaseModel.db_client = get_mongodb_client_defaults()
     LedgerEntry.db_client = TrackedBaseModel.db_client
