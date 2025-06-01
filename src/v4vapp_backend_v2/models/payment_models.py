@@ -325,6 +325,7 @@ class Payment(TrackedBaseModel):
             "log_str": self.log_str,
         }
 
+    # Properties which are not
     @property
     def timestamp(self) -> datetime:
         """
@@ -337,6 +338,17 @@ class Payment(TrackedBaseModel):
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         return timestamp
+
+    @property
+    def op_type(self) -> str:
+        """
+        Returns the operation type for the invoice.
+
+        Returns:
+            str: The operation type for the invoice, which is always "invoice".
+        """
+        return "invoice"
+
 
     @property
     def age(self) -> float:

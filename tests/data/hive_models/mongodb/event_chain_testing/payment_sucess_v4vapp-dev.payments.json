@@ -1,0 +1,80 @@
+[{
+  "_id": {
+    "$oid": "6836e5e28257e3a4298a9c63"
+  },
+  "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+  "creation_date": {
+    "$date": "2025-05-28T10:30:58.000Z"
+  },
+  "creation_time_ns": {
+    "$date": "2025-05-28T10:30:58.724Z"
+  },
+  "destination": "V4VAPP Hive Bridge",
+  "fee_ppm": 0,
+  "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+  "payment_index": {
+    "$numberLong": "74474"
+  },
+  "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+  "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "route_str": "V4VAPP Hive Bridge",
+  "status": "SUCCEEDED",
+  "value": {
+    "$numberLong": "2233"
+  },
+  "value_msat": {
+    "$numberLong": "2233000"
+  },
+  "value_sat": {
+    "$numberLong": "2233"
+  },
+  "custom_records": {
+    "keysend_message": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+    "v4vapp_group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real"
+  },
+  "htlcs": [
+    {
+      "attempt_id": {
+        "$numberLong": "90085"
+      },
+      "status": "SUCCEEDED",
+      "attempt_time_ns": {
+        "$date": "2025-05-28T10:30:58.786Z"
+      },
+      "resolve_time_ns": {
+        "$date": "2025-05-28T10:31:02.997Z"
+      },
+      "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+      "route": {
+        "total_time_lock": 898808,
+        "total_amt": {
+          "$numberLong": "2233"
+        },
+        "hops": [
+          {
+            "chan_id": "800082725764071425",
+            "chan_capacity": {
+              "$numberLong": "2333033"
+            },
+            "amt_to_forward": {
+              "$numberLong": "2233"
+            },
+            "expiry": 898808,
+            "amt_to_forward_msat": {
+              "$numberLong": "2233000"
+            },
+            "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+            "tlv_payload": true,
+            "custom_records": {
+              "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+              "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+            }
+          }
+        ],
+        "total_amt_msat": {
+          "$numberLong": "2233000"
+        }
+      }
+    }
+  ]
+}]

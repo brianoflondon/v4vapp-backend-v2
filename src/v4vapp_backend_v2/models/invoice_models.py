@@ -425,6 +425,16 @@ class Invoice(TrackedBaseModel):
         return timestamp
 
     @property
+    def op_type(self) -> str:
+        """
+        Returns the operation type for the invoice.
+
+        Returns:
+            str: The operation type for the invoice, which is always "invoice".
+        """
+        return "invoice"
+
+    @property
     def age(self) -> float:
         """
         Returns the age of the invoice as a float representing the total seconds.

@@ -46,7 +46,7 @@ class ReplyModel(BaseModel):
         # TODO: We could automatically determine the reply_type based on the reply_id
         self.reply_id = data.get("reply_id", "")
         self.reply_type = data.get("reply_type", None)
-        self.reply_msat = data.get("reply_msat", None)
+        self.reply_msat = data.get("reply_msat", 0)
         self.reply_error = data.get("reply_error", None)
         self.reply_message = data.get("reply_message", None)
 
@@ -54,18 +54,17 @@ class ReplyModel(BaseModel):
 
 
 class TrackedBaseModel(BaseModel):
-    locked: bool = Field(
-        default=False,
-        description="Flag to indicate if the operation is locked or being processed",
-        exclude=False,
-    )
     replies: List[ReplyModel] = Field(
         default_factory=list,
         description="List of replies to the operation",
         exclude=False,
     )
 
-    conv: CryptoConv | None = CryptoConv()
+    conv: CryptoConv = Field(CryptoConv(), description="Conversion object for the transaction")
+    fee_conv: CryptoConv | None = Field(
+        CryptoConv(),
+        description="Conversion object for fees associated with this transaction if any",
+    )
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
@@ -77,28 +76,27 @@ class TrackedBaseModel(BaseModel):
         :param data: The data to initialize the model with.
         """
         super().__init__(**data)
-        self.locked = data.get("locked", False)
 
-    async def __aenter__(self) -> "TrackedBaseModel":
+    def __enter__(self) -> "TrackedBaseModel":
         """
-        Asynchronously acquires a lock and returns the current instance.
+        Acquires a lock and returns the current instance.
 
-        This method is intended to be used as part of an asynchronous context manager
+        This method is intended to be used as part of a context manager
         protocol. Upon entering the context, it ensures that the necessary lock is
         acquired before proceeding.
 
         Returns:
             TrackedBaseModel: The current instance with the lock acquired.
         """
-        await self.lock_op()
+        self.lock_op()
         return self
 
-    async def __aexit__(
+    def __exit__(
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
     ) -> None:
         """
-        Asynchronous context manager exit method.
-        This method is called when exiting the async context. It ensures that any necessary cleanup is performed,
+        Context manager exit method.
+        This method is called when exiting the context. It ensures that any necessary cleanup is performed,
         such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
         was raised within the context.
         Args:
@@ -108,7 +106,7 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        await self.unlock_op()
+        self.unlock_op()
 
     # MARK: Reply Management
 
@@ -224,7 +222,30 @@ class TrackedBaseModel(BaseModel):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    async def lock_op(self) -> UpdateResult | None:
+    # MARK: Lock Management
+
+    @property
+    def locked(self) -> bool:
+        """
+        Returns the locked status of the operation.
+
+        This method checks if the operation is currently locked, which
+        indicates that it is being processed and should not be modified
+        or accessed by other threads or processes.
+
+        Returns:
+            bool: True if the operation is locked, False otherwise.
+        """
+        if TrackedBaseModel.db_client:
+            db = TrackedBaseModel.db_client.sync_db
+            result: dict[str, Any] | None = db[self.collection].find_one(
+                self.group_id_query, projection={"locked": True}
+            )
+            if result:
+                return result.get("locked", False)
+        return False
+
+    def lock_op(self) -> UpdateResult | None:
         """
         Locks the operation to prevent concurrent processing.
 
@@ -235,17 +256,16 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        self.locked = True
         if TrackedBaseModel.db_client:
-            ans = await TrackedBaseModel.db_client.update_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
-                update={"locked": self.locked},
+            db = TrackedBaseModel.db_client.sync_db
+            ans: UpdateResult = db[self.collection].update_one(
+                self.group_id_query,
+                update={"$set": {"locked": True}},
             )
             return ans
         return None
 
-    async def unlock_op(self) -> UpdateResult | None:
+    def unlock_op(self) -> UpdateResult | None:
         """
         Unlocks the operation to allow concurrent processing.
 
@@ -256,12 +276,11 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        self.locked = False
-        if self.db_client:
+        if TrackedBaseModel.db_client:
+            db = TrackedBaseModel.db_client.sync_db
             # Remember my update_one already has the $set
-            ans = await self.db_client.update_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
+            ans: UpdateResult = db[self.collection].update_one(
+                self.group_id_query,
                 update={"$unset": {"locked": ""}},
                 upsert=True,
             )

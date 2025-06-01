@@ -84,7 +84,10 @@ class OpBase(TrackedBaseModel):
     type: str = Field(description="Type of the event")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
-    timestamp: datetime = Field(description="Timestamp of the transaction in UTC format")
+    timestamp: datetime = Field(
+        default=datetime.now(tz=timezone.utc),
+        description="Timestamp of the transaction in UTC format",
+    )
     extensions: List[Any] = Field(
         default=[], description="List of extensions associated with the operation"
     )

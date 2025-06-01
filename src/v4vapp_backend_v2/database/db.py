@@ -9,7 +9,8 @@ from urllib.parse import quote_plus
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
-from pymongo import UpdateOne
+from pymongo import MongoClient, UpdateOne
+from pymongo.database import Database
 from pymongo.errors import (
     BulkWriteError,
     CollectionInvalid,
@@ -281,6 +282,20 @@ class MongoDBClient:
                     "time_connected": time_connected,
                 },
             )
+
+    @property
+    def sync_db(self) -> Database:
+        """
+        Returns the MongoDB database instance.
+
+        This property provides access to the MongoDB database, which is an instance of
+        `Database`. It is used to interact with the MongoDB database.
+
+        Returns:
+            Database: The MongoDB database instance.
+        """
+
+        return MongoClient(self.uri)[self.db_name]
 
     @property
     def admin_uri(self):

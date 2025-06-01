@@ -83,7 +83,7 @@ async def process_tracked(tracked_op: TrackedAny) -> LedgerEntry:
         LedgerEntryException: If there is an error processing the tracked operation.
     """
     try:
-        async with tracked_op:
+        with tracked_op:
             if getattr(tracked_op, "type", None):
                 ledger_entry = await process_hive_op(op=tracked_op)
             elif isinstance(tracked_op, Invoice):
@@ -156,7 +156,7 @@ async def process_lightning_invoice(invoice: Invoice, ledger_entry: LedgerEntry)
     # Invoice means we are receiving sats from external.
     node_name = InternalConfig().config.lnd_config.default
 
-    async with invoice:
+    with invoice:
         if not invoice.conv or invoice.conv.is_unset():
             await invoice.update_conv()
         ledger_entry.description = invoice.memo
@@ -198,7 +198,7 @@ async def process_lightning_payment(payment: Payment, ledger_entry: LedgerEntry)
     Raises:
         NotImplementedError: If the payment memo does not match implemented cases.
     """
-    async with payment:
+    with payment:
         if not payment.conv or payment.conv.is_unset():
             await payment.update_conv()
         v4vapp_group_id = ""
