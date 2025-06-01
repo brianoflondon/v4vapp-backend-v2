@@ -152,7 +152,7 @@ async def test_lightning_invoices_replacement():
     op_transfer = Transfer(
         from_account="someone",
         to_account="v4vapp",
-        type="transfer",
+        op_type="transfer",
         block_num="95282089",
         trx_id="d54942972facb449d7a82590aad0d76c04d46d1c",
         amount=Amount("33.000 HIVE"),

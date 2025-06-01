@@ -151,7 +151,7 @@ async def stream_ops_async(
                             continue
                         op_in_trx_counter.op_in_trx_inc(op_virtual_base)
                         # print(op_virtual_base.type, op_virtual_base.block_num, op_virtual_base.trx_id, op_virtual_base.op_in_trx)
-                        if op_virtual_base.type in opNames:
+                        if op_virtual_base.op_type in opNames:
                             yield op_virtual_base
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue

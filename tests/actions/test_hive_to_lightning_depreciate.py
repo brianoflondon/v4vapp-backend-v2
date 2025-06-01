@@ -123,7 +123,7 @@ async def test_hive_to_lightning_invoice_expired():
             await asyncio.sleep(0.1)
 
         assert mock_return_hive_transfer.call_count == 1
-        assert mock_return_hive_transfer.call_args_list[0][1]["op"] == op
+        assert mock_return_hive_transfer.call_args_list[0][1]["hive_transfer"] == op
 
         # TODO:: Simulate Hive failures
 

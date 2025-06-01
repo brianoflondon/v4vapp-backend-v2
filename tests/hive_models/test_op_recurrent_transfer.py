@@ -39,15 +39,15 @@ async def test_find_recurrent_transfers():
             assert isinstance(op, OpAllTransfers)
             assert isinstance(op, OpBase)
             assert op.markdown_link
-            if op.type in all_recurrent_ops:
+            if op.op_type in all_recurrent_ops:
                 assert isinstance(op, OpAllTransfers)
                 assert isinstance(op, OpAllRecurrent)
                 assert isinstance(op, OpBase)
                 assert op.markdown_link
-                if op.type == "recurrent_transfer":
+                if op.op_type == "recurrent_transfer":
                     assert isinstance(op, RecurrentTransfer)
-                if op.type == "fill_recurrent_transfer":
+                if op.op_type == "fill_recurrent_transfer":
                     assert isinstance(op, FillRecurrentTransfer)
         if op.is_watched:
-            if op.type in all_recurrent_ops:
+            if op.op_type in all_recurrent_ops:
                 print(op.log_str)

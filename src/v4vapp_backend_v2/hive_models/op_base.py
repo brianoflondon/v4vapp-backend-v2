@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, List
 
 from nectar.hive import Hive
-from pydantic import Field, computed_field
+from pydantic import ConfigDict, Field, computed_field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
@@ -81,7 +81,7 @@ class OpBase(TrackedBaseModel):
     )
     trx_id: str = Field(description="Transaction ID")
     op_in_trx: int = Field(default=1, description="Operation index in the block")
-    type: str = Field(description="Type of the event")
+    op_type: str = Field(description="Type of the event", alias="type")
     block_num: int = Field(description="Block number containing this transaction")
     trx_num: int = Field(default=0, description="Transaction number within the block")
     timestamp: datetime = Field(
@@ -104,6 +104,10 @@ class OpBase(TrackedBaseModel):
     proposals_tracked: ClassVar[List[int]] = []
     custom_json_ids_tracked: ClassVar[List[str]] = []
     hive_inst: ClassVar[Hive | None] = None
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     def __init__(self, **data):
         """
@@ -130,7 +134,7 @@ class OpBase(TrackedBaseModel):
             or self.timestamp.tzinfo.utcoffset(self.timestamp) is None
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
-        if op_type := data.get("type"):
+        if op_type := data.get("type") or data.get("op_type"):
             self.realm = op_realm(op_type)
         else:
             raise ValueError(f"Unknown op_type for realm: {op_type}")
@@ -224,10 +228,10 @@ class OpBase(TrackedBaseModel):
 
     @property
     def tracked(self) -> bool:
-        if self.type == "custom_json":
+        if self.op_type == "custom_json":
             return self.known_custom_json
         else:
-            return self.type in OP_TRACKED
+            return self.op_type in OP_TRACKED
 
     @property
     def is_watched(self) -> bool:
@@ -272,11 +276,11 @@ class OpBase(TrackedBaseModel):
 
     @property
     def log_str(self) -> str:
-        return f"{self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.type:<35} | {self.op_in_trx:<3} | {self.link}"
+        return f"{self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.op_type:<35} | {self.op_in_trx:<3} | {self.link}"
 
     @property
     def notification_str(self) -> str:
-        return f"{self.type} | {self.op_in_trx} | {self.markdown_link}"
+        return f"{self.op_type} | {self.op_in_trx} | {self.markdown_link}"
 
     @property
     def age(self) -> float:

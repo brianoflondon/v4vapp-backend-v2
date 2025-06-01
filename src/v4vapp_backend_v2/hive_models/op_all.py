@@ -48,8 +48,8 @@ def get_op_type(value: Any) -> str:
             return "op_base"
     if isinstance(value, OpBase):
         if hasattr(value, "type"):
-            if value.type in OP_MAP:
-                return value.type
+            if value.op_type in OP_MAP:
+                return value.op_type
             else:
                 return "op_base"
             return value.type
@@ -171,4 +171,4 @@ def is_op_all_transfer(op: OpAny) -> bool:
     Returns:
         bool: True if the operation type is a transfer operation, False otherwise.
     """
-    return op.type in ["transfer", "recurrent_transfer", "fill_recurrent_transfer"]
+    return op.op_type in ["transfer", "recurrent_transfer", "fill_recurrent_transfer"]

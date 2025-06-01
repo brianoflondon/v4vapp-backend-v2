@@ -33,7 +33,7 @@ def test_all_validate():
         for hive_event in load_hive_events():
             try:
                 op = op_any(hive_event)
-                assert op.type == op.name()
+                assert op.op_type == op.name()
                 assert op.markdown_link
                 if op.link:
                     response = httpx_client.head(op.link)
@@ -53,9 +53,9 @@ def test_op_any_or_base():
         try:
             op = op_any_or_base(hive_event)
             assert isinstance(op, OpBase)
-            if op.type == "transfer":
+            if op.op_type == "transfer":
                 assert isinstance(op, Transfer)
-            if op.type == "producer_reward":
+            if op.op_type == "producer_reward":
                 assert isinstance(op, ProducerReward)
             assert op.markdown_link
 
@@ -80,8 +80,8 @@ def test_all_block_explorer_links(mocker):
                 try:
                     tested_type.append(hive_event.get("type"))
                     op = op_any(hive_event)
-                    assert op.type == op.name()
-                    print(hive_event.get("type"), op.type, op.link)
+                    assert op.op_type == op.name()
+                    print(hive_event.get("type"), op.op_type, op.link)
                     if op.link:
                         response = httpx_client.get(op.link)
                         assert response.status_code == 200
@@ -102,8 +102,8 @@ def test_hive_account_name_links(mocker):
         for hive_event in load_hive_events():
             try:
                 op = op_any(hive_event)
-                assert op.type == op.name()
-                if op.type == "transfer":
+                assert op.op_type == op.name()
+                if op.op_type == "transfer":
                     assert isinstance(op, Transfer)
                     if link_from := op.from_account.link:
                         response = httpx_client.head(link_from)
