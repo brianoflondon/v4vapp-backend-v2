@@ -1,7 +1,7 @@
 import asyncio
-from decimal import Decimal
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from nectar.amount import Amount
@@ -112,6 +112,15 @@ class CryptoConv(BaseModel):
             and self.btc == 0.0
             and self.msats_fee == 0
         )
+
+    def is_set(self) -> bool:
+        """
+        Check if the conversion values are set (non-zero).
+
+        Returns:
+            bool: True if any conversion value is non-zero, False otherwise.
+        """
+        return not self.is_unset()
 
     def limit_test(self) -> bool:
         """

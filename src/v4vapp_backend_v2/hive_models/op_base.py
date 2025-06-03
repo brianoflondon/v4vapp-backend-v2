@@ -156,9 +156,9 @@ class OpBase(TrackedBaseModel):
         """
         ans = {
             "block_num": self.block_num,
-            "trx_num": self.trx_num,
+            "trx_id": self.trx_id,
             "op_in_trx": self.op_in_trx,
-            "realm": self.realm,
+            "realm": str(self.realm),
         }
         # special case for OpRealm.MARKER (Overrides this default)
         return ans

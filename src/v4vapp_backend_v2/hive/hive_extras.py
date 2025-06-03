@@ -578,7 +578,7 @@ async def send_transfer(
                     "from_account": from_account,
                 },
             )
-            raise HiveSomeOtherRPCException(trx)
+            raise HiveSomeOtherRPCException(f"{ex}")
 
 
 if __name__ == "__main__":

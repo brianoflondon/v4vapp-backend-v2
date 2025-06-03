@@ -153,6 +153,7 @@ async def test_hive_to_lightning_pay_refund():
         bot_instance = mock_bot.return_value
         bot_instance.send_message = AsyncMock()
         # first run with reply ID set to correct_reply_id
+        process_op.unlock_op()
         with pytest.raises(
             HiveToLightningError,
             match="Operation already has a.*reply.*",

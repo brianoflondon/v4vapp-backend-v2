@@ -279,6 +279,7 @@ class LedgerEntry(BaseModel):
 
     async def save(self) -> ObjectId:
         """
+        WARNING : THIS METHOD SHOULD ONLY BE USED ONCE! To update the LedgerEntry, use the `update_op` method instead.
         Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
         and once. If it is called again, it will raise a duplicate exception.
 

@@ -280,7 +280,7 @@ class Invoice(TrackedBaseModel):
         return "invoices"
 
     @property
-    def group_id_query(self) -> dict:
+    def group_id_query(self) -> Dict[str, Any]:
         """
         Returns the query used to identify the group ID in the database.
 

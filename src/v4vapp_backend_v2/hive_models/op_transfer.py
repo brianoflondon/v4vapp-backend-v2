@@ -195,8 +195,11 @@ class TransferBase(OpBase):
                 If None, uses the last quote.
         """
 
-        quote = quote or TrackedBaseModel.last_quote
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+        if self.change_amount:
+            self.change_conv = CryptoConversion(amount=self.change_amount, quote=quote).conversion
 
 
 class Transfer(TransferBase):

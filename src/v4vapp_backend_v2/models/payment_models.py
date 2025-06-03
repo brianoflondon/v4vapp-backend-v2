@@ -156,7 +156,7 @@ class Payment(TrackedBaseModel):
         if not quote:
             quote = await TrackedBaseModel.nearest_quote(self.timestamp)
         if self.fee_msat:
-            self.conv_fee = CryptoConversion(
+            self.fee_conv = CryptoConversion(
                 conv_from=Currency.MSATS,
                 value=float(self.fee_msat),
                 quote=quote,
@@ -266,7 +266,7 @@ class Payment(TrackedBaseModel):
         return "payments"
 
     @property
-    def group_id_query(self) -> dict:
+    def group_id_query(self) -> Dict[str, str]:
         return {"payment_hash": self.payment_hash}
 
     @computed_field
@@ -342,18 +342,17 @@ class Payment(TrackedBaseModel):
     @property
     def op_type(self) -> str:
         """
-        Returns the operation type for the invoice.
+        Returns the operation type for the payment.
 
         Returns:
-            str: The operation type for the invoice, which is always "invoice".
+            str: The operation type for the payment, which is always "payment".
         """
-        return "invoice"
-
+        return "payment"
 
     @property
     def age(self) -> float:
         """
-        Returns the age of the invoice as a float representing the total seconds.
+        Returns the age of the payment as a float representing the total seconds.
 
         Returns:
             float: The age of the invoice in seconds.
@@ -363,10 +362,10 @@ class Payment(TrackedBaseModel):
     @property
     def age_str(self) -> str:
         """
-        Returns the age of the invoice as a formatted string.
+        Returns the age of the payment as a formatted string.
 
         Returns:
-            str: The age of the invoice in a human-readable format.
+            str: The age of the payment in a human-readable format.
         """
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
         return age_text

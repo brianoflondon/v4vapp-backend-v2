@@ -25,7 +25,11 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
-from v4vapp_backend_v2.actions.tracked_all import TrackedAny, process_tracked, tracked_any_filter
+from v4vapp_backend_v2.actions.process_tracked_events import (
+    TrackedAny,
+    process_tracked_event,
+    tracked_any_filter,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
@@ -164,9 +168,9 @@ async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
         try:
             quote = await TrackedBaseModel.nearest_quote(op.timestamp)
             TrackedBaseModel.last_quote = quote or last_quote()
-            ledger_entry = await process_tracked(op)
-            if ledger_entry is not None:
-                processed_count += 1
+            ledger_entries = await process_tracked_event(op)
+            if ledger_entries is not None:
+                processed_count += len(ledger_entries)
                 # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
         except LedgerEntryException as e:
             print(f"Error processing tracked operation: {e}")
@@ -228,11 +232,12 @@ async def test_balance_sheet_steps_hive_ops():
                 continue
             print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
             try:
-                ledger_entry = await process_tracked(op_tracked)
+                ledger_entries = await process_tracked_event(op_tracked)
             except LedgerEntryException as e:
                 print(f"Expected error processing tracked operation: {e}")
                 continue
-            print(ledger_entry.print_journal_entry())
+            for ledger_entry in ledger_entries:
+                print(ledger_entry.print_journal_entry())
             df = await get_ledger_dataframe()
             balance_sheet_pandas = await generate_balance_sheet_pandas(
                 df, reporting_date=datetime.now(tz=timezone.utc)
@@ -362,9 +367,10 @@ async def test_process_hive_ops_invoices():
     for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
         print(op_tracked.log_str)
         try:
-            ledger_entry = await process_tracked(op_tracked)
-            print(ledger_entry)
-            print(ledger_entry.draw_t_diagram())
+            ledger_entries = await process_tracked_event(op_tracked)
+            for ledger_entry in ledger_entries:
+                print(ledger_entry)
+                print(ledger_entry.draw_t_diagram())
         except LedgerEntryException as e:
             print(f"Expected error processing tracked operation: {e}")
             continue
@@ -412,9 +418,10 @@ async def test_process_one_lightning_invoice_funding_umbrel():
     print(op_tracked.log_str)
 
     try:
-        ledger_entry = await process_tracked(op_tracked)
-        print(ledger_entry)
-        print(ledger_entry.draw_t_diagram())
+        ledger_entries = await process_tracked_event(op_tracked)
+        for ledger_entry in ledger_entries:
+            print(ledger_entry)
+            print(ledger_entry.draw_t_diagram())
     except LedgerEntryException as e:
         print(f"Expected error processing tracked operation: {e}")
         return

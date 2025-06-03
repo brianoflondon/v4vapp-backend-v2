@@ -1,5 +1,7 @@
+import asyncio
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timer
 from typing import Any, ClassVar, List
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,6 +12,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 class ReplyModel(BaseModel):
@@ -65,6 +68,14 @@ class TrackedBaseModel(BaseModel):
         CryptoConv(),
         description="Conversion object for fees associated with this transaction if any",
     )
+    change_amount: AmountPyd | None = Field(
+        None,
+        description="Amount of change associated with this transaction if any",
+    )
+    change_conv: CryptoConv | None = Field(
+        CryptoConv(),
+        description="Conversion object for any returned change associated with this transaction if any",
+    )
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
@@ -77,25 +88,33 @@ class TrackedBaseModel(BaseModel):
         """
         super().__init__(**data)
 
-    def __enter__(self) -> "TrackedBaseModel":
+    async def __aenter__(self) -> "TrackedBaseModel":
         """
-        Acquires a lock and returns the current instance.
+        Acquires an async lock and returns the current instance.
 
-        This method is intended to be used as part of a context manager
+        This method is intended to be used as part of an async context manager
         protocol. Upon entering the context, it ensures that the necessary lock is
-        acquired before proceeding.
+        acquired before proceeding, waiting up to 10 seconds for the lock.
 
         Returns:
             TrackedBaseModel: The current instance with the lock acquired.
         """
-        self.lock_op()
+        if await self.locked:
+            logger.warning(
+                f"Operation {self.name()} is already locked, waiting for unlock",
+                extra={"notification": False},
+            )
+            unlocked = await self.wait_for_lock(timeout=10)
+            if not unlocked:
+                raise TimeoutError("Timeout waiting for lock to be released.")
+        await self.lock_op()
         return self
 
-    def __exit__(
+    async def __aexit__(
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
     ) -> None:
         """
-        Context manager exit method.
+        Async context manager exit method.
         This method is called when exiting the context. It ensures that any necessary cleanup is performed,
         such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
         was raised within the context.
@@ -106,7 +125,7 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        self.unlock_op()
+        await self.unlock_op()
 
     # MARK: Reply Management
 
@@ -133,7 +152,7 @@ class TrackedBaseModel(BaseModel):
         :param reply_type: The type of the reply (optional).
         :param reply_error: Any error associated with the reply (optional).
         """
-        if reply_id in self.reply_ids():
+        if reply_id and reply_id in self.reply_ids():
             logger.warning(
                 f"Reply with ID {reply_id} already exists in {self.name()}",
                 extra={"notification": False},
@@ -159,6 +178,14 @@ class TrackedBaseModel(BaseModel):
             if reply.reply_id == reply_id:
                 return reply
         return None
+
+    def get_errors(self) -> list[ReplyModel]:
+        """
+        Retrieves all replies that have an error.
+
+        :return: A list of ReplyModel instances that have an error.
+        """
+        return [reply for reply in self.replies if reply.reply_error is not None]
 
     def get_replies_by_type(self, reply_type: str) -> list[ReplyModel]:
         """
@@ -224,8 +251,29 @@ class TrackedBaseModel(BaseModel):
 
     # MARK: Lock Management
 
+    async def wait_for_lock(self, timeout: int = 10) -> bool:
+        """
+        Waits for the operation to be unlocked within a specified timeout.
+
+        This method checks if the operation is locked and waits until it is
+        unlocked or the timeout is reached.
+
+        Args:
+            timeout (int): The maximum time to wait for the lock to be released, in seconds.
+
+        Returns:
+            bool: True if the operation was unlocked, False if the timeout was reached.
+        """
+        # TODO: #113 Make this much more efficient in the way it handles the db_client
+        start_time = timer()
+        while await self.locked:
+            if (timer() - start_time) > timeout:
+                return False
+            await asyncio.sleep(0.1)
+        return True
+
     @property
-    def locked(self) -> bool:
+    async def locked(self) -> bool:
         """
         Returns the locked status of the operation.
 
@@ -237,15 +285,17 @@ class TrackedBaseModel(BaseModel):
             bool: True if the operation is locked, False otherwise.
         """
         if TrackedBaseModel.db_client:
-            db = TrackedBaseModel.db_client.sync_db
-            result: dict[str, Any] | None = db[self.collection].find_one(
-                self.group_id_query, projection={"locked": True}
-            )
+            async with TrackedBaseModel.db_client as db_client:
+                result: dict[str, Any] | None = await db_client.find_one(
+                    collection_name=self.collection,
+                    query=self.group_id_query,
+                    projection={"locked": True},
+                )
             if result:
                 return result.get("locked", False)
         return False
 
-    def lock_op(self) -> UpdateResult | None:
+    async def lock_op(self) -> UpdateResult | None:
         """
         Locks the operation to prevent concurrent processing.
 
@@ -257,15 +307,16 @@ class TrackedBaseModel(BaseModel):
             None
         """
         if TrackedBaseModel.db_client:
-            db = TrackedBaseModel.db_client.sync_db
-            ans: UpdateResult = db[self.collection].update_one(
-                self.group_id_query,
-                update={"$set": {"locked": True}},
-            )
-            return ans
+            async with TrackedBaseModel.db_client as db_client:
+                ans: UpdateResult = await db_client.update_one(
+                    collection_name=self.collection,
+                    query=self.group_id_query,
+                    update={"$set": {"locked": True}},
+                )
+                return ans
         return None
 
-    def unlock_op(self) -> UpdateResult | None:
+    async def unlock_op(self) -> UpdateResult | None:
         """
         Unlocks the operation to allow concurrent processing.
 
@@ -277,14 +328,15 @@ class TrackedBaseModel(BaseModel):
             None
         """
         if TrackedBaseModel.db_client:
-            db = TrackedBaseModel.db_client.sync_db
-            # Remember my update_one already has the $set
-            ans: UpdateResult = db[self.collection].update_one(
-                self.group_id_query,
-                update={"$unset": {"locked": ""}},
-                upsert=True,
-            )
-            return ans
+            async with TrackedBaseModel.db_client as db_client:
+                # Remember my update_one already has the $set
+                ans: UpdateResult = await db_client.update_one(
+                    collection_name=self.collection,
+                    query=self.group_id_query,
+                    update={"$unset": {"locked": ""}},
+                    upsert=True,
+                )
+                return ans
         return None
 
     async def save(
@@ -497,3 +549,6 @@ class TrackedBaseModel(BaseModel):
             except Exception as e:
                 logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
         return cls.last_quote
+
+
+

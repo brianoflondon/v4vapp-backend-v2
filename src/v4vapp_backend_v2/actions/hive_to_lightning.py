@@ -1,17 +1,17 @@
 import asyncio
-from typing import Dict
+from typing import Dict, Tuple
 
 from nectar.amount import Amount
+from nectar.hive import Hive
 
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, get_hive_client, send_transfer
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -119,9 +119,7 @@ async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> 
     return True
 
 
-async def process_hive_to_lightning(
-    hive_transfer: TrackedTransfer, nobroadcast: bool = False
-) -> None:
+async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast: bool = False):
     """
     Process a transfer operation from Hive to Lightning.
 
@@ -163,32 +161,24 @@ async def process_hive_to_lightning(
 
     """
     # MARK: 1. Checks
-    # How can I wait for a lock to be released?
-    # asyncio has a inbuilt lock, but we are using a custom lock here
-    while hive_transfer.locked:
-        await asyncio.sleep(1)
-    if hive_transfer.locked:
-        logger.info(
-            f"Operation is already locked, skipping processing. {hive_transfer.log_str}",
-            extra={"notification": False, "op": hive_transfer.model_dump()},
-        )
-        raise HiveToLightningError(f"Operation is locked: {hive_transfer.locked}")
-    # Now check if the operation already has a lightning payment transaction
+    # Check if the operation already has a lightning payment transaction
     # If it does, we skip processing
     payment_reply = hive_transfer.get_replies_by_type("payment")
     transfer_reply = hive_transfer.get_replies_by_type("transfer")
     if payment_reply:
         logger.info(
             f"Operation already has a payment reply, skipping processing. {hive_transfer.log_str}, reply_id(s): {payment_reply}",
-            extra={"notification": False, "op": hive_transfer.model_dump()},
+            extra={"notification": False, "hive_transfer": hive_transfer.model_dump()},
         )
-        raise HiveToLightningError(f"Operation already has a payment reply: {payment_reply}")
+        raise HiveToLightningError(f"Operation already has a payment reply: {len(payment_reply)}")
     if transfer_reply:
         logger.info(
             f"Operation already has a transfer reply, skipping processing. {hive_transfer.log_str}, reply_id(s): {transfer_reply}",
-            extra={"notification": False, "op": hive_transfer.model_dump()},
+            extra={"notification": False, "hive_transfer": hive_transfer.model_dump()},
         )
-        raise HiveToLightningError(f"Operation already has a transfer reply: {transfer_reply}")
+        raise HiveToLightningError(
+            f"Operation already has a transfer reply: {len(transfer_reply)}"
+        )
 
     hive_config = InternalConfig().config.hive
     lnd_config = InternalConfig().config.lnd_config
@@ -202,7 +192,7 @@ async def process_hive_to_lightning(
         message = f"Missing configuration details for Hive or LND: {hive_config}, {lnd_config}"
         logger.warning(message, extra={"notification": False})
         raise HiveToLightningError(message)
-    with hive_transfer:
+    async with hive_transfer:
         server_account = hive_config.server_account.name
         if hive_transfer.to_account == server_account:
             # Process the operation
@@ -214,34 +204,9 @@ async def process_hive_to_lightning(
                 # MARK: 2. Pay Lightning Invoice
                 if hive_transfer.memo:
                     try:
-                        pay_req = await decode_incoming_payment_message(
+                        pay_req, lnd_client = await decode_incoming_payment_message(
                             hive_transfer=hive_transfer
                         )
-                        if not pay_req:
-                            raise HiveToLightningError("Failed to decode Lightning invoice")
-                        if not await can_attempt_to_pay(pay_req):
-                            raise HiveToLightningError(
-                                "Invoice is not open or already paid, cannot attempt to pay"
-                            )
-                        if not await check_user_limits(pay_req, hive_transfer):
-                            raise HiveToLightningError(
-                                "User limits exceeded for this payment request"
-                            )
-                        if hive_transfer.conv is None or hive_transfer.conv.is_unset():
-                            logger.warning(
-                                f"Conversion details missing for operation: {hive_transfer.memo}",
-                                extra={"notification": False, **hive_transfer.log_extra},
-                            )
-                            await hive_transfer.update_conv()
-                        if not hive_transfer.conv:
-                            logger.error(
-                                "Conversion details not found for operation, failed to update conversion.",
-                                extra={"notification": False, **hive_transfer.log_extra},
-                            )
-                            raise HiveToLightningError(
-                                "Conversion details not found for operation"
-                            )
-                        lnd_client = LNDClient(connection_name=lnd_config.default)
                         payment = await send_lightning_to_pay_req(
                             pay_req=pay_req,
                             lnd_client=lnd_client,
@@ -250,16 +215,16 @@ async def process_hive_to_lightning(
                             amount_msat=hive_transfer.conv.msats - hive_transfer.conv.msats_fee,
                             fee_limit_ppm=500,
                         )
-                        if payment:
-                            await update_payment_route_with_alias(
-                                db_client=TransferBase.db_client,
-                                lnd_client=lnd_client,
-                                payment=payment,
-                            )
-                            # MARK: 3. Move to Handle payment sent (this should not be done here.)
-                            asyncio.create_task(
-                                lightning_payment_sent(payment, hive_transfer, nobroadcast)
-                            )
+                        # This doesn't do anything here because the payment is not yet in the database.
+                        # if payment:
+                        #     await update_payment_route_with_alias(
+                        #         db_client=TransferBase.db_client,
+                        #         lnd_client=lnd_client,
+                        #         payment=payment,
+                        #     )
+                        # MARK: 3. Move to Handle payment sent (this should not be done here.)
+                        return
+
                     except LnurlException as e:
                         logger.info(
                             f"Error decoding Lightning invoice: {e}",
@@ -287,7 +252,9 @@ async def process_hive_to_lightning(
                     )
 
 
-async def decode_incoming_payment_message(hive_transfer: TrackedTransfer) -> PayReq | None:
+async def decode_incoming_payment_message(
+    hive_transfer: TrackedTransfer,
+) -> Tuple[PayReq, LNDClient]:
     """
     Decodes an incoming Lightning payment message and validates its value and conversion limits.
 
@@ -305,17 +272,39 @@ async def decode_incoming_payment_message(hive_transfer: TrackedTransfer) -> Pay
         None directly, but may propagate exceptions from called methods if not handled elsewhere.
     """
 
-    lnd_config = InternalConfig().config.lnd_config
     logger.info(f"Processing payment request: {hive_transfer.memo}")
+    lnd_config = InternalConfig().config.lnd_config
     lnd_client = LNDClient(connection_name=lnd_config.default)
     try:
         pay_req = await decode_any_lightning_string(
             input=hive_transfer.memo, lnd_client=lnd_client
         )
-        return pay_req
+        if not pay_req:
+            raise HiveToLightningError("Failed to decode Lightning invoice")
+        if pay_req.is_expired:
+            raise HiveToLightningError("Lightning invoice is expired")
     except Exception as e:
         logger.error(f"Error decoding Lightning invoice: {e}")
-        return None
+        raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
+
+    if not await can_attempt_to_pay(pay_req):
+        raise HiveToLightningError("Invoice is not open or already paid, cannot attempt to pay")
+    if not await check_user_limits(pay_req, hive_transfer):
+        raise HiveToLightningError("User limits exceeded for this payment request")
+    if hive_transfer.conv is None or hive_transfer.conv.is_unset():
+        logger.warning(
+            f"Conversion details missing for operation: {hive_transfer.memo}",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        await hive_transfer.update_conv()
+    if not hive_transfer.conv:
+        logger.error(
+            "Conversion details not found for operation, failed to update conversion.",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        raise HiveToLightningError("Conversion details not found for operation")
+
+    return pay_req, lnd_client
 
 
 async def lightning_payment_sent(
@@ -335,8 +324,8 @@ async def lightning_payment_sent(
     """
     # Placeholder for actual implementation
     # This function should not take in the hive_transfer, it should instead retrieve it from database.
-    with hive_transfer:
-        with payment:
+    async with hive_transfer:
+        async with payment:
             if not confirm_payment_details(hive_transfer, payment):
                 message = f"Payment group ID {payment.custom_records} does not match operation group ID {hive_transfer.group_id_p}"
                 logger.warning(
@@ -354,76 +343,30 @@ async def lightning_payment_sent(
             )
             # Now calculate if change is needed and record the FEE
             # MARK: FEES
-            cost_of_payment_msat = payment.value_msat + payment.fee_msat
-            message = f"Lightning payment sent for operation {hive_transfer.group_id_p}: {payment.payment_hash} {payment.route_str} {cost_of_payment_msat / 1000:,.0f} sats"
-            if not hive_transfer.conv or hive_transfer.conv.is_unset():
-                await hive_transfer.update_conv()
-            hive_transfer.add_reply(
-                reply_id=payment.payment_hash,
-                reply_type="payment",
-                reply_msat=cost_of_payment_msat,
-                reply_error=None,
-                reply_message=message,
+            change_amount = hive_transfer.change_amount.beam
+            message = f"Lightning payment sent for operation {hive_transfer.group_id_p}: {payment.payment_hash} {payment.route_str} {change_amount}"
+
+            reason = f"Change from Lightning payment {payment.payment_hash} for operation {hive_transfer.group_id_p}"
+            trx = await return_hive_transfer(
+                hive_transfer=hive_transfer,
+                reason=reason,
+                amount=change_amount,
+                nobroadcast=nobroadcast,
             )
-            hive_transfer.fee_conv = CryptoConversion(
-                conv_from=Currency.MSATS,
-                value=hive_transfer.conv.msats_fee,
-                quote=TrackedBaseModel.last_quote,
-            ).conversion
-            ans = await hive_transfer.save(include={"replies", "fee_conv"})
-            # After this update the DB Monitor should spot the new fee_conv and create a ledger entry to
-            # record the fee in the Ledger as revenue
             logger.info(
-                f"Updated operation with Lightning payment reply: {payment.payment_hash}",
-                extra={
-                    "notification": False,
-                    **hive_transfer.log_extra,
-                    **payment.log_extra,
-                },
+                f"Change transaction created for operation {hive_transfer.group_id_p}: {change_amount}",
+                extra={"notification": True, **hive_transfer.log_extra, **payment.log_extra},
             )
 
-            change = hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.conv.msats_fee
-            if change > 1_100:
-                # If change is more than 1.1 satoshis, we need to send a change transaction
-                logger.info(
-                    f"Change detected for operation {hive_transfer.group_id_p}: {change} msats",
-                    extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
-                )
-                if hive_transfer.conv.conv_from == Currency.HIVE:
-                    amount_to_return = round((change / 1000) / hive_transfer.conv.sats_hive, 3)
-                    currency = "HIVE"
-                else:
-                    amount_to_return = round((change / 1000) / hive_transfer.conv.sats_hbd, 3)
-                    currency = "HBD"
-                amount = Amount(f"{amount_to_return:.3f} {currency}")
-                # TODO: Work on reply message system
-                reason = f"Change from Lightning payment {payment.payment_hash} for operation {hive_transfer.group_id_p}"
-                trx = await return_hive_transfer(
-                    hive_transfer=hive_transfer,
-                    reason=reason,
-                    amount=amount,
-                    nobroadcast=nobroadcast,
-                )
-                logger.info(
-                    f"Change transaction created for operation {hive_transfer.group_id_p}: {amount} {currency}",
-                    extra={"notification": True, **hive_transfer.log_extra, **payment.log_extra},
-                )
-
-            else:
-                # TODO: Work on reply message system
-                reason = f"Lightning invoice paid {payment.payment_hash} for operation {hive_transfer.group_id_p}"
-                trx = await return_hive_transfer(
-                    hive_transfer=hive_transfer,
-                    reason=reason,
-                    nobroadcast=nobroadcast,
-                    amount=Amount("0.001 HIVE"),
-                )
-                logger.info(
-                    f"No change transaction needed for operation {hive_transfer.group_id_p}: {change} msats",
-                    extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
-                )
             if trx:
-                # finally update the original Ledger Entry for this operation
+                # # finally update the original Ledger Entry for this operation
+                # hive_transfer.add_reply(
+                #     reply_id=trx.get("trx_id", ""),
+                #     reply_type="transfer",
+                #     reply_msat=hive_transfer.change_conv.msats,
+                #     reply_error=None,
+                #     reply_message=message,
+                # )
                 original_ledger_entry, ans = await update_ledger_entry_op(
                     group_id=hive_transfer.group_id_p, op=hive_transfer
                 )
@@ -432,6 +375,55 @@ async def lightning_payment_sent(
                         f"Updated original Ledger Entry {hive_transfer.group_id_p} with OP: {ans}",
                         extra={**hive_transfer.log_extra, **original_ledger_entry.log_extra},
                     )
+
+
+async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: Payment) -> Amount:
+    """
+    Calculate the change amount to return to the user after a Hive to Lightning transfer.
+    This function computes the change based on the Hive transfer's conversion details and the payment amount.
+    Args:
+        hive_transfer (TrackedTransfer): The Hive transfer object containing conversion details.
+        payment (Payment): The Payment object representing the sent payment.
+    Returns:
+        Amount: The calculated change amount to return to the user.
+    """
+    if hive_transfer.conv is None or hive_transfer.conv.is_unset():
+        await hive_transfer.update_conv()
+    if payment.conv is None or payment.conv.is_unset():
+        await payment.update_conv()
+
+    if not hive_transfer.conv or not payment.conv:
+        logger.error(
+            "Conversion details not found for operation, failed to update conversion.",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        raise HiveToLightningError("Conversion details not found for operation")
+
+    cost_of_payment_msat = payment.value_msat + payment.fee_msat
+    change_msat = hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.conv.msats_fee
+    if change_msat <= 1_100:
+        # If change is less than or equal to 1.1 satoshis, no change transaction is needed just
+        # notification minimum
+        amount = Amount("0.001 HIVE")
+    else:
+        match hive_transfer.conv.conv_from:
+            case Currency.HIVE:
+                amount_to_return = round((change_msat / 1000) / hive_transfer.conv.sats_hive, 3)
+                currency = "HIVE"
+            case Currency.HBD:
+                amount_to_return = round((change_msat / 1000) / hive_transfer.conv.sats_hbd, 3)
+                currency = "HBD"
+            case _:
+                raise HiveToLightningError(f"Unknown currency: {hive_transfer.conv.conv_from}")
+        amount = Amount(f"{amount_to_return:.3f} {currency}")
+    hive_transfer.change_amount = AmountPyd(amount=amount)
+    await hive_transfer.update_conv()
+    # The conversion details await hive_transfer.update_conv()will be set when the
+    logger.info(
+        f"Change detected for operation {hive_transfer.group_id_p}: {change_msat / 1_000:,.0f} sats {amount}",
+        extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
+    )
+    return amount
 
 
 def confirm_payment_details(op: TransferBase, payment: Payment) -> bool:
@@ -478,22 +470,8 @@ async def return_hive_transfer(
         f"Repaying Hive to Lightning operation: {hive_transfer.log_str}",
         extra={"notification": False, "op": hive_transfer.model_dump()},
     )
-    hive_config = InternalConfig().config.hive
-    if not hive_config.server_account:
-        raise HiveToLightningError("Missing Hive server account configuration for repayment")
+    hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
 
-    memo_key = hive_config.server_account.memo_key or ""
-    active_key = hive_config.server_account.active_key or ""
-    if not memo_key or not active_key:
-        raise HiveToLightningError("Missing Hive server account keys for repayment")
-
-    hive_client = get_hive_client(
-        keys=[
-            hive_config.server_account.memo_key,
-            hive_config.server_account.active_key,
-        ],
-        nobroadcast=nobroadcast,
-    )
     amount = amount or hive_transfer.amount.beam
     if not isinstance(amount, Amount):
         raise HiveToLightningError("Amount must be an instance of Amount")
@@ -501,7 +479,7 @@ async def return_hive_transfer(
         memo = f"{reason} - {hive_transfer.group_id}{MEMO_FOOTER}"
         trx = await send_transfer(
             hive_client=hive_client,
-            from_account=hive_config.server_account.name,
+            from_account=server_account_name,
             to_account=hive_transfer.from_account,  # Repay to the original sender
             amount=amount,
             memo=memo,
@@ -509,7 +487,7 @@ async def return_hive_transfer(
         if trx:
             # MARK: UPDATE ORIGINAL OPERATION
             logger.info(
-                f"Successfully paid Hive to Lightning operation: {hive_transfer.replies[-1]}",
+                f"Successfully paid reply to Hive to Lightning operation: {hive_transfer.log_str}",
                 extra={
                     "notification": True,
                     "trx": trx,
@@ -556,7 +534,7 @@ async def return_hive_transfer(
     except Exception as e:
         message = f"Unexpected error during Hive to Lightning repayment: {e}"
         hive_transfer.add_reply(
-            reply_id="", reply_type="transfer", reply_error=e, reply_message=message
+            reply_id="", reply_type="transfer", reply_error=str(e), reply_message=message
         )
         await hive_transfer.save()
         logger.error(
@@ -564,3 +542,23 @@ async def return_hive_transfer(
             extra={"notification": False, **hive_transfer.log_extra},
         )
         raise HiveToLightningError(message)
+
+
+async def get_verified_hive_client(nobroadcast: bool = False) -> Tuple[Hive, str]:
+    hive_config = InternalConfig().config.hive
+    if not hive_config.server_account:
+        raise HiveToLightningError("Missing Hive server account configuration for repayment")
+
+    memo_key = hive_config.server_account.memo_key or ""
+    active_key = hive_config.server_account.active_key or ""
+    if not memo_key or not active_key:
+        raise HiveToLightningError("Missing Hive server account keys for repayment")
+
+    hive_client = get_hive_client(
+        keys=[
+            hive_config.server_account.memo_key,
+            hive_config.server_account.active_key,
+        ],
+        nobroadcast=nobroadcast,
+    )
+    return hive_client, hive_config.server_account.name

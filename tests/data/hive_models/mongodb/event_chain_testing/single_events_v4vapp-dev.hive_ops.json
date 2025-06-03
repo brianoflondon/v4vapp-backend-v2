@@ -1130,46 +1130,4 @@
   "to": "devtre.v4vapp",
   "trx_id": "4fb71999f130fc6ead36171d938f64fa3fd00b8e",
   "type": "transfer"
-},
-{
-  "_id": {
-    "$oid": "6835c4df8257e3a4298a9768"
-  },
-  "realm": "real",
-  "op_in_trx": 1,
-  "block_num": 96255782,
-  "trx_num": 25,
-  "amount": {
-    "amount": "10000",
-    "nai": "@@000000021",
-    "precision": 3
-  },
-  "conv": {
-    "hive": 10,
-    "hbd": 2.598999,
-    "usd": 2.598999,
-    "sats": 2365,
-    "msats": 2365038,
-    "msats_fee": 90205,
-    "btc": 0.00002365038,
-    "sats_hive": 236.5039,
-    "sats_hbd": 909.9803,
-    "source": "Binance",
-    "fetch_date": {
-      "$date": "2025-05-27T13:57:50.593Z"
-    },
-    "in_limits": true,
-    "conv_from": "hive",
-    "value": "10"
-  },
-  "d_memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
-  "from": "devser.v4vapp",
-  "link": "https://hivehub.dev/tx/222616bceed2f9abbc36ff990cca3cf2eeb80768",
-  "memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
-  "timestamp": {
-    "$date": "2025-05-27T11:56:45.000Z"
-  },
-  "to": "v4vapp-test",
-  "trx_id": "222616bceed2f9abbc36ff990cca3cf2eeb80768",
-  "type": "transfer"
 }]

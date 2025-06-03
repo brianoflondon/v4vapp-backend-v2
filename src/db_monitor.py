@@ -11,7 +11,10 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any_filter
+from v4vapp_backend_v2.actions.process_tracked_events import (
+    process_tracked_event,
+    tracked_any_filter,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -189,7 +192,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         return
     logger.info(f"Processing {op.group_id_query}")
     try:
-        ledger_entry = await process_tracked(op)
+        ledger_entries = await process_tracked_event(op)
     except ValueError as e:
         logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
         return
@@ -199,8 +202,8 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     except LedgerEntryException as e:
         logger.warning(f"{ICON} Ledger entry error: {e}", extra={"error": e})
         return
-
-    print(ledger_entry)
+    for ledger_entry in ledger_entries:
+        print(ledger_entry)
     balance_sheet = await generate_balance_sheet_pandas()
     if not balance_sheet["is_balanced"]:
         logger.warning(

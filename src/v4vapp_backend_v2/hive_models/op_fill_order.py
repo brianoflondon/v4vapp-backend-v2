@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from nectar.amount import Amount
 from pydantic import Field
 
@@ -20,7 +18,6 @@ class FillOrder(OpBase):
     open_orderid: int
     open_owner: str
     open_pays: AmountPyd
-    timestamp: datetime
     debit_conv: CryptoConv = CryptoConv()
     credit_conv: CryptoConv = CryptoConv()
 
@@ -38,30 +35,31 @@ class FillOrder(OpBase):
     def __init__(self, **data: dict):
         super().__init__(**data)
         # Debit conv should match the debit side in the ledger (open_pays, HIVE received)
-        if TrackedBaseModel.last_quote.sats_usd == 0:
-            logger.warning(
-                f"FillOrder: {self.current_orderid} {self.open_orderid} last_quote.sats_usd is 0",
-                extra={
-                    "notification": False,
-                    "last_quote": TrackedBaseModel.last_quote,
-                    "fill_order": self,
-                },
+        if self.debit_conv.is_unset() or self.credit_conv.is_unset():
+            if TrackedBaseModel.last_quote.sats_usd == 0:
+                logger.warning(
+                    f"FillOrder: {self.current_orderid} {self.open_orderid} last_quote.sats_usd is 0",
+                    extra={
+                        "notification": False,
+                        "last_quote": TrackedBaseModel.last_quote,
+                        "fill_order": self,
+                    },
+                )
+            self.debit_conv = CryptoConv(
+                conv_from=self.open_pays.unit,  # HIVE
+                value=self.open_pays.amount_decimal,  # 25.052 HIVE
+                converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
+                quote=TrackedBaseModel.last_quote,
+                timestamp=self.timestamp,
             )
-        self.debit_conv = CryptoConv(
-            conv_from=self.open_pays.unit,  # HIVE
-            value=self.open_pays.amount_decimal,  # 25.052 HIVE
-            converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
-            quote=TrackedBaseModel.last_quote,
-            timestamp=self.timestamp,
-        )
-        # Credit conv should match the credit side in the ledger (current_pays, HBD given)
-        self.credit_conv = CryptoConv(
-            conv_from=self.current_pays.unit,  # HBD
-            value=self.current_pays.amount_decimal,  # 6.738 HBD
-            converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
-            quote=TrackedBaseModel.last_quote,
-            timestamp=self.timestamp,
-        )
+            # Credit conv should match the credit side in the ledger (current_pays, HBD given)
+            self.credit_conv = CryptoConv(
+                conv_from=self.current_pays.unit,  # HBD
+                value=self.current_pays.amount_decimal,  # 6.738 HBD
+                converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
+                quote=TrackedBaseModel.last_quote,
+                timestamp=self.timestamp,
+            )
         # Set the log_internal string to None to force it to be generated
         self.log_internal = self._log_internal()
 

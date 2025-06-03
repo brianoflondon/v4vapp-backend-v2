@@ -84,9 +84,11 @@ exclude = [
 
 [tool.pytest.ini_options]
 log_cli = true
+log_cli_level = "INFO"
+log_file = "pytest.log"
 filterwarnings = [
     "ignore::DeprecationWarning:beem\\..*",  # Suppress warnings from the beem library
-    "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz librar
+    "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz library
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

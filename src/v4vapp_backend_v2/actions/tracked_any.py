@@ -2,6 +2,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Discriminator, Tag
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
@@ -23,8 +24,11 @@ def get_tracked_any_type(value: Any) -> str:
         str: The operation type or 'base' for unknown types
     """
     # Check for a Ledger Tracked Hive Event
+
     if isinstance(value, dict):
-        op_type = value.get("type", None)
+        if value.get("type", value.get("op_type", None)) == "block_marker":
+            raise ValueError(f"Invalid operation type {value}")
+        op_type = value.get("type", None) or value.get("op_type", None)
         if op_type and op_type in [
             "transfer",
             "fill_order",
@@ -47,12 +51,14 @@ def get_tracked_any_type(value: Any) -> str:
 
     # Check for a Lightning Tracked Hive Event
     if isinstance(value, Invoice):
-        return "invoice"
+        return value.op_type or "invoice"
     if isinstance(value, Payment):
-        return "payment"
-    if isinstance(value, (OpAllTransfers, FillOrder, LimitOrderCreate)):
-        if type := getattr(value, "type", None):
-            return type
+        return value.op_type or "payment"
+    if not isinstance(value, dict) and isinstance(
+        value, (OpAllTransfers, FillOrder, LimitOrderCreate)
+    ):
+        if hasattr(value, "op_type"):
+            return value.op_type
 
     raise ValueError(f"Invalid operation type {value}")
 
@@ -78,3 +84,29 @@ TrackedTransfer = Annotated[
 
 class DiscriminatedTracked(BaseModel):
     value: TrackedAny
+
+
+async def load_tracked_object(tracked_obj: TrackedAny) -> TrackedAny | None:
+    """
+    Asynchronously loads a tracked object from the database using the provided group_id.
+
+    Args:
+        group_id (str): The group ID of the tracked object to load.
+        db_client (MongoDBClient): The database client to use for the operation.
+
+    Returns:
+        TrackedBaseModel | None: The loaded tracked object, or None if not found.
+    """
+    if not TrackedBaseModel.db_client:
+        return None
+
+    async with TrackedBaseModel.db_client as client:
+        result = await client.find_one(
+            collection_name=tracked_obj.collection,
+            query=tracked_obj.group_id_query,
+        )
+        if result:
+            value = {"value": result}
+            answer = DiscriminatedTracked.model_validate(value)
+            return answer.value
+    return None
