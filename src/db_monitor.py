@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.process_tracked_events import (
     process_tracked_event,
@@ -233,6 +233,7 @@ async def subscribe_stream(
     # the rest of the app.
     client = get_mongodb_client()
     TrackedBaseModel.db_client = get_mongodb_client()
+    LedgerEntry.db_client = get_mongodb_client()
 
     collection = await client.get_collection(collection_name)
     resume = ResumeToken(collection=collection_name)
