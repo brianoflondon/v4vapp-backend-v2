@@ -905,8 +905,12 @@ async def get_account_balance_printout(
         # Calculate running balance for this unit
         unit_df["running_balance"] = unit_df["signed_amount"].cumsum()
 
+        # Determine display unit: if MSATS, display as SATS
+        display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
+        conversion_factor = 1000 if unit.upper() == "MSATS" else 1  # Convert MSATS to SATS
+
         # Format output for this unit
-        output.append(f"\nUnit: {unit.upper()}")
+        output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
         if full_history:
             output.append(
@@ -919,12 +923,23 @@ async def get_account_balance_printout(
                 debit = row["debit_amount"] if row["debit_unit"] == unit else 0.0
                 credit = row["credit_amount"] if row["credit_unit"] == unit else 0.0
                 balance = row["running_balance"]
+                # Convert to SATS for display if unit is MSATS
+                if unit.upper() == "MSATS":
+                    debit = debit / conversion_factor
+                    credit = credit / conversion_factor
+                    balance = balance / conversion_factor
+                # Format with commas, no decimals for SATS, two decimals for others
+                debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.2f}"
+                credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.2f}"
+                balance_str = (
+                    f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.2f}"
+                )
                 output.append(
                     f"{timestamp:<20} "
                     f"{description:<45} "
-                    f"{debit:>12,.2f} "
-                    f"{credit:>12,.2f} "
-                    f"{balance:>12,.2f}"
+                    f"{debit_str:>12} "
+                    f"{credit_str:>12} "
+                    f"{balance_str:>12}"
                 )
 
         # Get the final balance for this unit and calculate converted values
@@ -965,7 +980,16 @@ async def get_account_balance_printout(
                 f"{total_msats:>16,.0f} msats"
             )
             output.append("-" * max_width)
-            output.append(f"{'Final Balance':<10} {final_balance:>15,.2f} {unit.upper():>6}")
+            # Display final balance in SATS if unit is MSATS
+            display_balance = (
+                final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
+            )
+            balance_str = (
+                f"{display_balance:,.0f}"
+                if unit.upper() == "MSATS"
+                else f"{display_balance:>15,.2f}"
+            )
+            output.append(f"{'Final Balance':<10} {balance_str:>15} {display_unit:>6}")
 
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
