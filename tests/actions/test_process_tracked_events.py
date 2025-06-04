@@ -397,25 +397,33 @@ async def test_hive_transfer_successful_payment():
         ledger_entries_payment = await process_tracked_event(outbound_payment)
         inbound_transfer = await load_tracked_object(inbound_transfer)
         for ledger_entry_payment in ledger_entries_payment:
-            print(ledger_entry_payment.draw_t_diagram())
+            # print(ledger_entry_payment.draw_t_diagram())
             print(ledger_entry_payment)
 
         with patch(
-            "v4vapp_backend_v2.actions.hive_to_lightning.return_hive_transfer",
+            "v4vapp_backend_v2.actions.hive_to_lightning.get_verified_hive_client",
             new_callable=AsyncMock,
-        ) as mock_return_hive_transfer:
-            mock_return_hive_transfer.return_value = {
-                "trx_id": "123456789abcdef",
-            }
-            await lightning_payment_sent(
-                payment=outbound_payment,
-                hive_transfer=inbound_transfer,
-                nobroadcast=True,
-            )
-    for ledger_entry in ledger_entries_payment:
+        ) as mock_get_verified_hive_client:
+            mock_get_verified_hive_client.return_value = (Hive(), "devser.v4vapp")
+            with patch(
+                "v4vapp_backend_v2.actions.hive_to_lightning.send_transfer",
+                new_callable=AsyncMock,
+            ) as mock_send_transfer:
+                mock_send_transfer.return_value = {
+                    "operations": [[None, {"amount": "4.154 HIVE"}]],
+                    "trx_id": "12345678999",
+                }
+                await lightning_payment_sent(
+                    payment=outbound_payment,
+                    hive_transfer=inbound_transfer,
+                    nobroadcast=True,
+                )
+
+    for ledger_entry in ledger_entries_inbound + ledger_entries_payment:
         for account in [ledger_entry.debit, ledger_entry.credit]:
             balance_printout = await get_account_balance_printout(account, full_history=True)
             print(balance_printout)
+            print("*" * 100)
 
     # Wait for all tasks to complete
     while asyncio.all_tasks():
