@@ -7,8 +7,9 @@ from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defaults
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
@@ -139,6 +140,8 @@ class LedgerEntry(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self.op_type = get_tracked_any_type(self.op)
+        if not LedgerEntry.db_client:
+            LedgerEntry.db_client = TrackedBaseModel.db_client or get_mongodb_client_defaults()
 
     @property
     def is_completed(self) -> bool:
@@ -428,23 +431,59 @@ class LedgerEntry(BaseModel):
 
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
 
-        # Prepare the account names
+        # Prepare the account names with type in parentheses
         debit_account = self.debit.name if self.debit else "N/A"
+        debit_type = (
+            self.debit.account_type
+            if self.debit and hasattr(self.debit, "account_type")
+            else "N/A"
+        )
         credit_account = self.credit.name if self.credit else "N/A"
+        credit_type = (
+            self.credit.account_type
+            if self.credit and hasattr(self.credit, "account_type")
+            else "N/A"
+        )
+        debit_account_with_type = f"{debit_account} ({debit_type})"
+        credit_account_with_type = f"{credit_account} ({credit_type})"
 
-        # Format the amounts with 2 decimal places and include the units
-        debit_unit_str = f" {self.debit_unit.value}" if self.debit_unit else ""
-        credit_unit_str = f" {self.credit_unit.value}" if self.credit_unit else ""
-        formatted_debit_amount = (
-            f"{self.debit_amount:.2f}{debit_unit_str}"
-            if self.debit_amount
-            else f"0.00{debit_unit_str}"
+        # Determine display units and conversion for debit and credit
+        debit_display_unit = (
+            "SATS"
+            if self.debit_unit and self.debit_unit.value.upper() == "MSATS"
+            else self.debit_unit.value
+            if self.debit_unit
+            else ""
         )
-        formatted_credit_amount = (
-            f"{self.credit_amount:.2f}{credit_unit_str}"
-            if self.credit_amount
-            else f"0.00{credit_unit_str}"
+        credit_display_unit = (
+            "SATS"
+            if self.credit_unit and self.credit_unit.value.upper() == "MSATS"
+            else self.credit_unit.value
+            if self.credit_unit
+            else ""
         )
+        debit_conversion_factor = (
+            1000 if self.debit_unit and self.debit_unit.value.upper() == "MSATS" else 1
+        )
+        credit_conversion_factor = (
+            1000 if self.credit_unit and self.credit_unit.value.upper() == "MSATS" else 1
+        )
+
+        # Format the amounts: SATS with no decimals and commas, others with 2 decimals
+        debit_amount = self.debit_amount if self.debit_amount else 0.00
+        credit_amount = self.credit_amount if self.credit_amount else 0.00
+        if debit_conversion_factor == 1000:
+            formatted_debit_amount = (
+                f"{debit_amount / debit_conversion_factor:,.0f} {debit_display_unit}"
+            )
+        else:
+            formatted_debit_amount = f"{debit_amount:,.2f} {debit_display_unit}"
+        if credit_conversion_factor == 1000:
+            formatted_credit_amount = (
+                f"{credit_amount / credit_conversion_factor:,.0f} {credit_display_unit}"
+            )
+        else:
+            formatted_credit_amount = f"{credit_amount:,.2f} {credit_display_unit}"
 
         description = lightning_memo(self.description)
         entry = (
@@ -453,8 +492,8 @@ class LedgerEntry(BaseModel):
             f"DATE\n{formatted_date}\n\n"
             f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
             f"{'-' * 100}\n"
-            f"{debit_account:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
-            f"{' ' * 4}{credit_account:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
+            f"{debit_account_with_type:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
+            f"{' ' * 4}{credit_account_with_type:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
             f"DESCRIPTION\n{description or 'N/A'}"
             f"\n{'=' * 100}\n"
         )
