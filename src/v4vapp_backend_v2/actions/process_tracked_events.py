@@ -3,7 +3,11 @@ from typing import Any, List, Union
 
 from pydantic import ValidationError
 
-from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.account_type import (
+    AssetAccount,
+    LiabilityAccount,
+    RevenueAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
     LedgerEntryCreationException,
@@ -305,62 +309,84 @@ async def process_lightning_payment(
 
                 node_name = InternalConfig().config.lnd_config.default
                 ledger_entries_list = []
-                # Build the 2nd ledger entry: Conversion of Hive to Sats
-                # The credit amount is the incoming Hive Transfer - the expected change amount.
-                credit_amount = hive_transfer.amount.beam - change_amount
-                credit_amount_float = credit_amount.amount - getattr(
-                    hive_transfer.fee_conv, credit_amount.symbol.lower()
-                )
-                ledger_entry.group_id = f"{payment.group_id}_hive_to_lightning"
-                ledger_entry.op = payment
-                ledger_entry.debit = AssetAccount(
-                    name="Treasury Lightning",
-                    sub=node_name,  # This is the SERVER Lightning
-                )
-                ledger_entry.debit_unit = Currency.MSATS
-                ledger_entry.debit_amount = (
-                    cost_of_payment_msat
-                    + hive_transfer.conv.msats_fee  # Includes the Lighting fees and service fee
-                )
-                ledger_entry.debit_conv = payment.conv
-                ledger_entry.credit = AssetAccount(
-                    name="Customer Deposits Hive",
-                    sub=hive_transfer.to_account,
-                )
-                ledger_entry.credit_unit = hive_transfer.unit
-                ledger_entry.credit_amount = credit_amount_float
-                ledger_entry.credit_conv = hive_transfer.conv
-                ledger_entry.description = (
-                    f"Conversion {hive_transfer.amount} to {cost_of_payment_msat / 1000:,.0f} sats"
-                )
-                ledger_entries_list.append(ledger_entry)
 
-                # Build the 3rd ledger entry: Outgoing Lightning Payment
-                # Debit amount is
-                debit_amount = hive_transfer.amount.beam - change_amount
-                debit_amount_float = debit_amount.amount
+                # MARK: Conversion of Hive to Sats
+                conversion_credit_amount = hive_transfer.amount.beam - change_amount
+                conversion_debit_amount = cost_of_payment_msat + hive_transfer.conv.msats_fee
+                conversion_ledger_entry = LedgerEntry(
+                    group_id=f"{payment.group_id}_conversion",
+                    timestamp=payment.timestamp,
+                    op=payment,
+                    description=f"Conversion of {conversion_credit_amount} to Lightning {conversion_debit_amount / 1000:,.0f} sats",
+                    debit=AssetAccount(
+                        name="Treasury Lightning",
+                        sub=node_name,  # This is the SERVER Lightning
+                    ),
+                    debit_unit=Currency.MSATS,
+                    debit_amount=conversion_debit_amount,
+                    debit_conv=payment.conv,
+                    credit=AssetAccount(
+                        name="Customer Deposits Hive",
+                        sub=hive_transfer.to_account,  # This is the CUSTOMER
+                    ),
+                    credit_unit=hive_transfer.unit,
+                    credit_amount=conversion_credit_amount.amount,
+                    credit_conv=hive_transfer.conv,
+                )
+                ledger_entries_list.append(conversion_ledger_entry)
+
+                # MARK: Outgoing
+                # Build the 3a ledger entry: Outgoing Lightning Payment
+                fee_debit_amount = getattr(hive_transfer.fee_conv, hive_transfer.unit.lower())
+                outgoing_debit_amount = (
+                    hive_transfer.amount.beam - change_amount - fee_debit_amount
+                )
                 outgoing_ledger_entry = LedgerEntry(
                     group_id=f"{payment.group_id}_outgoing",
                     timestamp=payment.timestamp,
                     op=payment,
-                    description=f"Outgoing Lightning Payment {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
+                    description=f"Outgoing Lightning Payment {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
                     debit=LiabilityAccount(
-                        name="Customer Liability Lightning",
+                        name="Customer Liability Hive",
                         sub=hive_transfer.from_account,  # This is the CUSTOMER
                     ),
                     debit_unit=hive_transfer.unit,
-                    debit_amount=debit_amount_float,
+                    debit_amount=outgoing_debit_amount.amount,
                     debit_conv=hive_transfer.conv,
                     credit=AssetAccount(
                         name="Treasury Lightning",
                         sub=node_name,  # This is the SERVER
                     ),
                     credit_unit=Currency.MSATS,
-                    credit_amount=payment.value_msat
-                    + payment.fee_msat,  # This is the total sent without the
+                    credit_amount=cost_of_payment_msat,
+                    credit_conv=payment.conv,
                 )
-
                 ledger_entries_list.append(outgoing_ledger_entry)
+
+                # MARK: Fee
+                # Build the 3b ledger entry: the Fee expense
+                fee_ledger_entry = LedgerEntry(
+                    group_id=f"{payment.group_id}_fee",
+                    timestamp=payment.timestamp,
+                    op=payment,
+                    description=f"Fee for Lightning Payment {cost_of_payment_msat / 1000:,.0f} sats",
+                    debit=LiabilityAccount(
+                        name="Customer Liability Hive",
+                        sub=hive_transfer.from_account,  # This is the CUSTOMER
+                    ),
+                    debit_unit=hive_transfer.unit,
+                    debit_amount=fee_debit_amount,
+                    debit_conv=hive_transfer.conv,
+                    credit=RevenueAccount(
+                        name="Fee Income Lightning",
+                        sub=node_name,  # This is the SERVER
+                    ),
+                    credit_unit=Currency.MSATS,
+                    credit_amount=hive_transfer.conv.msats_fee,
+                    credit_conv=hive_transfer.conv,
+                )
+                ledger_entries_list.append(fee_ledger_entry)
+
                 asyncio.create_task(
                     lightning_payment_sent(
                         payment=payment,
