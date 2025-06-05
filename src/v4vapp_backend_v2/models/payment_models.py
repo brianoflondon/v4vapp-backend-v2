@@ -286,10 +286,9 @@ class Payment(TrackedBaseModel):
     @property
     def short_id(self) -> str:
         """
-        Returns a short identifier for the payment, which is the first 8 characters of the payment hash.
+        Returns a short identifier for the payment, which is the first 10 characters of the payment hash.
         """
-        prefix = f"{self.timestamp:%Y%m%d}"
-        return f"{prefix}_{self.group_id_p[:8]}"
+        return self.group_id_p[:10]
 
     @property
     def destination_pub_keys(self) -> List[str | None]:
@@ -342,7 +341,7 @@ class Payment(TrackedBaseModel):
         Returns:
             datetime: The creation date of the invoice.
         """
-        timestamp = self.creation_date
+        timestamp = self.creation_time_ns or self.creation_date
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         return timestamp

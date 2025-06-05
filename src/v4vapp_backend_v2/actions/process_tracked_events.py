@@ -162,7 +162,7 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     """
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
-        timestamp=op.creation_date,
+        timestamp=op.timestamp,
         op=op,
     )
     if isinstance(op, Invoice):
@@ -388,6 +388,7 @@ async def process_lightning_payment(
                 )
                 ledger_entries_list.append(fee_ledger_entry)
 
+                # This will initiate the return payment
                 asyncio.create_task(
                     lightning_payment_sent(
                         payment=payment,

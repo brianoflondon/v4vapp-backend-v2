@@ -14,6 +14,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     HiveToLightningError,
     process_hive_to_lightning,
 )
+from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defaults
@@ -216,16 +217,21 @@ async def test_hive_to_lightning_successful_payment():
         # load payment dictionary from JSON file
         with open("tests/data/hive_models/mongodb/payment_dict_success.json", "r") as f:
             json_data = json.load(f)
-        payment = Payment.model_validate(json_data.get("payment"))
+        outbound_payment = Payment.model_validate(json_data.get("payment"))
         with patch(
             "v4vapp_backend_v2.actions.hive_to_lightning.send_lightning_to_pay_req",
             new=AsyncMock(),
         ) as mock_send_lightning:
             # Configure the mock to return the payment dictionary
-            mock_send_lightning.return_value = payment
+            mock_send_lightning.return_value = outbound_payment
             transfer.replies = []
             await process_hive_to_lightning(transfer, nobroadcast=True)
             await asyncio.sleep(0.5)
+
+    with patch("asyncio.create_task") as mock_create_task:
+        mock_create_task.return_value = None
+        # this will create the ledger entries for the payment
+        ledger_entries_payment = await process_tracked_event(outbound_payment)
 
     # Wait for all tasks to complete
     while asyncio.all_tasks():

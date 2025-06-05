@@ -375,6 +375,7 @@ async def test_hive_transfer_successful_payment():
         ledger_entry_inbound = ledger_entries_inbound[0]
         print(ledger_entries_inbound[0])
 
+        # First test the failure case where the operation has already been processed.
         try:
             await process_hive_to_lightning(inbound_transfer, nobroadcast=True)
         except HiveToLightningError as e:
