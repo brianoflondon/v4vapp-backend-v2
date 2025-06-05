@@ -4,6 +4,7 @@ from pydantic import BaseModel, Discriminator, Tag
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
+from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -86,23 +87,48 @@ class DiscriminatedTracked(BaseModel):
     value: TrackedAny
 
 
-async def load_tracked_object(tracked_obj: TrackedAny) -> TrackedAny | None:
+async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | None:
     """
-    Asynchronously loads a tracked object from the database using the provided group_id.
+    Asynchronously loads a tracked object from the database using either a TrackedAny instance or a short ID string.
 
-    Args:
-        group_id (str): The group ID of the tracked object to load.
-        db_client (MongoDBClient): The database client to use for the operation.
+    If a string is provided, the function determines the appropriate collection to query based on the format of the string.
+    If a TrackedAny instance is provided, it uses its collection and group_id_query attributes to perform the lookup.
 
-    Returns:
-        TrackedBaseModel | None: The loaded tracked object, or None if not found.
+        tracked_obj (TrackedAny | str): The tracked object instance or its short ID.
+
+        TrackedAny | None: The loaded tracked object if found, otherwise None.
+
     """
     if not TrackedBaseModel.db_client:
         return None
 
+    if isinstance(tracked_obj, str):
+        short_id = tracked_obj
+        if "_" in short_id:
+            # This is a for a hive_ops object
+            async with TrackedBaseModel.db_client as client:
+                collection_name = OpBase.collection
+                query = TrackedBaseModel.short_id_query(short_id=short_id)
+                result = await client.find_one(collection_name=collection_name, query=query)
+                if result:
+                    value = {"value": result}
+                    answer = DiscriminatedTracked.model_validate(value)
+                    return answer.value
+        else:
+            collections = [Invoice.collection, Payment.collection]
+            async with TrackedBaseModel.db_client as client:
+                for collection_name in collections:
+                    query = TrackedBaseModel.short_id_query(short_id=short_id)
+                    result = await client.find_one(collection_name=collection_name, query=query)
+                    if result:
+                        value = {"value": result}
+                        answer = DiscriminatedTracked.model_validate(value)
+                        return answer.value
+
     async with TrackedBaseModel.db_client as client:
+        collection_name = tracked_obj.collection
         result = await client.find_one(
-            collection_name=tracked_obj.collection,
+            collection_name=collection_name,
             query=tracked_obj.group_id_query,
         )
         if result:
