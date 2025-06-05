@@ -16,6 +16,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
 )
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     calculate_hive_return_change,
+    complete_hive_to_lightning,
     lightning_payment_sent,
     process_hive_to_lightning,
 )
@@ -147,7 +148,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
 
 
-async def process_lightning_op(op: Invoice | Payment) -> [LedgerEntry]:
+async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     """
     Processes the Lightning operation and creates a ledger entry if applicable.
 
@@ -555,6 +556,10 @@ async def process_transfer_op(
         server = hive_transfer.from_account
         ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
+
+        if hive_transfer.is_reply_transfer:
+            follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
+
     elif hive_transfer.to_account == server_account:
         # MARK: Customer account to server account
         customer = hive_transfer.from_account
