@@ -457,3 +457,20 @@ def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
     if len(text) > max_length:
         return text[: max_length - 3] + "..."
     return text
+
+
+def find_short_id(text: str) -> str | None:
+    """
+    Finds a short ID in the given text.
+    A short ID is defined as a string that starts with '§' and is followed by alphanumeric characters.
+
+    Args:
+        text (str): The input text to search for a short ID.
+
+    Returns:
+        str | None: The found short ID or None if no valid ID is found.
+    """
+    match = re.search(r"§\s*([a-zA-Z0-9_]+)", text)
+    if match:
+        return match.group(1)
+    return None
