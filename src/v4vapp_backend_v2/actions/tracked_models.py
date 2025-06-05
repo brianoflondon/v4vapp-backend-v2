@@ -2,7 +2,7 @@ import asyncio
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Any, ClassVar, List
+from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.results import UpdateResult
@@ -87,6 +87,16 @@ class TrackedBaseModel(BaseModel):
         :param data: The data to initialize the model with.
         """
         super().__init__(**data)
+
+    @classmethod
+    def short_id_query(cls, short_id: str) -> Dict[str, Any]:
+        """
+        Returns a query to find a document by its short_id.
+
+        :param short_id: The short ID to search for.
+        :return: A dictionary representing the query.
+        """
+        return {"group_id": {"$regex": f"^{short_id}"}}  # Match the full short_id
 
     async def __aenter__(self) -> "TrackedBaseModel":
         """
@@ -240,6 +250,9 @@ class TrackedBaseModel(BaseModel):
     def group_id_p(self) -> str:
         """
         Returns the group ID as a string.
+
+        Note: @computed_field doesn't not work properly with mypy so the _p @property is used
+        to fix this.
 
         This method should be overridden in subclasses to provide the
         specific query for the group ID.
@@ -549,6 +562,3 @@ class TrackedBaseModel(BaseModel):
             except Exception as e:
                 logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
         return cls.last_quote
-
-
-
