@@ -188,14 +188,37 @@ class OpBase(TrackedBaseModel):
         group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
         return group_id
 
+    """
+    Note: @computed_field doesn't not work properly with mypy so the _p @property is used
+    instead to fix this
+    """
+
     @property
     def group_id_p(self) -> str:
         """
         Returns the group ID for the payment as a property instead of a @computed_field
         to fix type checking issues with mypy.
+
+        Note: @computed_field doesn't not work properly with mypy so the _p @property is used
+        to fix this.
         """
         group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
         return group_id
+
+    @property
+    def short_id(self) -> str:
+        """
+        Returns a short ID for this record. This is a string used to uniquely identify
+        the operation in the database.
+        The short ID is a combination of the block number, transaction number,
+        operation index in the transaction, and realm.
+        This is used to determine the key in the database where the operation
+        """
+        # Give the last 4 digits of the block number and first 5 chars of the trx_id
+        short_block_num = f"{self.block_num}"
+        short_trx_id = self.trx_id[:5]
+
+        return f"{short_block_num}_{short_trx_id}"
 
     @classmethod
     def name(cls) -> str:
