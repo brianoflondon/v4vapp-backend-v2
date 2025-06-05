@@ -224,7 +224,16 @@ async def process_tracked_events_single_items_no_extra_processes():
             try:
                 print(tracked_op.log_str)
                 ledger_entries = await process_tracked_event(tracked_op)
-                # print(ledger_entry.draw_t_diagram())
+                for ledger_entry in ledger_entries:
+                    print(ledger_entry)
+                    if ledger_entry.op is not None:
+                        short_id = ledger_entry.op.short_id
+                        query = TrackedBaseModel.short_id_query(short_id)
+                        doc = await TrackedBaseModel.db_client.find_one("hive_ops", query)
+                        assert doc is not None, (
+                            f"Document with short_id {short_id} not found in hive_ops."
+                        )
+
             except LedgerEntryDuplicateException:
                 continue
 
@@ -391,7 +400,6 @@ async def test_hive_transfer_successful_payment():
                 await outbound_payment.save()
 
     # Now we should process the outbound payment for a ledger.
-
     with patch("asyncio.create_task") as mock_create_task:
         mock_create_task.return_value = None
         ledger_entries_payment = await process_tracked_event(outbound_payment)
