@@ -7,7 +7,7 @@ from pydantic import ConfigDict, Field
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
+from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id, seconds_only_time_diff
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -181,6 +181,21 @@ class TransferBase(OpBase):
         else:
             memo = f"💬{self.d_memo}"
         return memo
+
+    @property
+    def extract_reply_short_id(self) -> str:
+        """
+        Determines if the transfer is a reply to another transfer.
+
+        Returns:
+            str: The short_id if it is found or an empty string.
+        """
+        if not self.d_memo:
+            return ""
+        short_id = find_short_id(self.d_memo)
+        if not short_id:
+            return ""
+        return short_id
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

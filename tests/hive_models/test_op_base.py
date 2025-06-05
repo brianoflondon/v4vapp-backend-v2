@@ -78,6 +78,8 @@ def test_op_base_model_dump():
     print(op_base.log_str)
     print(op_base.notification_str)
     print(op_base.logs)
+    print(op_base.short_id)
+    print(OpBase.short_id_query(op_base.short_id))
 
 
 # TODO: need far better testing of this

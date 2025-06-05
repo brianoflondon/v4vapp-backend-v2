@@ -217,8 +217,11 @@ class OpBase(TrackedBaseModel):
         # Give the last 4 digits of the block number and first 5 chars of the trx_id
         short_block_num = f"{self.block_num}"
         short_trx_id = self.trx_id[:5]
-
-        return f"{short_block_num}_{short_trx_id}"
+        if self.op_in_trx > 1:
+            short_op_in_trx = f"_{self.op_in_trx}"
+        else:
+            short_op_in_trx = ""
+        return f"{short_block_num}_{short_trx_id}{short_op_in_trx}"
 
     @classmethod
     def name(cls) -> str:

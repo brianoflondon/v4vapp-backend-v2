@@ -7,6 +7,7 @@ from tests.get_last_quote import last_quote
 from tests.helpers.test_crypto_prices import mock_binance
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id
 from v4vapp_backend_v2.hive_models.op_all import op_any, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -95,6 +96,23 @@ def test_all_block_explorer_links(mocker):
                     assert False
 
 
+def test_short_id(mocker):
+    _ = mock_binance(mocker)
+    TrackedBaseModel.last_quote = last_quote()
+    for hive_event in load_hive_events():
+        try:
+            op = op_any(hive_event)
+            memo = f"This is a test memo with a short id | § {op.short_id} and some more text."
+            print(op.short_id, OpBase.short_id_query(op.short_id), memo)
+            assert find_short_id(memo) == op.short_id
+
+        except ValueError as e:
+            assert "Unknown operation type" in str(e) or "Invalid CustomJson data" in str(e)
+        except Exception as e:
+            print(e)
+            assert False
+
+
 def test_hive_account_name_links(mocker):
     _ = mock_binance(mocker)
     TrackedBaseModel.last_quote = last_quote()
@@ -102,6 +120,7 @@ def test_hive_account_name_links(mocker):
         for hive_event in load_hive_events():
             try:
                 op = op_any(hive_event)
+                print(op.short_id, OpBase.short_id_query(op.short_id))
                 assert op.op_type == op.name()
                 if op.op_type == "transfer":
                     assert isinstance(op, Transfer)
