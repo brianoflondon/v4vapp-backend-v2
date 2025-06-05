@@ -284,6 +284,14 @@ class Payment(TrackedBaseModel):
         return self.payment_hash
 
     @property
+    def short_id(self) -> str:
+        """
+        Returns a short identifier for the payment, which is the first 8 characters of the payment hash.
+        """
+        prefix = f"{self.timestamp:%Y%m%d}"
+        return f"{prefix}_{self.group_id_p[:8]}"
+
+    @property
     def destination_pub_keys(self) -> List[str | None]:
         """
         Retrieves the public keys of the destination hops in the HTLC route.

@@ -251,6 +251,7 @@ class Invoice(TrackedBaseModel):
         self.fill_hive_accname()
         self.fill_custom_records()
 
+
     @override
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
@@ -305,6 +306,13 @@ class Invoice(TrackedBaseModel):
         Returns the group ID for the payment.
         """
         return self.r_hash
+
+    @property
+    def short_id(self) -> str:
+        """
+        Returns a short identifier for the payment, which is the first 8 characters of the payment hash.
+        """
+        return self.group_id_p[:8]
 
     @property
     def log_str(self) -> str:
