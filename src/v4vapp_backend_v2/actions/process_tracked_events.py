@@ -377,14 +377,14 @@ async def process_lightning_payment(
                     ),
                     debit_unit=hive_transfer.unit,
                     debit_amount=fee_debit_amount,
-                    debit_conv=hive_transfer.conv,
+                    debit_conv=hive_transfer.fee_conv,
                     credit=RevenueAccount(
                         name="Fee Income Lightning",
                         sub=node_name,  # This is the SERVER
                     ),
                     credit_unit=Currency.MSATS,
                     credit_amount=hive_transfer.conv.msats_fee,
-                    credit_conv=hive_transfer.conv,
+                    credit_conv=hive_transfer.fee_conv,
                 )
                 ledger_entries_list.append(fee_ledger_entry)
 

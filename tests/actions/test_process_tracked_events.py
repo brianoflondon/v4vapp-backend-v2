@@ -19,6 +19,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import get_account_balance_print
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryDuplicateException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     HiveToLightningError,
+    complete_hive_to_lightning,
     lightning_payment_sent,
     process_hive_to_lightning,
     return_hive_transfer,
@@ -360,24 +361,26 @@ async def test_hive_transfer_successful_payment():
             "tests/data/hive_models/mongodb/event_chain_testing/successful_hive_to_lightning/success_v4vapp-dev.hive_ops.json"
         )
     )
-    inbound_transfer: TrackedTransfer = all_data[
-        0
-    ]  # Assuming the first entry is the transfer operation
-    outbound_payment: Payment = all_data[1]  # Assuming the second entry is the payment operation
-    # outbound_transfer: TrackedTransfer = all_data[
-    #     2
-    # ]  # Assuming the third entry is the transfer operation
+
+    # The Hive transfer which starts the processs
+    hive_inbound_transfer: TrackedTransfer = all_data[0]
+
+    # The Lightning outbound payment
+    lightning_outbound_payment: Payment = all_data[1]
+
+    # The Hive change transaction is the third entry
+    hive_change_transfer: TrackedTransfer = all_data[2]
 
     with patch("asyncio.create_task") as mock_create_task:
         mock_create_task.return_value = None
-        await inbound_transfer.save()
-        ledger_entries_inbound = await process_tracked_event(inbound_transfer)  #
+        await hive_inbound_transfer.save()
+        ledger_entries_inbound = await process_tracked_event(hive_inbound_transfer)  #
         ledger_entry_inbound = ledger_entries_inbound[0]
         print(ledger_entries_inbound[0])
 
         # First test the failure case where the operation has already been processed.
         try:
-            await process_hive_to_lightning(inbound_transfer, nobroadcast=True)
+            await process_hive_to_lightning(hive_inbound_transfer, nobroadcast=True)
         except HiveToLightningError as e:
             assert "Operation already has" in str(e)
 
@@ -390,21 +393,21 @@ async def test_hive_transfer_successful_payment():
                 "v4vapp_backend_v2.actions.hive_to_lightning.send_lightning_to_pay_req",
                 new_callable=AsyncMock,
             ) as mock_send_lightning:
-                mock_send_lightning.return_value = outbound_payment
+                mock_send_lightning.return_value = lightning_outbound_payment
                 # We also need to remove the replies from  LedgerEntry OP
                 ledger_entry_inbound.op.replies = []
                 await ledger_entry_inbound.update_op()
-                inbound_transfer.replies = []
-                await inbound_transfer.save()
-                await process_hive_to_lightning(inbound_transfer, nobroadcast=True)
+                hive_inbound_transfer.replies = []
+                await hive_inbound_transfer.save()
+                await process_hive_to_lightning(hive_inbound_transfer, nobroadcast=True)
                 # this will have created the payment, we need to save it to the database
-                await outbound_payment.save()
+                await lightning_outbound_payment.save()
 
     # Now we should process the outbound payment for a ledger.
     with patch("asyncio.create_task") as mock_create_task:
         mock_create_task.return_value = None
-        ledger_entries_payment = await process_tracked_event(outbound_payment)
-        inbound_transfer = await load_tracked_object(inbound_transfer)
+        ledger_entries_payment = await process_tracked_event(lightning_outbound_payment)
+        hive_inbound_transfer = await load_tracked_object(hive_inbound_transfer)
         for ledger_entry_payment in ledger_entries_payment:
             # print(ledger_entry_payment.draw_t_diagram())
             print(ledger_entry_payment)
@@ -423,12 +426,26 @@ async def test_hive_transfer_successful_payment():
                     "trx_id": "12345678999",
                 }
                 await lightning_payment_sent(
-                    payment=outbound_payment,
-                    hive_transfer=inbound_transfer,
+                    payment=lightning_outbound_payment,
+                    hive_transfer=hive_inbound_transfer,
                     nobroadcast=True,
                 )
 
-    for ledger_entry in ledger_entries_inbound + ledger_entries_payment:
+    # Now we will process the Hive Transaction for the change which was
+    # would have been kicked off by lightning_payment_sent but was mocked to not
+    # actually send the transaction.
+    with patch("asyncio.create_task") as mock_create_task:
+        mock_create_task.return_value = None
+        ledger_entries_hive_change = await process_tracked_event(hive_change_transfer)
+        for ledger_entry in ledger_entries_hive_change:
+            # print(ledger_entry_payment.draw_t_diagram())
+            print(ledger_entry)
+
+        await complete_hive_to_lightning(hive_change_transfer, nobroadcast=True)
+
+    for ledger_entry in (
+        ledger_entries_inbound + ledger_entries_payment + ledger_entries_hive_change
+    ):
         for account in [ledger_entry.debit, ledger_entry.credit]:
             balance_printout = await get_account_balance_printout(account, full_history=True)
             print(balance_printout)

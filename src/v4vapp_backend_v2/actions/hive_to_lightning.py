@@ -326,7 +326,9 @@ async def lightning_payment_sent(
     """
     Callback function to be called when a Lightning payment is sent.
     This will check that the payment matches the operation and check if a change
-    transaction is needed
+    transaction is needed.
+
+    This SENDS HIVE BACK TO THE USER if the payment was successful.
 
     Args:
         payment (Payment): The Payment object representing the sent payment.

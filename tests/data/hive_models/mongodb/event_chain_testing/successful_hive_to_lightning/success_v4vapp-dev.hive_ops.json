@@ -154,5 +154,45 @@
   ]
 },
 {
-  
+  "_id": {
+    "$oid": "68416c0816c063bc6743cf9a"
+  },
+  "block_num": 96512348,
+  "trx_id": "ffb2d99c698b0b12714fd8c878dbbf78054f7c48",
+  "realm": "real",
+  "op_in_trx": 1,
+  "amount": {
+    "amount": "4154",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 4.154,
+    "hbd": 0.984082,
+    "usd": 0.984082,
+    "sats": 939,
+    "msats": 938547,
+    "msats_fee": 65955,
+    "btc": 0.00000938547,
+    "sats_hive": 225.9382,
+    "sats_hbd": 953.728,
+    "conv_from": "hive",
+    "value": 4.154,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-06-05T10:05:14.478Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+  "from": "devser.v4vapp",
+  "group_id": "96512348_ffb2d99c698b0b12714fd8c878dbbf78054f7c48_1_real",
+  "link": "https://hivehub.dev/tx/ffb2d99c698b0b12714fd8c878dbbf78054f7c48",
+  "memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+  "timestamp": {
+    "$date": "2025-06-05T09:59:15.000Z"
+  },
+  "to": "v4vapp-test",
+  "trx_num": 3,
+  "type": "transfer"
 }]
