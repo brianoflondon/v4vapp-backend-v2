@@ -557,7 +557,7 @@ async def process_transfer_op(
         ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
 
-        if hive_transfer.is_reply_transfer:
+        if hive_transfer.extract_reply_short_id:
             follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
 
     elif hive_transfer.to_account == server_account:
