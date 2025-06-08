@@ -268,7 +268,7 @@ class LedgerEntry(BaseModel):
         Returns:
             UpdateResult: The result of the database update operation.
         """
-        #TODO:
+        #TODO: Review whether we should even be updating old ledger entries
         self.db_checks()
         logger.info(f"Updating ledger entry {self.group_id} with op {self.op.group_id}")
         try:
