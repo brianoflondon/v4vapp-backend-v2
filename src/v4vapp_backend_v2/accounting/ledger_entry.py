@@ -268,7 +268,9 @@ class LedgerEntry(BaseModel):
         Returns:
             UpdateResult: The result of the database update operation.
         """
+        #TODO:
         self.db_checks()
+        logger.info(f"Updating ledger entry {self.group_id} with op {self.op.group_id}")
         try:
             ans = await self.db_client.update_one(
                 collection_name=LedgerEntry.collection(),
