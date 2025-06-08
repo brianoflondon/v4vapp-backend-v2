@@ -5,7 +5,7 @@ from nectar.amount import Amount
 from nectar.hive import Hive
 
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
-from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
+from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -15,12 +15,16 @@ from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import LNDPaymentExpired, send_lightning_to_pay_req
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    LNDPaymentError,
+    LNDPaymentExpired,
+    send_lightning_to_pay_req,
+)
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
-ACCEPTABLE_LIGHTNING_FEE_PPM = 500  # Acceptable Lightning fee in parts per million (ppm)
+ACCEPTABLE_LIGHTNING_FEE_PPM = 1_500  # Acceptable Lightning fee in parts per million (ppm)
 
 
 class HiveToLightningError(Exception):
@@ -87,21 +91,21 @@ async def can_attempt_to_pay(pay_req: PayReq) -> bool:
         AssertionError: If the database client is not initialized.
     """
     # Placeholder for actual implementation
-    assert TransferBase.db_client, "Database client is not initialized"
-    async with TransferBase.db_client as db_client:
-        invoice = await db_client.find_one("invoices", {"payment_request": pay_req.pay_req_str})
-        if not invoice:
-            logger.info(
-                f"Invoice {pay_req.pay_req_str} not found in the database.",
-                extra={"notification": False, **pay_req.log_extra},
-            )
-            return True
-        if invoice.status != "open":
-            logger.warning(
-                f"Invoice {pay_req.pay_req_str} is not open, current status: {invoice.status}.",
-                extra={"notification": False, **pay_req.log_extra},
-            )
-            return False
+    # assert TransferBase.db_client, "Database client is not initialized"
+    # async with TransferBase.db_client as db_client:
+    #     invoice = await db_client.find_one("invoices", {"payment_request": pay_req.pay_req_str})
+    #     if not invoice:
+    #         logger.info(
+    #             f"Invoice {pay_req.pay_req_str} not found in the database.",
+    #             extra={"notification": False, **pay_req.log_extra},
+    #         )
+    #         return True
+    #     if getattr(invoice, "status", None) != "open":
+    #         logger.warning(
+    #             f"Invoice {pay_req.pay_req_str} is not open, current status: {getattr(invoice, 'status', None)}.",
+    #             extra={"notification": False, **pay_req.log_extra},
+    #         )
+    #         return False
     return True
 
 
@@ -227,19 +231,18 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                         )
                         return
 
-                    except LnurlException as e:
-                        logger.info(
-                            f"Error decoding Lightning invoice: {e}",
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-                        raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
-
                     except HiveToLightningError as e:
                         logger.error(
                             f"Error processing Hive to Lightning operation: {e}",
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
-                        raise e
+                        asyncio.create_task(
+                            return_hive_transfer(
+                                hive_transfer=hive_transfer,
+                                reason=f"{e}",
+                                nobroadcast=nobroadcast,
+                            )
+                        )
 
                     except LNDPaymentExpired as e:
                         logger.warning(
@@ -250,6 +253,19 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                             return_hive_transfer(
                                 hive_transfer=hive_transfer,
                                 reason="Lightning invoice expired",
+                                nobroadcast=nobroadcast,
+                            )
+                        )
+
+                    except LNDPaymentError as e:
+                        logger.error(
+                            f"Lightning payment error: {e}",
+                            extra={"notification": False, **hive_transfer.log_extra},
+                        )
+                        asyncio.create_task(
+                            return_hive_transfer(
+                                hive_transfer=hive_transfer,
+                                reason=f"Lightning payment error: {e}",
                                 nobroadcast=nobroadcast,
                             )
                         )
@@ -265,20 +281,20 @@ async def decode_incoming_payment_message(
     hive_transfer: TrackedTransfer,
 ) -> Tuple[PayReq, LNDClient]:
     """
-    Decodes an incoming Lightning payment message and validates its value and conversion limits.
+    Decodes and validates an incoming Lightning payment message from a Hive transfer.
 
-    Args:
-        message (str): The Lightning payment request string to decode.
+    This function processes a Lightning payment request contained in the `d_memo` field of a `TrackedTransfer` object.
+    It decodes the payment request, checks its validity, ensures it is payable, and verifies user conversion limits.
+    If conversion details are missing, it attempts to update them. Raises a `HiveToLightningError` if any validation fails.
 
-    Returns:
-        PayReq | None: The decoded payment request object with conversion details if valid and within limits, otherwise None.
+        hive_transfer (TrackedTransfer): The Hive transfer object containing the Lightning payment request and conversion details.
 
-    Logs:
-        - Information about the processing and decoding of the payment request.
-        - Details about the decoded invoice and conversion status.
+        Tuple[PayReq, LNDClient]: A tuple containing the decoded payment request object and the LND client instance.
 
-    Raises:
-        None directly, but may propagate exceptions from called methods if not handled elsewhere.
+        HiveToLightningError: If decoding fails, the invoice is not payable, user limits are exceeded, or conversion details are missing.
+
+        - Warnings and errors related to conversion details and decoding failures.
+
     """
 
     logger.info(f"Processing payment request: {hive_transfer.d_memo}")
@@ -286,7 +302,7 @@ async def decode_incoming_payment_message(
     lnd_client = LNDClient(connection_name=lnd_config.default)
     try:
         pay_req = await decode_any_lightning_string(
-            input=hive_transfer.d_memo, lnd_client=lnd_client
+            input=hive_transfer.d_memo, lnd_client=lnd_client, sats=hive_transfer.conv.sats
         )
         if not pay_req:
             raise HiveToLightningError("Failed to decode Lightning invoice")
@@ -420,7 +436,10 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
     if change_msat <= 1_100:
         # If change is less than or equal to 1.1 satoshis, no change transaction is needed just
         # notification minimum
-        amount = Amount("0.001 HIVE")
+        if hive_transfer.conv.conv_from == Currency.HIVE:
+            amount = Amount("0.001 HIVE")
+        elif hive_transfer.conv.conv_from == Currency.HBD:
+            amount = Amount("0.001 HBD")
     else:
         match hive_transfer.conv.conv_from:
             case Currency.HIVE:
