@@ -21,6 +21,24 @@ class Account(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+    def __repr__(self) -> str:
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}"
+
+    def __eq__(self, other):
+        if not isinstance(other, Account):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.account_type == other.account_type
+            and self.sub == other.sub
+        )
+
+    def __hash__(self):
+        return hash((self.name, self.account_type, self.sub))
+
 
 # MARK: Asset Accounts
 class AssetAccount(Account):
