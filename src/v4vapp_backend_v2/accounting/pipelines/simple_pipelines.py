@@ -99,28 +99,36 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
     pipeline_exclude_locked_changes: list[Mapping[str, Any]] = []
 
     payments_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-        {"$match": {"fullDocument.custom_records.v4vapp_group_id": {"$ne": None}}},
         {
-            "$project": {
-                "fullDocument.creation_date": 1,
-                "fullDocument.payment_hash": 1,
-                "fullDocument.status": 1,
-                "fullDocument.value_msat": 1,
+            "$match": {
+                "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
+                "fullDocument.status": "SUCCEEDED",  # status must exist and be SUCCEEDED
             }
         },
+        # {
+        #     "$project": {
+        #         "fullDocument.creation_date": 1,
+        #         "fullDocument.payment_hash": 1,
+        #         "fullDocument.status": 1,
+        #         "fullDocument.value_msat": 1,
+        #     }
+        # },
     ]
-    invoices_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-        {
-            "$project": {
-                "fullDocument.creation_date": 1,
-                "fullDocument.r_hash": 1,
-                "fullDocument.state": 1,
-                "fullDocument.amt_paid_msat": 1,
-                "fullDocument.value_msat": 1,
-                "fullDocument.memo": 1,
-            }
-        },
-    ]
+    invoices_pipeline: Sequence[Mapping[str, Any]] = (
+        pipeline_exclude_locked_changes
+        + [
+            # {
+            #     "$project": {
+            #         "fullDocument.creation_date": 1,
+            #         "fullDocument.r_hash": 1,
+            #         "fullDocument.state": 1,
+            #         "fullDocument.amt_paid_msat": 1,
+            #         "fullDocument.value_msat": 1,
+            #         "fullDocument.memo": 1,
+            #     }
+            # },
+        ]
+    )
     hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
         {
             "$match": {
