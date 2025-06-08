@@ -67,8 +67,15 @@ async def get_ledger_entries(
             sort=[("timestamp", 1)],
         )
         async for entry in cursor:
-            ledger_entry = LedgerEntry.model_validate(entry)
-            ledger_entries.append(ledger_entry)
+            try:
+                ledger_entry = LedgerEntry.model_validate(entry)
+                ledger_entries.append(ledger_entry)
+            except Exception as e:
+                logger.error(
+                    f"Error validating ledger entry: {entry}. Error: {e}",
+                    extra={"notification": False, "entry": entry, "error": str(e)},
+                )
+                continue
     return ledger_entries
 
 
@@ -562,7 +569,9 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
     return is_balanced
 
 
-def balance_sheet_printout(balance_sheet: Dict, as_of_date: datetime) -> str:
+def balance_sheet_printout(
+    balance_sheet: Dict, as_of_date: datetime = datetime.now(tz=timezone.utc)
+) -> str:
     """
     Formats the balance sheet into a readable string representation, displaying only USD values.
     Includes sections for Assets, Liabilities, and Equity, along with their respective totals.
