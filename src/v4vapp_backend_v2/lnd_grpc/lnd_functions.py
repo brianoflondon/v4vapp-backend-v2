@@ -289,23 +289,23 @@ async def send_lightning_to_pay_req(
     fee_limit_msat = max(fee_limit_msat, 1)
     logger.info(f"Fee limit: {fee_limit_msat} msat")
     failure_reason = "Unknown Failure"
+    # Construct the SendPaymentRequest parameters
+    request_params = {
+        "payment_request": pay_req.pay_req_str,
+        "timeout_seconds": 600,
+        "fee_limit_msat": fee_limit_msat,
+        "allow_self_payment": True,
+        "dest_custom_records": dest_custom_records,
+    }
+
+    # Add amount_msat if it's a zero-value invoice
+    if zero_value_pay_req:
+        request_params["amt_msat"] = amount_msat
+
+    # Create the SendPaymentRequest object
+    request = routerrpc.SendPaymentRequest(**request_params)
+
     try:
-        # Construct the SendPaymentRequest parameters
-        request_params = {
-            "payment_request": pay_req.pay_req_str,
-            "timeout_seconds": 600,
-            "fee_limit_msat": fee_limit_msat,
-            "allow_self_payment": True,
-            "dest_custom_records": dest_custom_records,
-        }
-
-        # Add amount_msat if it's a zero-value invoice
-        if zero_value_pay_req:
-            request_params["amt_msat"] = amount_msat
-
-        # Create the SendPaymentRequest object
-        request = routerrpc.SendPaymentRequest(**request_params)
-
         payment_dict = {}
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):
             payment_dict = MessageToDict(payment_resp, preserving_proto_field_name=True)
@@ -318,23 +318,6 @@ async def send_lightning_to_pay_req(
                 },
             )
             failure_reason = payment_dict.get("failure_reason", "Unknown Failure")
-        if payment_dict:
-            try:
-                payment = Payment.model_validate(payment_dict)
-                logger.info(
-                    f"{lnd_client.icon} {payment.log_str}",
-                    extra={
-                        "notification": False,
-                        **payment.log_extra,
-                    },
-                )
-                if payment.status == lnrpc.Payment.SUCCEEDED:
-                    return payment
-
-            except ValidationError as e:
-                logger.error(f"{lnd_client.icon} Payment validation error: {e}")
-                raise LNDPaymentError(f"Payment validation error: {e}")
-        raise LNDPaymentError(f"{lnd_client.icon} Payment failed {failure_reason}")
     except AioRpcError as e:
         logger.info(
             f"{lnd_client.icon} Problem paying Lightning invoice", extra={"notification": False}
@@ -343,11 +326,31 @@ async def send_lightning_to_pay_req(
             raise LNDPaymentExpired(f"{lnd_client.icon} Payment expired: {e.details()}")
         raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
 
-    except Exception as e:
-        logger.exception(
-            f"{lnd_client.icon} Problem paying Lightning invoice", extra={"notification": False}
-        )
-        raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
+    if payment_dict:
+        try:
+            payment = Payment.model_validate(payment_dict)
+            logger.info(
+                f"{lnd_client.icon} {payment.log_str}",
+                extra={
+                    "notification": False,
+                    **payment.log_extra,
+                },
+            )
+        except ValidationError as e:
+            logger.error(f"{lnd_client.icon} Payment validation error: {e}")
+            raise LNDPaymentError(f"Payment validation error: {e}")
+
+        if payment.status and payment.status.value == "SUCCEEDED":
+            return payment
+
+        elif payment.status and payment.status.value == "FAILED":
+            raise LNDPaymentError(f"{lnd_client.icon} Payment failed: {payment.failure_reason}")
+
+    logger.error(
+        f"Failed to retrieve payment_dict or payment status paying {pay_req.pay_req_str}",
+        extra={"notification": False},
+    )
+    raise LNDPaymentError(f"{lnd_client.icon} Payment failed {failure_reason}")
 
 
 def test_zero_value_pay_req(pay_req: PayReq, amount_msat: int) -> tuple[bool, int]:
