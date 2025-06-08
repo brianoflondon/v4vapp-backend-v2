@@ -109,6 +109,9 @@ class TrackedBaseModel(BaseModel):
         Returns:
             TrackedBaseModel: The current instance with the lock acquired.
         """
+        # stack = inspect.stack()
+        # print(stack[1].function, stack[1].filename, stack[1].lineno)
+        logger.info(f"Locking   operation {self.group_id_p}")
         if await self.locked:
             logger.warning(
                 f"Operation {self.name()} is already locked, waiting for unlock",
@@ -116,7 +119,8 @@ class TrackedBaseModel(BaseModel):
             )
             unlocked = await self.wait_for_lock(timeout=10)
             if not unlocked:
-                raise TimeoutError("Timeout waiting for lock to be released.")
+                await self.unlock_op()
+                # raise TimeoutError("Timeout waiting for lock to be released.")
         await self.lock_op()
         return self
 
@@ -135,6 +139,7 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
+        logger.info(f"Unlocking operation {self.group_id_p}")
         await self.unlock_op()
 
     # MARK: Reply Management
@@ -264,7 +269,7 @@ class TrackedBaseModel(BaseModel):
 
     # MARK: Lock Management
 
-    async def wait_for_lock(self, timeout: int = 10) -> bool:
+    async def wait_for_lock(self, timeout: int = 2) -> bool:
         """
         Waits for the operation to be unlocked within a specified timeout.
 
@@ -282,7 +287,7 @@ class TrackedBaseModel(BaseModel):
         while await self.locked:
             if (timer() - start_time) > timeout:
                 return False
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
         return True
 
     @property
