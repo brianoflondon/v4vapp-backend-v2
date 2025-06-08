@@ -26,6 +26,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
@@ -229,7 +230,7 @@ async def process_lightning_invoice(
 
 
 async def process_lightning_payment(
-    payment: Payment, ledger_entry: LedgerEntry
+    payment: Payment, ledger_entry: LedgerEntry, nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
     Processes a Lightning Network payment and updates the corresponding ledger entry.
@@ -288,13 +289,7 @@ async def process_lightning_payment(
                 # hive_transfer.change_amount = change_amount
                 # await hive_transfer.update_conv()
 
-                hive_transfer.add_reply(
-                    reply_id=payment.group_id_p,
-                    reply_type="payment",
-                    reply_msat=cost_of_payment_msat,
-                    reply_error=None,
-                    reply_message=message,
-                )
+
                 quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
                 hive_transfer.fee_conv = CryptoConversion(
                     conv_from=Currency.MSATS,
@@ -388,12 +383,20 @@ async def process_lightning_payment(
                 )
                 ledger_entries_list.append(fee_ledger_entry)
 
+                hive_transfer.add_reply(
+                    reply_id=payment.group_id_p,
+                    reply_type="payment",
+                    reply_msat=cost_of_payment_msat,
+                    reply_error=None,
+                    reply_message=message,
+                )
+
                 # This will initiate the return payment
                 asyncio.create_task(
                     lightning_payment_sent(
                         payment=payment,
                         hive_transfer=hive_transfer,
-                        nobroadcast=True,
+                        nobroadcast=nobroadcast,
                     )
                 )
                 return ledger_entries_list
@@ -480,7 +483,8 @@ async def process_transfer_op(
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     expense_accounts = ["privex"]
-    description = hive_transfer.d_memo if hive_transfer.d_memo else ""
+    processed_d_memo = lightning_memo(hive_transfer.d_memo)
+    base_description = f"{hive_transfer.amount_str} from {hive_transfer.from_account} to {hive_transfer.to_account} {processed_d_memo}"
     hive_config = InternalConfig().config.hive
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
@@ -493,7 +497,7 @@ async def process_transfer_op(
         raise LedgerEntryCreationException("Conversion not set in operation.")
 
     follow_on_task = None
-    ledger_entry.description = description
+    ledger_entry.description = base_description
     ledger_entry.credit_unit = ledger_entry.debit_unit = hive_transfer.unit
     ledger_entry.credit_amount = ledger_entry.debit_amount = hive_transfer.amount_decimal
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
@@ -505,6 +509,7 @@ async def process_transfer_op(
         # MARK: Server to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
+        ledger_entry.description = f"Server to Treasury transfer: {base_description}"
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == server_account
@@ -512,6 +517,7 @@ async def process_transfer_op(
         # MARK: Treasury to Server
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+        ledger_entry.description = f"Treasury to Server transfer: {base_description}"
     elif (
         hive_transfer.from_account == funding_account
         and hive_transfer.to_account == treasury_account
@@ -521,6 +527,7 @@ async def process_transfer_op(
         ledger_entry.credit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=funding_account
         )
+        ledger_entry.description = f"Funding to Treasury transfer: {base_description}"
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == funding_account
@@ -530,6 +537,7 @@ async def process_transfer_op(
             name="Owner Loan Payable (funding)", sub=treasury_account
         )
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=funding_account)
+        ledger_entry.description = f"Treasury to Funding transfer: {base_description}"
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
@@ -537,6 +545,7 @@ async def process_transfer_op(
         # MARK: Treasury to Exchange
         ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
+        ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
     elif (
         hive_transfer.from_account == exchange_account
         and hive_transfer.to_account == treasury_account
@@ -544,6 +553,7 @@ async def process_transfer_op(
         # MARK: Exchange to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
+        ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
     elif (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account in expense_accounts
@@ -557,6 +567,7 @@ async def process_transfer_op(
         server = hive_transfer.from_account
         ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.description = f"Server to Customer withdrawal: {base_description}"
 
         if hive_transfer.extract_reply_short_id:
             follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
@@ -567,6 +578,7 @@ async def process_transfer_op(
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
+        ledger_entry.description = f"Customer to Server deposit: {base_description}"
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         follow_on_task = process_hive_to_lightning(hive_transfer=hive_transfer)
