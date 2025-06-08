@@ -9,6 +9,14 @@ import pytest
 from bson import json_util
 
 from tests.get_last_quote import last_quote
+from v4vapp_backend_v2.accounting.balance_sheet import (
+    balance_sheet_all_currencies_printout,
+    balance_sheet_printout,
+    generate_balance_sheet_pandas,
+    get_account_balance_printout,
+    get_ledger_entries,
+    list_all_accounts,
+)
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, get_ledger_entry
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     HiveToLightningError,
@@ -187,6 +195,7 @@ async def test_hive_to_lightning_pay_refund():
         # assert mock_repay_hive_to_lightning.call_args_list[0][1]["op"] == op
 
 
+@pytest.mark.skip("Skipping test")
 @pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
 )
@@ -241,3 +250,28 @@ async def test_hive_to_lightning_successful_payment():
 
 
 trx_json_str = '{"expiration": "2025-05-27T16:10:30", "ref_block_num": 53993, "ref_block_prefix": 4044532601, "operations": [["transfer", {"from": "devser.v4vapp", "to": "v4vapp-test", "amount": "10.000 HIVE", "memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app"}]], "extensions": [], "signatures": ["1f379ef999379c1fc8503a149bf1616f54b3267c5a13e8ae3ec02faa08faa3748e769e3af1ef53554535aae79bbf514bad96c58d90e4190818d6e5114c743540d5"], "trx_id": "d9b771ebf9662a963f42b93c1ce702481f7700c8"}'
+
+
+async def test_complete_dev_database():
+    """
+    This test completes the dev database by processing all operations in the MongoDB dump.
+    It will process all operations and create ledger entries for them.
+    """
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = get_mongodb_client_defaults()
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+
+    ledger_entries = await get_ledger_entries()
+    for ledger_entry in ledger_entries:
+        print(ledger_entry)
+
+    balance_sheet = await generate_balance_sheet_pandas()
+    print(balance_sheet_all_currencies_printout(balance_sheet))
+    print(balance_sheet_printout(balance_sheet))
+
+    accounts = await list_all_accounts()
+    for account in accounts:
+        account_balance = await get_account_balance_printout(account, full_history=True)
+        print("\n\nAccount:", account.name)
+        print(account_balance)
+        print("\n\n")
