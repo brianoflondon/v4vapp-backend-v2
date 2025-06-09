@@ -1,6 +1,4 @@
 import base64
-from collections.abc import Callable
-from typing import Any, Coroutine
 
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import AioRpcError
@@ -16,7 +14,8 @@ from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
 
 node_alias_cache = {}
-LIGHTNING_FEE_LIMIT_PPM = 1
+LIGHTNING_FEE_LIMIT_PPM = 1_000
+LIGHTNING_FEE_BASE_MSAT = 50_000
 
 
 class LNDPaymentError(Exception):
@@ -233,8 +232,6 @@ async def send_lightning_to_pay_req(
     chat_message: str = "",
     amount_msat: int = 0,
     fee_limit_ppm: int = LIGHTNING_FEE_LIMIT_PPM,
-    callback: Callable | None = None,
-    async_callback: Callable[..., "Coroutine[Any, Any, Any]"] | None = None,
 ) -> Payment:
     """
     Send a payment to a Lightning Network invoice using the provided payment request.
@@ -247,9 +244,6 @@ async def send_lightning_to_pay_req(
         amount_msat (int, optional): Amount to pay in millisatoshis, required for zero-value invoices.
                     Defaults to 0. If set will be ignored if the pay_req includes an amount
         fee_limit_ppm (int, optional): Fee limit in parts per million. Defaults to LIGHTNING_FEE_LIMIT_PPM.
-        callback (Callable, optional): Synchronous callback to execute after payment. Defaults to None.
-        async_callback (Callable[..., Awaitable[Any]], optional): Asynchronous callback to execute after payment. Defaults to None.
-        callback_args (Mapping[str, Any], optional): Additional arguments to pass to the callback(s). Defaults to {}.
 
     Raises:
         ValueError: If the LNDClient instance is not provided.
@@ -277,24 +271,29 @@ async def send_lightning_to_pay_req(
     )
     logger.info(pay_req.log_str)
 
+    request_params = {}
     await lnd_client.node_get_info
     if pay_req.destination == lnd_client.get_info.identity_pubkey:
         logger.info(
             "Payment address is the same as the node's identity pubkey set fee limit to minimum"
         )
-        fee_limit_msat = 1
+        fee_limit_msat = 100_000
+        request_params["allow_self_payment"] = True
+        request_params["outgoing_chan_ids"] = [800082725764071425]
+        # TODO: replace this hard coded channel ID with a dynamic one
     else:
-        fee_limit_msat = int(payment_amount_msat * fee_limit_ppm / 1_000_000)
+        fee_limit_msat = (
+            int(payment_amount_msat * fee_limit_ppm / 1_000_000) + LIGHTNING_FEE_BASE_MSAT
+        )
     # Must prevent 0 fee limit which is an unlimited fee.
     fee_limit_msat = max(fee_limit_msat, 1)
     logger.info(f"Fee limit: {fee_limit_msat} msat")
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
-    request_params = {
+    request_params = request_params | {
         "payment_request": pay_req.pay_req_str,
         "timeout_seconds": 600,
         "fee_limit_msat": fee_limit_msat,
-        "allow_self_payment": True,
         "dest_custom_records": dest_custom_records,
     }
 
@@ -302,10 +301,9 @@ async def send_lightning_to_pay_req(
     if zero_value_pay_req:
         request_params["amt_msat"] = amount_msat
 
-    # Create the SendPaymentRequest object
-    request = routerrpc.SendPaymentRequest(**request_params)
-
     try:
+        # Create the SendPaymentRequest object
+        request = routerrpc.SendPaymentRequest(**request_params)
         payment_dict = {}
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):
             payment_dict = MessageToDict(payment_resp, preserving_proto_field_name=True)
@@ -324,6 +322,14 @@ async def send_lightning_to_pay_req(
         )
         if e.details() and "invoice expired" in str(e.details()).lower():
             raise LNDPaymentExpired(f"{lnd_client.icon} Payment expired: {e.details()}")
+        raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
+
+    except Exception as e:
+        logger.info(
+            f"{lnd_client.icon} Unexpected problem paying Lightning invoice",
+            extra={"notification": False},
+        )
+        logger.exception(e)
         raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
 
     if payment_dict:
