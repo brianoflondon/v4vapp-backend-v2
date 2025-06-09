@@ -289,7 +289,6 @@ async def process_lightning_payment(
                 # hive_transfer.change_amount = change_amount
                 # await hive_transfer.update_conv()
 
-
                 quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
                 hive_transfer.fee_conv = CryptoConversion(
                     conv_from=Currency.MSATS,
@@ -313,7 +312,7 @@ async def process_lightning_payment(
                     group_id=f"{payment.group_id}_conversion",
                     timestamp=payment.timestamp,
                     op=payment,
-                    description=f"Conversion of {conversion_credit_amount} to Lightning {conversion_debit_amount / 1000:,.0f} sats",
+                    description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {hive_transfer.to_account}",
                     debit=AssetAccount(
                         name="Treasury Lightning",
                         sub=node_name,  # This is the SERVER Lightning
@@ -365,7 +364,7 @@ async def process_lightning_payment(
                     group_id=f"{payment.group_id}_fee",
                     timestamp=payment.timestamp,
                     op=payment,
-                    description=f"Fee for Lightning Payment {cost_of_payment_msat / 1000:,.0f} sats",
+                    description=f"Fee Lightning {hive_transfer.from_account} {cost_of_payment_msat / 1000:,.0f} sats",
                     debit=LiabilityAccount(
                         name="Customer Liability Hive",
                         sub=hive_transfer.from_account,  # This is the CUSTOMER
@@ -567,7 +566,7 @@ async def process_transfer_op(
         server = hive_transfer.from_account
         ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.description = f"Server to Customer withdrawal: {base_description}"
+        ledger_entry.description = f"Withdrawal: {base_description}"
 
         if hive_transfer.extract_reply_short_id:
             follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
@@ -578,7 +577,7 @@ async def process_transfer_op(
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
-        ledger_entry.description = f"Customer to Server deposit: {base_description}"
+        ledger_entry.description = f"Deposit: {base_description}"
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         follow_on_task = process_hive_to_lightning(hive_transfer=hive_transfer)
