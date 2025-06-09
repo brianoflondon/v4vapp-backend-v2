@@ -96,6 +96,7 @@ async def get_ledger_dataframe(
         pd.DataFrame: A DataFrame containing ledger entry data with the following columns:
             - timestamp: The timestamp of the ledger entry.
             - group_id: The group ID associated with the ledger entry.
+            - short_id: A short identifier for the ledger entry.
             - description: A description of the ledger entry.
             - debit_amount: The amount of the debit transaction.
             - debit_unit: The unit of the debit amount.
@@ -127,6 +128,7 @@ async def get_ledger_dataframe(
             {
                 "timestamp": entry.timestamp,
                 "group_id": entry.group_id,
+                "short_id": entry.short_id,
                 "description": entry.description,
                 "debit_amount": debit_amount,
                 "debit_unit": debit_unit,
@@ -802,6 +804,7 @@ async def get_account_balance(
         [
             "timestamp",
             "description",
+            "short_id",
             "debit_amount",
             "debit_unit",
             "debit_conv_hive",
@@ -815,6 +818,7 @@ async def get_account_balance(
         [
             "timestamp",
             "description",
+            "short_id",
             "credit_amount",
             "credit_unit",
             "credit_conv_hive",
@@ -875,7 +879,7 @@ async def get_account_balance_printout(
         str: A formatted string containing either the full transaction history or the closing balance
              for the specified account and sub-account up to the specified date.
     """
-    max_width = 110
+    max_width = 125
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
 
@@ -932,6 +936,7 @@ async def get_account_balance_printout(
                 debit = row["debit_amount"] if row["debit_unit"] == unit else 0.0
                 credit = row["credit_amount"] if row["credit_unit"] == unit else 0.0
                 balance = row["running_balance"]
+                short_id = row.get("short_id", "")
                 # Convert to SATS for display if unit is MSATS
                 if unit.upper() == "MSATS":
                     debit = debit / conversion_factor
@@ -948,7 +953,8 @@ async def get_account_balance_printout(
                     f"{description:<45} "
                     f"{debit_str:>12} "
                     f"{credit_str:>12} "
-                    f"{balance_str:>12}"
+                    f"{balance_str:>12} "
+                    f"{short_id:>15}"
                 )
 
         # Get the final balance for this unit and calculate converted values
