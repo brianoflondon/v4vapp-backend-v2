@@ -123,7 +123,7 @@ async def test_hive_to_lightning_invoice_expired():
         if op := op_dict.get("a5f153f96ab572a8260703773d6c530d0dd86e41"):
             # Assign an empty RepliesModel (or appropriate type) instead of a list
             op.replies = []
-            await process_hive_to_lightning(op)
+            await process_hive_to_lightning(op, nobroadcast=True)
 
         # Wait for all tasks to complete
         while asyncio.all_tasks():
@@ -135,6 +135,39 @@ async def test_hive_to_lightning_invoice_expired():
         assert mock_return_hive_transfer.call_args_list[0][1]["hive_transfer"] == op
 
         # TODO:: Simulate Hive failures
+
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
+@pytest.mark.asyncio
+async def test_hive_to_lightning_invoice_limits():
+    """
+    Test the Hive to Lightning processing but without attempting a refund.
+    """
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = get_mongodb_client_defaults()
+
+    op_dict = get_op_dict()
+    # create async_mock for return_hive_transfer
+    with patch(
+        "v4vapp_backend_v2.actions.hive_to_lightning.return_hive_transfer",
+        new_callable=AsyncMock,
+    ) as mock_return_hive_transfer:
+        if op := op_dict.get("a5f153f96ab572a8260703773d6c530d0dd86e41"):
+            # Assign an empty RepliesModel (or appropriate type) instead of a list
+            op.replies = []
+            op.conv.msats = 1000  # Set a low amount to trigger limits
+            await process_hive_to_lightning(op, nobroadcast=True)
+
+        # Wait for all tasks to complete
+        while asyncio.all_tasks():
+            if len(asyncio.all_tasks()) == 1:
+                break
+            await asyncio.sleep(0.1)
+
+        assert mock_return_hive_transfer.call_count == 1
+        assert mock_return_hive_transfer.call_args_list[0][1]["hive_transfer"] == op
+        assert "Not enough sent" in mock_return_hive_transfer.call_args[1]["reason"]
 
 
 @pytest.mark.skipif(
