@@ -16,6 +16,8 @@ from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    LIGHTNING_FEE_BASE_MSAT,
+    LIGHTNING_FEE_LIMIT_PPM,
     LNDPaymentError,
     LNDPaymentExpired,
     send_lightning_to_pay_req,
@@ -72,7 +74,7 @@ async def check_for_hive_to_lightning(op: OpAny) -> bool:
     return True
 
 
-async def can_attempt_to_pay(pay_req: PayReq) -> bool:
+async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
     """
     Asynchronously checks whether a payment attempt can be made for a given payment request.
 
@@ -90,23 +92,32 @@ async def can_attempt_to_pay(pay_req: PayReq) -> bool:
     Raises:
         AssertionError: If the database client is not initialized.
     """
-    # Placeholder for actual implementation
-    # assert TransferBase.db_client, "Database client is not initialized"
-    # async with TransferBase.db_client as db_client:
-    #     invoice = await db_client.find_one("invoices", {"payment_request": pay_req.pay_req_str})
-    #     if not invoice:
-    #         logger.info(
-    #             f"Invoice {pay_req.pay_req_str} not found in the database.",
-    #             extra={"notification": False, **pay_req.log_extra},
-    #         )
-    #         return True
-    #     if getattr(invoice, "status", None) != "open":
-    #         logger.warning(
-    #             f"Invoice {pay_req.pay_req_str} is not open, current status: {getattr(invoice, 'status', None)}.",
-    #             extra={"notification": False, **pay_req.log_extra},
-    #         )
-    #         return False
-    return True
+    if pay_req.is_zero_value:
+        if hive_transfer.conv.in_limits():
+            return ""
+        else:
+            return "Payment request has zero value, but conversion limits exceeded."
+
+    amount_sent_after_fee_msats = hive_transfer.conv.msats - hive_transfer.conv.msats_fee
+    payment_amount_msats = pay_req.value_msat
+    fee_estimate_msats = (
+        int(payment_amount_msats * LIGHTNING_FEE_LIMIT_PPM / 1_000_000) + LIGHTNING_FEE_BASE_MSAT
+    )
+    surplus_msats = amount_sent_after_fee_msats - payment_amount_msats - fee_estimate_msats
+    if surplus_msats < 1:
+        if hive_transfer.conv.conv_from == Currency.HIVE:
+            surplus_hive = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3)
+            failure_reason = (
+                f"Not enough sent to process this payment request: {surplus_hive} HIVE"
+            )
+        elif hive_transfer.conv.conv_from == Currency.HBD:
+            surplus_hbd = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3)
+            failure_reason = f"Not enough sent to process this payment request: {surplus_hbd} HBD"
+        else:
+            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
+
+        return failure_reason
+    return ""
 
 
 async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> bool:
@@ -232,7 +243,7 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                         return
 
                     except HiveToLightningError as e:
-                        logger.error(
+                        logger.warning(
                             f"Error processing Hive to Lightning operation: {e}",
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
@@ -268,6 +279,12 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                                 reason=f"Lightning payment error: {e}",
                                 nobroadcast=nobroadcast,
                             )
+                        )
+
+                    except Exception:
+                        logger.exception(
+                            "Unexpected error during Hive to Lightning processing",
+                            extra={"notification": False, **hive_transfer.log_extra},
                         )
 
                 else:
@@ -310,8 +327,9 @@ async def decode_incoming_payment_message(
         logger.error(f"Error decoding Lightning invoice: {e}")
         raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
 
-    if not await can_attempt_to_pay(pay_req):
-        raise HiveToLightningError("Invoice is not open or already paid, cannot attempt to pay")
+    result = await check_amount_sent(hive_transfer, pay_req)
+    if result:
+        raise HiveToLightningError(result)
     if not await check_user_limits(pay_req, hive_transfer):
         raise HiveToLightningError("User limits exceeded for this payment request")
     if hive_transfer.conv is None or hive_transfer.conv.is_unset():
@@ -334,6 +352,7 @@ async def decode_incoming_payment_message(
 """
 After a payment is sent, this function will be called via the database trigger
 """
+
 
 
 async def lightning_payment_sent(
