@@ -1,8 +1,9 @@
+import textwrap
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, Tuple
 
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.accounting.account_type import AccountAny
@@ -225,6 +226,19 @@ class LedgerEntry(BaseModel):
         }
         return ans
 
+    @computed_field
+    def short_id(self) -> str:
+        """
+        Returns a short identifier for the LedgerEntry, which is the group_id.
+
+        This method is used to provide a concise representation of the LedgerEntry
+        that can be used in logs or other contexts where a full representation is not needed.
+
+        Returns:
+            str: The group_id of the LedgerEntry.
+        """
+        return self.op.short_id if self.op else self.group_id
+
     # MARK: DB Database Methods
 
     @classmethod
@@ -268,7 +282,7 @@ class LedgerEntry(BaseModel):
         Returns:
             UpdateResult: The result of the database update operation.
         """
-        #TODO: Review whether we should even be updating old ledger entries
+        # TODO: Review whether we should even be updating old ledger entries
         self.db_checks()
         logger.info(f"Updating ledger entry {self.group_id} with op {self.op.group_id}")
         try:
@@ -424,11 +438,12 @@ class LedgerEntry(BaseModel):
         Returns:
             str: A string representation of the journal entry.
         """
+        max_width = 100
         if not self.is_completed or not self.debit or not self.credit:
             # If the entry is not completed, show a warning
             return (
                 f"WARNING: LedgerEntry is not completed. Missing debit or credit account.\n"
-                f"{'=' * 100}\n"
+                f"{'=' * max_width}\n"
             )
 
         formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
@@ -488,9 +503,12 @@ class LedgerEntry(BaseModel):
             formatted_credit_amount = f"{credit_amount:,.2f} {credit_display_unit}"
 
         description = lightning_memo(self.description)
+        if len(description) > 100:
+            # Split description into lines at word boundaries, max 100 chars per line
+            description = "\n".join(textwrap.wrap(description, width=100))
         entry = (
             f"\n"
-            f"J/E NUMBER: {self.group_id or '#####'}\n"
+            f"J/E NUMBER: {self.group_id or '#####'} {self.short_id:>12}\n"
             f"DATE\n{formatted_date}\n\n"
             f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
             f"{'-' * 100}\n"
