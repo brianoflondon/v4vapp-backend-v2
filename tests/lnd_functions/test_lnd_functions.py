@@ -111,7 +111,8 @@ async def test_get_node_alias_from_pay_request(
 
 @pytest.mark.asyncio
 async def test_get_invoice_from_pay_request(
-    set_base_config_path: None, monkeypatch: pytest.MonkeyPatch
+    set_base_config_path: None,  # type: ignore
+    monkeypatch: pytest.MonkeyPatch,
 ):
     with open("tests/data/lnd_functions/get_node_info_response.json") as f:
         json_data = f.read()

@@ -69,7 +69,7 @@ class V4VConfigData(BaseModel):
     dynamic_fees_url: str = Field("", description="URL for dynamic fees.")
     dynamic_fees_permlink: str = Field("", description="Permlink for dynamic fees.")
 
-    def __init__(cls, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
 

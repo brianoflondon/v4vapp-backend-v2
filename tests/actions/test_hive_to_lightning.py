@@ -5,11 +5,12 @@ from typing import Generator
 import pytest
 from bson import json_util
 
+from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.actions.hive_to_lightning import process_hive_to_lightning
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
-from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 
 mongodb_export_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
@@ -64,7 +65,6 @@ def load_hive_events_from_mongodb_dump(file_path: str) -> Generator[OpAny, None,
         raw_data = f.read()
         json_data = json_util.loads(raw_data)
     for hive_event in json_data:
-        hive_event["update_conv"] = False
         op = op_any_or_base(hive_event)
         yield op
 
@@ -77,7 +77,7 @@ async def test_hive_to_lightning():
     """
     Test the Hive to Lightning processing.
     """
-    await OpBase.update_quote()
+    TrackedBaseModel.last_quote = last_quote()
 
     # Load hive events from the MongoDB dump
     op_list = list(load_hive_events_from_mongodb_dump(mongodb_export_path))

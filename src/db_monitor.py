@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
+from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any_filter
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -25,7 +25,7 @@ shutdown_event = asyncio.Event()
 
 def get_mongodb_client() -> MongoDBClient:
     """
-    Returns a MongoDB client instance.
+    Returns a MongoDB client instance using the defaults from the config.
 
     This function creates a MongoDB client instance using the default connection
     and database name from the configuration.
@@ -163,7 +163,7 @@ def change_to_locked(change: Mapping[str, Any]) -> bool:
     return False
 
 
-async def process_op(change: Mapping[str, Any], collection: str):
+async def process_op(change: Mapping[str, Any], collection: str) -> None:
     """
     Creates a ledger entry based on the document and collection name.
 
@@ -181,9 +181,17 @@ async def process_op(change: Mapping[str, Any], collection: str):
             f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
         )
         return
-    op = tracked_any(full_document)
+    try:
+        op = tracked_any_filter(full_document)
+    except ValueError as e:
+        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
+        return
     logger.info(f"Processing {op.group_id_query}")
-    ledger_entry = await process_tracked(op)
+    try:
+        ledger_entry = await process_tracked(op)
+    except NotImplementedError:
+        logger.info(f"{ICON} Operation not implemented for {op.group_id}")
+        return
     if not ledger_entry:
         logger.warning(
             f"{ICON} No ledger entry created for {op.group_id_query}",

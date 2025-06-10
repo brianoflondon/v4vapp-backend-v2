@@ -31,7 +31,7 @@ async def update_payment_route_with_alias(
     db_client: MongoDBClient,
     lnd_client: LNDClient,
     payment: Payment,
-    pub_keys: list[str | None] = None,
+    pub_keys: list[str] | None = None,
     fill_cache: bool = False,
     force_update: bool = False,
     col_pub_keys: str = "pub_keys",
@@ -66,9 +66,7 @@ async def update_payment_route_with_alias(
         return
     global LOCAL_PUB_KEY_ALIAS_CACHE
     if fill_cache and not LOCAL_PUB_KEY_ALIAS_CACHE:
-        LOCAL_PUB_KEY_ALIAS_CACHE = await get_all_pub_key_aliases(
-            db_client, col_pub_keys
-        )
+        LOCAL_PUB_KEY_ALIAS_CACHE = await get_all_pub_key_aliases(db_client, col_pub_keys)
 
     for pub_key in pub_keys:
         if not LOCAL_PUB_KEY_ALIAS_CACHE:
@@ -97,8 +95,6 @@ async def update_payment_route_with_alias(
             )
             LOCAL_PUB_KEY_ALIAS_CACHE[pub_key] = hop_alias.alias
         else:
-            hop_alias = NodeAlias(
-                pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key]
-            )
+            hop_alias = NodeAlias(pub_key=pub_key, alias=LOCAL_PUB_KEY_ALIAS_CACHE[pub_key])
         # Update the payment route with the alias.
         payment.route.append(hop_alias)
