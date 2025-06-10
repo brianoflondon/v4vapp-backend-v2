@@ -106,7 +106,7 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 
 async def decode_any_lightning_string(
     input: str,
-    sats: int = 0,
+    msats: int = 0,
     comment: str = "",
     ignore_limits: bool = False,
     lnd_client: LNDClient | None = None,
@@ -116,7 +116,7 @@ async def decode_any_lightning_string(
 
     Args:
         input (str): The input string to decode.
-        sats (int, optional): The amount in satoshis. Defaults to 0.
+        msats (int, optional): The amount in millisatoshis. Defaults to 0.
         comment (str, optional): A comment to include. Defaults to "".
         ignore_limits (bool, optional): Whether to ignore limits. Defaults to False.
 
@@ -128,10 +128,7 @@ async def decode_any_lightning_string(
         LNDInvoiceError: If the amount is out of the allowed range or the comment is too long
         some other error with the LNDInvoice.
     """
-    if sats:
-        sats = round(sats)
     input = strip_lightning(input)
-
     extras = input.split(" ", 1)
     if len(extras) > 1:
         comment = extras[1] if not comment else comment
@@ -149,7 +146,10 @@ async def decode_any_lightning_string(
         # if ln_invoice.zero_sat:
         #     ln_invoice.force_send_sats = sats
         pay_req = protobuf_pay_req_to_pydantic(lnrpc_pay_req, pay_req_str=input)
-        pay_req.dest_alias = await get_node_alias_from_pub_key(pay_req.destination, lnd_client=lnd_client)
+        pay_req.dest_alias = await get_node_alias_from_pub_key(
+            pay_req.destination, lnd_client=lnd_client
+        )
+        pay_req.send_everything = pay_req.is_zero_value or False
         return pay_req
 
     data = LnurlProxyData(
@@ -157,20 +157,19 @@ async def decode_any_lightning_string(
     )
     try:
         response = await decode_any_lnurp_or_lightning_address(data)
-        milisats = sats * 1_000
         if response.tag != "payRequest":
             raise LnurlException("Not a valid LNURLp or Lightning Address")
-        if not (response.min_sendable <= milisats <= response.max_sendable):
+        if not (response.min_sendable <= msats <= response.max_sendable):
             raise LnurlException(
-                f"Amount {sats:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
+                f"Amount {msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
                 failure={"error": "amount out of range"},
             )
         if not response.comment_allowed:
-            params = {"amount": milisats}
+            params = {"amount": msats}
         else:
             if len(comment) > response.comment_allowed:
                 comment = comment[: response.comment_allowed]
-            params = {"amount": milisats, "comment": comment}
+            params = {"amount": msats, "comment": comment}
 
     except LnurlException as ex:
         logger.error(

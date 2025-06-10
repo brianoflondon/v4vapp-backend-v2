@@ -5,6 +5,7 @@ from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import find_short_id, seconds_only_time_diff
@@ -215,6 +216,24 @@ class TransferBase(OpBase):
         self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
         if self.change_amount:
             self.change_conv = CryptoConversion(amount=self.change_amount, quote=quote).conversion
+
+    def max_send_amount_msats(self) -> int:
+        """
+        Calculate the maximum amount that can be sent after deducting fees and estimating Lightning fees.
+        This method calculates the maximum amount that can be sent in millisatoshis (msats) based on
+        the Hive or HBD value of the transfer, the conversion to millisatoshis,
+
+        Args:
+            self (TrackedTransfer): The tracked transfer object.
+
+        Returns:
+            int: The maximum amount that can be sent after fees and fee estimates.
+        """
+        lnd_config = InternalConfig().config.lnd_config
+        amount_sent = self.conv.msats - self.conv.msats_fee
+        max_payment_amount = amount_sent - lnd_config.lightning_fee_base_msats
+        fee_estimate = int(max_payment_amount * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
+        return max_payment_amount - fee_estimate
 
 
 class Transfer(TransferBase):

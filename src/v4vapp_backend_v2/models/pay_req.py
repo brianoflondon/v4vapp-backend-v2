@@ -127,6 +127,11 @@ class PayReq(BaseModel):
         description="Alias of the destination node, set outside the class",
     )
 
+    send_everything: bool = Field(
+        default=False,
+        description="Indicates if the payment request has a fixed amount",
+    )
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         populate_by_name=True,  # Allow initialization with aliased field names
@@ -233,9 +238,9 @@ class PayReq(BaseModel):
         Returns:
             bool: True if the payment request is expired, False otherwise.
         """
-        return self.expiry_date is not None and datetime.now(tz=timezone.utc) > self.expiry_date + timedelta(
-            seconds=0
-        )
+        return self.expiry_date is not None and datetime.now(
+            tz=timezone.utc
+        ) > self.expiry_date + timedelta(seconds=0)
 
     @property
     def amount_msat(self) -> int:

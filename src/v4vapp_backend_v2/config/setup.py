@@ -66,6 +66,9 @@ class LndConnectionConfig(BaseConfig):
 class LndConfig(BaseConfig):
     default: str = ""
     connections: Dict[str, LndConnectionConfig] = {}
+    lightning_fee_limit_ppm: int = 5000
+    lightning_fee_estimate_ppm: int = 1000
+    lightning_fee_base_msats: int = 50000
 
 
 class TailscaleConfig(BaseConfig):

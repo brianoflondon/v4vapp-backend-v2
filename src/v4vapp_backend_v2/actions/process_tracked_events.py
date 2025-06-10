@@ -14,6 +14,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryDuplicateException,
     LedgerEntryException,
 )
+from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     calculate_hive_return_change,
     complete_hive_to_lightning,
@@ -125,7 +126,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
                 ledger_entry = await process_hive_op(op=tracked_op)
                 ledger_entries = [ledger_entry]
-            elif isinstance(tracked_op, Invoice):
+            elif isinstance(tracked_op, Invoice) and tracked_op.settled:
                 ledger_entries = await process_lightning_op(op=tracked_op)
             elif isinstance(tracked_op, Payment):
                 ledger_entries = await process_lightning_op(op=tracked_op)
@@ -213,7 +214,7 @@ async def process_lightning_invoice(
     ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
     ledger_entry.credit_conv = invoice.conv or CryptoConv()
     ledger_entry.debit_conv = invoice.conv or CryptoConv()
-    if "Funding" in invoice.memo:
+    if "funding" in invoice.memo.lower():
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
         ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
         ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
@@ -255,7 +256,7 @@ async def process_lightning_payment(
     if not payment.conv or payment.conv.is_unset():
         await payment.update_conv()
     v4vapp_group_id = ""
-    if payment.custom_records:
+    if payment.succeeded and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
         existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
@@ -589,7 +590,9 @@ async def process_transfer_op(
 
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
-        asyncio.create_task(follow_on_task)
+        task = asyncio.create_task(follow_on_task)
+        task.add_done_callback(lambda t: handle_tasks([t]))
+        task.set_name(f"Process hive to lightning {hive_transfer.group_id_p}")
 
     return ledger_entry
 

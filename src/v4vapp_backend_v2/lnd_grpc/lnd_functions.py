@@ -231,7 +231,7 @@ async def send_lightning_to_pay_req(
     group_id: str = "",
     chat_message: str = "",
     amount_msat: int = 0,
-    fee_limit_ppm: int = LIGHTNING_FEE_LIMIT_PPM,
+    fee_limit_ppm: int = 0,
 ) -> Payment:
     """
     Send a payment to a Lightning Network invoice using the provided payment request.
@@ -243,7 +243,7 @@ async def send_lightning_to_pay_req(
         chat_message (str, optional): Chat message to attach to the payment, used in custom records. Defaults to "".
         amount_msat (int, optional): Amount to pay in millisatoshis, required for zero-value invoices.
                     Defaults to 0. If set will be ignored if the pay_req includes an amount
-        fee_limit_ppm (int, optional): Fee limit in parts per million. Defaults to LIGHTNING_FEE_LIMIT_PPM.
+        fee_limit_ppm (int, optional): Fee limit in parts per million. Defaults to setting in config.
 
     Raises:
         ValueError: If the LNDClient instance is not provided.
@@ -257,6 +257,9 @@ async def send_lightning_to_pay_req(
         raise ValueError("LNDClient instance is required")
 
     # for keysend we need a pre_image and to put it in 5482373484
+    lnd_config = InternalConfig().config.lnd_config
+
+    fee_limit_ppm = fee_limit_ppm or lnd_config.lightning_fee_limit_ppm
 
     zero_value_pay_req, payment_amount_msat = test_zero_value_pay_req(pay_req, amount_msat)
 
@@ -283,10 +286,11 @@ async def send_lightning_to_pay_req(
         # TODO: replace this hard coded channel ID with a dynamic one
     else:
         fee_limit_msat = (
-            int(payment_amount_msat * fee_limit_ppm / 1_000_000) + LIGHTNING_FEE_BASE_MSAT
+            int(payment_amount_msat * fee_limit_ppm / 1_000_000)
+            + lnd_config.lightning_fee_base_msats
         )
     # Must prevent 0 fee limit which is an unlimited fee.
-    fee_limit_msat = max(fee_limit_msat, 1)
+    fee_limit_msat = max(fee_limit_msat, 1000)
     logger.info(f"Fee limit: {fee_limit_msat} msat")
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters

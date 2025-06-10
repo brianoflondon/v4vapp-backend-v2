@@ -111,15 +111,20 @@ class TrackedBaseModel(BaseModel):
         """
         # stack = inspect.stack()
         # print(stack[1].function, stack[1].filename, stack[1].lineno)
-        logger.info(f"Locking   operation {self.group_id_p}")
+        logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
         if await self.locked:
             logger.warning(
-                f"Operation {self.name()} is already locked, waiting for unlock",
+                f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
                 extra={"notification": False},
             )
             unlocked = await self.wait_for_lock(timeout=10)
             if not unlocked:
+                logger.warning(
+                    f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
+                    extra={"notification": False},
+                )
                 await self.unlock_op()
+
                 # raise TimeoutError("Timeout waiting for lock to be released.")
         await self.lock_op()
         return self
@@ -139,7 +144,7 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        logger.info(f"Unlocking operation {self.group_id_p}")
+        logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
         await self.unlock_op()
 
     # MARK: Reply Management

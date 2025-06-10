@@ -201,7 +201,7 @@ def get_good_nodes() -> List[str]:
     """
     try:
         response = httpx.get(
-            "https://beacon.peakd.com/api/nodes",
+            "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
         )
         nodes = response.json()
         logger.debug("Fetched good nodes Last good nodes", extra={"beacon_response": nodes})
@@ -226,6 +226,8 @@ def get_good_nodes() -> List[str]:
         else:
             logger.warning(f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e})
             good_nodes = DEFAULT_GOOD_NODES
+            with V4VAsyncRedis().sync_redis as redis_sync_client:
+                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
 
     return good_nodes
 
