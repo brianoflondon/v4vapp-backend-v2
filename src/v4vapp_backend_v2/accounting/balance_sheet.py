@@ -1004,14 +1004,14 @@ async def get_account_balance_printout(
             balance_str = (
                 f"{display_balance:,.0f}"
                 if unit.upper() == "MSATS"
-                else f"{display_balance:>15,.2f}"
+                else f"{display_balance:>10,.2f}"
             )
-            output.append(f"{'Final Balance':<10} {balance_str:>15} {display_unit:>6}")
+            output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
 
             if unit.upper() != "MSATS" and adjustment.get(unit, 0) != 0:
                 adjusted_balance = final_balance + adjustment.get(unit, 0)
-                adjusted_balance_str = f"{adjusted_balance:>15,.2f}"
-                output.append(f"{'Adj Balance':<10} {adjusted_balance_str:>15} {display_unit:>6}")
+                adjusted_balance_str = f"{adjusted_balance:>10,.2f}"
+                output.append(f"{'Adj Balance':<18} {adjusted_balance_str:>10} {display_unit:<5}")
 
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
