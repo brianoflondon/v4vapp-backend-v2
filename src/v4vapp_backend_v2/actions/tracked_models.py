@@ -363,7 +363,7 @@ class TrackedBaseModel(BaseModel):
         return None
 
     async def save(
-        self, exclude_unset: bool = True, exclude_none: bool = True, **kwargs: Any
+        self, exclude_unset: bool = False, exclude_none: bool = True, **kwargs: Any
     ) -> UpdateResult | None:
         """
         Saves the current state of the operation to the database.
