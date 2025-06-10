@@ -6,6 +6,7 @@ from typing import Annotated, Any, Mapping, Sequence
 
 import typer
 from pydantic import BaseModel, Field
+from pymongo.errors import OperationFailure
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
@@ -114,6 +115,19 @@ class ResumeToken(BaseModel):
             self.redis_client.sync_redis.set(self.redis_key, serialized_token)
         except Exception as e:
             logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
+            raise e
+
+    def delete_token(self):
+        """
+        Delete the resume token from Redis.
+        """
+        if not self.redis_client:
+            self.redis_client = V4VAsyncRedis()
+        try:
+            self.redis_client.sync_redis.delete(self.redis_key)
+            logger.info(f"Resume token deleted for collection '{self.collection}'")
+        except Exception as e:
+            logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
             raise e
 
     @property
@@ -265,6 +279,22 @@ async def subscribe_stream(
         )
         return
 
+    except OperationFailure as e:
+        logger.error(
+            f"{ICON} Operation failure in stream subscription: {e}",
+            extra={"error": e, "notification": False},
+        )
+        if "resume token" in str(e):
+            logger.warning(
+                f"{ICON} Resume token error in stream subscription: {e}",
+                extra={"error": e, "notification": False},
+            )
+            resume.delete_token()
+            asyncio.create_task(
+                subscribe_stream(collection_name=collection_name, pipeline=pipeline)
+            )
+            return
+
     except Exception as e:
         logger.error(f"{ICON} Error in stream subscription: {e}", extra={"error": e})
         raise e
@@ -387,4 +417,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         logger.exception(e)
+        sys.exit(1)
         sys.exit(1)
