@@ -14,7 +14,7 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     4. Projects the final output to include only the relevant fields.
     5. Sorts the results by `account_type`, `name`, and `sub`.
     """
-    pipeline = [
+    pipeline: Sequence[Mapping[str, Any]] = [
         {
             "$project": {
                 "accounts": [
@@ -99,6 +99,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
     pipeline_exclude_locked_changes: list[Mapping[str, Any]] = []
 
     payments_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {"$match": {"operationType": {"$ne": "delete"}}},
         {
             "$match": {
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
@@ -114,27 +115,27 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
         #     }
         # },
     ]
-    invoices_pipeline: Sequence[Mapping[str, Any]] = (
-        pipeline_exclude_locked_changes
-        + [
-            # {
-            #     "$project": {
-            #         "fullDocument.creation_date": 1,
-            #         "fullDocument.r_hash": 1,
-            #         "fullDocument.state": 1,
-            #         "fullDocument.amt_paid_msat": 1,
-            #         "fullDocument.value_msat": 1,
-            #         "fullDocument.memo": 1,
-            #     }
-            # },
-        ]
-    )
+    invoices_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {"$match": {"operationType": {"$ne": "delete"}}},
+        {"$match": {"fullDocument.state": "SETTLED"}},  # state must exist and be SETTLED
+        # {
+        #     "$project": {
+        #         "fullDocument.creation_date": 1,
+        #         "fullDocument.r_hash": 1,
+        #         "fullDocument.state": 1,
+        #         "fullDocument.amt_paid_msat": 1,
+        #         "fullDocument.value_msat": 1,
+        #         "fullDocument.memo": 1,
+        #     }
+        # },
+    ]
     hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
+        {"$match": {"operationType": {"$ne": "delete"}}},
         {
             "$match": {
                 "fullDocument.type": {"$ne": "block_marker"},
             }
-        }
+        },
     ]
 
     return {
