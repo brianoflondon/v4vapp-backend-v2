@@ -447,6 +447,7 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
 
     cost_of_payment_msat = payment.value_msat + payment.fee_msat
     change_msat = hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.conv.msats_fee
+    amount = Amount("0.001 HIVE")  # Default amount to return if no change is needed
     if change_msat <= 1_100:
         # If change is less than or equal to 1.1 satoshis, no change transaction is needed just
         # notification minimum
@@ -549,11 +550,13 @@ async def return_hive_transfer(
                 return_amount = Amount("0.001 HIVE")
             if not return_amount:
                 return_amount = Amount("0.001 HIVE")
-            return_amount_msat = CryptoConversion(
+            await TransferBase.update_quote()
+            hive_transfer.change_conv = CryptoConversion(
                 conv_from=return_amount.symbol,
                 amount=return_amount,
                 quote=TransferBase.last_quote,
-            ).msats
+            ).conversion
+            return_amount_msat = hive_transfer.change_conv.msats
             # Now add the Hive reply to the original Hive transfer operation
             # MARK: 5. Update hive_transfer
             # TODO: Move this note of the reply id to the processing of the reply. complete_hive_to_lightning
@@ -565,7 +568,11 @@ async def return_hive_transfer(
                 reply_error=None,
                 reply_message=reason,
             )
-            await hive_transfer.save(include={"replies"})
+            ans = await hive_transfer.save()
+            logger.info(
+                f"Updated Hive transfer with reply: {ans}",
+                extra={"notification": False, **hive_transfer.log_extra},
+            )
             return trx
         else:
             raise HiveTransferError("No transaction created during Hive to Lightning repayment")
