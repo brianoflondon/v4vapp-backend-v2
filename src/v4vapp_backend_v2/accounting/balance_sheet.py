@@ -1008,13 +1008,9 @@ async def get_account_balance_printout(
             )
             output.append(f"{'Final Balance':<10} {balance_str:>15} {display_unit:>6}")
 
-            if adjustment.get(unit) != 0:
+            if unit.upper() != "MSATS" and adjustment.get(unit, 0) != 0:
                 adjusted_balance = final_balance + adjustment.get(unit, 0)
-                adjusted_balance_str = (
-                    f"{adjusted_balance:,.0f}"
-                    if unit.upper() == "MSATS"
-                    else f"{adjusted_balance:>15,.2f}"
-                )
+                adjusted_balance_str = f"{adjusted_balance:>15,.2f}"
                 output.append(f"{'Adj Balance':<10} {adjusted_balance_str:>15} {display_unit:>6}")
 
             total_usd += total_usd_for_unit
@@ -1079,6 +1075,6 @@ async def get_conversion_adjustment(
         elif credit_unit == "hbd":
             hbd_total += credit_amount
     return {
-        "HIVE": hive_total,
-        "HBD": hbd_total,
+        "hive": hive_total,
+        "hbd": hbd_total,
     }
