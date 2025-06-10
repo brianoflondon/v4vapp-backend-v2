@@ -214,6 +214,13 @@ class Payment(TrackedBaseModel):
         return self.route[-1].alias
 
     @property
+    def succeeded(self) -> bool:
+        """
+        Checks if the payment has succeeded.
+        """
+        return self.status == PaymentStatus.SUCCEEDED
+
+    @property
     def get_succeeded_htlc(self) -> HTLCAttempt | None:
         """
         Retrieves the HTLC attempt with status 'SUCCEEDED'.
