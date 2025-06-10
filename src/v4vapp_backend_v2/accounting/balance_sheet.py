@@ -890,6 +890,8 @@ async def get_account_balance_printout(
         as_of_date=as_of_date,
     )
 
+    adjustment = await get_conversion_adjustment(account, as_of_date)
+
     # Group by unit (process debit_unit and credit_unit separately)
     units = set(combined_df["debit_unit"].dropna().unique()).union(
         set(combined_df["credit_unit"].dropna().unique())
@@ -1006,6 +1008,15 @@ async def get_account_balance_printout(
             )
             output.append(f"{'Final Balance':<10} {balance_str:>15} {display_unit:>6}")
 
+            if adjustment.get(unit) != 0:
+                adjusted_balance = final_balance + adjustment.get(unit, 0)
+                adjusted_balance_str = (
+                    f"{adjusted_balance:,.0f}"
+                    if unit.upper() == "MSATS"
+                    else f"{adjusted_balance:>15,.2f}"
+                )
+                output.append(f"{'Adj Balance':<10} {adjusted_balance_str:>15} {display_unit:>6}")
+
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
 
@@ -1013,6 +1024,7 @@ async def get_account_balance_printout(
     output.append(f"Total USD: {total_usd:>19,.2f}")
     output.append(f"Total SATS: {total_sats:>18,.0f}")
     output.append(title_line)
+
     output.append("=" * max_width + "\n")
 
     return "\n".join(output)
@@ -1034,3 +1046,39 @@ async def list_all_accounts() -> List[Account]:
         account = Account.model_validate(doc)
         accounts.append(account)
     return accounts
+
+
+async def get_conversion_adjustment(
+    conversion_account: Account, as_of_date: datetime | None = None
+) -> Dict[str, float]:
+    """
+    Queries the ledger for conversion entries credited to Customer Deposits Hive,
+    sums the credit_amounts for HIVE and HBD, and returns them as an adjustment.
+
+    Returns:
+        Dict[str, float]: A dictionary with keys "hive" and "hbd" representing the adjustments.
+    """
+    if not as_of_date:
+        as_of_date = datetime.now(tz=timezone.utc)
+
+    collection = await TrackedBaseModel.db_client.get_collection("ledger")
+    query = {
+        "group_id": {"$regex": ".*conversion"},
+        "credit.name": {"$regex": f"^{conversion_account.name}"},
+        "credit.sub": {"$regex": f"^{conversion_account.sub}$"} if conversion_account.sub else {},
+        "timestamp": {"$lte": as_of_date},
+    }
+    cursor = collection.find(query)
+    hive_total = 0.0
+    hbd_total = 0.0
+    async for doc in cursor:
+        credit_unit = doc.get("credit_unit", "").lower()
+        credit_amount = float(doc.get("credit_amount", 0))
+        if credit_unit == "hive":
+            hive_total += credit_amount
+        elif credit_unit == "hbd":
+            hbd_total += credit_amount
+    return {
+        "HIVE": hive_total,
+        "HBD": hbd_total,
+    }
