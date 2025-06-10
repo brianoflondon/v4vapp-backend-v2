@@ -265,10 +265,13 @@ async def subscribe_stream(
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
+                group_id = change.get("fullDocument", {}).get("group_id", None) or ""
                 logger.info(
-                    f"{ICON} Change detected in {collection_name}",
+                    f"{ICON} Change detected in {collection_name} {group_id} "
+                    f"but it is locked. Skipping processing.",
                     extra={"notification": False, "change": change},
                 )
+                continue
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
