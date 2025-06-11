@@ -225,7 +225,6 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             extra={"notification": False},
         )
         return
-    logger.info(f"Unlocking {op.group_id_query}")
 
 
 async def subscribe_stream(
@@ -259,18 +258,26 @@ async def subscribe_stream(
             resume_after=resume_token,
         ) as stream:
             async for change in stream:
-                if not change_to_locked(change):
+                group_id = change.get("fullDocument", {}).get("group_id", None) or ""
+                if change_to_locked(change):
+                    # If the change is a lock, we want to resume the stream
+                    # and not process the operation.
+                    logger.info(
+                        f"{ICON}🔒 Change detected in {collection_name} {group_id}",
+                        extra={"notification": False, "change": change},
+                    )
+                else:
+                    # Process the change if it is not a lock/unlock
+                    logger.info(
+                        f"{ICON}✳️ Change detected in {collection_name} {group_id}",
+                        extra={"notification": False, "change": change},
+                    )
                     asyncio.create_task(process_op(change=change, collection=collection_name))
                 resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
                 group_id = change.get("fullDocument", {}).get("group_id", None) or ""
-                logger.info(
-                    f"{ICON} Change detected in {collection_name} {group_id} "
-                    f"but it is locked. Skipping processing.",
-                    extra={"notification": False, "change": change},
-                )
                 continue
 
     except (asyncio.CancelledError, KeyboardInterrupt):
