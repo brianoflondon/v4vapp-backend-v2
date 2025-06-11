@@ -1,3 +1,4 @@
+import asyncio
 import base64
 
 from google.protobuf.json_format import MessageToDict
@@ -305,62 +306,111 @@ async def send_lightning_to_pay_req(
     if zero_value_pay_req:
         request_params["amt_msat"] = amount_msat
 
+    payment_dict = {}
+    payment_id = f"{lnd_client.icon} {pay_req.pay_req_str[:14]}"
+    error_message = ""
+    response_queue = asyncio.Queue()
+    logging_task = asyncio.create_task(log_payment_in_process(payment_id, response_queue))
     try:
         # Create the SendPaymentRequest object
         request = routerrpc.SendPaymentRequest(**request_params)
-        payment_dict = {}
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):
             payment_dict = MessageToDict(payment_resp, preserving_proto_field_name=True)
-            logger.info(
-                f"Status: {lnrpc.Payment.PaymentStatus.Name(payment_resp.status)} - "
-                f"Failure {lnrpc.PaymentFailureReason.Name(payment_resp.failure_reason)}",
-                extra={
-                    "notification": False,
-                    "payment_dict": payment_dict,
-                },
-            )
+            await response_queue.put(payment_dict)
             failure_reason = payment_dict.get("failure_reason", "Unknown Failure")
+
     except AioRpcError as e:
-        logger.info(
-            f"{lnd_client.icon} Problem paying Lightning invoice", extra={"notification": False}
-        )
+        error_message = (f"{payment_id} Failed to send payment: {e}",)
         if e.details() and "invoice expired" in str(e.details()).lower():
-            raise LNDPaymentExpired(f"{lnd_client.icon} Payment expired: {e.details()}")
-        raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
+            error_message = (f"{payment_id} Payment expired: {e.details()}",)
+        raise LNDPaymentError(error_message)
 
     except Exception as e:
-        logger.info(
-            f"{lnd_client.icon} Unexpected problem paying Lightning invoice",
-            extra={"notification": False},
-        )
+        error_message = f"{payment_id} Unexpected problem paying Lightning invoice"
         logger.exception(e)
-        raise LNDPaymentError(f"{lnd_client.icon} Failed to send payment: {e}")
+        raise LNDPaymentError(error_message)
 
+    finally:
+        # Ensure the logging task is cancelled after payment processing
+        if error_message:
+            logger.warning(error_message, extra={"notification": False})
+        logging_task.cancel()
+        try:
+            await logging_task
+        except asyncio.CancelledError:
+            logger.info(f"{payment_id} Payment logging task cancelled")
+            pass
+
+    # NOTHING VITAL HAPPENS IF A PAYMENT IS A HOLD INVOICE AND THIS IS INTERRUPTED
+    # The payment for the hold invoice, if it happens, will be found by db_monitor
+    # Check if we received a payment_dict and if the payment status is valid
     if payment_dict:
         try:
             payment = Payment.model_validate(payment_dict)
             logger.info(
-                f"{lnd_client.icon} {payment.log_str}",
+                f"{payment_id} {payment.log_str}",
                 extra={
                     "notification": False,
                     **payment.log_extra,
                 },
             )
         except ValidationError as e:
-            logger.error(f"{lnd_client.icon} Payment validation error: {e}")
+            logger.error(f"{payment_id} Payment validation error: {e}")
             raise LNDPaymentError(f"Payment validation error: {e}")
 
         if payment.status and payment.status.value == "SUCCEEDED":
             return payment
 
         elif payment.status and payment.status.value == "FAILED":
-            raise LNDPaymentError(f"{lnd_client.icon} Payment failed: {payment.failure_reason}")
+            raise LNDPaymentError(f"{payment_id} Payment failed: {payment.failure_reason}")
 
     logger.error(
         f"Failed to retrieve payment_dict or payment status paying {pay_req.pay_req_str}",
         extra={"notification": False},
     )
-    raise LNDPaymentError(f"{lnd_client.icon} Payment failed {failure_reason}")
+    raise LNDPaymentError(f"{payment_id} Payment failed {failure_reason}")
+
+
+async def log_payment_in_process(payment_id: str, response_queue: asyncio.Queue) -> None:
+    """
+    Logs payment status and progress for the given payment ID.
+    Processes payment dictionaries from the queue, logs status immediately, and logs periodic updates.
+
+    Args:
+        payment_id (str): The ID of the payment.
+        response_queue (asyncio.Queue): Queue to receive payment dictionary objects.
+    """
+    status = "STATUS_UNSET"
+    while True:
+        try:
+            # Wait for a payment dictionary or timeout after 30 seconds
+            try:
+                payment_dict = await asyncio.wait_for(response_queue.get(), timeout=30)
+                status = payment_dict.get("status", "STATUS_UNSET")
+                # Log the payment status from the payment dictionary
+                failure_reason = payment_dict.get("failure_reason", "FAILURE_REASON_UNSET")
+                logger.info(
+                    f"{payment_id} Status: {status} - Failure {failure_reason}",
+                    extra={
+                        "notification": False,
+                        "payment_dict": payment_dict,
+                    },
+                )
+                response_queue.task_done()
+            except asyncio.TimeoutError:
+                # No new payment dictionary, log periodic update
+                logger.info(
+                    f"{payment_id} Payment still in process: {status}",
+                    extra={
+                        "notification": False,
+                    },
+                )
+        except asyncio.CancelledError:
+            logger.info(f"{payment_id} Payment logging cancelled by successful payment")
+            raise
+        except Exception as e:
+            logger.error(f"{payment_id} Error logging payment in process: {e}")
+            break
 
 
 def test_zero_value_pay_req(pay_req: PayReq, amount_msat: int) -> tuple[bool, int]:
