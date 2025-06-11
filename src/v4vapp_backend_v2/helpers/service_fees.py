@@ -45,25 +45,23 @@ def msats_fee(msats: float) -> int:
 
 def limit_test(msats: float = 0.0) -> bool:
     """
-    Calculate the service fee based on the base amount in milisats.
+    Checks if the given amount in millisatoshis (msats) is within the allowed invoice payment limits.
 
-    Args:
-        msats (float): The base amount in milisats.
+        msats (float, optional): The amount in millisatoshis to check. Defaults to 0.0.
 
-    Returns:
-        bool: True if the invoice amount is within limits.
-
+        bool: True if the amount is within the configured minimum and maximum invoice payment limits.
     Raises:
-        ValueError: If the invoice amount is less than the minimum or greater than the maximum.
+        V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
+        V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
     """
     config_data = V4VConfig().data
-    sats = msats / 1000
+    sats = msats // 1000
     if sats < config_data.minimum_invoice_payment_sats:
         raise V4VMinimumInvoice(
-            f"Minimum invoice is {config_data.minimum_invoice_payment_sats} sats"
+            f"{sats:,.0f} below minimum invoice of {config_data.minimum_invoice_payment_sats} sats"
         )
     if sats > config_data.maximum_invoice_payment_sats:
         raise V4VMaximumInvoice(
-            f"Maximum invoice is {config_data.maximum_invoice_payment_sats} sats"
+            f"{sats:,.0f} exceeds maximum invoice of {config_data.maximum_invoice_payment_sats} sats"
         )
     return True

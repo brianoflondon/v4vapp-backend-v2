@@ -11,6 +11,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, get_hive_client, send_transfer
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
@@ -216,7 +217,7 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                 if hive_transfer.d_memo:
                     return_hive_message = ""
                     try:
-                        pay_req, lnd_client = await decode_incoming_payment_message(
+                        pay_req, lnd_client = await decode_incoming_and_checks(
                             hive_transfer=hive_transfer
                         )
                         chat_message = f"Sending sats from v4v.app | § {hive_transfer.short_id} |"
@@ -286,23 +287,26 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                     )
 
 
-async def decode_incoming_payment_message(
+async def decode_incoming_and_checks(
     hive_transfer: TrackedTransfer,
 ) -> Tuple[PayReq, LNDClient]:
     """
-    Decodes and validates an incoming Lightning payment message from a Hive transfer.
+    This asynchronous function processes a Lightning payment request contained in the `d_memo` field of a `TrackedTransfer` object.
+    It performs the following steps:
+    - Logs the incoming payment request.
+    - Initializes the LND client using internal configuration.
+    - Ensures conversion details are present; attempts to update them if missing.
+    - Decodes the Lightning payment request and validates its structure.
+    - Checks conversion limits and user-specific payment limits.
+    - Raises a `HiveToLightningError` if any validation or decoding step fails.
 
-    This function processes a Lightning payment request contained in the `d_memo` field of a `TrackedTransfer` object.
-    It decodes the payment request, checks its validity, ensures it is payable, and verifies user conversion limits.
-    If conversion details are missing, it attempts to update them. Raises a `HiveToLightningError` if any validation fails.
-
-        hive_transfer (TrackedTransfer): The Hive transfer object containing the Lightning payment request and conversion details.
-
-        Tuple[PayReq, LNDClient]: A tuple containing the decoded payment request object and the LND client instance.
-
-        HiveToLightningError: If decoding fails, the invoice is not payable, user limits are exceeded, or conversion details are missing.
-
-        - Warnings and errors related to conversion details and decoding failures.
+    Args:
+        hive_transfer (TrackedTransfer): The transfer operation containing the Lightning payment request in `d_memo`.
+    Returns:
+        Tuple[PayReq, LNDClient]: A tuple containing the decoded Lightning payment request and the LND client.
+    Raises:
+        HiveToLightningError: If conversion details are missing, invoice decoding fails, or limits are exceeded.
+    hive_transfer (TrackedTransfer): The transfer operation containing the Lightning payment request in `d_memo`.
 
     """
 
@@ -322,6 +326,15 @@ async def decode_incoming_payment_message(
             extra={"notification": False, **hive_transfer.log_extra},
         )
         raise HiveToLightningError("Conversion details not found for operation")
+
+    try:
+        hive_transfer.conv.limit_test()
+    except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
+        logger.error(
+            f"Conversion limits exceeded for operation {hive_transfer.group_id_p}: {e}",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        raise HiveToLightningError(f"Conversion limits: {e}")
 
     try:
         pay_req = await decode_any_lightning_string(
