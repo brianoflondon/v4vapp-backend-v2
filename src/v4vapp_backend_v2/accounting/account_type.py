@@ -11,6 +11,7 @@ class AccountType(StrEnum):
     EQUITY = "Equity"
     REVENUE = "Revenue"
     EXPENSE = "Expense"
+    CONTRA_ASSET = "Contra Asset"
 
 
 # MARK: Base class for all accounts
@@ -70,6 +71,28 @@ class AssetAccount(Account):
     def __init__(self, name="", sub="", account_type: AccountType = AccountType.ASSET):
         super().__init__(name=name, sub=sub, account_type=account_type)
         self.account_type = AccountType.ASSET
+        self.name = name
+        self.sub = sub
+
+
+class ContraAssetAccount(Account):
+    """
+    Represents a contra asset account (e.g., 'Converted Assets Out').
+    Contra assets DECREASE total assets and INCREASE with a CREDIT.
+    """
+
+    name: Literal[
+        "Converted Hive Offset",
+        "External Lightning Payments",
+        # Add more as needed
+    ] = Field(..., description="Specific contra asset account name")
+    account_type: Literal[AccountType.CONTRA_ASSET] = Field(
+        AccountType.CONTRA_ASSET, description="Type of account"
+    )
+
+    def __init__(self, name="", sub="", account_type: AccountType = AccountType.CONTRA_ASSET):
+        super().__init__(name=name, sub=sub, account_type=account_type)
+        self.account_type = AccountType.CONTRA_ASSET
         self.name = name
         self.sub = sub
 
