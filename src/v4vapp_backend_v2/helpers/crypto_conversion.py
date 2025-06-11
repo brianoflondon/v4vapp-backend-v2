@@ -124,16 +124,18 @@ class CryptoConv(BaseModel):
 
     def limit_test(self) -> bool:
         """
-        Check if the conversion is within the limits.
+            Check if the conversion is within the limits.
 
-        Returns:
-            bool: True if the conversion is within limits, False otherwise.
+            Returns:
+                bool: True if the conversion is within limits, False otherwise.
 
-        Raises:
-            ValueError: If the conversion amount is less than the minimum or greater than the maximum.
+            Raises:
+                V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
+                V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
-        return limit_test(self.msats)
+        limit_test_result = limit_test(self.msats)
+        return limit_test_result
 
     @computed_field
     def in_limits(self) -> bool:
