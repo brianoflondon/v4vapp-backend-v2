@@ -20,14 +20,20 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     complete_hive_to_lightning,
     lightning_payment_sent,
     process_hive_to_lightning,
+    return_hive_transfer,
 )
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
-from v4vapp_backend_v2.actions.tracked_any import DiscriminatedTracked, TrackedAny, TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_any import (
+    DiscriminatedTracked,
+    TrackedAny,
+    TrackedTransfer,
+    load_tracked_object,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
@@ -267,7 +273,7 @@ async def process_lightning_payment(
             print(old_ledger_entry)
             print(old_ledger_entry.draw_t_diagram())
             hive_transfer = old_ledger_entry.op
-            # MARK: Hive to Lightning Payment
+            # MARK: Hive to Lightning Payment Success
             if isinstance(hive_transfer, TransferBase):
                 # This means we have found an inbound Hive payment and this is the matching
                 # payment
@@ -402,6 +408,44 @@ async def process_lightning_payment(
                 return ledger_entries_list
 
         raise NotImplementedError(f"Not implemented yet {v4vapp_group_id} {keysend_message}")
+
+    if payment.failed and payment.custom_records:
+        v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
+        keysend_message = payment.custom_records.keysend_message or ""
+        existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
+            collection_name=LedgerEntry.collection(), query={"group_id": v4vapp_group_id}
+        )
+        if existing_ledger_entry:
+            old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
+            print(old_ledger_entry)
+            hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.op)
+            # MARK: Hive to Lightning Payment Failed
+            if isinstance(hive_transfer, TransferBase):
+                async with hive_transfer:
+                    # If a payment fails we need to update the hive_transfer if
+                    if not hive_transfer.replies:
+                        # MARK: Record Failed payment and make a refund
+                        # No Journal entry necessary because the Hive Refund will automatically create one
+                        failure_reason = from_snake_case(payment.failure_reason.lower())
+                        return_hive_message = f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
+                        task = asyncio.create_task(
+                            return_hive_transfer(
+                                hive_transfer=hive_transfer,
+                                reason=return_hive_message,
+                                nobroadcast=nobroadcast,
+                            )
+                        )
+                        task.add_done_callback(lambda t: handle_tasks([t]))
+                        task.set_name(
+                            f"Return Hive after failure in Hive to Lightning transfer for {hive_transfer.group_id_p}"
+                        )
+                        return []
+                    else:
+                        logger.warning(
+                            f"Hive transfer already has replies, skipping update. {hive_transfer.short_id}",
+                            extra={"notification": False, **hive_transfer.log_extra},
+                        )
+                        return []
 
     if not v4vapp_group_id:
         raise LedgerEntryCreationException(

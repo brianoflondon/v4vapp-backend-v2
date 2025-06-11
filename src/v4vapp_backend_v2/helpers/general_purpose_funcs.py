@@ -13,6 +13,17 @@ def snake_case(name: str) -> str:
     return "".join(["_" + i.lower() if i.isupper() else i for i in name]).lstrip("_")
 
 
+def from_snake_case(snake_str: str) -> str:
+    """
+    Convert a snake_case string to a human-readable format.
+    Args:
+        snake_str (str): The snake_case string to convert.
+    Returns:
+        str: The string converted to a human-readable format.
+    """
+    return " ".join(word.capitalize() for word in snake_str.split("_"))
+
+
 def camel_case(snake_str: str) -> str:
     """
     Convert a snake_case string to camelCase.

@@ -103,7 +103,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
         {
             "$match": {
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
-                "fullDocument.status": "SUCCEEDED",  # status must exist and be SUCCEEDED
+                "fullDocument.status": {"$in": ["FAILED", "SUCCEEDED"]},  # status must be FAILED or SUCCEEDED
             }
         },
         # {

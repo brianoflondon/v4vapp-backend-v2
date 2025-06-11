@@ -4,7 +4,6 @@ from pydantic import BaseModel, Discriminator, Tag
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
-from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -107,7 +106,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
         if "_" in short_id:
             # This is a for a hive_ops object
             async with TrackedBaseModel.db_client as client:
-                collection_name = OpBase.collection
+                collection_name = "hive_ops"
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
                 result = await client.find_one(collection_name=collection_name, query=query)
                 if result:

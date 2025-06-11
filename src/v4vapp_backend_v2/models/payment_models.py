@@ -221,6 +221,20 @@ class Payment(TrackedBaseModel):
         return self.status == PaymentStatus.SUCCEEDED
 
     @property
+    def failed(self) -> bool:
+        """
+        Checks if the payment has failed.
+        """
+        return self.status == PaymentStatus.FAILED
+
+    @property
+    def in_flight(self) -> bool:
+        """
+        Checks if the payment is currently in flight.
+        """
+        return self.status == PaymentStatus.IN_FLIGHT
+
+    @property
     def get_succeeded_htlc(self) -> HTLCAttempt | None:
         """
         Retrieves the HTLC attempt with status 'SUCCEEDED'.
