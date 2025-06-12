@@ -149,6 +149,8 @@ class Payment(TrackedBaseModel):
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion rate for the payment.
+        Includes the fee in the value for conversion.
+        Also sets fee_conv if fee_msat is present
 
         This method retrieves the latest conversion rate and updates the
         `conv` attribute of the payment instance.
@@ -163,7 +165,7 @@ class Payment(TrackedBaseModel):
             ).conversion
         self.conv = CryptoConversion(
             conv_from=Currency.MSATS,
-            value=float(self.value_msat),
+            value=float(self.value_msat + self.fee_msat),
             quote=quote,
         ).conversion
 

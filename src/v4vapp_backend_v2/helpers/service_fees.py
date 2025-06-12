@@ -30,16 +30,10 @@ def msats_fee(msats: float) -> int:
     Returns:
         int: The calculated service fee in milisats.
     """
-    try:
-        limit_test(msats)
-    except V4VMinimumInvoice:
-        return 0
-    except V4VMaximumInvoice:
-        pass
     config_data = V4VConfig().data
-    fee: float = (config_data.conv_fee_sats * 1_000) + (
-        config_data.conv_fee_percent + MARGIN_SPREAD
-    ) * msats
+    fee: float = ((config_data.conv_fee_percent + MARGIN_SPREAD) * msats) + (
+        config_data.conv_fee_sats * 1_000
+    )
     return int(fee)
 
 

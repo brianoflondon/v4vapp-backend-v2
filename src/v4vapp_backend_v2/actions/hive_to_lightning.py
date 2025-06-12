@@ -8,10 +8,11 @@ from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
+from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice, msats_fee
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, get_hive_client, send_transfer
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
@@ -459,7 +460,19 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
         raise HiveToLightningError("Conversion details not found for operation")
 
     cost_of_payment_msat = payment.value_msat + payment.fee_msat
-    change_msat = hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.conv.msats_fee
+    # This is using the msats_fee from the original Hive Transaction which will be slightly too high at this point.
+    new_msat_fee = msats_fee(cost_of_payment_msat)
+    hive_transfer.conv.msats_fee = new_msat_fee
+    quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
+    hive_transfer.fee_conv = CryptoConversion(
+        conv_from=Currency.MSATS,
+        value=hive_transfer.conv.msats_fee,
+        quote=quote,
+    ).conversion
+
+    change_msat = (
+        hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.fee_conv.msats_fee
+    )
     amount = Amount("0.001 HIVE")  # Default amount to return if no change is needed
     if change_msat <= 1_100:
         # If change is less than or equal to 1.1 satoshis, no change transaction is needed just
@@ -480,7 +493,7 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
                 raise HiveToLightningError(f"Unknown currency: {hive_transfer.conv.conv_from}")
         amount = Amount(f"{amount_to_return:.3f} {currency}")
     hive_transfer.change_amount = AmountPyd(amount=amount)
-    await hive_transfer.update_conv()
+
     # The conversion details await hive_transfer.update_conv()will be set when the
     logger.info(
         f"Change detected for operation {hive_transfer.group_id_p}: {change_msat / 1_000:,.0f} sats {amount}",

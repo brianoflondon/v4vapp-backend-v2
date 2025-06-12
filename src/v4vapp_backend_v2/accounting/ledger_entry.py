@@ -146,13 +146,18 @@ class LedgerEntry(BaseModel):
 
     @property
     def is_completed(self) -> bool:
-        """
-        Returns True if the LedgerEntry is completed, False otherwise.
-        """
         if not self.debit and not self.credit:
             return False
         if not self.debit_amount and not self.credit_amount:
             return False
+        if abs(self.debit_conv.msats - self.credit_conv.msats) > 1_000:
+            logger.error(
+                f"Debit and Credit Conversion mismatch: "
+                f"{self.debit_conv.msats} vs {self.credit_conv.msats}",
+                extra={"notification": False},
+            )
+            return False
+
         return True
 
     @property
@@ -494,13 +499,13 @@ class LedgerEntry(BaseModel):
                 f"{debit_amount / debit_conversion_factor:,.0f} {debit_display_unit}"
             )
         else:
-            formatted_debit_amount = f"{debit_amount:,.2f} {debit_display_unit}"
+            formatted_debit_amount = f"{debit_amount:,.3f} {debit_display_unit}"
         if credit_conversion_factor == 1000:
             formatted_credit_amount = (
                 f"{credit_amount / credit_conversion_factor:,.0f} {credit_display_unit}"
             )
         else:
-            formatted_credit_amount = f"{credit_amount:,.2f} {credit_display_unit}"
+            formatted_credit_amount = f"{credit_amount:,.3f} {credit_display_unit}"
 
         description = lightning_memo(self.description)
         if len(description) > 100:

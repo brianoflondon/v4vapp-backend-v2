@@ -75,6 +75,7 @@ class AssetAccount(Account):
         self.sub = sub
 
 
+# MARK: Contra Asset Accounts
 class ContraAssetAccount(Account):
     """
     Represents a contra asset account (e.g., 'Converted Assets Out').
@@ -117,6 +118,7 @@ class LiabilityAccount(Account):
     name: Literal[
         "Customer Liability Hive",
         "Customer Liability Lightning",
+        "Lightning Payment Clearing",
         "Owner Loan Payable (funding)",
         "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
@@ -197,7 +199,14 @@ class ExpenseAccount(Account):
         self.sub = sub
 
 
-AccountAny = Union[AssetAccount, LiabilityAccount, EquityAccount, RevenueAccount, ExpenseAccount]
+AccountAny = Union[
+    AssetAccount,
+    ContraAssetAccount,
+    LiabilityAccount,
+    EquityAccount,
+    RevenueAccount,
+    ExpenseAccount,
+]
 
 
 if __name__ == "__main__":

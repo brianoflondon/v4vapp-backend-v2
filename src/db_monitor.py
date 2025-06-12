@@ -217,7 +217,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         logger.warning(f"{ICON} Ledger entry error: {e}", extra={"error": e})
         return
     for ledger_entry in ledger_entries:
-        print(ledger_entry)
+        logger.info("\n" + str(ledger_entry))
     balance_sheet = await generate_balance_sheet_pandas()
     if not balance_sheet["is_balanced"]:
         logger.warning(
@@ -258,7 +258,8 @@ async def subscribe_stream(
             resume_after=resume_token,
         ) as stream:
             async for change in stream:
-                group_id = change.get("fullDocument", {}).get("group_id", None) or ""
+                full_document = change.get("fullDocument") or {}
+                group_id = full_document.get("group_id", None) or ""
                 if change_to_locked(change):
                     # If the change is a lock, we want to resume the stream
                     # and not process the operation.
@@ -277,7 +278,6 @@ async def subscribe_stream(
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                group_id = change.get("fullDocument", {}).get("group_id", None) or ""
                 continue
 
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -427,5 +427,4 @@ if __name__ == "__main__":
 
     except Exception as e:
         logger.exception(e)
-        sys.exit(1)
         sys.exit(1)

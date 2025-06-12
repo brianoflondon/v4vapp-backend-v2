@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     cap_camel_case,
     check_time_diff,
@@ -218,8 +219,6 @@ def test_re_escape(text, reserved_chars, expected):
     assert result == expected, f"Expected '{expected}', got '{result}'"
 
 
-
-
 @pytest.mark.parametrize(
     "text, expected",
     [
@@ -349,7 +348,3 @@ def test_check_time_diff_large_time_difference():
     assert 3599 <= result.total_seconds() <= 3601, (
         f"Expected ~3600s, got {result.total_seconds()}s"
     )
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])
