@@ -163,7 +163,7 @@ async def generate_balance_sheet_pandas(
 ) -> Dict:
     """
     Generates a GAAP-compliant balance sheet in USD, with supplemental columns for HIVE, HBD, SATS, and msats.
-    Includes proper CTA calculation.
+    Includes proper CTA calculation and handles all account types, including Contra-Asset, Revenue, and Expense.
     """
     # Step 1: Determine the reporting date and spot rates
     if df.empty:
@@ -183,14 +183,15 @@ async def generate_balance_sheet_pandas(
                 "sats": 0.0,
                 "msats": 0.0,
             },
+            "is_balanced": True,
         }
 
-    # Get the most recent entry (df is already sorted by timestamp, earliest to latest)
+    # Get the most recent entry (df is sorted by timestamp, earliest to latest)
     latest_entry = df.iloc[-1]
     if reporting_date is None:
         reporting_date = latest_entry["timestamp"]
 
-    # Derive spot rates from the most recent entry (using credit side for consistency)
+    # Derive spot rates from the most recent entry (credit side for consistency)
     conv_usd = latest_entry["credit_conv_usd"]
     conv_hbd = latest_entry["credit_conv_hbd"]
     conv_hive = latest_entry["credit_conv_hive"]
@@ -250,19 +251,40 @@ async def generate_balance_sheet_pandas(
     )
 
     # Combine debits and credits with signed amounts
-    debit_df["amount_adj"] = debit_df.apply(
-        lambda row: row["amount"] if row["account_type"] == "Asset" else -row["amount"], axis=1
-    )
-    debit_df["usd_adj"] = debit_df.apply(
-        lambda row: row["conv_usd"] if row["account_type"] == "Asset" else -row["conv_usd"], axis=1
-    )
+    def adjust_amount(row):
+        if row["account_type"] == "Asset":
+            return row["amount"]  # Debits increase, Credits decrease
+        elif row["account_type"] == "Contra-Asset":
+            return -row["amount"]  # Credits increase, Debits decrease
+        elif row["account_type"] == "Liability":
+            return -row["amount"]  # Credits increase, Debits decrease
+        elif row["account_type"] == "Equity":
+            return -row["amount"]  # Credits increase, Debits decrease
+        elif row["account_type"] == "Revenue":
+            return -row["amount"]  # Credits increase (net income), Debits decrease
+        elif row["account_type"] == "Expense":
+            return row["amount"]  # Debits increase (reduces net income), Credits decrease
+        return 0.0
 
-    credit_df["amount_adj"] = credit_df.apply(
-        lambda row: -row["amount"] if row["account_type"] == "Asset" else row["amount"], axis=1
-    )
-    credit_df["usd_adj"] = credit_df.apply(
-        lambda row: -row["conv_usd"] if row["account_type"] == "Asset" else row["conv_usd"], axis=1
-    )
+    def adjust_usd(row):
+        if row["account_type"] == "Asset":
+            return row["conv_usd"]
+        elif row["account_type"] == "Contra-Asset":
+            return -row["conv_usd"]
+        elif row["account_type"] == "Liability":
+            return -row["conv_usd"]
+        elif row["account_type"] == "Equity":
+            return -row["conv_usd"]
+        elif row["account_type"] == "Revenue":
+            return -row["conv_usd"]
+        elif row["account_type"] == "Expense":
+            return row["conv_usd"]
+        return 0.0
+
+    debit_df["amount_adj"] = debit_df.apply(adjust_amount, axis=1)
+    debit_df["usd_adj"] = debit_df.apply(adjust_usd, axis=1)
+    credit_df["amount_adj"] = credit_df.apply(adjust_amount, axis=1)
+    credit_df["usd_adj"] = credit_df.apply(adjust_usd, axis=1)
 
     # Combine and aggregate by native unit and historical USD
     combined_df = pd.concat([debit_df, credit_df], ignore_index=True)
@@ -290,21 +312,31 @@ async def generate_balance_sheet_pandas(
         name, sub, account_type, unit = row["name"], row["sub"], row["account_type"], row["unit"]
         amount = row["amount_adj"]
         usd_historical = row["usd_adj"]
+        # Categorize based on account type
         category = (
             "Assets"
-            if account_type == "Asset"
+            if account_type in ["Asset", "Contra-Asset"]
             else "Liabilities"
             if account_type == "Liability"
             else "Equity"
+            if account_type in ["Equity", "Revenue", "Expense"]
+            else "Equity"  # Default to Equity for unknown types
         )
         if sub not in balance_sheet[category][name]:
-            balance_sheet[category][name][sub] = {"hive": 0.0, "hbd": 0.0, "sats": 0.0}
+            balance_sheet[category][name][sub] = {
+                "hive": 0.0,
+                "hbd": 0.0,
+                "sats": 0.0,
+                "msats": 0.0,
+            }
         if unit and unit.lower() == "hive":
             balance_sheet[category][name][sub]["hive"] += amount
         elif unit and unit.lower() == "hbd":
             balance_sheet[category][name][sub]["hbd"] += amount
         elif unit and unit.lower() == "sats":
             balance_sheet[category][name][sub]["sats"] += amount
+        elif unit and unit.lower() == "msats":
+            balance_sheet[category][name][sub]["msats"] += amount
         historical_usd[category][name][sub] += usd_historical
 
     # Step 5: Translate to USD and compute supplemental currencies
@@ -316,7 +348,6 @@ async def generate_balance_sheet_pandas(
 
     for category in ["Assets", "Liabilities", "Equity"]:
         for account_name in balance_sheet[category]:
-            # Ensure translated_values has an entry for every account, even if empty
             if not translated_values[category][account_name]:
                 for sub in balance_sheet[category][account_name]:
                     if sub != "Total":
@@ -333,21 +364,22 @@ async def generate_balance_sheet_pandas(
                 hive = balance_sheet[category][account_name][sub]["hive"]
                 hbd = balance_sheet[category][account_name][sub]["hbd"]
                 sats = balance_sheet[category][account_name][sub]["sats"]
+                msats = balance_sheet[category][account_name][sub]["msats"]
 
-                # Translate to USD using spot rates at balance sheet date
+                # Translate to USD using spot rates
                 usd = (
                     hive * spot_rates["hive_to_usd"]
                     + hbd * spot_rates["hbd_to_usd"]
                     + sats * spot_rates["sats_to_usd"]
+                    + msats * spot_rates["msats_to_usd"]
                 )
 
-                # Update translated values
                 translated_values[category][account_name][sub] = {
                     "usd": round(usd, 2),
-                    "hive": round(usd / spot_rates["hive_to_usd"], 2)
+                    "hive": round(usd / spot_rates["hive_to_usd"], 3)
                     if spot_rates["hive_to_usd"] != 0
                     else 0.0,
-                    "hbd": round(usd / spot_rates["hbd_to_usd"], 2)
+                    "hbd": round(usd / spot_rates["hbd_to_usd"], 3)
                     if spot_rates["hbd_to_usd"] != 0
                     else 0.0,
                     "sats": round(usd / spot_rates["sats_to_usd"], 0)
@@ -366,7 +398,39 @@ async def generate_balance_sheet_pandas(
                     account_name
                 ][sub]
 
-    # Step 7: Calculate totals for each account and category
+    # Step 7: Calculate net income and roll into Retained Earnings
+    net_income_hive = 0.0
+    net_income_hbd = 0.0
+    net_income_sats = 0.0
+    net_income_msats = 0.0
+    net_income_usd = 0.0
+
+    # Aggregate Revenue and Expense accounts under Equity
+    for account_name in balance_sheet["Equity"]:
+        if account_name in ["Fee Income Lightning", "Fee Expenses Lightning"]:
+            for sub in balance_sheet["Equity"][account_name]:
+                net_income_hive += balance_sheet["Equity"][account_name][sub]["hive"]
+                net_income_hbd += balance_sheet["Equity"][account_name][sub]["hbd"]
+                net_income_sats += balance_sheet["Equity"][account_name][sub]["sats"]
+                net_income_msats += balance_sheet["Equity"][account_name][sub]["msats"]
+                net_income_usd += balance_sheet["Equity"][account_name][sub]["usd"]
+
+    # Add net income to Retained Earnings
+    if "Retained Earnings" not in balance_sheet["Equity"]:
+        balance_sheet["Equity"]["Retained Earnings"]["default"] = {
+            "usd": 0.0,
+            "hive": 0.0,
+            "hbd": 0.0,
+            "sats": 0.0,
+            "msats": 0.0,
+        }
+    balance_sheet["Equity"]["Retained Earnings"]["default"]["hive"] += net_income_hive
+    balance_sheet["Equity"]["Retained Earnings"]["default"]["hbd"] += net_income_hbd
+    balance_sheet["Equity"]["Retained Earnings"]["default"]["sats"] += net_income_sats
+    balance_sheet["Equity"]["Retained Earnings"]["default"]["msats"] += net_income_msats
+    balance_sheet["Equity"]["Retained Earnings"]["default"]["usd"] += net_income_usd
+
+    # Step 8: Calculate totals for each account and category
     for category in ["Assets", "Liabilities", "Equity"]:
         for account_name in balance_sheet[category]:
             sub_accounts = {
@@ -374,43 +438,29 @@ async def generate_balance_sheet_pandas(
                 for sub, balance in balance_sheet[category][account_name].items()
                 if sub != "Total"
             }
-            total_usd = (
-                sum(sub_acc["usd"] for sub_acc in sub_accounts.values() if "usd" in sub_acc)
-                if sub_accounts
-                else 0.0
+            total_usd = sum(
+                sub_acc["usd"] for sub_acc in sub_accounts.values() if "usd" in sub_acc
             )
-            total_hive = (
-                sum(sub_acc["hive"] for sub_acc in sub_accounts.values() if "hive" in sub_acc)
-                if sub_accounts
-                else 0.0
+            total_hive = sum(
+                sub_acc["hive"] for sub_acc in sub_accounts.values() if "hive" in sub_acc
             )
-            total_hbd = (
-                sum(sub_acc["hbd"] for sub_acc in sub_accounts.values() if "hbd" in sub_acc)
-                if sub_accounts
-                else 0.0
+            total_hbd = sum(
+                sub_acc["hbd"] for sub_acc in sub_accounts.values() if "hbd" in sub_acc
             )
-            total_sats = (
-                sum(sub_acc["sats"] for sub_acc in sub_accounts.values() if "sats" in sub_acc)
-                if sub_accounts
-                else 0.0
+            total_sats = sum(
+                sub_acc["sats"] for sub_acc in sub_accounts.values() if "sats" in sub_acc
             )
-            total_msats = (
-                sum(sub_acc["msats"] for sub_acc in sub_accounts.values() if "msats" in sub_acc)
-                if sub_accounts
-                else 0.0
+            total_msats = sum(
+                sub_acc["msats"] for sub_acc in sub_accounts.values() if "msats" in sub_acc
             )
-            total_historical_usd = (
-                sum(
-                    historical_usd[category][account_name][sub]
-                    for sub in historical_usd[category][account_name]
-                )
-                if historical_usd[category][account_name]
-                else 0.0
+            total_historical_usd = sum(
+                historical_usd[category][account_name][sub]
+                for sub in historical_usd[category][account_name]
             )
             balance_sheet[category][account_name]["Total"] = {
                 "usd": round(total_usd, 2),
-                "hive": round(total_hive, 2),
-                "hbd": round(total_hbd, 2),
+                "hive": round(total_hive, 3),
+                "hbd": round(total_hbd, 3),
                 "sats": round(total_sats, 0),
                 "msats": round(total_msats, 0),
                 "historical_usd": round(total_historical_usd, 2),
@@ -437,14 +487,14 @@ async def generate_balance_sheet_pandas(
         )
         balance_sheet[category]["Total"] = {
             "usd": round(total_usd, 2),
-            "hive": round(total_hive, 2),
-            "hbd": round(total_hbd, 2),
+            "hive": round(total_hive, 3),
+            "hbd": round(total_hbd, 3),
             "sats": round(total_sats, 0),
             "msats": round(total_msats, 0),
             "historical_usd": round(total_historical_usd, 2),
         }
 
-    # Step 8: Calculate CTA
+    # Step 9: Calculate CTA
     total_assets_usd = balance_sheet["Assets"]["Total"]["usd"]
     total_liabilities_usd = balance_sheet["Liabilities"]["Total"]["usd"]
     total_equity_usd = balance_sheet["Equity"]["Total"]["usd"]
@@ -459,12 +509,20 @@ async def generate_balance_sheet_pandas(
         - (total_equity_usd - total_equity_historical_usd)
     )
 
+    if "CTA" not in balance_sheet["Equity"]:
+        balance_sheet["Equity"]["CTA"]["default"] = {
+            "usd": 0.0,
+            "hive": 0.0,
+            "hbd": 0.0,
+            "sats": 0.0,
+            "msats": 0.0,
+        }
     balance_sheet["Equity"]["CTA"]["default"] = {
         "usd": round(cta, 2),
-        "hive": round(cta / spot_rates["hive_to_usd"], 2)
+        "hive": round(cta / spot_rates["hive_to_usd"], 3)
         if spot_rates["hive_to_usd"] != 0
         else 0.0,
-        "hbd": round(cta / spot_rates["hbd_to_usd"], 2) if spot_rates["hbd_to_usd"] != 0 else 0.0,
+        "hbd": round(cta / spot_rates["hbd_to_usd"], 3) if spot_rates["hbd_to_usd"] != 0 else 0.0,
         "sats": round(cta / spot_rates["sats_to_usd"], 0)
         if spot_rates["sats_to_usd"] != 0
         else 0.0,
@@ -473,35 +531,36 @@ async def generate_balance_sheet_pandas(
         else 0.0,
     }
 
-    total_usd = sum(
+    # Step 10: Recalculate Equity totals to include CTA
+    equity_total_usd = sum(
         sub_acc["usd"]
         for acc_name, acc in balance_sheet["Equity"].items()
         if acc_name != "Total"
         for sub, sub_acc in acc.items()
         if sub != "Total" and isinstance(sub_acc, dict) and "usd" in sub_acc
     )
-    total_hive = sum(
+    equity_total_hive = sum(
         sub_acc["hive"]
         for acc_name, acc in balance_sheet["Equity"].items()
         if acc_name != "Total"
         for sub, sub_acc in acc.items()
         if sub != "Total" and isinstance(sub_acc, dict) and "hive" in sub_acc
     )
-    total_hbd = sum(
+    equity_total_hbd = sum(
         sub_acc["hbd"]
         for acc_name, acc in balance_sheet["Equity"].items()
         if acc_name != "Total"
         for sub, sub_acc in acc.items()
         if sub != "Total" and isinstance(sub_acc, dict) and "hbd" in sub_acc
     )
-    total_sats = sum(
+    equity_total_sats = sum(
         sub_acc["sats"]
         for acc_name, acc in balance_sheet["Equity"].items()
         if acc_name != "Total"
         for sub, sub_acc in acc.items()
         if sub != "Total" and isinstance(sub_acc, dict) and "sats" in sub_acc
     )
-    total_msats = sum(
+    equity_total_msats = sum(
         sub_acc["msats"]
         for acc_name, acc in balance_sheet["Equity"].items()
         if acc_name != "Total"
@@ -509,13 +568,14 @@ async def generate_balance_sheet_pandas(
         if sub != "Total" and isinstance(sub_acc, dict) and "msats" in sub_acc
     )
     balance_sheet["Equity"]["Total"] = {
-        "usd": round(total_usd, 2),
-        "hive": round(total_hive, 2),
-        "hbd": round(total_hbd, 2),
-        "sats": round(total_sats, 0),
-        "msats": round(total_msats, 0),
+        "usd": round(equity_total_usd, 2),
+        "hive": round(equity_total_hive, 3),
+        "hbd": round(equity_total_hbd, 3),
+        "sats": round(equity_total_sats, 0),
+        "msats": round(equity_total_msats, 0),
     }
 
+    # Step 11: Calculate Total Liabilities and Equity
     balance_sheet["Total Liabilities and Equity"] = {
         "usd": round(
             balance_sheet["Liabilities"]["Total"]["usd"] + balance_sheet["Equity"]["Total"]["usd"],
@@ -524,11 +584,11 @@ async def generate_balance_sheet_pandas(
         "hive": round(
             balance_sheet["Liabilities"]["Total"]["hive"]
             + balance_sheet["Equity"]["Total"]["hive"],
-            2,
+            3,
         ),
         "hbd": round(
             balance_sheet["Liabilities"]["Total"]["hbd"] + balance_sheet["Equity"]["Total"]["hbd"],
-            2,
+            3,
         ),
         "sats": round(
             balance_sheet["Liabilities"]["Total"]["sats"]
@@ -542,6 +602,7 @@ async def generate_balance_sheet_pandas(
         ),
     }
 
+    # Step 12: Check balance
     balance_sheet["is_balanced"] = check_balance_sheet(balance_sheet)
     if balance_sheet["is_balanced"]:
         logger.info(
@@ -550,9 +611,11 @@ async def generate_balance_sheet_pandas(
     else:
         logger.warning("Balance Sheet is NOT balanced.")
         logger.warning(
-            f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: {balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}",
+            f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: "
+            f"{balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}",
             extra={"balance_sheet": balance_sheet},
         )
+
     return balance_sheet
 
 
@@ -865,7 +928,7 @@ async def get_account_balance_printout(
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
     Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
-    Properly accounts for assets and liabilities, and includes converted values to other units
+    Properly accounts for assets, contra-assets, and liabilities, and includes converted values to other units
     (SATS, HIVE, HBD, USD, msats).
 
     Args:
@@ -889,8 +952,6 @@ async def get_account_balance_printout(
         full_history=full_history,
         as_of_date=as_of_date,
     )
-
-    adjustment = await get_conversion_adjustment(account, as_of_date)
 
     # Group by unit (process debit_unit and credit_unit separately)
     units = set(combined_df["debit_unit"].dropna().unique()).union(
@@ -951,7 +1012,7 @@ async def get_account_balance_printout(
                     f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.2f}"
                 )
                 output.append(
-                    f"{timestamp:<20} "
+                    f"{timestamp} "
                     f"{description:<45} "
                     f"{debit_str:>12} "
                     f"{credit_str:>12} "
@@ -1008,11 +1069,6 @@ async def get_account_balance_printout(
             )
             output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
 
-            if unit.upper() != "MSATS" and adjustment.get(unit, 0) != 0:
-                adjusted_balance = final_balance + adjustment.get(unit, 0)
-                adjusted_balance_str = f"{adjusted_balance:>10,.2f}"
-                output.append(f"{'Adj Balance':<18} {adjusted_balance_str:>10} {display_unit:<5}")
-
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
 
@@ -1020,7 +1076,6 @@ async def get_account_balance_printout(
     output.append(f"Total USD: {total_usd:>19,.2f}")
     output.append(f"Total SATS: {total_sats:>18,.0f}")
     output.append(title_line)
-
     output.append("=" * max_width + "\n")
 
     return "\n".join(output)
