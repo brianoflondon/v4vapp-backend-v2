@@ -7,7 +7,7 @@ from nectar.hive import Hive
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -548,6 +548,8 @@ async def return_hive_transfer(
     )
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
 
+    # We don't check the operation was already paid here because that is done in the processing function
+
     amount = amount or hive_transfer.amount.beam
     if not isinstance(amount, Amount):
         raise HiveToLightningError("Amount must be an instance of Amount")
@@ -605,7 +607,7 @@ async def return_hive_transfer(
     except HiveTransferError as e:
         message = f"Failed to repay Hive to Lightning operation: {e}"
         hive_transfer.add_reply(
-            reply_id="", reply_type="transfer", reply_error=e, reply_message=message
+            reply_id="", reply_type="transfer", reply_error=str(e), reply_message=message
         )
         await hive_transfer.save()
         logger.error(

@@ -37,7 +37,7 @@ class ReplyModel(BaseModel):
         description="Message associated with the reply, if any",
         exclude=False,
     )
-    reply_error: Any | None = Field(None, description="Error in the reply, if any", exclude=False)
+    reply_error: str | None = Field(None, description="Error in the reply, if any", exclude=False)
 
     def __init__(self, **data):
         """
