@@ -176,8 +176,14 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
             )
             if trx:
                 logger.info(f"Transaction broadcast: {trx.get('trx_id')}", extra={"trx": trx})
-    except Exception as e:
+    except ValueError as ve:
         logger.error(
+            f"{icon} ValueError in {__name__}: {ve} Maybe misconfigured account? No hbd_balance set?",
+            extra={"notification": False, "error": ve},
+        )
+
+    except Exception as e:
+        logger.exception(
             f"{icon} Error in {__name__}: {e}",
             extra={"notification": False, "error": e},
         )
