@@ -294,7 +294,7 @@ async def subscribe_stream(
             f"{ICON} Operation failure in stream subscription: {e}",
             extra={"error": e, "notification": False},
         )
-        if "resume token" in str(e):
+        if "resume" in str(e):
             logger.warning(
                 f"{ICON} Resume token error in stream subscription: {e}",
                 extra={"error": e, "notification": False},
