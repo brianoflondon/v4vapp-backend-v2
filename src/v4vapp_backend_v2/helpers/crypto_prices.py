@@ -24,12 +24,20 @@ ALL_PRICES_COINMARKETCAP = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/
 
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 
+TESTING_CACHE_TIMES = {
+    "CoinGecko": 3600,
+    "Binance": 3600,
+    "CoinMarketCap": 3600,
+    "HiveInternalMarket": 3600,
+}
+
 CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
     "CoinMarketCap": 180,
     "HiveInternalMarket": 60,
 }
+
 
 DB_RATES_COLLECTION: str = "rates"  # Collection name for storing rates in the database
 
@@ -610,7 +618,11 @@ class QuoteService(ABC):
 
     async def set_cache(self, quote: QuoteResponse) -> None:
         key = f"{self.__class__.__name__}:get_quote"
-        expiry = CACHE_TIMES[self.__class__.__name__]
+        if InternalConfig().config.development.enabled:
+            cache_times = TESTING_CACHE_TIMES
+        else:
+            cache_times = CACHE_TIMES
+        expiry = cache_times[self.__class__.__name__]
         async with V4VAsyncRedis(decode_responses=False) as redis_client:
             await redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
 
