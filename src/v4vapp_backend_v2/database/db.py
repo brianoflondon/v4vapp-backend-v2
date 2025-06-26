@@ -8,7 +8,12 @@ from typing import Any, List
 from urllib.parse import quote_plus
 
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorCursor
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorCollection,
+    AsyncIOMotorCursor,
+    AsyncIOMotorDatabase,
+)
 from pymongo import MongoClient, UpdateOne
 from pymongo.database import Database
 from pymongo.errors import (
@@ -185,6 +190,19 @@ class MongoDBClient:
         self._update_buffer: deque = deque()  # Buffer to store updates
         self._buffer_lock: Lock = Lock()
         self._bulk_write_in_progress = False  # Flag to track bulk write status
+
+    def get_db(self) -> AsyncIOMotorDatabase:
+        """
+        Returns the MongoDB database instance.
+
+        This method returns the MongoDB database instance based on the provided
+        `db_name` and `db_user`. It initializes the client if it is not already
+        connected and returns the database instance.
+
+        Returns:
+            Database: The MongoDB database instance.
+        """
+        return self.db  # type: ignore[return-value]
 
     def validate_connection(self):
         """
