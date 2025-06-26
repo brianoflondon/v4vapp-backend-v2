@@ -96,6 +96,28 @@ class CryptoConv(BaseModel):
         if "sats" not in data:
             self.sats = int(self.msats / 1000)
 
+    def __neg__(self):
+        # List of fields NOT to invert
+        rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+        values = self.model_dump()
+        for key in values:
+            if key not in rate_fields and isinstance(values[key], (int, float)):
+                values[key] = -values[key]
+        return self.__class__(**values)
+
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            values = self.model_dump()
+            rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+            for key in values:
+                if key not in rate_fields and isinstance(values[key], (int, float)):
+                    values[key] = values[key] * other
+            return self.__class__(**values)
+        return NotImplemented
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
     def is_unset(self) -> bool:
         """
         Check if the conversion values are unset (zero).
@@ -124,14 +146,14 @@ class CryptoConv(BaseModel):
 
     def limit_test(self) -> bool:
         """
-            Check if the conversion is within the limits.
+        Check if the conversion is within the limits.
 
-            Returns:
-                bool: True if the conversion is within limits, False otherwise.
+        Returns:
+            bool: True if the conversion is within limits, False otherwise.
 
-            Raises:
-                V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
-                V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
+        Raises:
+            V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
+            V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
         limit_test_result = limit_test(self.msats)
