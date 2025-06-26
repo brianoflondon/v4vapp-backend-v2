@@ -4,7 +4,7 @@ import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, List, Tuple
+from typing import Annotated, Any, Dict, List, Tuple
 
 import typer
 from nectar.amount import Amount
@@ -396,6 +396,9 @@ async def all_ops_loop(
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
     if start_block == 0:
         last_good_block = await get_last_good_block() + 1
+    elif start_block == -1:
+        global_properties: Dict = hive_client.get_dynamic_global_properties()  # type: ignore
+        last_good_block = global_properties.get("head_block_number", 97112440)
     else:
         last_good_block = start_block
     block_counter = BlockCounter(
