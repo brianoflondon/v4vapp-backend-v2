@@ -25,10 +25,10 @@ ALL_PRICES_COINMARKETCAP = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 
 TESTING_CACHE_TIMES = {
-    "CoinGecko": 3600,
-    "Binance": 3600,
-    "CoinMarketCap": 3600,
-    "HiveInternalMarket": 3600,
+    "CoinGecko": 360,
+    "Binance": 360,
+    "CoinMarketCap": 360,
+    "HiveInternalMarket": 360,
 }
 
 CACHE_TIMES = {

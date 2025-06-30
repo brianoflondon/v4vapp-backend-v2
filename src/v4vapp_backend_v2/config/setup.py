@@ -369,6 +369,19 @@ class HiveConfig(BaseConfig):
         return []
 
 
+class DevelopmentConfig(BaseModel):
+    """
+    DevelopmentConfig is a configuration class for development mode settings.
+
+    Attributes:
+        enabled (bool): Indicates whether development mode is enabled. Default is False.
+        env_var (str): The name of the environment variable that will be set to True when running in development mode.
+    """
+
+    enabled: bool = False
+    env_var: str = "V4VAPP_DEV_MODE"
+
+
 class Config(BaseModel):
     """
     version (str): The version of the configuration. Default is an empty string.
@@ -400,6 +413,7 @@ class Config(BaseModel):
 
     version: str = ""
     logging: LoggingConfig
+    development: DevelopmentConfig = DevelopmentConfig()
 
     lnd_config: LndConfig = LndConfig()
     dbs_config: DbsConfig = DbsConfig()
@@ -645,18 +659,24 @@ class InternalConfig:
             if logger_object:
                 logger_object.setLevel(level)
 
-        # Start the queue handler listener if it exists
+        # Start the queue handler listener if it exists and has a listener attribute
         queue_handler = logging.getHandlerByName("queue_handler")
         if queue_handler is not None:
-            queue_handler.listener.start()
+            # If you have a QueueListener, you should start it here.
+            # The handler itself does not have a listener attribute.
+            # You may need to manage the QueueListener instance separately.
+            # For now, just log that the queue handler was found.
+            logger.info(
+                "Queue handler found; ensure QueueListener is started elsewhere if needed."
+            )
             try:
-                self.notification_loop = asyncio.get_running_loop()
+                InternalConfig.notification_loop = asyncio.get_running_loop()
                 logger.info("Found running loop for setup logging")
             except RuntimeError:  # No event loop in the current thread
-                self.notification_loop = asyncio.new_event_loop()
+                InternalConfig.notification_loop = asyncio.new_event_loop()
                 logger.info(
                     "Started new event loop for notification logging",
-                    extra={"loop": self.notification_loop.__dict__},
+                    extra={"loop": InternalConfig.notification_loop.__dict__},
                 )
 
         # Set up the simple format string

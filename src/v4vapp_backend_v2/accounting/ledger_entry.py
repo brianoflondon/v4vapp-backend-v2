@@ -494,13 +494,23 @@ class LedgerEntry(BaseModel):
         # Format the amounts: SATS with no decimals and commas, others with 2 decimals
         debit_amount = self.debit_amount if self.debit_amount else 0.00
         credit_amount = self.credit_amount if self.credit_amount else 0.00
-        if debit_conversion_factor == 1000:
+
+        if debit_display_unit.upper() == "SATS" and (debit_amount / debit_conversion_factor) < 5:
+            formatted_debit_amount = (
+                f"{debit_amount / debit_conversion_factor:,.3f} {debit_display_unit}"
+            )
+        elif debit_conversion_factor == 1000:
             formatted_debit_amount = (
                 f"{debit_amount / debit_conversion_factor:,.0f} {debit_display_unit}"
             )
         else:
             formatted_debit_amount = f"{debit_amount:,.3f} {debit_display_unit}"
-        if credit_conversion_factor == 1000:
+
+        if credit_display_unit.upper() == "SATS" and (credit_amount / credit_conversion_factor) < 5:
+            formatted_credit_amount = (
+                f"{credit_amount / credit_conversion_factor:,.3f} {credit_display_unit}"
+            )
+        elif credit_conversion_factor == 1000:
             formatted_credit_amount = (
                 f"{credit_amount / credit_conversion_factor:,.0f} {credit_display_unit}"
             )

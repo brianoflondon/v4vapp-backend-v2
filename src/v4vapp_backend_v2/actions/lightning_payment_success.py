@@ -106,29 +106,31 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ledger_entries_list.append(conversion_ledger_entry)
 
                 # MARK: 3 Reverse Conversion for Reconciliation
-                # # This the 3 contra entry to move converted Hive out of the Customer Deposits Hive balance
-                # # and into the Converted Hive Offset account.
-                # contra_conversion_ledger_entry = LedgerEntry(
-                #     group_id=f"{payment.group_id}_contra",
-                #     timestamp=payment.timestamp,
-                #     op=payment,
-                #     description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
-                #     debit=AssetAccount(
-                #         name="Customer Deposits Hive",
-                #         sub=hive_transfer.to_account,  # This is the Server
-                #     ),
-                #     debit_unit=hive_transfer.unit,
-                #     debit_amount=conversion_credit_amount.amount,
-                #     debit_conv=conversion_credit_debit_conv,  # No conversion needed
-                #     credit=ContraAssetAccount(
-                #         name="Converted Hive Offset",
-                #         sub=hive_transfer.to_account,  # This is the Server
-                #     ),
-                #     credit_unit=hive_transfer.unit,
-                #     credit_amount=conversion_credit_amount.amount,
-                #     credit_conv=conversion_credit_debit_conv,  # No conversion needed
-                # )
-                # ledger_entries_list.append(contra_conversion_ledger_entry)
+                # This the 3 contra entry to move converted Hive out of the Customer Deposits Hive balance
+                # and into the Converted Hive Offset account.
+                contra_conversion_ledger_entry = LedgerEntry(
+                    group_id=f"{payment.group_id}_contra",
+                    timestamp=payment.timestamp,
+                    op=payment,
+                    description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
+                    debit=AssetAccount(
+                        name="Customer Deposits Hive",
+                        sub=hive_transfer.to_account,  # This is the Server
+                        contra=False,  # This is FROM the Customer Deposits Hive account
+                    ),
+                    debit_unit=hive_transfer.unit,
+                    debit_amount=conversion_credit_amount.amount,
+                    debit_conv=conversion_credit_debit_conv,
+                    credit=AssetAccount(
+                        name="Converted Hive Offset (-)",
+                        sub=hive_transfer.to_account,  # This is the Server
+                        contra=True,  # This is a contra entry
+                    ),
+                    credit_unit=hive_transfer.unit,
+                    credit_amount=conversion_credit_amount.amount,
+                    credit_conv=conversion_credit_debit_conv,  # No conversion needed
+                )
+                ledger_entries_list.append(contra_conversion_ledger_entry)
 
                 # MARK: 4 Outgoing Payment Allocation
                 fee_debit_value = getattr(hive_transfer.fee_conv, hive_transfer.unit.lower())
@@ -190,27 +192,27 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 # ledger_entries_list.append(external_payment_ledger_entry)
 
                 # MARK: 5.5 Clear Lightning Payment Clearing
-                # clear_lightning_clearing_ledger_entry = LedgerEntry(
-                #     group_id=f"{payment.group_id}_clearing",
-                #     timestamp=payment.timestamp,
-                #     op=payment,
-                #     description=f"Clear Lightning Payment Clearing for {hive_transfer.from_account}",
-                #     debit=LiabilityAccount(
-                #         name="Lightning Payment Clearing",
-                #         sub=node_name,  # This is the SERVER
-                #     ),
-                #     debit_unit=hive_transfer.unit,
-                #     debit_amount=outgoing_debit_amount.amount,
-                #     debit_conv=outgoing_conv,
-                #     credit=LiabilityAccount(
-                #         name="Customer Liability Hive",
-                #         sub=hive_transfer.from_account,  # This is the CUSTOMER
-                #     ),
-                #     credit_unit=hive_transfer.unit,
-                #     credit_amount=outgoing_debit_amount.amount,
-                #     credit_conv=outgoing_conv,
-                # )
-                # ledger_entries_list.append(clear_lightning_clearing_ledger_entry)
+                clear_lightning_clearing_ledger_entry = LedgerEntry(
+                    group_id=f"{payment.group_id}_clearing",
+                    timestamp=payment.timestamp,
+                    op=payment,
+                    description=f"Clear Lightning Payment Clearing for {hive_transfer.from_account}",
+                    debit=LiabilityAccount(
+                        name="Lightning Payment Clearing",
+                        sub=node_name,  # This is the SERVER
+                    ),
+                    debit_unit=hive_transfer.unit,
+                    debit_amount=outgoing_debit_amount.amount,
+                    debit_conv=outgoing_conv,
+                    credit=AssetAccount(
+                        name="Treasury Lightning",
+                        sub=node_name,
+                    ),
+                    credit_unit=Currency.MSATS,
+                    credit_amount=cost_of_payment_msat,
+                    credit_conv=outgoing_conv,
+                )
+                ledger_entries_list.append(clear_lightning_clearing_ledger_entry)
 
                 # MARK: 6 Service Fee
                 # Build the 3b ledger entry: the Fee expense
@@ -284,10 +286,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     reply_error=None,
                     reply_message=message,
                 )
-                ans = await hive_transfer.save(
-                    include={"replies", "fee_conv", "change_amount", "change_conv"}
-                )
-                ans_p = await payment.save(include={"fee_conv", "conv"})
+                # ans = await hive_transfer.save(
+                #     include={"replies", "fee_conv", "change_amount", "change_conv"}
+                # )
+                # ans_p = await payment.save(include={"fee_conv", "conv"})
                 # This will initiate the return payment
                 asyncio.create_task(
                     lightning_payment_sent(

@@ -7,7 +7,7 @@ from nectar.hive import Hive
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, load_tracked_object
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -381,7 +381,8 @@ async def lightning_payment_sent(
     Returns:
         None
     """
-    # This function should not take in the hive_transfer, it should instead retrieve it from database.
+    # This hive_transfer is passed in and should have the payment recorded in it but will not have been updated
+    # in the database yet.
     async with hive_transfer:
         async with payment:
             if not confirm_payment_details(hive_transfer, payment):
@@ -459,8 +460,54 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
         )
         raise HiveToLightningError("Conversion details not found for operation")
 
-    cost_of_payment_msat = payment.value_msat + payment.fee_msat
-    # This is using the msats_fee from the original Hive Transaction which will be slightly too high at this point.
+    # payment.fee_msat is the lightning fee
+    cost_of_payment_msat_pre_fee = payment.value_msat + payment.fee_msat
+    # payment.conv.msats_fee is the Hive to Lightning conversion fee
+    cost_of_payment_msat = cost_of_payment_msat_pre_fee + payment.conv.msats_fee
+
+    # Value of payment and fee in Hive or HBD
+    cost_of_payment_amount = Amount(
+        "0.001 HIVE"
+    )  # Default amount to return if no change is needed
+    if hive_transfer.conv.conv_from == Currency.HIVE:
+        cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hive
+        cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HIVE")
+    elif hive_transfer.conv.conv_from == Currency.HBD:
+        cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hbd
+        cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HBD")
+    else:
+        raise HiveToLightningError(
+            f"Unknown currency: {hive_transfer.conv.conv_from} for change calculation"
+        )
+
+    logger.info(
+        f"Cost of payment in {hive_transfer.conv.conv_from}: {cost_of_payment_amount} ({cost_of_payment_msat / 1_000:,.0f} sats)",
+        extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
+    )
+
+    change_hive_amount = hive_transfer.amount.beam - cost_of_payment_amount
+
+    # If change is less than 0.001 HIVE, no change transaction is needed just notification minimum
+    if hive_transfer.conv.conv_from == Currency.HIVE and change_hive_amount < Amount("0.001 HIVE"):
+        change_hive_amount = Amount("0.001 HIVE")
+    elif hive_transfer.conv.conv_from == Currency.HBD and change_hive_amount < Amount("0.001 HBD"):
+        change_hive_amount = Amount("0.001 HBD")
+
+    hive_transfer.change_amount = AmountPyd(amount=change_hive_amount)
+    hive_transfer.fee_conv = CryptoConversion(
+        conv_from=Currency.MSATS,
+        value=payment.conv.msats_fee,
+        quote=await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp),
+    ).conversion
+
+    # The conversion details await hive_transfer.update_conv()will be set when the
+    logger.info(
+        f"Change detected for operation {hive_transfer.group_id_p}: {change_hive_amount}",
+        extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
+    )
+
+    return change_hive_amount
+
     new_msat_fee = msats_fee(cost_of_payment_msat)
     hive_transfer.conv.msats_fee = new_msat_fee
     quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
