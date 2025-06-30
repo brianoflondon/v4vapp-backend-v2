@@ -159,6 +159,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
     CONFIG = InternalConfig().config
     logger.info("Waiting for 30 seconds to re-balance HBD level")
     await asyncio.sleep(30)  # Sleeps to make sure we only balance HBD after time for a return
+    use_account = None
     try:
         if transfer.from_account in CONFIG.hive.server_account_names:
             use_account = transfer.from_account
@@ -181,6 +182,12 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
             f"{icon} ValueError in {__name__}: {ve} Maybe misconfigured account? No hbd_balance set?",
             extra={"notification": False, "error": ve},
         )
+        if use_account:
+            logger.error(
+                f"{icon} Account {use_account} miss config, "
+                f"please check your config file {DEFAULT_CONFIG_FILENAME}",
+                extra={"notification": False, "error": ve},
+            )
 
     except Exception as e:
         logger.exception(

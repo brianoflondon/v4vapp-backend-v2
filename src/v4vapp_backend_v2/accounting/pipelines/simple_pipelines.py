@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Sequence
 
-from v4vapp_backend_v2.accounting.account_type import Account
+from v4vapp_backend_v2.accounting.account_type import LedgerAccount
 
 
 def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
@@ -55,7 +55,7 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
 
 
 def filter_by_account_as_of_date_query(
-    account: Account | None = None, as_of_date: datetime = datetime.now(tz=timezone.utc)
+    account: LedgerAccount | None = None, as_of_date: datetime = datetime.now(tz=timezone.utc)
 ) -> Dict[str, Any]:
     """
     Generates a MongoDB query to filter documents by a specific account and date.
@@ -103,7 +103,9 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
         {
             "$match": {
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
-                "fullDocument.status": {"$in": ["FAILED", "SUCCEEDED"]},  # status must be FAILED or SUCCEEDED
+                "fullDocument.status": {
+                    "$in": ["FAILED", "SUCCEEDED"]
+                },  # status must be FAILED or SUCCEEDED
             }
         },
         # {

@@ -14,7 +14,7 @@ class AccountType(StrEnum):
 
 
 # MARK: Base class for all accounts
-class Account(BaseModel):
+class LedgerAccount(BaseModel):
     name: str = Field(..., description="Name of the ledger account")
     account_type: AccountType = Field(..., description="Type of account")
     sub: str = Field("", description="Sub-account name for more specific categorization")
@@ -31,7 +31,7 @@ class Account(BaseModel):
         return f"{self.name} ({self.account_type}) - Sub: {self.sub}"
 
     def __eq__(self, other):
-        if not isinstance(other, Account):
+        if not isinstance(other, LedgerAccount):
             return NotImplemented
         return (
             self.name == other.name
@@ -44,7 +44,7 @@ class Account(BaseModel):
 
 
 # MARK: Asset Accounts
-class AssetAccount(Account):
+class AssetAccount(LedgerAccount):
     """
     Represents an asset account in the accounting system.
     Assets INCREASE with a DEBIT and DECREASE with a CREDIT.
@@ -86,7 +86,7 @@ class AssetAccount(Account):
 
 
 # MARK: Liability Accounts
-class LiabilityAccount(Account):
+class LiabilityAccount(LedgerAccount):
     """
     LiabilityAccount is a subclass of Account that represents a specific type of liability account.
     Liabilities INCREASE with a CREDIT and DECREASE with a DEBIT.
@@ -124,7 +124,7 @@ class LiabilityAccount(Account):
 
 
 # MARK: Equity Accounts
-class EquityAccount(Account):
+class EquityAccount(LedgerAccount):
     """
     Represents an equity account in the accounting system.
     Equity accounts INCREASE with a CREDIT and DECREASE with a DEBIT.
@@ -158,7 +158,7 @@ class EquityAccount(Account):
 
 
 # MARK: Revenue Accounts
-class RevenueAccount(Account):
+class RevenueAccount(LedgerAccount):
     name: Literal["Fee Income Hive", "Fee Income Lightning", "DHF Income", "Other Income"] = Field(
         ..., description="Specific revenue account name"
     )
@@ -177,7 +177,7 @@ class RevenueAccount(Account):
 
 
 # MARK: Expense Accounts
-class ExpenseAccount(Account):
+class ExpenseAccount(LedgerAccount):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",

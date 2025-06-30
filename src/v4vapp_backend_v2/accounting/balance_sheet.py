@@ -5,7 +5,7 @@ from typing import Dict, List
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.account_type import Account
+from v4vapp_backend_v2.accounting.account_type import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
@@ -19,7 +19,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "",
-    filter_by_account: Account | None = None,
+    filter_by_account: LedgerAccount | None = None,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date, optionally filtered by account.
@@ -82,7 +82,7 @@ async def get_ledger_entries(
 async def get_ledger_dataframe(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "",
-    filter_by_account: Account | None = None,
+    filter_by_account: LedgerAccount | None = None,
 ) -> pd.DataFrame:
     """
     Fetches ledger entries from the database as of a specified date and returns them as a pandas DataFrame.
@@ -260,7 +260,7 @@ async def generate_balance_sheet_pandas(
     )
 
     # Combine debits and credits with signed amounts
-    print("Processing debit and credit entries...")
+    # print("Processing debit and credit entries...")
 
     debit_df["amount_adj"] = debit_df.apply(
         lambda row: row["amount"] if row["account_type"] == "Asset" else -row["amount"],
@@ -776,7 +776,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
 
 
 async def get_account_balance(
-    account: Account,
+    account: LedgerAccount,
     df: pd.DataFrame = pd.DataFrame(),
     full_history: bool = False,
     as_of_date: datetime | None = None,
@@ -854,7 +854,7 @@ async def get_account_balance(
 
 
 async def get_account_balance_printout(
-    account: Account,
+    account: LedgerAccount,
     df: pd.DataFrame = pd.DataFrame(),
     full_history: bool = False,
     as_of_date: datetime | None = None,
@@ -1021,7 +1021,7 @@ async def get_account_balance_printout(
     return "\n".join(output)
 
 
-async def list_all_accounts() -> List[Account]:
+async def list_all_accounts() -> List[LedgerAccount]:
     """
     Lists all unique accounts in the ledger by aggregating debit and credit accounts.
 
@@ -1034,7 +1034,7 @@ async def list_all_accounts() -> List[Account]:
     cursor = collection.aggregate(pipeline=pipeline)
     accounts = []
     async for doc in cursor:
-        account = Account.model_validate(doc)
+        account = LedgerAccount.model_validate(doc)
         accounts.append(account)
     return accounts
 
