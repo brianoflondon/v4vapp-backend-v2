@@ -52,10 +52,10 @@ def limit_test(msats: float = 0.0) -> bool:
     sats = msats // 1000
     if sats < config_data.minimum_invoice_payment_sats:
         raise V4VMinimumInvoice(
-            f"{sats:,.0f} below minimum invoice of {config_data.minimum_invoice_payment_sats} sats"
+            f"{sats:,.0f} sats is below minimum invoice of {config_data.minimum_invoice_payment_sats} sats"
         )
     if sats > config_data.maximum_invoice_payment_sats:
         raise V4VMaximumInvoice(
-            f"{sats:,.0f} exceeds maximum invoice of {config_data.maximum_invoice_payment_sats} sats"
+            f"{sats:,.0f} sats exceeds maximum invoice of {config_data.maximum_invoice_payment_sats} sats"
         )
     return True

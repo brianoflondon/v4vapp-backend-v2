@@ -167,7 +167,7 @@ async def test_hive_to_lightning_invoice_limits():
 
         assert mock_return_hive_transfer.call_count == 1
         assert mock_return_hive_transfer.call_args_list[0][1]["hive_transfer"] == op
-        assert "Not enough sent" in mock_return_hive_transfer.call_args[1]["reason"]
+        assert "below minimum invoice" in mock_return_hive_transfer.call_args[1]["reason"]
 
 
 @pytest.mark.skipif(
