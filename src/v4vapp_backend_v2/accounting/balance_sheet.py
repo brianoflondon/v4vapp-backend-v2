@@ -117,41 +117,47 @@ async def get_ledger_dataframe(
     )
     data = []
     for entry in ledger_entries:
-        debit_amount = entry.debit_amount
-        debit_unit = entry.debit_unit.value if entry.debit_unit else None
-        debit_conv = entry.debit_conv
-        credit_amount = entry.credit_amount
-        credit_unit = entry.credit_unit.value if entry.credit_unit else None
-        credit_conv = entry.credit_conv
+        if entry.debit and entry.credit:
+            debit_modifier = -1 if entry.debit.contra else 1
+            credit_modifier = -1 if entry.credit.contra else 1
 
-        data.append(
-            {
-                "timestamp": entry.timestamp,
-                "group_id": entry.group_id,
-                "short_id": entry.short_id,
-                "description": entry.description,
-                "debit_amount": debit_amount,
-                "debit_unit": debit_unit,
-                "debit_conv_sats": debit_conv.sats,
-                "debit_conv_msats": debit_conv.msats,
-                "debit_conv_hive": debit_conv.hive,
-                "debit_conv_hbd": debit_conv.hbd,
-                "debit_conv_usd": debit_conv.usd,
-                "credit_amount": credit_amount,
-                "credit_unit": credit_unit,
-                "credit_conv_sats": credit_conv.sats,
-                "credit_conv_msats": credit_conv.msats,
-                "credit_conv_hive": credit_conv.hive,
-                "credit_conv_hbd": credit_conv.hbd,
-                "credit_conv_usd": credit_conv.usd,
-                "debit_name": entry.debit.name,
-                "debit_account_type": entry.debit.account_type,
-                "debit_sub": entry.debit.sub,
-                "credit_name": entry.credit.name,
-                "credit_account_type": entry.credit.account_type,
-                "credit_sub": entry.credit.sub,
-            }
-        )
+            debit_amount = debit_modifier * entry.debit_amount
+            debit_unit = entry.debit_unit.value if entry.debit_unit else None
+            debit_conv = debit_modifier * entry.debit_conv
+            credit_amount = credit_modifier * entry.credit_amount
+            credit_unit = entry.credit_unit.value if entry.credit_unit else None
+            credit_conv = credit_modifier * entry.credit_conv
+
+            data.append(
+                {
+                    "timestamp": entry.timestamp,
+                    "group_id": entry.group_id,
+                    "short_id": entry.short_id,
+                    "description": entry.description,
+                    "debit_amount": debit_amount,
+                    "debit_unit": debit_unit,
+                    "debit_conv_sats": debit_conv.sats,
+                    "debit_conv_msats": debit_conv.msats,
+                    "debit_conv_hive": debit_conv.hive,
+                    "debit_conv_hbd": debit_conv.hbd,
+                    "debit_conv_usd": debit_conv.usd,
+                    "credit_amount": credit_amount,
+                    "credit_unit": credit_unit,
+                    "credit_conv_sats": credit_conv.sats,
+                    "credit_conv_msats": credit_conv.msats,
+                    "credit_conv_hive": credit_conv.hive,
+                    "credit_conv_hbd": credit_conv.hbd,
+                    "credit_conv_usd": credit_conv.usd,
+                    "debit_name": entry.debit.name,
+                    "debit_account_type": entry.debit.account_type,
+                    "debit_sub": entry.debit.sub,
+                    "debit_contra": entry.debit.contra,
+                    "credit_name": entry.credit.name,
+                    "credit_account_type": entry.credit.account_type,
+                    "credit_sub": entry.credit.sub,
+                    "credit_contra": entry.credit.contra,
+                }
+            )
 
     df = pd.DataFrame(data)
     return df
@@ -214,6 +220,7 @@ async def generate_balance_sheet_pandas(
             "debit_amount",
             "debit_unit",
             "debit_conv_usd",
+            "debit_contra",
         ]
     ].copy()
     debit_df = debit_df.rename(
@@ -224,6 +231,7 @@ async def generate_balance_sheet_pandas(
             "debit_amount": "amount",
             "debit_unit": "unit",
             "debit_conv_usd": "conv_usd",
+            "debit_contra": "contra",
         }
     )
 
@@ -236,6 +244,7 @@ async def generate_balance_sheet_pandas(
             "credit_amount",
             "credit_unit",
             "credit_conv_usd",
+            "credit_contra",
         ]
     ].copy()
     credit_df = credit_df.rename(
@@ -246,22 +255,29 @@ async def generate_balance_sheet_pandas(
             "credit_amount": "amount",
             "credit_unit": "unit",
             "credit_conv_usd": "conv_usd",
+            "credit_contra": "contra",
         }
     )
 
     # Combine debits and credits with signed amounts
+    print("Processing debit and credit entries...")
+
     debit_df["amount_adj"] = debit_df.apply(
-        lambda row: row["amount"] if row["account_type"] == "Asset" else -row["amount"], axis=1
+        lambda row: row["amount"] if row["account_type"] == "Asset" else -row["amount"],
+        axis=1,
     )
     debit_df["usd_adj"] = debit_df.apply(
-        lambda row: row["conv_usd"] if row["account_type"] == "Asset" else -row["conv_usd"], axis=1
+        lambda row: row["conv_usd"] if row["account_type"] == "Asset" else -row["conv_usd"],
+        axis=1,
     )
 
     credit_df["amount_adj"] = credit_df.apply(
-        lambda row: -row["amount"] if row["account_type"] == "Asset" else row["amount"], axis=1
+        lambda row: -row["amount"] if row["account_type"] == "Asset" else row["amount"],
+        axis=1,
     )
     credit_df["usd_adj"] = credit_df.apply(
-        lambda row: -row["conv_usd"] if row["account_type"] == "Asset" else row["conv_usd"], axis=1
+        lambda row: -row["conv_usd"] if row["account_type"] == "Asset" else row["conv_usd"],
+        axis=1,
     )
 
     # Combine and aggregate by native unit and historical USD
@@ -679,29 +695,29 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                 output.append(
                     f"{truncate_text(account_name, 40):<40} "
                     f"{truncate_text(sub, 17):<17} "
-                    f"{balance['sats']:>10,.0f} "
-                    f"{balance['hive']:>12,.2f} "
-                    f"{balance['hbd']:>12,.2f} "
-                    f"{balance['usd']:>12,.2f}"
+                    f"{balance.get('sats', 0):>10,.0f} "
+                    f"{balance.get('hive', 0):>12,.2f} "
+                    f"{balance.get('hbd', 0):>12,.2f} "
+                    f"{balance.get('usd', 0):>12,.2f}"
                 )
             if "Total" not in sub_accounts:
                 total_usd = sum(
-                    sub_acc["usd"]
+                    sub_acc.get("usd", 0)
                     for sub, sub_acc in sub_accounts.items()
                     if sub != "Total" and "usd" in sub_acc
                 )
                 total_hive = sum(
-                    sub_acc["hive"]
+                    sub_acc.get("hive", 0)
                     for sub, sub_acc in sub_accounts.items()
                     if sub != "Total" and "hive" in sub_acc
                 )
                 total_hbd = sum(
-                    sub_acc["hbd"]
+                    sub_acc.get("hbd", 0)
                     for sub, sub_acc in sub_accounts.items()
                     if sub != "Total" and "hbd" in sub_acc
                 )
                 total_sats = sum(
-                    sub_acc["sats"]
+                    sub_acc.get("sats", 0)
                     for sub, sub_acc in sub_accounts.items()
                     if sub != "Total" and "sats" in sub_acc
                 )
@@ -716,20 +732,20 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             output.append(
                 f"{'Total ' + truncate_text(account_name, 35):<40} "
                 f"{'':<17} "
-                f"{total['sats']:>10,.0f} "
-                f"{total['hive']:>12,.2f} "
-                f"{total['hbd']:>12,.2f} "
-                f"{total['usd']:>12,.2f}"
+                f"{total.get('sats', 0):>10,.0f} "
+                f"{total.get('hive', 0):>12,.2f} "
+                f"{total.get('hbd', 0):>12,.2f} "
+                f"{total.get('usd', 0):>12,.2f}"
             )
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
         output.append(
             f"{'Total ' + category:<40} "
             f"{'':<17} "
-            f"{total['sats']:>10,.0f} "
-            f"{total['hive']:>12,.2f} "
-            f"{total['hbd']:>12,.2f} "
-            f"{total['usd']:>12,.2f}"
+            f"{total.get('sats', 0):>10,.0f} "
+            f"{total.get('hive', 0):>12,.2f} "
+            f"{total.get('hbd', 0):>12,.2f} "
+            f"{total.get('usd', 0):>12,.2f}"
         )
         output.append("-" * max_width)
 
@@ -738,10 +754,10 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     output.append(
         f"{'Total Liab. & Equity':<40} "
         f"{'':<17} "
-        f"{total['sats']:>10,.0f} "
-        f"{total['hive']:>12,.2f} "
-        f"{total['hbd']:>12,.2f} "
-        f"{total['usd']:>12,.2f}"
+        f"{total.get('sats', 0):>10,.0f} "
+        f"{total.get('hive', 0):>12,.2f} "
+        f"{total.get('hbd', 0):>12,.2f} "
+        f"{total.get('usd', 0):>12,.2f}"
     )
 
     is_balanced = math.isclose(
@@ -765,23 +781,6 @@ async def get_account_balance(
     full_history: bool = False,
     as_of_date: datetime | None = None,
 ) -> pd.DataFrame:
-    """
-    Calculate the balance for a specified account (and optional sub-account) from the DataFrame.
-    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
-    Properly accounts for assets and liabilities, and includes converted values to other units
-    (SATS, HIVE, HBD, USD, msats).
-
-    Args:
-        account (Account): An Account object specifying the account name, type, and optional sub-account.
-        df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
-        full_history (bool, optional): If True, shows the full transaction history with running balances.
-                                       If False, shows only the closing balance. Defaults to False.
-        as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
-
-    Returns:
-        pd.DataFrame: A DataFrame containing either the full transaction history or the closing balance
-                      for the specified account and sub-account up to as_of_date.
-    """
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if df.empty:
@@ -843,14 +842,12 @@ async def get_account_balance(
     if account.account_type == "Asset":
         debit_df["signed_amount"] = debit_df["debit_amount"]
         credit_df["signed_amount"] = -credit_df["credit_amount"]
-    else:  # Liability
+    else:  # Liability, Equity, Revenue, Expense
         debit_df["signed_amount"] = -debit_df["debit_amount"]
         credit_df["signed_amount"] = credit_df["credit_amount"]
 
     # Combine debits and credits
     combined_df = pd.concat([debit_df, credit_df], ignore_index=True)
-
-    # Sort by timestamp to ensure chronological order
     combined_df = combined_df.sort_values(by="timestamp").reset_index(drop=True)
 
     return combined_df
@@ -889,8 +886,6 @@ async def get_account_balance_printout(
         full_history=full_history,
         as_of_date=as_of_date,
     )
-
-    adjustment = await get_conversion_adjustment(account, as_of_date)
 
     # Group by unit (process debit_unit and credit_unit separately)
     units = set(combined_df["debit_unit"].dropna().unique()).union(
@@ -945,10 +940,10 @@ async def get_account_balance_printout(
                     credit = credit / conversion_factor
                     balance = balance / conversion_factor
                 # Format with commas, no decimals for SATS, two decimals for others
-                debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.2f}"
-                credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.2f}"
+                debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
+                credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
                 balance_str = (
-                    f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.2f}"
+                    f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
                 )
                 output.append(
                     f"{timestamp:<20} "
@@ -990,9 +985,9 @@ async def get_account_balance_printout(
             output.append("-" * max_width)
             output.append(
                 f"{'Converted    ':<10} "
-                f"{total_hive:>15,.2f} HIVE "
-                f"{total_hbd:>12,.2f} HBD "
-                f"{total_usd_for_unit:>12,.2f} USD "
+                f"{total_hive:>15,.3f} HIVE "
+                f"{total_hbd:>12,.3f} HBD "
+                f"{total_usd_for_unit:>12,.3f} USD "
                 f"{total_sats_for_unit:>12,.0f} SATS "
                 f"{total_msats:>16,.0f} msats"
             )
@@ -1004,20 +999,20 @@ async def get_account_balance_printout(
             balance_str = (
                 f"{display_balance:,.0f}"
                 if unit.upper() == "MSATS"
-                else f"{display_balance:>10,.2f}"
+                else f"{display_balance:>10,.3f}"
             )
             output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
 
-            if unit.upper() != "MSATS" and adjustment.get(unit, 0) != 0:
-                adjusted_balance = final_balance + adjustment.get(unit, 0)
-                adjusted_balance_str = f"{adjusted_balance:>10,.2f}"
-                output.append(f"{'Adj Balance':<18} {adjusted_balance_str:>10} {display_unit:<5}")
+            # if unit.upper() != "MSATS" and adjustment.get(unit, 0) != 0:
+            #     adjusted_balance = final_balance + adjustment.get(unit, 0)
+            #     adjusted_balance_str = f"{adjusted_balance:>10,.2f}"
+            #     output.append(f"{'Adj Balance':<18} {adjusted_balance_str:>10} {display_unit:<5}")
 
             total_usd += total_usd_for_unit
             total_sats += total_sats_for_unit
 
     output.append("-" * max_width)
-    output.append(f"Total USD: {total_usd:>19,.2f}")
+    output.append(f"Total USD: {total_usd:>19,.3f}")
     output.append(f"Total SATS: {total_sats:>18,.0f}")
     output.append(title_line)
 
@@ -1044,37 +1039,37 @@ async def list_all_accounts() -> List[Account]:
     return accounts
 
 
-async def get_conversion_adjustment(
-    conversion_account: Account, as_of_date: datetime | None = None
-) -> Dict[str, float]:
-    """
-    Queries the ledger for conversion entries credited to Customer Deposits Hive,
-    sums the credit_amounts for HIVE and HBD, and returns them as an adjustment.
+# async def get_conversion_adjustment(
+#     conversion_account: Account, as_of_date: datetime | None = None
+# ) -> Dict[str, float]:
+#     """
+#     Queries the ledger for conversion entries credited to Customer Deposits Hive,
+#     sums the credit_amounts for HIVE and HBD, and returns them as an adjustment.
 
-    Returns:
-        Dict[str, float]: A dictionary with keys "hive" and "hbd" representing the adjustments.
-    """
-    if not as_of_date:
-        as_of_date = datetime.now(tz=timezone.utc)
+#     Returns:
+#         Dict[str, float]: A dictionary with keys "hive" and "hbd" representing the adjustments.
+#     """
+#     if not as_of_date:
+#         as_of_date = datetime.now(tz=timezone.utc)
 
-    collection = await TrackedBaseModel.db_client.get_collection("ledger")
-    query = {
-        "group_id": {"$regex": ".*conversion"},
-        "credit.name": {"$regex": f"^{conversion_account.name}"},
-        "credit.sub": {"$regex": f"^{conversion_account.sub}$"} if conversion_account.sub else {},
-        "timestamp": {"$lte": as_of_date},
-    }
-    cursor = collection.find(query)
-    hive_total = 0.0
-    hbd_total = 0.0
-    async for doc in cursor:
-        credit_unit = doc.get("credit_unit", "").lower()
-        credit_amount = float(doc.get("credit_amount", 0))
-        if credit_unit == "hive":
-            hive_total += credit_amount
-        elif credit_unit == "hbd":
-            hbd_total += credit_amount
-    return {
-        "hive": hive_total,
-        "hbd": hbd_total,
-    }
+#     collection = await TrackedBaseModel.db_client.get_collection("ledger")
+#     query = {
+#         "group_id": {"$regex": ".*conversion"},
+#         "credit.name": {"$regex": f"^{conversion_account.name}"},
+#         "credit.sub": {"$regex": f"^{conversion_account.sub}$"} if conversion_account.sub else {},
+#         "timestamp": {"$lte": as_of_date},
+#     }
+#     cursor = collection.find(query)
+#     hive_total = 0.0
+#     hbd_total = 0.0
+#     async for doc in cursor:
+#         credit_unit = doc.get("credit_unit", "").lower()
+#         credit_amount = float(doc.get("credit_amount", 0))
+#         if credit_unit == "hive":
+#             hive_total += credit_amount
+#         elif credit_unit == "hbd":
+#             hbd_total += credit_amount
+#     return {
+#         "hive": hive_total,
+#         "hbd": hbd_total,
+#     }
