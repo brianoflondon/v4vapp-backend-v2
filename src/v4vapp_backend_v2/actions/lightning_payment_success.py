@@ -108,8 +108,8 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 # MARK: 3 Reverse Conversion for Reconciliation
                 # This the 3 contra entry to move converted Hive out of the Customer Deposits Hive balance
                 # and into the Converted Hive Offset account.
-                contra_conversion_ledger_entry = LedgerEntry(
-                    group_id=f"{payment.group_id}_contra",
+                contra_h_conversion_ledger_entry = LedgerEntry(
+                    group_id=f"{payment.group_id}_h_contra",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
@@ -124,13 +124,13 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     credit=AssetAccount(
                         name="Converted Hive Offset (-)",
                         sub=hive_transfer.to_account,  # This is the Server
-                        contra=True,  # This is a contra entry
+                        contra=True,
                     ),
                     credit_unit=hive_transfer.unit,
                     credit_amount=conversion_credit_amount.amount,
                     credit_conv=conversion_credit_debit_conv,  # No conversion needed
                 )
-                ledger_entries_list.append(contra_conversion_ledger_entry)
+                ledger_entries_list.append(contra_h_conversion_ledger_entry)
 
                 # MARK: 4 Outgoing Payment Allocation
                 fee_debit_value = getattr(hive_transfer.fee_conv, hive_transfer.unit.lower())
@@ -168,23 +168,20 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
 
                 # MARK: 5 External Lightning Payment
                 # # Uses the cost_of_payment_msat which includes the fee
-                # await payment.update_conv(quote=quote)
                 # external_payment_ledger_entry = LedgerEntry(
                 #     group_id=f"{payment.group_id}_external_payment",
                 #     timestamp=payment.timestamp,
                 #     op=payment,
                 #     description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
-                #     debit=ContraAssetAccount(
-                #         name="External Lightning Payments",
+                #     debit=AssetAccount(
+                #         name="External Lightning Payments (-)",
                 #         sub=node_name,
+                #         contra=True,  # This is FROM the External Lightning Payments account
                 #     ),
                 #     debit_unit=Currency.MSATS,
                 #     debit_amount=cost_of_payment_msat,
                 #     debit_conv=payment.conv,
-                #     credit=AssetAccount(
-                #         name="Treasury Lightning",
-                #         sub=node_name,
-                #     ),
+                #     credit=LiabilityAccount(name="Lightning Payment Clearing", sub=node_name, contra=True),
                 #     credit_unit=Currency.MSATS,
                 #     credit_amount=cost_of_payment_msat,
                 #     credit_conv=payment.conv,
@@ -204,12 +201,12 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     debit_unit=hive_transfer.unit,
                     debit_amount=outgoing_debit_amount.amount,
                     debit_conv=outgoing_conv,
-                    credit=AssetAccount(
-                        name="Treasury Lightning",
-                        sub=node_name,
+                    credit=LiabilityAccount(
+                        name="Customer Liability Hive",
+                        sub=hive_transfer.from_account,  # This is the CUSTOMER
                     ),
-                    credit_unit=Currency.MSATS,
-                    credit_amount=cost_of_payment_msat,
+                    credit_unit=hive_transfer.unit,
+                    credit_amount=outgoing_debit_amount.amount,
                     credit_conv=outgoing_conv,
                 )
                 ledger_entries_list.append(clear_lightning_clearing_ledger_entry)
