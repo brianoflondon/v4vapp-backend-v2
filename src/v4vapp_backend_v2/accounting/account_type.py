@@ -1,3 +1,4 @@
+import re
 from enum import StrEnum
 from typing import Literal, Union
 
@@ -25,10 +26,12 @@ class LedgerAccount(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
     def __repr__(self) -> str:
-        return f"{self.name} ({self.account_type}) - Sub: {self.sub}"
+        contra_str = " (Contra)" if self.contra else ""
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}{contra_str}"
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.account_type}) - Sub: {self.sub}"
+        contra_str = " (Contra)" if self.contra else ""
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}{contra_str}"
 
     def __eq__(self, other):
         if not isinstance(other, LedgerAccount):
@@ -41,6 +44,38 @@ class LedgerAccount(BaseModel):
 
     def __hash__(self):
         return hash((self.name, self.account_type, self.sub))
+
+    @classmethod
+    def from_string(cls, s: str):
+        """
+        Parse a string like 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp'
+        or 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp (Contra)'
+        and return an Account (or subclass) instance.
+        """
+        # Allow optional (Contra) at the end
+        pattern = r"^(.*?) \((.*?)\) - Sub: (.*?)(?: \(Contra\))?$"
+        match = re.match(pattern, s)
+        if not match:
+            raise ValueError(f"String does not match expected format: {s}")
+        name, account_type_str, sub = match.groups()
+        contra = s.strip().endswith("(Contra)")
+        account_type_str = account_type_str.strip()
+
+        # Convert string to AccountType enum
+        try:
+            account_type = AccountType(account_type_str)
+        except ValueError:
+            raise ValueError(f"Unknown account type: {account_type_str}")
+
+        # Try to instantiate the correct subclass based on account_type
+        for subclass in cls.__subclasses__():
+            if (
+                hasattr(subclass, "account_type")
+                and getattr(subclass, "account_type") == account_type
+            ):
+                return subclass(name=name.strip(), sub=sub.strip(), contra=contra)
+        # Fallback to base class if no subclass matches
+        return cls(name=name.strip(), account_type=account_type, sub=sub.strip(), contra=contra)
 
 
 # MARK: Asset Accounts
@@ -66,6 +101,7 @@ class AssetAccount(LedgerAccount):
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
         "Converted Hive Offset (-)",
+        "External Lightning Payments (-)"
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
