@@ -1,7 +1,8 @@
 import math
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -49,21 +50,21 @@ async def get_ledger_entries(
         cursor = await db_client.find(
             collection_name=collection_name,
             query=query,
-            projection={
-                "group_id": 1,
-                "timestamp": 1,
-                "description": 1,
-                "debit_amount": 1,
-                "debit_unit": 1,
-                "debit_conv": 1,
-                "credit_amount": 1,
-                "credit_unit": 1,
-                "credit_conv": 1,
-                "debit": 1,
-                "credit": 1,
-                "_id": 0,
-                "op": 1,
-            },
+            # projection={
+            #     "group_id": 1,
+            #     "timestamp": 1,
+            #     "description": 1,
+            #     "debit_amount": 1,
+            #     "debit_unit": 1,
+            #     "debit_conv": 1,
+            #     "credit_amount": 1,
+            #     "credit_unit": 1,
+            #     "credit_conv": 1,
+            #     "debit": 1,
+            #     "credit": 1,
+            #     "_id": 0,
+            #     "op": 1,
+            # },
             sort=[("timestamp", 1)],
         )
         async for entry in cursor:
@@ -789,6 +790,10 @@ async def get_account_balance(
             filter_by_account=account,
         )
 
+    if df.empty:
+        logger.warning(f"No transactions found for account {account.name} up to {as_of_date}.")
+        return pd.DataFrame()
+
     # Filter transactions for the account (debit or credit)
     debit_df = df[df["debit_name"] == account.name].copy()
     credit_df = df[df["credit_name"] == account.name].copy()
@@ -853,12 +858,36 @@ async def get_account_balance(
     return combined_df
 
 
+@dataclass
+class ConvertedSummary:
+    hive: float
+    hbd: float
+    usd: float
+    sats: float
+    msats: float
+
+
+@dataclass
+class UnitSummary:
+    final_balance: float
+    converted: ConvertedSummary
+
+
+@dataclass
+class AccountBalanceSummary:
+    unit_summaries: Dict[str, UnitSummary] = field(default_factory=dict)
+    total_usd: float = 0.0
+    total_sats: float = 0.0
+    line_items: List[str] = field(default_factory=list)
+    output_text: str = ""
+
+
 async def get_account_balance_printout(
     account: LedgerAccount,
     df: pd.DataFrame = pd.DataFrame(),
     full_history: bool = False,
     as_of_date: datetime | None = None,
-) -> str:
+) -> Tuple[str, AccountBalanceSummary]:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
     Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
@@ -886,6 +915,9 @@ async def get_account_balance_printout(
         full_history=full_history,
         as_of_date=as_of_date,
     )
+    if combined_df.empty:
+        logger.warning(f"No transactions found for account {account.name} up to {as_of_date}.")
+        return "No transactions found for this account up to today.", AccountBalanceSummary()
 
     # Group by unit (process debit_unit and credit_unit separately)
     units = set(combined_df["debit_unit"].dropna().unique()).union(
@@ -899,11 +931,17 @@ async def get_account_balance_printout(
     if combined_df.empty:
         output.append("No transactions found for this account up to today.")
         output.append("=" * max_width)
-        return "\n".join(output)
+        return "\n".join(output), AccountBalanceSummary()
 
     total_usd = 0.0
     total_sats = 0.0
     unit_balances = {unit: 0.0 for unit in units}
+
+    summary = AccountBalanceSummary()
+    summary.total_usd = 0.0
+    summary.total_sats = 0.0
+    summary.line_items = []
+    summary.unit_summaries = {}
 
     for unit in units:
         unit_df = combined_df[
@@ -923,10 +961,6 @@ async def get_account_balance_printout(
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
         if full_history:
-            output.append(
-                f"{'Timestamp':<20} {'Description':<45} {'Debit':>12} {'Credit':>12} {'Balance':>12}"
-            )
-            output.append("-" * 10)
             for _, row in unit_df.iterrows():
                 timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
                 description = truncate_text(row["description"], 45)
@@ -934,18 +968,16 @@ async def get_account_balance_printout(
                 credit = row["credit_amount"] if row["credit_unit"] == unit else 0.0
                 balance = row["running_balance"]
                 short_id = row.get("short_id", "")
-                # Convert to SATS for display if unit is MSATS
                 if unit.upper() == "MSATS":
                     debit = debit / conversion_factor
                     credit = credit / conversion_factor
                     balance = balance / conversion_factor
-                # Format with commas, no decimals for SATS, two decimals for others
                 debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
                 credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
                 balance_str = (
                     f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
                 )
-                output.append(
+                line = (
                     f"{timestamp:<20} "
                     f"{description:<45} "
                     f"{debit_str:>12} "
@@ -953,6 +985,8 @@ async def get_account_balance_printout(
                     f"{balance_str:>12} "
                     f"{short_id:>15}"
                 )
+                summary.line_items.append(line)
+                output.append(line)
 
         # Get the final balance for this unit and calculate converted values
         final_balance = unit_df["running_balance"].iloc[-1]
@@ -981,6 +1015,19 @@ async def get_account_balance_printout(
             total_usd_for_unit = conv_usd * factor
             total_sats_for_unit = conv_sats * factor
             total_msats = conv_msats * factor
+
+            summary.unit_summaries[unit] = UnitSummary(
+                final_balance=final_balance,
+                converted=ConvertedSummary(
+                    hive=total_hive,
+                    hbd=total_hbd,
+                    usd=total_usd_for_unit,
+                    sats=total_sats_for_unit,
+                    msats=total_msats,
+                ),
+            )
+            summary.total_usd += total_usd_for_unit
+            summary.total_sats += total_sats_for_unit
 
             output.append("-" * max_width)
             output.append(
@@ -1018,7 +1065,9 @@ async def get_account_balance_printout(
 
     output.append("=" * max_width + "\n")
 
-    return "\n".join(output)
+    summary.output_text = "\n".join(output)
+
+    return summary.output_text, summary
 
 
 async def list_all_accounts() -> List[LedgerAccount]:
