@@ -2,7 +2,8 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from pprint import pprint
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 
@@ -121,6 +122,8 @@ async def get_ledger_dataframe(
         if entry.debit and entry.credit:
             debit_modifier = -1 if entry.debit.contra else 1
             credit_modifier = -1 if entry.credit.contra else 1
+            debit_modifier = 1
+            credit_modifier = 1
 
             debit_amount = debit_modifier * entry.debit_amount
             debit_unit = entry.debit_unit.value if entry.debit_unit else None
@@ -324,7 +327,7 @@ async def generate_balance_sheet_pandas(
             balance_sheet[category][name][sub]["sats"] += amount
         historical_usd[category][name][sub] += usd_historical
 
-    # Step 5: Translate to USD and compute supplemental currencies
+    # Step 7: Translate to USD and supplemental currencies
     translated_values = {
         "Assets": defaultdict(dict),
         "Liabilities": defaultdict(dict),
@@ -816,6 +819,7 @@ async def get_account_balance(
             "debit_conv_usd",
             "debit_conv_sats",
             "debit_conv_msats",
+            "debit_contra",
         ]
     ].copy()
     credit_df = credit_df[
@@ -830,6 +834,7 @@ async def get_account_balance(
             "credit_conv_usd",
             "credit_conv_sats",
             "credit_conv_msats",
+            "credit_contra",
         ]
     ].copy()
 
@@ -923,7 +928,7 @@ async def get_account_balance_printout(
     units = set(combined_df["debit_unit"].dropna().unique()).union(
         set(combined_df["credit_unit"].dropna().unique())
     )
-    title_line = f"Balance for {account.name} (sub: {account.sub if account.sub else 'All'}) {account.account_type}"
+    title_line = f"Balance for {account}"
     output = ["=" * max_width]
     output.append(title_line)
     output.append("-" * max_width)
@@ -962,6 +967,12 @@ async def get_account_balance_printout(
         output.append("-" * 10)
         if full_history:
             for _, row in unit_df.iterrows():
+                contra_str = (
+                    "(-)"
+                    if (pd.notna(row["credit_contra"]) and row["credit_contra"])
+                    or (pd.notna(row["debit_contra"]) and row["debit_contra"])
+                    else "   "
+                )
                 timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
                 description = truncate_text(row["description"], 45)
                 debit = row["debit_amount"] if row["debit_unit"] == unit else 0.0
@@ -980,6 +991,7 @@ async def get_account_balance_printout(
                 line = (
                     f"{timestamp:<20} "
                     f"{description:<45} "
+                    f"{contra_str} "
                     f"{debit_str:>12} "
                     f"{credit_str:>12} "
                     f"{balance_str:>12} "
