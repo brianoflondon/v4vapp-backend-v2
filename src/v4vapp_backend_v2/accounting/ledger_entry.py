@@ -491,6 +491,9 @@ class LedgerEntry(BaseModel):
             1000 if self.credit_unit and self.credit_unit.value.upper() == "MSATS" else 1
         )
 
+        debit_contra_str = "-ve" if self.debit.contra else "   "
+        credit_contra_str = "-ve" if self.credit.contra else "   "
+
         # Format the amounts: SATS with no decimals and commas, others with 2 decimals
         debit_amount = self.debit_amount if self.debit_amount else 0.00
         credit_amount = self.credit_amount if self.credit_amount else 0.00
@@ -506,7 +509,10 @@ class LedgerEntry(BaseModel):
         else:
             formatted_debit_amount = f"{debit_amount:,.3f} {debit_display_unit}"
 
-        if credit_display_unit.upper() == "SATS" and (credit_amount / credit_conversion_factor) < 5:
+        if (
+            credit_display_unit.upper() == "SATS"
+            and (credit_amount / credit_conversion_factor) < 5
+        ):
             formatted_credit_amount = (
                 f"{credit_amount / credit_conversion_factor:,.3f} {credit_display_unit}"
             )
@@ -516,6 +522,9 @@ class LedgerEntry(BaseModel):
             )
         else:
             formatted_credit_amount = f"{credit_amount:,.3f} {credit_display_unit}"
+
+        formatted_credit_amount = f"{credit_contra_str} {formatted_credit_amount}"
+        formatted_debit_amount = f"{debit_contra_str} {formatted_debit_amount}"
 
         description = lightning_memo(self.description)
         if len(description) > 100:

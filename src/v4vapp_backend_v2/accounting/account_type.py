@@ -100,8 +100,8 @@ class AssetAccount(LedgerAccount):
         "Treasury Lightning",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
-        "Converted Hive Offset (-)",
-        "External Lightning Payments (-)"
+        "Converted Hive Offset",
+        "External Lightning Payments"
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
