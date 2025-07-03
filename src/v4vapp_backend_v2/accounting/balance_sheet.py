@@ -570,9 +570,12 @@ async def generate_balance_sheet_pandas(
             f"Balance Sheet is balanced. Assets {balance_sheet['Assets']['Total']['usd']} USD"
         )
     else:
-        logger.warning("Balance Sheet is NOT balanced.")
+        message = (
+            f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: {balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}"
+        )
+        logger.warning(f"Balance Sheet is NOT balanced. {message}")
         logger.warning(
-            f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: {balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}",
+            message,
             extra={"balance_sheet": balance_sheet},
         )
     return balance_sheet
