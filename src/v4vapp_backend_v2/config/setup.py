@@ -48,7 +48,6 @@ class LoggingConfig(BaseConfig):
     default_log_level: str = "DEBUG"
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
-    log_filename: Path = Path("v4vapp-backend-v2.log.jsonl")
     log_notification_silent: List[str] = []
     default_notification_bot_name: str = ""
 
@@ -589,16 +588,21 @@ class InternalConfig:
         return cls._instance
 
     def __init__(
-        self, bot_name: str = "", config_filename: str = DEFAULT_CONFIG_FILENAME, *args, **kwargs
+        self,
+        bot_name: str = "",
+        config_filename: str = DEFAULT_CONFIG_FILENAME,
+        log_filename: str = "app.log.jsonl",
+        *args,
+        **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            self._initialized = True    # Must set this to avoid re-initialization during setup
             logger.info(f"Config filename: {config_filename}")
             super().__init__()
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
-            self.setup_logging()
-            self._initialized = True
+            self.setup_logging(log_filename)
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -628,15 +632,15 @@ class InternalConfig:
             # exit the program with an error but no stack trace
             raise StartupFailure(ex)
 
-    def setup_logging(self):
+    def setup_logging(self, log_filename: str = "app.log") -> None:
         try:
             config_file = Path(BASE_LOGGING_CONFIG_PATH, self.config.logging.log_config_file)
             with open(config_file) as f_in:
                 config = json.load(f_in)
                 try:
-                    if self.config.logging.log_folder and self.config.logging.log_filename:
+                    if self.config.logging.log_folder and log_filename:
                         config["handlers"]["file_json"]["filename"] = str(
-                            Path(self.config.logging.log_folder, self.config.logging.log_filename)
+                            Path(self.config.logging.log_folder, log_filename)
                         )
                 except KeyError as ex:
                     print(f"KeyError in logging config no logfile set: {ex}")
