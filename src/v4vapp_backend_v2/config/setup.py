@@ -647,7 +647,7 @@ class InternalConfig:
 
         # Ensure log folder exists
         log_folder = self.config.logging.log_folder
-        log_folder.mkdir(exist_ok=True)
+        log_folder.mkdir(parents=True, exist_ok=True)
 
         # Apply the logging configuration from the JSON file
         logging.config.dictConfig(config)
@@ -662,13 +662,12 @@ class InternalConfig:
         # Start the queue handler listener if it exists and has a listener attribute
         queue_handler = logging.getHandlerByName("queue_handler")
         if queue_handler is not None:
-            # If you have a QueueListener, you should start it here.
-            # The handler itself does not have a listener attribute.
-            # You may need to manage the QueueListener instance separately.
-            # For now, just log that the queue handler was found.
             logger.info(
                 "Queue handler found; ensure QueueListener is started elsewhere if needed."
             )
+            queue_handler.listener.start()
+            atexit.register(queue_handler.listener.stop)
+
             try:
                 InternalConfig.notification_loop = asyncio.get_running_loop()
                 logger.info("Found running loop for setup logging")
@@ -678,6 +677,21 @@ class InternalConfig:
                     "Started new event loop for notification logging",
                     extra={"loop": InternalConfig.notification_loop.__dict__},
                 )
+
+            # # Get the handlers from the queue handler's configuration
+            # handlers = []
+            # for handler_name in config["handlers"]["queue_handler"]["handlers"]:
+            #     handler = logging.getHandlerByName(handler_name)
+            #     if handler:
+            #         handlers.append(handler)
+
+            # # Create and start the queue listener
+            # from logging.handlers import QueueListener
+            # self.queue_listener = QueueListener(
+            #     queue_handler.queue, *handlers, respect_handler_level=True
+            # )
+            # self.queue_listener.start()
+            # logger.info("QueueListener started successfully")
 
         # Set up the simple format string
         try:
