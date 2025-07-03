@@ -2,8 +2,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pprint import pprint
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -297,6 +296,9 @@ async def generate_balance_sheet_pandas(
         "Assets": defaultdict(dict),
         "Liabilities": defaultdict(dict),
         "Equity": defaultdict(dict),
+        "is_balanced": False,
+        "reporting_date": reporting_date,
+        "spot_rates": spot_rates,
     }
 
     # Step 4: Sum in native units and historical USD
@@ -306,7 +308,7 @@ async def generate_balance_sheet_pandas(
         "Equity": defaultdict(lambda: defaultdict(float)),
     }
 
-    for _, row in balance_df.iterrows():
+    for not_used, row in balance_df.iterrows():
         name, sub, account_type, unit = row["name"], row["sub"], row["account_type"], row["unit"]
         amount = row["amount_adj"]
         usd_historical = row["usd_adj"]
@@ -363,17 +365,17 @@ async def generate_balance_sheet_pandas(
 
                 # Update translated values
                 translated_values[category][account_name][sub] = {
-                    "usd": round(usd, 2),
-                    "hive": round(usd / spot_rates["hive_to_usd"], 2)
+                    "usd": round(usd, 5),
+                    "hive": round(usd / spot_rates["hive_to_usd"], 5)
                     if spot_rates["hive_to_usd"] != 0
                     else 0.0,
-                    "hbd": round(usd / spot_rates["hbd_to_usd"], 2)
+                    "hbd": round(usd / spot_rates["hbd_to_usd"], 5)
                     if spot_rates["hbd_to_usd"] != 0
                     else 0.0,
-                    "sats": round(usd / spot_rates["sats_to_usd"], 0)
+                    "sats": round(usd / spot_rates["sats_to_usd"], 5)
                     if spot_rates["sats_to_usd"] != 0
                     else 0.0,
-                    "msats": round(usd / spot_rates["msats_to_usd"], 0)
+                    "msats": round(usd / spot_rates["msats_to_usd"], 5)
                     if spot_rates["msats_to_usd"] != 0
                     else 0.0,
                 }
@@ -428,12 +430,12 @@ async def generate_balance_sheet_pandas(
                 else 0.0
             )
             balance_sheet[category][account_name]["Total"] = {
-                "usd": round(total_usd, 2),
-                "hive": round(total_hive, 2),
-                "hbd": round(total_hbd, 2),
-                "sats": round(total_sats, 0),
-                "msats": round(total_msats, 0),
-                "historical_usd": round(total_historical_usd, 2),
+                "usd": round(total_usd, 5),
+                "hive": round(total_hive, 5),
+                "hbd": round(total_hbd, 5),
+                "sats": round(total_sats, 5),
+                "msats": round(total_msats, 5),
+                "historical_usd": round(total_historical_usd, 5),
             }
         total_usd = sum(
             acc["Total"]["usd"] for acc in balance_sheet[category].values() if "Total" in acc
@@ -456,12 +458,12 @@ async def generate_balance_sheet_pandas(
             if "Total" in acc
         )
         balance_sheet[category]["Total"] = {
-            "usd": round(total_usd, 2),
-            "hive": round(total_hive, 2),
-            "hbd": round(total_hbd, 2),
-            "sats": round(total_sats, 0),
-            "msats": round(total_msats, 0),
-            "historical_usd": round(total_historical_usd, 2),
+            "usd": round(total_usd, 5),
+            "hive": round(total_hive, 5),
+            "hbd": round(total_hbd, 5),
+            "sats": round(total_sats, 5),
+            "msats": round(total_msats, 5),
+            "historical_usd": round(total_historical_usd, 5),
         }
 
     # Step 8: Calculate CTA
@@ -480,15 +482,15 @@ async def generate_balance_sheet_pandas(
     )
 
     balance_sheet["Equity"]["CTA"]["default"] = {
-        "usd": round(cta, 2),
-        "hive": round(cta / spot_rates["hive_to_usd"], 2)
+        "usd": round(cta, 5),
+        "hive": round(cta / spot_rates["hive_to_usd"], 5)
         if spot_rates["hive_to_usd"] != 0
         else 0.0,
-        "hbd": round(cta / spot_rates["hbd_to_usd"], 2) if spot_rates["hbd_to_usd"] != 0 else 0.0,
-        "sats": round(cta / spot_rates["sats_to_usd"], 0)
+        "hbd": round(cta / spot_rates["hbd_to_usd"], 5) if spot_rates["hbd_to_usd"] != 0 else 0.0,
+        "sats": round(cta / spot_rates["sats_to_usd"], 5)
         if spot_rates["sats_to_usd"] != 0
         else 0.0,
-        "msats": round(cta / spot_rates["msats_to_usd"], 0)
+        "msats": round(cta / spot_rates["msats_to_usd"], 5)
         if spot_rates["msats_to_usd"] != 0
         else 0.0,
     }
@@ -529,36 +531,36 @@ async def generate_balance_sheet_pandas(
         if sub != "Total" and isinstance(sub_acc, dict) and "msats" in sub_acc
     )
     balance_sheet["Equity"]["Total"] = {
-        "usd": round(total_usd, 2),
-        "hive": round(total_hive, 2),
-        "hbd": round(total_hbd, 2),
-        "sats": round(total_sats, 0),
-        "msats": round(total_msats, 0),
+        "usd": round(total_usd, 5),
+        "hive": round(total_hive, 5),
+        "hbd": round(total_hbd, 5),
+        "sats": round(total_sats, 5),
+        "msats": round(total_msats, 5),
     }
 
     balance_sheet["Total Liabilities and Equity"] = {
         "usd": round(
             balance_sheet["Liabilities"]["Total"]["usd"] + balance_sheet["Equity"]["Total"]["usd"],
-            2,
+            5,
         ),
         "hive": round(
             balance_sheet["Liabilities"]["Total"]["hive"]
             + balance_sheet["Equity"]["Total"]["hive"],
-            2,
+            5,
         ),
         "hbd": round(
             balance_sheet["Liabilities"]["Total"]["hbd"] + balance_sheet["Equity"]["Total"]["hbd"],
-            2,
+            5,
         ),
         "sats": round(
             balance_sheet["Liabilities"]["Total"]["sats"]
             + balance_sheet["Equity"]["Total"]["sats"],
-            0,
+            5,
         ),
         "msats": round(
             balance_sheet["Liabilities"]["Total"]["msats"]
             + balance_sheet["Equity"]["Total"]["msats"],
-            0,
+            5,
         ),
     }
 
@@ -583,10 +585,13 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
     Args:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
     """
+    tolerance_msats = 10_000  # tolerance of 10 sats.
+
     is_balanced = math.isclose(
-        balance_sheet["Assets"]["Total"]["usd"],
-        balance_sheet["Liabilities"]["Total"]["usd"] + balance_sheet["Equity"]["Total"]["usd"],
+        balance_sheet["Assets"]["Total"]["msats"],
+        balance_sheet["Liabilities"]["Total"]["msats"] + balance_sheet["Equity"]["Total"]["msats"],
         rel_tol=0.01,
+        abs_tol=tolerance_msats,
     )
     return is_balanced
 
@@ -1098,39 +1103,3 @@ async def list_all_accounts() -> List[LedgerAccount]:
         account = LedgerAccount.model_validate(doc)
         accounts.append(account)
     return accounts
-
-
-# async def get_conversion_adjustment(
-#     conversion_account: Account, as_of_date: datetime | None = None
-# ) -> Dict[str, float]:
-#     """
-#     Queries the ledger for conversion entries credited to Customer Deposits Hive,
-#     sums the credit_amounts for HIVE and HBD, and returns them as an adjustment.
-
-#     Returns:
-#         Dict[str, float]: A dictionary with keys "hive" and "hbd" representing the adjustments.
-#     """
-#     if not as_of_date:
-#         as_of_date = datetime.now(tz=timezone.utc)
-
-#     collection = await TrackedBaseModel.db_client.get_collection("ledger")
-#     query = {
-#         "group_id": {"$regex": ".*conversion"},
-#         "credit.name": {"$regex": f"^{conversion_account.name}"},
-#         "credit.sub": {"$regex": f"^{conversion_account.sub}$"} if conversion_account.sub else {},
-#         "timestamp": {"$lte": as_of_date},
-#     }
-#     cursor = collection.find(query)
-#     hive_total = 0.0
-#     hbd_total = 0.0
-#     async for doc in cursor:
-#         credit_unit = doc.get("credit_unit", "").lower()
-#         credit_amount = float(doc.get("credit_amount", 0))
-#         if credit_unit == "hive":
-#             hive_total += credit_amount
-#         elif credit_unit == "hbd":
-#             hbd_total += credit_amount
-#     return {
-#         "hive": hive_total,
-#         "hbd": hbd_total,
-#     }
