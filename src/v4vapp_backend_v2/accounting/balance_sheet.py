@@ -570,9 +570,7 @@ async def generate_balance_sheet_pandas(
             f"Balance Sheet is balanced. Assets {balance_sheet['Assets']['Total']['usd']} USD"
         )
     else:
-        message = (
-            f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: {balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}"
-        )
+        message = f"Assets: {balance_sheet['Assets']['Total']['usd']} != Liabilities + Equity: {balance_sheet['Liabilities']['Total']['usd']} + {balance_sheet['Equity']['Total']['usd']}"
         logger.warning(f"Balance Sheet is NOT balanced. {message}")
         logger.warning(
             message,
@@ -657,12 +655,7 @@ def balance_sheet_printout(
     formatted_total = f"${balance_sheet['Total Liabilities and Equity']['usd']:,.2f}"
     output.append(f"{'':<74} {formatted_total:>15}")
 
-    is_balanced = math.isclose(
-        balance_sheet["Assets"]["Total"]["usd"],
-        balance_sheet["Liabilities"]["Total"]["usd"] + balance_sheet["Equity"]["Total"]["usd"],
-        rel_tol=0.01,
-    )
-    if is_balanced:
+    if balance_sheet["is_balanced"]:
         output.append(f"\n{'The balance sheet is balanced.':^94}")
     else:
         output.append(f"\n{'******* The balance sheet is NOT balanced. ********':^94}")
@@ -772,12 +765,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
         f"{total.get('usd', 0):>12,.2f}"
     )
 
-    is_balanced = math.isclose(
-        balance_sheet["Assets"]["Total"]["usd"],
-        balance_sheet["Liabilities"]["Total"]["usd"] + balance_sheet["Equity"]["Total"]["usd"],
-        rel_tol=0.01,
-    )
-    if is_balanced:
+    if balance_sheet["is_balanced"]:
         output.append(f"\n{'The balance sheet is balanced.':^94}")
     else:
         output.append(f"\n{'******* The balance sheet is NOT balanced. ********':^94}")
