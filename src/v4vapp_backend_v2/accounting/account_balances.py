@@ -1,3 +1,4 @@
+from asyncio import TaskGroup
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
@@ -5,7 +6,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_type import LedgerAccount
-from v4vapp_backend_v2.accounting.balance_sheet import get_ledger_dataframe
+from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import list_all_accounts_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -43,6 +44,9 @@ class AccountBalanceSummary:
     unit_summaries: Dict[str, UnitSummary] = field(default_factory=dict)
     total_usd: float = 0.0
     total_sats: float = 0.0
+    total_hive: float = 0.0
+    total_hbd: float = 0.0
+    total_msats: float = 0.0
     line_items: List[str] = field(default_factory=list)
     output_text: str = ""
 
@@ -80,7 +84,10 @@ async def get_account_balance(
         )
 
     if df.empty:
-        logger.warning(f"No transactions found for account {account.name} up to {as_of_date}.")
+        logger.debug(
+            f"No transactions found for account {account.name} up to {as_of_date}.",
+            extra={"notification": False, "account": account.name, "as_of_date": as_of_date},
+        )
         return pd.DataFrame()
 
     # Filter transactions for the account (debit or credit)
@@ -183,7 +190,7 @@ async def get_account_balance_printout(
         as_of_date=as_of_date,
     )
     if combined_df.empty:
-        logger.warning(f"No transactions found for account {account.name} up to {as_of_date}.")
+        logger.info(f"No transactions found for account {account.name} up to {as_of_date}.")
         return "No transactions found for this account up to today.", AccountBalanceSummary()
 
     # Group by unit (process debit_unit and credit_unit separately)
@@ -302,6 +309,9 @@ async def get_account_balance_printout(
             )
             summary.total_usd += total_usd_for_unit
             summary.total_sats += total_sats_for_unit
+            summary.total_hive += total_hive
+            summary.total_hbd += total_hbd
+            summary.total_msats += total_msats
 
             output.append("-" * max_width)
             output.append(
@@ -354,3 +364,52 @@ async def list_all_accounts() -> List[LedgerAccount]:
         account = LedgerAccount.model_validate(doc)
         accounts.append(account)
     return accounts
+
+
+async def get_all_accounts(
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+) -> Dict[LedgerAccount, AccountBalanceSummary]:
+    """
+    Fetches the balance summaries for all accounts as of a specified date.
+
+    This asynchronous function retrieves all accounts from the ledger, computes their balances as of the given date,
+    and returns a dictionary mapping account identifiers to their respective balance summaries.
+
+        as_of_date (datetime, optional): The cutoff date for fetching account balances. Defaults to the current UTC datetime.
+
+        Dict[LedgerAccount, AccountBalanceSummary]: A dictionary where each key is an account identifier and each value is an
+        AccountBalanceSummary object representing the account's balance summary as of the specified date.
+
+    Raises:
+        Exception: Logs and skips any account for which balance computation fails.
+
+    """
+    accounts = await list_all_accounts()
+    ledger_df = await get_ledger_dataframe(
+        as_of_date=as_of_date,
+        filter_by_account=None,  # No specific account filter
+    )
+    async with TaskGroup() as tg:
+        tasks = {
+            account: tg.create_task(
+                get_account_balance_printout(
+                    account=account,
+                    df=ledger_df,
+                    full_history=False,
+                    as_of_date=as_of_date,
+                )
+            )
+            for account in accounts
+        }
+    result = {}
+    for account, task in tasks.items():
+        try:
+            output_text, summary = await task
+            summary.output_text = None  # Remove output_text from summary
+            result[account] = summary
+        except Exception as e:
+            logger.error(
+                f"Error processing account {account}: {e}",
+                extra={"notification": False, "account": account, "error": str(e)},
+            )
+    return result
