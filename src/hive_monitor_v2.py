@@ -718,7 +718,9 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig(config_filename=config_filename).config
+    CONFIG = InternalConfig(
+        config_filename=config_filename, log_filename="hive_monitor_v2.log.jsonl"
+    ).config
     global COMMAND_LINE_WATCH_ONLY
     global HIVE_DATABASE
     global HIVE_DATABASE_CONNECTION

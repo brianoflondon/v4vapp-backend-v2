@@ -403,7 +403,7 @@ def main(
     Returns:
         None
     """
-    _ = InternalConfig(config_filename=config_filename)
+    _ = InternalConfig(config_filename=config_filename, log_filename="db_monitor.log.jsonl")
     logger.info(
         f"{ICON} ✅ Database Monitor App. Started. Version: {__version__}",
         extra={"notification": True},

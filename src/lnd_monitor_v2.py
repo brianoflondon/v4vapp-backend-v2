@@ -1067,7 +1067,9 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig(config_filename=config_filename).config
+    CONFIG = InternalConfig(
+        config_filename=config_filename, log_filename="lnd_monitor_v2.log.jsonl"
+    ).config
     lnd_node = CONFIG.lnd_config.default
     icon = CONFIG.lnd_config.connections[lnd_node].icon
     if not lnd_node:
