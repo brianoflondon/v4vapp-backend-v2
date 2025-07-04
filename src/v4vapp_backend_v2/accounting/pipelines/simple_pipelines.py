@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, Mapping, Sequence
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.account_type import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
@@ -59,6 +59,7 @@ def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_type: LedgerType = LedgerType.UNSET,
+    age: timedelta | None = None,
 ) -> Mapping[str, Any]:
     """
     Generates a MongoDB query to filter documents by a specific account and date.
@@ -76,28 +77,65 @@ def filter_by_account_as_of_date_query(
     Returns:
         Dict[str, Any]: A dictionary representing the MongoDB query.
     """
-    if account:
-        query: Mapping[str, Any] = {
-            "timestamp": {"$lte": as_of_date},
-            "$or": [
-                {
-                    "debit.name": account.name,
-                    "debit.sub": account.sub if account.sub else "",
-                },
-                {
-                    "credit.name": account.name,
-                    "credit.sub": account.sub if account.sub else "",
-                },
-            ],
-        }
+    if age:
+        start_date = as_of_date - age
+        date_range_query = {"$gte": start_date, "$lte": as_of_date}
     else:
-        query = {
-            "timestamp": {"$lte": as_of_date},
-        }
+        date_range_query = {"$lte": as_of_date}
+
+    query: Mapping[str, Any] = {"timestamp": date_range_query}
+
+    if account:
+        query["$or"] = [
+            {
+                "debit.name": account.name,
+                "debit.sub": account.sub if account.sub else "",
+            },
+            {
+                "credit.name": account.name,
+                "credit.sub": account.sub if account.sub else "",
+            },
+        ]
+
     # Add ledger_type condition if provided
     if ledger_type != LedgerType.UNSET:
         query["ledger_type"] = ledger_type
     return query
+
+
+def filter_sum_credit_debit_pipeline(
+    account: LedgerAccount | None = None,
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    ledger_type: LedgerType = LedgerType.UNSET,
+    age: timedelta | None = None,
+) -> List[Mapping[str, Any]]:
+    query = filter_by_account_as_of_date_query(
+        account=account,
+        as_of_date=as_of_date,
+        ledger_type=ledger_type,
+        age=age,
+    )
+    pipeline: List[Mapping[str, Any]] = [
+        {"$match": query},  # Apply the filtering criteria
+        {
+            "$group": {
+                "_id": None,  # Group all documents together
+                # Sum fields from credit_conv
+                "credit_total_hive": {"$sum": "$credit_conv.hive"},
+                "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
+                "credit_total_sats": {"$sum": "$credit_conv.sats"},
+                "credit_total_msats": {"$sum": "$credit_conv.msats"},
+                "credit_total_usd": {"$sum": "$credit_conv.usd"},
+                # Sum fields from debit_conv
+                "debit_total_hive": {"$sum": "$debit_conv.hive"},
+                "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
+                "debit_total_sats": {"$sum": "$debit_conv.sats"},
+                "debit_total_msats": {"$sum": "$debit_conv.msats"},
+                "debit_total_usd": {"$sum": "$debit_conv.usd"},
+            }
+        },
+    ]
+    return pipeline
 
 
 def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:

@@ -1,54 +1,27 @@
 from asyncio import TaskGroup
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.account_type import LedgerAccount
+from v4vapp_backend_v2.accounting.account_type import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalanceSummary,
+    ConvertedSummary,
+    LightningSpendSummary,
+    UnitSummary,
+)
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import list_all_accounts_pipeline
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
+    filter_sum_credit_debit_pipeline,
+    list_all_accounts_pipeline,
+)
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
-
-
-@dataclass
-class ConvertedSummary:
-    hive: float
-    hbd: float
-    usd: float
-    sats: float
-    msats: float
-
-
-@dataclass
-class UnitSummary:
-    final_balance: float
-    converted: ConvertedSummary
-
-
-@dataclass
-class AccountBalanceSummary:
-    """
-    Represents a summary of account balances, including totals and detailed line items.
-
-    Attributes:
-        unit_summaries (Dict[str, UnitSummary]): A dictionary mapping unit names to their summaries.
-        total_usd (float): The total account balance in USD.
-        total_sats (float): The total account balance in satoshis.
-        line_items (List[str]): A list of line item descriptions related to the account balance.
-        output_text (str): A formatted string representation of the summary for output purposes.
-    """
-
-    unit_summaries: Dict[str, UnitSummary] = field(default_factory=dict)
-    total_usd: float = 0.0
-    total_sats: float = 0.0
-    total_hive: float = 0.0
-    total_hbd: float = 0.0
-    total_msats: float = 0.0
-    line_items: List[str] = field(default_factory=list)
-    output_text: str = ""
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
 
 async def get_account_balance(
@@ -393,18 +366,25 @@ async def get_all_accounts(
         as_of_date=as_of_date,
         filter_by_account=None,  # No specific account filter
     )
-    async with TaskGroup() as tg:
-        tasks = {
-            account: tg.create_task(
-                get_account_balance_printout(
-                    account=account,
-                    df=ledger_df,
-                    full_history=False,
-                    as_of_date=as_of_date,
+    try:
+        async with TaskGroup() as tg:
+            tasks = {
+                account: tg.create_task(
+                    get_account_balance_printout(
+                        account=account,
+                        df=ledger_df,
+                        full_history=False,
+                        as_of_date=as_of_date,
+                    )
                 )
-            )
-            for account in accounts
-        }
+                for account in accounts
+            }
+    except Exception as e:
+        logger.error(
+            f"Error creating tasks for accounts: {e}",
+            extra={"notification": False},
+        )
+        return {}
     result = {}
     for account, task in tasks.items():
         try:
@@ -417,3 +397,89 @@ async def get_all_accounts(
                 extra={"notification": False, "account": account, "error": str(e)},
             )
     return result
+
+
+async def get_account_lightning_spend(
+    account: LedgerAccount,
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta = timedelta(hours=4),
+) -> LightningSpendSummary:
+    """
+    Retrieves the lightning spend for a specific account as of a given date.
+
+    Args:
+        account (LedgerAccount): The account for which to retrieve the lightning spend.
+        as_of_date (datetime, optional): The date up to which to calculate the spend. Defaults to the current UTC time.
+
+    Returns:
+        Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
+    """
+    pipeline = filter_sum_credit_debit_pipeline(
+        account=account,
+        age=age,
+        ledger_type=LedgerType.LIGHTNING_OUT,
+    )
+    collection = await TrackedBaseModel.db_client.get_collection("ledger")
+    cursor = collection.aggregate(pipeline=pipeline)
+    ans = LightningSpendSummary(account=account, age=int(age.total_seconds()))
+    async for entry in cursor:
+        ans = LightningSpendSummary(
+            account=account,
+            age=int(age.total_seconds()),
+            total_hive=entry.get("credit_total_hive", 0.0),
+            total_hbd=entry.get("credit_total_hbd", 0.0),
+            total_usd=entry.get("credit_total_usd", 0.0),
+            total_sats=entry.get("credit_total_sats", 0.0),
+            total_msats=entry.get("credit_total_msats", 0.0),
+        )
+    return ans
+
+
+@dataclass
+class LightningLimitSummary:
+    """
+    Represents a summary of lightning spend limits for an account.
+
+    Attributes:
+        total_sats (int): Total lightning spend in satoshis.
+        total_msats (int): Total lightning spend in millisatoshis.
+        output_text (str): A formatted string representation of the lightning spend limits.
+    """
+
+    spend_summary: LightningSpendSummary
+    total_sats: float
+    total_msats: float
+    output_text: str
+    limit_ok: bool
+
+
+async def check_hive_lightning_limits(
+    hive_accname: str, extra_spend_sats: int = 0
+) -> List[LightningLimitSummary]:
+    account = LiabilityAccount(name="Customer Liability Hive", sub=hive_accname, contra=False)
+    v4v_config = V4VConfig()
+    lightning_rate_limits = v4v_config.data.lightning_rate_limits
+    ans = []
+    if not lightning_rate_limits:
+        logger.warning(
+            "Lightning rate limits are not configured. Skipping lightning spend checks.",
+            extra={"notification": False, "hive_accname": hive_accname},
+        )
+        return []
+
+    for limit in lightning_rate_limits:
+        age = timedelta(hours=limit.hours)
+        limit_timedelta = timedelta(hours=limit.hours)
+        lightning_spend = await get_account_lightning_spend(account=account, age=age)
+        limit_summary = LightningLimitSummary(
+            spend_summary=lightning_spend,
+            total_sats=lightning_spend.total_sats,
+            total_msats=lightning_spend.total_msats,
+            output_text=(
+                f"Lightning spend for {hive_accname} in the last {limit_timedelta} : "
+                f"{lightning_spend.total_sats:,.0f} SATS (limit: {limit.sats:,.0f} SATS)\n"
+            ),
+            limit_ok=(lightning_spend.total_sats + extra_spend_sats) <= limit.sats,
+        )
+        ans.append(limit_summary)
+    return ans

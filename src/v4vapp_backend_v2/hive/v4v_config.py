@@ -18,14 +18,14 @@ class V4VConfigRateLimits(BaseModel):
     """Class for holding the hourly rate limits for using the Lightning exchange"""
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
-    limit: int = Field(0, description="Limit in satoshis for the rate limit.")
+    sats: int = Field(0, description="Limit in satoshis for the rate limit.")
 
     def __repr__(self) -> str:
         return super().__repr__()
 
     def md_table(self, hive: float, HBD: float) -> str:
         return (
-            f"| {self.hours:>3.0f} hours | {self.limit:>7,.0f} | "
+            f"| {self.hours:>3.0f} hours | {self.sats:>7,.0f} | "
             f"{hive:>7,.1f} Hive | {HBD:>7,.1f} HBD |\n"
         )
 
@@ -60,9 +60,9 @@ class V4VConfigData(BaseModel):
     )
     lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            V4VConfigRateLimits(hours=4, limit=100_000 * 2),
-            V4VConfigRateLimits(hours=72, limit=100_000 * 4),
-            V4VConfigRateLimits(hours=168, limit=100_000 * 6),
+            V4VConfigRateLimits(hours=4, sats=10_000 * 2),
+            V4VConfigRateLimits(hours=72, sats=10_000 * 4),
+            V4VConfigRateLimits(hours=168, sats=10_000 * 6),
         ],
         description="Rate limits for Lightning transactions.",
     )
@@ -87,8 +87,8 @@ class V4VConfig:
 
     def __init__(self, server_accname: str = "", hive: Hive | None = None, *args, **kwargs):
         if not hasattr(self, "_initialized"):
-            super().__init__(*args, **kwargs)
             self._initialized = True
+            super().__init__(*args, **kwargs)
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()

@@ -4,6 +4,7 @@ from typing import Dict, Tuple
 from nectar.amount import Amount
 from nectar.hive import Hive
 
+from v4vapp_backend_v2.accounting.account_balances import check_hive_lightning_limits
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
@@ -115,19 +116,26 @@ async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> 
     return ""
 
 
-async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> bool:
+async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> str:
     """
-    Check if the user has sufficient limits to process the payment.
+    Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
 
-    Args:
-        pay_req (PayReq): The payment request object.
-        hive_transfer (TrackedTransfer): The hive transfer object.
+        pay_req (PayReq): The payment request object containing details of the Lightning payment.
+        hive_transfer (TrackedTransfer): The Hive transfer object representing the user's transfer details.
 
-    Returns:
-        bool: True if the user has sufficient limits, False otherwise.
+        str: An empty string if the user has sufficient limits; otherwise, a message describing the limit violation.
+
     """
-    # Placeholder for actual implementation
-    return True
+    limit_check = await check_hive_lightning_limits(
+        hive_accname=hive_transfer.from_account, extra_spend_sats=int(pay_req.value)
+    )
+    for limit in limit_check:
+        if not limit.limit_ok:
+            logger.warning(
+                limit.output_text, extra={"notification": False, **hive_transfer.log_extra}
+            )
+            return limit.output_text
+    return ""
 
 
 async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast: bool = False):
@@ -352,8 +360,12 @@ async def decode_incoming_and_checks(
     result = await check_amount_sent(hive_transfer, pay_req)
     if result:
         raise HiveToLightningError(result)
-    if not await check_user_limits(pay_req, hive_transfer):
-        raise HiveToLightningError("User limits exceeded for this payment request")
+
+    user_limits_text = await check_user_limits(pay_req, hive_transfer)
+    if user_limits_text:
+        raise HiveToLightningError(
+            f"{user_limits_text}"
+        )
 
     return pay_req, lnd_client
 

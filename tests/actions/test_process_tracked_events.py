@@ -15,7 +15,6 @@ import pytest
 from bson import json_util
 from nectar.hive import Hive
 
-from v4vapp_backend_v2.accounting.balance_sheet import get_account_balance_printout
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryDuplicateException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     HiveToLightningError,
