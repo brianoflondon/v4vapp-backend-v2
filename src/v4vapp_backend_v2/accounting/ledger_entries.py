@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_type import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
@@ -58,6 +58,9 @@ async def get_ledger_entries(
         )
         async for entry in cursor:
             try:
+                if entry.get("ledger_type") is None:
+                    # TODO: #123 This can be removed after database is cleared
+                    entry["ledger_type"] = LedgerType.UNSET.value
                 ledger_entry = LedgerEntry.model_validate(entry)
                 ledger_entries.append(ledger_entry)
             except Exception as e:
@@ -126,6 +129,7 @@ async def get_ledger_dataframe(
                     "group_id": entry.group_id,
                     "short_id": entry.short_id,
                     "description": entry.description,
+                    "ledger_type": entry.ledger_type,
                     "debit_amount": debit_amount,
                     "debit_unit": debit_unit,
                     "debit_conv_sats": debit_conv.sats,

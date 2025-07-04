@@ -9,6 +9,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryCreationException,
     LedgerEntryDuplicateException,
     LedgerEntryException,
+    LedgerType,
 )
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_lightning import (
@@ -409,83 +410,89 @@ async def process_transfer_op(
     ledger_entry.credit_amount = ledger_entry.debit_amount = hive_transfer.amount_decimal
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
 
+    # MARK: Server to Treasury
     if (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
-        # MARK: Server to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.description = f"Server to Treasury transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.SERVER_TO_TREASURY
+    # MARK: Treasury to Server
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == server_account
     ):
-        # MARK: Treasury to Server
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Server transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.TREASURY_TO_SERVER
+    # MARK: Funding to Treasury
     elif (
         hive_transfer.from_account == funding_account
         and hive_transfer.to_account == treasury_account
     ):
-        # MARK: Funding to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=funding_account
         )
         ledger_entry.description = f"Funding to Treasury transfer: {base_description}"
+    # MARK: Treasury to Funding
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == funding_account
     ):
-        # MARK: Treasury to Funding
         ledger_entry.debit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=treasury_account
         )
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=funding_account)
         ledger_entry.description = f"Treasury to Funding transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.TREASURY_TO_FUNDING
+    # MARK: Treasury to Exchange
     elif (
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
     ):
-        # MARK: Treasury to Exchange
         ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.TREASURY_TO_EXCHANGE
+        # MARK: Exchange to Treasury
     elif (
         hive_transfer.from_account == exchange_account
         and hive_transfer.to_account == treasury_account
     ):
-        # MARK: Exchange to Treasury
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
+        # MARK: Payments to special expense accounts if
     elif (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account in expense_accounts
     ):
-        # MARK: Payments to special expense accounts if
-        raise NotImplementedError("External expense accounts not implemented yet")
         # TODO: #110 Implement the system for expense accounts
+        raise NotImplementedError("External expense accounts not implemented yet")
+    # MARK: Server to customer account withdrawal
     elif hive_transfer.from_account == server_account:
-        # MARK: Server to customer account withdrawal
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
         ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
-
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
         if hive_transfer.extract_reply_short_id:
             follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
 
+    # MARK: Customer account to server account
     elif hive_transfer.to_account == server_account:
-        # MARK: Customer account to server account
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         follow_on_task = process_hive_to_lightning(hive_transfer=hive_transfer)
@@ -532,6 +539,7 @@ async def process_create_fill_order_op(
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
         ledger_entry.description = op.ledger_str
+        ledger_entry.ledger_type = LedgerType.LIMIT_ORDER_CREATE
         ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
         ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
         ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
@@ -559,6 +567,7 @@ async def process_create_fill_order_op(
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
         ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
         ledger_entry.description = op.ledger_str
+        ledger_entry.ledger_type = LedgerType.FILL_ORDER
         ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
         ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
         ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE

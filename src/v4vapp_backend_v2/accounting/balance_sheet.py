@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 import math
 from asyncio import TaskGroup
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict
 
@@ -9,26 +9,27 @@ import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
-from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
+
 @dataclass
-class BalanceSheetDict():
-    Assets: 'defaultdict[str, dict]'
-    Liabilities: 'defaultdict[str, dict]'
-    Equity: 'defaultdict[str, dict]'
+class BalanceSheetDict:
+    Assets: "defaultdict[str, dict]"
+    Liabilities: "defaultdict[str, dict]"
+    Equity: "defaultdict[str, dict]"
     is_balanced: bool
     as_of_date: datetime
 
 
 # MARK: Balance Sheet Generation
 async def generate_balance_sheet_pandas_from_accounts(
+    df: pd.DataFrame = pd.DataFrame(),
     as_of_date: datetime = datetime.now(tz=timezone.utc),
 ) -> Dict:
     async with TaskGroup() as tg:
         all_accounts_task = tg.create_task(get_all_accounts(as_of_date=as_of_date))
         profit_and_loss_task = tg.create_task(
-            generate_profit_and_loss_report(as_of_date=as_of_date)
+            generate_profit_and_loss_report(df=df, as_of_date=as_of_date)
         )
     all_accounts = await all_accounts_task
     profit_and_loss = await profit_and_loss_task

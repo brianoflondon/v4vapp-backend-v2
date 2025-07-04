@@ -104,6 +104,7 @@ async def get_account_balance(
         [
             "timestamp",
             "description",
+            "ledger_type",
             "short_id",
             "debit_amount",
             "debit_unit",
@@ -119,6 +120,7 @@ async def get_account_balance(
         [
             "timestamp",
             "description",
+            "ledger_type",
             "short_id",
             "credit_amount",
             "credit_unit",
@@ -179,7 +181,7 @@ async def get_account_balance_printout(
         str: A formatted string containing either the full transaction history or the closing balance
              for the specified account and sub-account up to the specified date.
     """
-    max_width = 125
+    max_width = 135
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
 
@@ -242,8 +244,9 @@ async def get_account_balance_printout(
                     or (pd.notna(row["debit_contra"]) and row["debit_contra"])
                     else "   "
                 )
-                timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M")
                 description = truncate_text(row["description"], 45)
+                ledger_type = row["ledger_type"]
                 debit = row["debit_amount"] if row["debit_unit"] == unit else 0.0
                 credit = row["credit_amount"] if row["credit_unit"] == unit else 0.0
                 balance = row["running_balance"]
@@ -258,13 +261,14 @@ async def get_account_balance_printout(
                     f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
                 )
                 line = (
-                    f"{timestamp:<20} "
+                    f"{timestamp:<18} "
                     f"{description:<45} "
                     f"{contra_str} "
                     f"{debit_str:>12} "
                     f"{credit_str:>12} "
                     f"{balance_str:>12} "
-                    f"{short_id:>15}"
+                    f"{short_id:>15} "
+                    f"{ledger_type:>11}"
                 )
                 summary.line_items.append(line)
                 output.append(line)

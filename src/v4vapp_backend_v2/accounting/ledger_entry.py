@@ -1,5 +1,6 @@
 import textwrap
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Any, ClassVar, Dict, Tuple
 
 from bson import ObjectId
@@ -103,12 +104,55 @@ async def update_ledger_entry_op(
     return ledger_entry, ans
 
 
+class LedgerType(StrEnum):
+    """
+    Enumeration of ledger entry types for accounting transactions.
+    value char length must be less than or equal to 10 chars
+
+    Attributes:
+        CONVERSION_H_L: Conversion from Hive to Lightning ("h_conv_l").
+        CONVERSION_L_H: Conversion from Lightning to Hive ("l_conv_h").
+        HIVE_CONTRA: Contra entry for Hive transactions ("h_contra").
+        HIVE_FEE: Fee applied to Hive transactions ("h_fee").
+        LIGHTNING_FEE: Fee applied to Lightning transactions ("l_fee").
+        LIGHTNING_CONTRA: Contra entry for Lightning transactions ("l_contra").
+        LIGHTNING_OUT: Outgoing Lightning transaction ("l_out").
+        LIGHTNING_IN: Incoming Lightning transaction ("l_in").
+        HIVE_IN: Incoming Hive transaction ("h_in").
+        HIVE_OUT: Outgoing Hive transaction ("h_out").
+    """
+
+    UNSET = "unset"  # Default value for unset ledger type
+    CONV_H_L = "h_conv_l"
+    CONTRA_H_L = "h_contra_l"
+
+    FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
+    FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
+
+    LIGHTNING_CONTRA = "l_contra"
+    LIGHTNING_OUT = "l_out"
+    LIGHTNING_IN = "l_in"
+    CUSTOMER_HIVE_IN = "cust_h_in"
+    CUSTOMER_HIVE_OUT = "cust_h_out"
+    SERVER_TO_TREASURY = "serv_to_t"  # Server to Treasury transfer
+    TREASURY_TO_SERVER = "t_to_serv"  # Treasury to Server transfer
+    FUNDING_TO_TREASURY = "fund_to_t"  # Funding to Treasury transfer
+    TREASURY_TO_FUNDING = "t_to_fund"  # Treasury to Funding transfer
+    TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
+    EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
+    LIMIT_ORDER_CREATE = "limit_or"
+    FILL_ORDER = "fill_or"
+
+
 class LedgerEntry(BaseModel):
     """
     Represents a ledger entry in the accounting system, supporting multi-currency transactions.
     """
 
     group_id: str = Field("", description="Group ID for the ledger entry")
+    ledger_type: LedgerType = Field(
+        default=LedgerType.UNSET, description="Transaction type of the ledger entry"
+    )
     timestamp: datetime = Field(
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
@@ -143,6 +187,34 @@ class LedgerEntry(BaseModel):
         self.op_type = get_tracked_any_type(self.op)
         if not LedgerEntry.db_client:
             LedgerEntry.db_client = TrackedBaseModel.db_client or get_mongodb_client_defaults()
+
+    # @field_validator("ledger_type", mode="before")
+    # @classmethod
+    # def convert_ledger_type(cls, value):
+    #     if isinstance(value, str):
+    #         try:
+    #             return LedgerType(value)  # Try direct conversion
+    #         except ValueError:
+    #             # Handle mapping of non-standard values
+    #             mapping = {
+    #                 "hive_conv": LedgerType.CONV_H_L,
+    #                 "fee_in": LedgerType.FEE_INCOME,
+    #                 # Add other mappings as needed
+    #             }
+    #             return mapping.get(value, LedgerType.UNSET)
+    #     return value
+
+    @property
+    def ledger_type_str(self) -> str:
+        """Returns the string representation of the ledger type.
+
+        This property is used to provide a human-readable format of the ledger type,
+        which can be useful for logging or displaying in user interfaces.
+
+        Returns:
+            str: The string representation of the ledger type.
+        """
+        return "".join(word.capitalize() for word in self.ledger_type.name.split("_"))
 
     @property
     def is_completed(self) -> bool:
@@ -242,7 +314,11 @@ class LedgerEntry(BaseModel):
         Returns:
             str: The group_id of the LedgerEntry.
         """
-        return self.op.short_id if self.op else self.group_id
+        if self.op and hasattr(self.op, "short_id"):
+            ans = f"{self.op.short_id}"
+        else:
+            ans = f"{self.group_id}"
+        return ans
 
     # MARK: DB Database Methods
 
@@ -532,8 +608,9 @@ class LedgerEntry(BaseModel):
             description = "\n".join(textwrap.wrap(description, width=100))
         entry = (
             f"\n"
-            f"J/E NUMBER: {self.group_id or '#####'} {self.short_id:>12}\n"
-            f"DATE\n{formatted_date}\n\n"
+            f"J/E NUMBER  : {self.group_id or '#####'}\n"
+            f"LEDGER TYPE : {self.ledger_type_str}\n"
+            f"{formatted_date}\n\n"
             f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
             f"{'-' * 100}\n"
             f"{debit_account_with_type:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"

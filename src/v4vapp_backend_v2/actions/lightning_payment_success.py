@@ -8,7 +8,7 @@ from v4vapp_backend_v2.accounting.account_type import (
     LiabilityAccount,
     RevenueAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     calculate_hive_return_change,
     lightning_payment_sent,
@@ -85,8 +85,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     value=conversion_debit_amount,
                     quote=quote,
                 ).conversion
+                ledger_type = LedgerType.CONV_H_L
                 conversion_ledger_entry = LedgerEntry(
-                    group_id=f"{payment.group_id}_conversion",
+                    ledger_type=ledger_type,
+                    group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {hive_transfer.to_account}",
@@ -108,8 +110,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ledger_entries_list.append(conversion_ledger_entry)
 
                 # MARK: 3 Contra Reconciliation Entry
+                ledger_type = LedgerType.CONTRA_H_L
                 contra_h_conversion_ledger_entry = LedgerEntry(
-                    group_id=f"{payment.group_id}_h_contra",
+                    ledger_type=ledger_type,
+                    group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
@@ -133,6 +137,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ledger_entries_list.append(contra_h_conversion_ledger_entry)
 
                 # MARK: 4 Fee Income
+                ledger_type = LedgerType.FEE_INCOME
                 fee_credit_conv = CryptoConversion(
                     conv_from=Currency.MSATS,
                     value=hive_transfer.fee_conv.msats,
@@ -144,7 +149,8 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 )
 
                 fee_ledger_entry_hive = LedgerEntry(
-                    group_id=f"{payment.group_id}_h_fee",
+                    ledger_type=ledger_type,
+                    group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"Fee Lightning {hive_transfer.from_account} {cost_of_payment_msat / 1000:,.0f} sats",
@@ -166,7 +172,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ledger_entries_list.append(fee_ledger_entry_hive)
 
                 # MARK: 5 Fulfill Main Payment Obligation
-
+                ledger_type = LedgerType.LIGHTNING_OUT
                 outgoing_debit_amount = conversion_credit_amount - fee_debit_amount_hive
                 outgoing_conv = CryptoConversion(
                     conv_from=hive_transfer.unit,
@@ -174,7 +180,8 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     quote=quote,
                 ).conversion
                 outgoing_ledger_entry = LedgerEntry(
-                    group_id=f"{payment.group_id}_outgoing",
+                    ledger_type=ledger_type,
+                    group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"Allocate outgoing {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
@@ -196,9 +203,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ledger_entries_list.append(outgoing_ledger_entry)
 
                 # MARK: 6 Send Lightning Payment
-
+                ledger_type = LedgerType.LIGHTNING_CONTRA
                 external_payment_ledger_entry = LedgerEntry(
-                    group_id=f"{payment.group_id}_external_payment",
+                    ledger_type=ledger_type,
+                    group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=payment.timestamp,
                     op=payment,
                     description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
@@ -304,9 +312,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                         value=payment.fee_msat,
                         quote=quote,
                     ).conversion
-
+                    ledger_type = LedgerType.FEE_EXPENSE
                     fee_ledger_entry_sats = LedgerEntry(
-                        group_id=f"{payment.group_id}_l_fee",
+                        ledger_type=ledger_type,
+                        group_id=f"{payment.group_id}-{ledger_type.value}",
                         timestamp=payment.timestamp,
                         op=payment,
                         description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
