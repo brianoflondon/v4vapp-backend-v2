@@ -15,6 +15,7 @@ async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
+    filter_by_ledger_type: LedgerType = LedgerType.UNSET,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date, optionally filtered by account.
@@ -38,7 +39,9 @@ async def get_ledger_entries(
           corresponds to the specified account name and sub-account.
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
-    query = filter_by_account_as_of_date_query(account=filter_by_account, as_of_date=as_of_date)
+    query = filter_by_account_as_of_date_query(
+        account=filter_by_account, as_of_date=as_of_date, ledger_type=filter_by_ledger_type
+    )
     ledger_entries = []
     if not TrackedBaseModel.db_client:
         logger.error(

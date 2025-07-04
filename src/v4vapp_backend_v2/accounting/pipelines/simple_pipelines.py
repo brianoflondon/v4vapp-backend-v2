@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.account_type import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 
 
 def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
@@ -55,8 +56,10 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
 
 
 def filter_by_account_as_of_date_query(
-    account: LedgerAccount | None = None, as_of_date: datetime = datetime.now(tz=timezone.utc)
-) -> Dict[str, Any]:
+    account: LedgerAccount | None = None,
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    ledger_type: LedgerType = LedgerType.UNSET,
+) -> Mapping[str, Any]:
     """
     Generates a MongoDB query to filter documents by a specific account and date.
 
@@ -74,7 +77,7 @@ def filter_by_account_as_of_date_query(
         Dict[str, Any]: A dictionary representing the MongoDB query.
     """
     if account:
-        query = {
+        query: Mapping[str, Any] = {
             "timestamp": {"$lte": as_of_date},
             "$or": [
                 {
@@ -91,6 +94,9 @@ def filter_by_account_as_of_date_query(
         query = {
             "timestamp": {"$lte": as_of_date},
         }
+    # Add ledger_type condition if provided
+    if ledger_type != LedgerType.UNSET:
+        query["ledger_type"] = ledger_type
     return query
 
 
