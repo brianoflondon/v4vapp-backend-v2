@@ -12,7 +12,8 @@ from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     balance_sheet_printout,
-    generate_balance_sheet_pandas,
+
+    generate_balance_sheet_pandas_from_accounts,
     get_account_balance_printout,
     get_ledger_entries,
     list_all_accounts,
@@ -298,7 +299,7 @@ async def test_complete_dev_database():
     for ledger_entry in ledger_entries:
         print(ledger_entry)
 
-    balance_sheet = await generate_balance_sheet_pandas()
+    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
     print(balance_sheet_all_currencies_printout(balance_sheet))
     print(balance_sheet_printout(balance_sheet))
 

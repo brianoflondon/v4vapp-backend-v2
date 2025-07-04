@@ -19,7 +19,7 @@ from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     balance_sheet_printout,
-    generate_balance_sheet_pandas,
+    generate_balance_sheet_pandas_from_accounts,
     get_account_balance_printout,
     get_ledger_dataframe,
     list_all_accounts,
@@ -239,8 +239,8 @@ async def test_balance_sheet_steps_hive_ops():
             for ledger_entry in ledger_entries:
                 print(ledger_entry.print_journal_entry())
             df = await get_ledger_dataframe()
-            balance_sheet_pandas = await generate_balance_sheet_pandas(
-                df, reporting_date=datetime.now(tz=timezone.utc)
+            balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+                df, as_of_date=datetime.now(tz=timezone.utc)
             )
             all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
             balance_sheet_print = balance_sheet_printout(
@@ -283,7 +283,9 @@ async def test_process_tracked_and_balance_sheet():
     await drop_collection_and_user("conn_1", "test_db", "test_user")
     as_of_date = datetime.now(tz=timezone.utc)
     df = await test_fill_ledger_database_from_mongodb_dump()
-    balance_sheet_pandas = await generate_balance_sheet_pandas(df=df, reporting_date=as_of_date)
+    balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+        df=df, as_of_date=as_of_date
+    )
 
     all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
     print(all_currencies)
@@ -362,7 +364,9 @@ async def test_process_hive_ops_invoices():
     await fill_rates_db()
     as_of_date = datetime.now(tz=timezone.utc)
     df = await test_fill_ledger_database_from_mongodb_dump()
-    balance_sheet_pandas = await generate_balance_sheet_pandas(df=df, reporting_date=as_of_date)
+    balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+        df=df, as_of_date=as_of_date
+    )
 
     for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
         print(op_tracked.log_str)

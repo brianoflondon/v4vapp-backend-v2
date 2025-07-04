@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from pymongo.errors import OperationFailure
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas, generate_balance_sheet_pandas_from_accounts
+from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.process_tracked_events import (

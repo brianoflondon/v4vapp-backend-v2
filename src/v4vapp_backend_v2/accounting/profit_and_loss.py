@@ -129,9 +129,6 @@ async def generate_profit_and_loss_report(
         .reset_index()
     )
 
-    # Debug: Print pl_df to verify signs
-    print(pl_df.to_string())
-
     # Initialize P&L report
     pl_report = {
         "Revenue": defaultdict(dict),
