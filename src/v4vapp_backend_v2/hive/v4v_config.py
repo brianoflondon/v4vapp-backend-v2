@@ -60,9 +60,9 @@ class V4VConfigData(BaseModel):
     )
     lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            V4VConfigRateLimits(hours=4, sats=10_000 * 2),
-            V4VConfigRateLimits(hours=72, sats=10_000 * 4),
-            V4VConfigRateLimits(hours=168, sats=10_000 * 6),
+            V4VConfigRateLimits(hours=4, sats=200_000 * 2),
+            V4VConfigRateLimits(hours=72, sats=200_000 * 4),
+            V4VConfigRateLimits(hours=168, sats=200_000 * 6),
         ],
         description="Rate limits for Lightning transactions.",
     )
