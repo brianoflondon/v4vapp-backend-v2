@@ -596,13 +596,13 @@ class InternalConfig:
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            self._initialized = True  # Must set this to avoid re-initialization during setup
             super().__init__()
             logger.info(f"Config filename: {config_filename}")
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
-            self._initialized = True  # Must set this to avoid re-initialization during setup
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -619,16 +619,16 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = safe_load(f_in)
             self.config_filename = config_filename
-            print(f"Config file found: {config_file}")
+            logger.info(f"Config file found: {config_file}")
         except FileNotFoundError as ex:
-            print(f"Config file not found: {ex}")
+            logger.error(f"Config file not found: {ex}")
             raise ex
 
         try:
             self.config = Config.model_validate(config)
         except ValueError as ex:
-            print("Invalid configuration:")
-            print(ex)
+            logger.error("Invalid configuration:")
+            logger.error(ex)
             # exit the program with an error but no stack trace
             raise StartupFailure(ex)
 

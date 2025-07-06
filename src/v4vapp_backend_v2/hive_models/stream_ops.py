@@ -10,7 +10,11 @@ from nectarapi.exceptions import NumRetriesReached
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_blockchain_instance,
+    get_good_nodes,
+    get_hive_client,
+)
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
@@ -69,6 +73,8 @@ async def stream_ops_async(
 
     """
     hive = hive or get_hive_client()
+    good_nodes = get_good_nodes()
+    hive.set_default_nodes(good_nodes)
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
@@ -213,6 +219,11 @@ async def stream_ops_async(
                 )
             current_node = hive.rpc.url
             hive.rpc.next()
+            if current_node == hive.rpc.url:
+                good_nodes = get_good_nodes()
+                hive.set_default_nodes(good_nodes)
+                blockchain = get_blockchain_instance(hive_instance=hive)
+
             logger.info(
                 f"{start_block:,} Switching {current_node} -> {hive.rpc.url} no_preview",
                 extra={"notification": True, "error_code": "stream_restart"},
