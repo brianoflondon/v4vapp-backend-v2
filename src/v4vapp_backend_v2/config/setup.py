@@ -163,6 +163,7 @@ class HiveRoles(StrEnum):
     treasury = "treasury"
     funding = "funding"
     exchange = "exchange"
+    customer = "customer"
 
 
 class HiveAccountConfig(BaseConfig):
@@ -177,7 +178,7 @@ class HiveAccountConfig(BaseConfig):
     """
 
     name: str = ""
-    role: HiveRoles = HiveRoles.server
+    role: HiveRoles = HiveRoles.customer
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
