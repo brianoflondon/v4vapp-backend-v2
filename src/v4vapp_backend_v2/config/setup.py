@@ -596,13 +596,13 @@ class InternalConfig:
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
-            self._initialized = True    # Must set this to avoid re-initialization during setup
-            logger.info(f"Config filename: {config_filename}")
             super().__init__()
+            logger.info(f"Config filename: {config_filename}")
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
+            self._initialized = True  # Must set this to avoid re-initialization during setup
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
