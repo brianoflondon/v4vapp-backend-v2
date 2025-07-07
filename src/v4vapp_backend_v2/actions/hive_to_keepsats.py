@@ -104,6 +104,8 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(conversion_ledger_entry)
+    # NOTE: The Treasury Lightning account now holds converted sats but in reality these are
+    # Probably need a contra asset account for the Treasury Lightning account to track the conversion
 
     # MARK: 3 Contra Asset Account
 
@@ -120,7 +122,7 @@ async def hive_to_keepsats_deposit(
         debit_amount=amount_to_deposit_before_fee.amount,
         debit_conv=amount_to_deposit_before_fee_conv,
         credit=AssetAccount(
-            name="Converted Hive Offset",
+            name="Converted Keepsats Offset",
             sub=hive_transfer.to_account,  # This is the Server
             contra=True,
         ),
@@ -151,7 +153,7 @@ async def hive_to_keepsats_deposit(
         debit_conv=fee_debit_conv,
         credit=RevenueAccount(
             name="Fee Income Keepsats",
-            sub=hive_transfer.to_account,  # This is the Server
+            sub="keepsats",  # This is the Server
         ),
         credit_unit=Currency.MSATS,
         credit_amount=amount_to_deposit_before_fee_conv.msats_fee,

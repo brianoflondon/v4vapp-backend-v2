@@ -101,6 +101,7 @@ class AssetAccount(LedgerAccount):
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
         "Converted Hive Offset",
+        "Converted Keepsats Offset",
         "External Lightning Payments",
         "Keepsats Lightning Movements",
     ] = Field(..., description="Specific asset account name")

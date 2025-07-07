@@ -380,7 +380,7 @@ async def get_all_accounts(
                 for account in accounts
             }
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Error creating tasks for accounts: {e}",
             extra={"notification": False},
         )
