@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     cap_camel_case,
     check_time_diff,
@@ -18,6 +17,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     sanitize_markdown_v1,
     seconds_only,
     snake_case,
+    timestamp_inc,
 )
 
 
@@ -348,3 +348,24 @@ def test_check_time_diff_large_time_difference():
     assert 3599 <= result.total_seconds() <= 3601, (
         f"Expected ~3600s, got {result.total_seconds()}s"
     )
+
+
+def test_timestamp_inc():
+    # Test incrementing a timestamp by 1 second
+    base_time = datetime(2023, 10, 1, 12, 0, 0, tzinfo=timezone.utc)
+    incremented_time = timestamp_inc(base_time, inc=timedelta(seconds=1))
+    expected_time = base_time + timedelta(seconds=1)
+    assert next(incremented_time) == expected_time, (
+        f"Expected {expected_time}, got {incremented_time}"
+    )
+
+    # Test incrementing a timestamp with microseconds
+    base_time_with_micro = datetime(2023, 10, 1, 12, 0, 0, 500000, tzinfo=timezone.utc)
+    incremented_time_with_micro = timestamp_inc(base_time_with_micro, inc=timedelta(seconds=1))
+    expected_time_with_micro = base_time_with_micro + timedelta(seconds=1)
+    assert next(incremented_time_with_micro) == expected_time_with_micro, (
+        f"Expected {expected_time_with_micro}, got {incremented_time_with_micro}"
+    )
+    inc_time = timestamp_inc(base_time_with_micro, inc=timedelta(seconds=0.01))
+    for i in range(0, 100):
+        print(f"Increment {i}: {next(inc_time)}")

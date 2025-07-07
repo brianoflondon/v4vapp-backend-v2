@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Generator
 
 
 def snake_case(name: str) -> str:
@@ -485,3 +486,25 @@ def find_short_id(text: str) -> str | None:
     if match:
         return match.group(1)
     return None
+
+
+def timestamp_inc(
+    start_time: datetime, inc: timedelta = timedelta(seconds=0.01)
+) -> Generator[datetime, None, None]:
+    """
+    Increment a timestamp by a given timedelta.
+
+    Args:
+        start_time (datetime): The initial timestamp.
+        inc (timedelta): The increment to apply.
+
+    Returns:
+        datetime: The incremented timestamp.
+    """
+    if start_time is None:
+        start_time = datetime.now(tz=timezone.utc)
+
+    current_time = start_time
+    while True:
+        current_time += inc
+        yield current_time

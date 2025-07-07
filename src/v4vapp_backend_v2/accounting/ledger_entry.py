@@ -110,21 +110,26 @@ class LedgerType(StrEnum):
     value char length must be less than or equal to 10 chars
 
     Attributes:
-        CONVERSION_H_L: Conversion from Hive to Lightning ("h_conv_l").
-        CONVERSION_L_H: Conversion from Lightning to Hive ("l_conv_h").
-        HIVE_CONTRA: Contra entry for Hive transactions ("h_contra").
-        HIVE_FEE: Fee applied to Hive transactions ("h_fee").
-        LIGHTNING_FEE: Fee applied to Lightning transactions ("l_fee").
-        LIGHTNING_CONTRA: Contra entry for Lightning transactions ("l_contra").
-        LIGHTNING_OUT: Outgoing Lightning transaction ("l_out").
-        LIGHTNING_IN: Incoming Lightning transaction ("l_in").
-        HIVE_IN: Incoming Hive transaction ("h_in").
-        HIVE_OUT: Outgoing Hive transaction ("h_out").
+        - UNSET: Default value for unset ledger type
+        - CONV_H_L: Conversion from Hive to Lightning
+        - CONTRA_H_L: Contra entry for Hive to Lightning conversion
+        - CONV_L_H: Conversion from Lightning to Hive
+        - CONTRA_L_H: Contra entry for Lightning to Hive conversion
+        - HIVE_FEE: Fee applied to Hive transactions
+        - LIGHTNING_FEE: Fee applied to Lightning transactions
+        - LIGHTNING_CONTRA: Contra entry for Lightning transactions
+        - LIGHTNING_OUT: Outgoing Lightning transaction
+        - LIGHTNING_IN: Incoming Lightning transaction
+        - HIVE_IN: Incoming Hive transaction
+        - HIVE_OUT: Outgoing Hive transaction
     """
 
     UNSET = "unset"  # Default value for unset ledger type
-    CONV_H_L = "h_conv_l"
-    CONTRA_H_L = "h_contra_l"
+    CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
+    CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
+    DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
+    CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
+    CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions

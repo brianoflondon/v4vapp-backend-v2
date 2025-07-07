@@ -101,7 +101,8 @@ class AssetAccount(LedgerAccount):
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
         "Converted Hive Offset",
-        "External Lightning Payments"
+        "External Lightning Payments",
+        "Keepsats Lightning Movements",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
@@ -129,7 +130,7 @@ class LiabilityAccount(LedgerAccount):
     Attributes:
         name (Literal): The specific name of the liability account. Must be one of:
             - "Customer Liability Hive"
-            - "Customer Liability Lightning"
+            - "Customer Liability Keepsats"
             - "Tax Liabilities"
         account_type (Literal[AccountType.LIABILITY]): The type of account, which is always set to `AccountType.LIABILITY`.
     Methods:
@@ -140,7 +141,7 @@ class LiabilityAccount(LedgerAccount):
 
     name: Literal[
         "Customer Liability Hive",
-        "Customer Liability Lightning",
+        "Customer Liability Keepsats",
         "Lightning Payment Clearing",
         "Owner Loan Payable (funding)",
         "Tax Liabilities",
@@ -195,9 +196,13 @@ class EquityAccount(LedgerAccount):
 
 # MARK: Revenue Accounts
 class RevenueAccount(LedgerAccount):
-    name: Literal["Fee Income Hive", "Fee Income Lightning", "DHF Income", "Other Income"] = Field(
-        ..., description="Specific revenue account name"
-    )
+    name: Literal[
+        "Fee Income Hive",
+        "Fee Income Lightning",
+        "Fee Income Keepsats",
+        "DHF Income",
+        "Other Income",
+    ] = Field(..., description="Specific revenue account name")
     account_type: Literal[AccountType.REVENUE] = Field(
         AccountType.REVENUE, description="Type of account"
     )

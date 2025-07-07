@@ -27,6 +27,7 @@
         "Muun",
         "mypy",
         "payreq",
+        "paywithsats",
         "protos",
         "pycache",
         "pyyaml",

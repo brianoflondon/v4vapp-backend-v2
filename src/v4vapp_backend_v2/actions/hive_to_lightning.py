@@ -6,14 +6,16 @@ from nectar.hive import Hive
 
 from v4vapp_backend_v2.accounting.account_balances import check_hive_lightning_limits
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
+from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
+from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice, msats_fee
+from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, get_hive_client, send_transfer
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
@@ -28,14 +30,6 @@ from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
-
-
-class HiveToLightningError(Exception):
-    """
-    Custom exception for Hive to Lightning errors.
-    """
-
-    pass
 
 
 class HiveRefundNeeded(HiveToLightningError):
@@ -138,7 +132,9 @@ async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> 
     return ""
 
 
-async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast: bool = False):
+async def process_hive_to_lightning(
+    hive_transfer: TrackedTransfer, nobroadcast: bool = False
+) -> None:
     """
     Process a transfer operation from Hive to Lightning.
 
@@ -225,6 +221,35 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
                 # MARK: 2. Pay Lightning Invoice
                 if hive_transfer.d_memo:
                     return_hive_message = ""
+                    # MARK: 2a. Keepsats checks
+                    if hive_transfer.keepsats:
+                        # This is a conversion of Hive/HBD into Lightning Keepsats
+                        logger.info(
+                            f"Detected keepsats operation in memo: {hive_transfer.d_memo}",
+                            extra={"notification": False, **hive_transfer.log_extra},
+                        )
+                        try:
+                            await convert_hive_to_keepsats(
+                                hive_transfer=hive_transfer, nobroadcast=nobroadcast
+                            )
+                            return
+                        except Exception as e:
+                            message = f"Error converting Hive to Keepsats: {e}"
+                            logger.error(
+                                message,
+                                extra={"notification": False, **hive_transfer.log_extra},
+                            )
+                            raise HiveToLightningError(message)
+                    elif hive_transfer.paywithsats:
+                        logger.info(
+                            f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
+                            extra={"notification": False, **hive_transfer.log_extra},
+                        )
+                        return_hive_message = (
+                            "Pay with sats operation detected, skipping processing."
+                        )
+                        raise HiveToLightningError(return_hive_message)
+
                     try:
                         pay_req, lnd_client = await decode_incoming_and_checks(
                             hive_transfer=hive_transfer
@@ -291,8 +316,8 @@ async def process_hive_to_lightning(hive_transfer: TrackedTransfer, nobroadcast:
 
                 else:
                     logger.warning(
-                        "Failed to decode Lightning invoice",
-                        extra={"notification": False, **hive_transfer.log_extra},
+                        f"Failed to take action on Hive Transfer {hive_transfer.group_id_p}",
+                        extra={"notification": True, **hive_transfer.log_extra},
                     )
 
 
@@ -363,9 +388,7 @@ async def decode_incoming_and_checks(
 
     user_limits_text = await check_user_limits(pay_req, hive_transfer)
     if user_limits_text:
-        raise HiveToLightningError(
-            f"{user_limits_text}"
-        )
+        raise HiveToLightningError(f"{user_limits_text}")
 
     return pay_req, lnd_client
 
@@ -520,46 +543,6 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
 
     return change_hive_amount
 
-    new_msat_fee = msats_fee(cost_of_payment_msat)
-    hive_transfer.conv.msats_fee = new_msat_fee
-    quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
-    hive_transfer.fee_conv = CryptoConversion(
-        conv_from=Currency.MSATS,
-        value=hive_transfer.conv.msats_fee,
-        quote=quote,
-    ).conversion
-
-    change_msat = (
-        hive_transfer.conv.msats - cost_of_payment_msat - hive_transfer.fee_conv.msats_fee
-    )
-    amount = Amount("0.001 HIVE")  # Default amount to return if no change is needed
-    if change_msat <= 1_100:
-        # If change is less than or equal to 1.1 satoshis, no change transaction is needed just
-        # notification minimum
-        if hive_transfer.conv.conv_from == Currency.HIVE:
-            amount = Amount("0.001 HIVE")
-        elif hive_transfer.conv.conv_from == Currency.HBD:
-            amount = Amount("0.001 HBD")
-    else:
-        match hive_transfer.conv.conv_from:
-            case Currency.HIVE:
-                amount_to_return = round((change_msat / 1000) / hive_transfer.conv.sats_hive, 3)
-                currency = "HIVE"
-            case Currency.HBD:
-                amount_to_return = round((change_msat / 1000) / hive_transfer.conv.sats_hbd, 3)
-                currency = "HBD"
-            case _:
-                raise HiveToLightningError(f"Unknown currency: {hive_transfer.conv.conv_from}")
-        amount = Amount(f"{amount_to_return:.3f} {currency}")
-    hive_transfer.change_amount = AmountPyd(amount=amount)
-
-    # The conversion details await hive_transfer.update_conv()will be set when the
-    logger.info(
-        f"Change detected for operation {hive_transfer.group_id_p}: {change_msat / 1_000:,.0f} sats {amount}",
-        extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
-    )
-    return amount
-
 
 def confirm_payment_details(op: TransferBase, payment: Payment) -> bool:
     """
@@ -576,6 +559,51 @@ def confirm_payment_details(op: TransferBase, payment: Payment) -> bool:
         if payment.custom_records.v4vapp_group_id == op.group_id_p:
             return True
     return False
+
+
+async def convert_hive_to_keepsats(
+    hive_transfer: TrackedTransfer, nobroadcast: bool = False
+) -> None:
+    """
+    Converts a Hive transfer to Keepsats.
+
+    Args:
+        hive_transfer (TrackedTransfer): The Hive transfer to convert.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcast. Defaults to False.
+
+    Returns:
+        Amount | None: The converted amount in Keepsats, or None if conversion fails.
+    """
+    try:
+        # Perform the conversion logic here
+        ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
+        for entry in ledger_entries:
+            logger.info(entry)
+            await entry.save()
+
+        trx = await return_hive_transfer(
+            hive_transfer=hive_transfer,
+            reason=reason,
+            amount=amount_to_return,
+            nobroadcast=nobroadcast,
+        )
+        if trx:
+            logger.info(
+                f"Successfully converted Hive to Keepsats: {hive_transfer.log_str}",
+                extra={"notification": True, **hive_transfer.log_extra},
+            )
+            return
+        else:
+            logger.error(
+                f"Failed to create transaction during Hive to Keepsats conversion: {hive_transfer.log_str}",
+                extra={"notification": False, **hive_transfer.log_extra},
+            )
+            raise HiveToLightningError("Failed to create transaction during conversion")
+
+        return None
+    except Exception as e:
+        logger.error(f"Failed to convert Hive to Keepsats: {e}")
+        return None
 
 
 async def return_hive_transfer(

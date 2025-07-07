@@ -199,6 +199,7 @@ def get_good_nodes() -> List[str]:
     Returns:
         List[str]: A list of endpoints for nodes with a score of 100.
     """
+    good_nodes: List[str] = []
     try:
         response = httpx.get(
             "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
@@ -216,7 +217,6 @@ def get_good_nodes() -> List[str]:
                 f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
             )
     except Exception as e:
-        good_nodes: List[str] = []
         with V4VAsyncRedis().sync_redis as redis_sync_client:
             good_nodes_json = redis_sync_client.get("good_nodes")
         if good_nodes_json and isinstance(good_nodes_json, str):
