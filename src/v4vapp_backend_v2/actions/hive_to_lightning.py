@@ -110,7 +110,7 @@ async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> 
     return ""
 
 
-async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> str:
+async def check_user_limits(extra_spend_sats: int, hive_transfer: TrackedTransfer) -> str:
     """
     Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
 
@@ -121,7 +121,7 @@ async def check_user_limits(pay_req: PayReq, hive_transfer: TrackedTransfer) -> 
 
     """
     limit_check = await check_hive_lightning_limits(
-        hive_accname=hive_transfer.from_account, extra_spend_sats=int(pay_req.value)
+        hive_accname=hive_transfer.from_account, extra_spend_sats=extra_spend_sats
     )
     for limit in limit_check:
         if not limit.limit_ok:
@@ -209,48 +209,55 @@ async def process_hive_to_lightning(
         )
         logger.warning(return_hive_message, extra={"notification": False})
         raise HiveToLightningError(return_hive_message)
-    async with hive_transfer:
-        server_account = hive_config.server_account.name
-        if hive_transfer.to_account == server_account:
-            # Process the operation
-            if await check_for_hive_to_lightning(hive_transfer):
-                logger.info(
-                    f"Processing operation to {server_account} ({hive_transfer.from_account} -> {hive_transfer.to_account})",
-                    extra={"notification": False, **hive_transfer.log_extra},
-                )
-                # MARK: 2. Pay Lightning Invoice
-                if hive_transfer.d_memo:
-                    return_hive_message = ""
-                    # MARK: 2a. Keepsats checks
-                    if hive_transfer.keepsats:
-                        # This is a conversion of Hive/HBD into Lightning Keepsats
-                        logger.info(
-                            f"Detected keepsats operation in memo: {hive_transfer.d_memo}",
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-                        try:
+    server_account = hive_config.server_account.name
+    if hive_transfer.to_account == server_account:
+        # Process the operation
+        if await check_for_hive_to_lightning(hive_transfer):
+            logger.info(
+                f"Processing operation to {server_account} ({hive_transfer.from_account} -> {hive_transfer.to_account})",
+                extra={"notification": False, **hive_transfer.log_extra},
+            )
+            # MARK: 2. Pay Lightning Invoice
+            if hive_transfer.d_memo:
+                return_hive_message = ""
+                # MARK: 2a. Keepsats checks
+                if hive_transfer.keepsats:
+                    # This is a conversion of Hive/HBD into Lightning Keepsats
+                    logger.info(
+                        f"Detected keepsats operation in memo: {hive_transfer.d_memo}",
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+                    user_limits_text = await check_user_limits(
+                        hive_transfer.conv.sats, hive_transfer
+                    )
+                    if user_limits_text:
+                        raise HiveToLightningError(f"{user_limits_text}")
+                    try:
+                        async with hive_transfer:
                             await convert_hive_to_keepsats(
                                 hive_transfer=hive_transfer, nobroadcast=nobroadcast
                             )
-                            return
-                        except Exception as e:
-                            message = f"Error converting Hive to Keepsats: {e}"
-                            logger.error(
-                                message,
-                                extra={"notification": False, **hive_transfer.log_extra},
-                            )
-                            raise HiveToLightningError(message)
-                    elif hive_transfer.paywithsats:
-                        logger.info(
-                            f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
+                        # Saves any reply added to the hive_transfer
+                        await hive_transfer.save()
+                        return
+
+                    except Exception as e:
+                        message = f"Error converting Hive to Keepsats: {e}"
+                        logger.error(
+                            message,
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
-                        return_hive_message = (
-                            "Pay with sats operation detected, skipping processing."
-                        )
-                        raise HiveToLightningError(return_hive_message)
+                        raise HiveToLightningError(message)
+                elif hive_transfer.paywithsats:
+                    logger.info(
+                        f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+                    return_hive_message = "Pay with sats operation detected, skipping processing."
+                    raise HiveToLightningError(return_hive_message)
 
-                    try:
+                try:
+                    async with hive_transfer:
                         pay_req, lnd_client = await decode_incoming_and_checks(
                             hive_transfer=hive_transfer
                         )
@@ -271,54 +278,54 @@ async def process_hive_to_lightning(
                                 **payment.log_extra,
                             },
                         )
-                        return
+                    return
 
-                    except HiveToLightningError as e:
-                        return_hive_message = f"Error processing Hive to Lightning operation: {e}"
-                        logger.warning(
-                            return_hive_message,
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-
-                    except LNDPaymentExpired as e:
-                        return_hive_message = f"Lightning payment expired: {e}"
-                        logger.warning(
-                            return_hive_message,
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-
-                    except LNDPaymentError as e:
-                        return_hive_message = f"Lightning payment error: {e}"
-                        logger.error(
-                            return_hive_message,
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-
-                    except Exception:
-                        logger.exception(
-                            "Unexpected error during Hive to Lightning processing",
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-
-                    finally:
-                        if return_hive_message:
-                            task = asyncio.create_task(
-                                return_hive_transfer(
-                                    hive_transfer=hive_transfer,
-                                    reason=return_hive_message,
-                                    nobroadcast=nobroadcast,
-                                )
-                            )
-                            task.add_done_callback(lambda t: handle_tasks([t]))
-                            task.set_name(
-                                f"Return Hive to Lightning transfer for {hive_transfer.group_id_p}"
-                            )
-
-                else:
+                except HiveToLightningError as e:
+                    return_hive_message = f"Error processing Hive to Lightning operation: {e}"
                     logger.warning(
-                        f"Failed to take action on Hive Transfer {hive_transfer.group_id_p}",
-                        extra={"notification": True, **hive_transfer.log_extra},
+                        return_hive_message,
+                        extra={"notification": False, **hive_transfer.log_extra},
                     )
+
+                except LNDPaymentExpired as e:
+                    return_hive_message = f"Lightning payment expired: {e}"
+                    logger.warning(
+                        return_hive_message,
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+
+                except LNDPaymentError as e:
+                    return_hive_message = f"Lightning payment error: {e}"
+                    logger.error(
+                        return_hive_message,
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+
+                except Exception:
+                    logger.exception(
+                        "Unexpected error during Hive to Lightning processing",
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+
+                finally:
+                    if return_hive_message:
+                        task = asyncio.create_task(
+                            return_hive_transfer(
+                                hive_transfer=hive_transfer,
+                                reason=return_hive_message,
+                                nobroadcast=nobroadcast,
+                            )
+                        )
+                        task.add_done_callback(lambda t: handle_tasks([t]))
+                        task.set_name(
+                            f"Return Hive to Lightning transfer for {hive_transfer.group_id_p}"
+                        )
+
+            else:
+                logger.warning(
+                    f"Failed to take action on Hive Transfer {hive_transfer.group_id_p}",
+                    extra={"notification": True, **hive_transfer.log_extra},
+                )
 
 
 async def decode_incoming_and_checks(
@@ -386,7 +393,7 @@ async def decode_incoming_and_checks(
     if result:
         raise HiveToLightningError(result)
 
-    user_limits_text = await check_user_limits(pay_req, hive_transfer)
+    user_limits_text = await check_user_limits(pay_req.value, hive_transfer)
     if user_limits_text:
         raise HiveToLightningError(f"{user_limits_text}")
 
@@ -592,6 +599,15 @@ async def convert_hive_to_keepsats(
                 f"Successfully converted Hive to Keepsats: {hive_transfer.log_str}",
                 extra={"notification": True, **hive_transfer.log_extra},
             )
+            reply_msat = hive_transfer.change_conv.msats if hive_transfer.change_conv else 0
+            hive_transfer.add_reply(
+                reply_id=trx.get("trx_id", ""),
+                reply_type="transfer",
+                reply_msat=reply_msat,
+                reply_error=None,
+                reply_message=f"Converted Hive to Keepsats: {hive_transfer.short_id}",
+            )
+            # hive_transfer will be saved to disk once the lock is released in the calling function
             return
         else:
             logger.error(

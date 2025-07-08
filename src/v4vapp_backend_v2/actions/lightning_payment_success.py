@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.accounting.account_type import (
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     ExpenseAccount,
     LiabilityAccount,

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.account_type import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
@@ -15,7 +15,7 @@ async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
-    filter_by_ledger_type: LedgerType = LedgerType.UNSET,
+    filter_by_ledger_types: list[LedgerType] | None = None,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date, optionally filtered by account.
@@ -40,7 +40,7 @@ async def get_ledger_entries(
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
     query = filter_by_account_as_of_date_query(
-        account=filter_by_account, as_of_date=as_of_date, ledger_type=filter_by_ledger_type
+        account=filter_by_account, as_of_date=as_of_date, ledger_types=filter_by_ledger_types
     )
     ledger_entries = []
     if not TrackedBaseModel.db_client:
@@ -61,9 +61,6 @@ async def get_ledger_entries(
         )
         async for entry in cursor:
             try:
-                if entry.get("ledger_type") is None:
-                    # TODO: #123 This can be removed after database is cleared
-                    entry["ledger_type"] = LedgerType.UNSET.value
                 ledger_entry = LedgerEntry.model_validate(entry)
                 ledger_entries.append(ledger_entry)
             except Exception as e:

@@ -7,7 +7,7 @@ from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.results import UpdateResult
 
-from v4vapp_backend_v2.accounting.account_type import AccountAny
+from v4vapp_backend_v2.accounting.ledger_account_classes import AccountAny
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger

@@ -3,7 +3,7 @@ from typing import Tuple
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.accounting.account_type import (
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     LiabilityAccount,
     RevenueAccount,
@@ -16,6 +16,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import timestamp_inc
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 async def hive_to_keepsats_deposit(
@@ -45,16 +46,23 @@ async def hive_to_keepsats_deposit(
         raise HiveToLightningError("Conversion details not found for operation")
 
     ledger_entries_list: list[LedgerEntry] = []
+    quote = await TrackedBaseModel.nearest_quote(timestamp=hive_transfer.timestamp)
 
     # The hive_transfer is already locked from within process_hive_to_lightning in hive_to_lightning.py
+    return_hive_amount: Amount = Amount("0.001 HIVE")  # Default return amount
     if hive_transfer.amount.unit == Currency.HIVE:
         return_hive_amount = Amount("0.001 HIVE")
     else:
         return_hive_amount = Amount("0.001 HBD")
+    hive_transfer.change_amount = AmountPyd(amount=return_hive_amount)
+    hive_transfer.change_conv = CryptoConversion(
+        conv_from=hive_transfer.amount.unit,
+        value=return_hive_amount.amount,
+        quote=quote,
+    ).conversion
 
     amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
 
-    quote = await TrackedBaseModel.nearest_quote(timestamp=hive_transfer.timestamp)
     timestamp = timestamp_inc(hive_transfer.timestamp, inc=timedelta(seconds=0.01))
 
     amount_to_deposit_before_fee_conv = CryptoConversion(
@@ -176,9 +184,7 @@ async def hive_to_keepsats_deposit(
         debit_unit=hive_transfer.unit,
         debit_amount=hive_deposit_value,
         debit_conv=amount_to_deposit_conv,
-        credit=LiabilityAccount(
-            name="Customer Liability Keepsats", sub=hive_transfer.from_account
-        ),
+        credit=LiabilityAccount(name="Customer Liability Hive", sub=hive_transfer.from_account),
         credit_unit=Currency.MSATS,
         credit_amount=amount_to_deposit_msats,
         credit_conv=amount_to_deposit_conv,
