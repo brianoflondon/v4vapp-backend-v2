@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-
 """
 Helper classes for accounting summaries, including account balances and lightning spend summaries.
 """
@@ -10,11 +8,11 @@ Helper classes for accounting summaries, including account balances and lightnin
 
 @dataclass
 class ConvertedSummary:
-    hive: float
-    hbd: float
-    usd: float
-    sats: float
-    msats: float
+    hive: float = 0.0
+    hbd: float = 0.0
+    usd: float = 0.0
+    sats: float = 0.0
+    msats: float = 0.0
 
 
 @dataclass
@@ -47,26 +45,25 @@ class AccountBalanceSummary:
 
 
 @dataclass
-class LightningSpendSummary:
+class LightningConvSummary(ConvertedSummary):
     """
-    Represents a summary of lightning spend, including total amounts and a formatted output.
+    Represents a summary of lightning conversion, including total amounts and a formatted output.
 
     Attributes:
-        total_hive (float): Total amount spent in Hive.
-        total_hbd (float): Total amount spent in HBD.
-        total_usd (float): Total amount spent in USD.
-        total_sats (float): Total amount spent in satoshis.
-        total_msats (float): Total amount spent in millisatoshis.
+        cust_id (str): The customer ID associated with the summary.
+        age (int): The age in seconds for filtering purposes.
+        by_ledger_type (Dict[str, ConvertedSummary]): A dictionary mapping ledger types to their
         output_text (str): A formatted string representation of the lightning spend summary.
     """
 
-    account: LedgerAccount | None = None
+    cust_id: str = ""
     age: int = 0  # Age in seconds, used for filtering
-    total_hive: float = 0.0
-    total_hbd: float = 0.0
-    total_usd: float = 0.0
-    total_sats: float = 0.0
-    total_msats: float = 0.0
+    # total_hive: float = 0.0
+    # total_hbd: float = 0.0
+    # total_usd: float = 0.0
+    # total_sats: float = 0.0
+    # total_msats: float = 0.0
+    by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
 
 
 @dataclass
@@ -80,7 +77,7 @@ class LightningLimitSummary:
         output_text (str): A formatted string representation of the lightning spend limits.
     """
 
-    spend_summary: LightningSpendSummary
+    spend_summary: LightningConvSummary
     total_sats: float
     total_msats: float
     output_text: str

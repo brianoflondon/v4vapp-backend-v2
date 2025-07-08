@@ -57,6 +57,7 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
 
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
+    cust_id: str | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
@@ -67,6 +68,9 @@ def filter_by_account_as_of_date_query(
     This function creates a query that filters documents based on the provided
     account details (`name` and optionally `sub`) and ensures that the `timestamp`
     field is less than or equal to the specified `as_of_date`.
+
+    If `account` is not given, returns all accounts.
+    If `age` is provided, it filters documents within the specified age range
 
     Args:
         account (Account): The account object containing `name` and optionally `sub`
@@ -97,6 +101,10 @@ def filter_by_account_as_of_date_query(
             },
         ]
 
+    # Add cust_id condition if provided
+    if cust_id:
+        query["cust_id"] = cust_id
+
     # Add ledger_types condition if provided and not empty
     if ledger_types:
         # If there's only one type, use simple equality
@@ -105,11 +113,13 @@ def filter_by_account_as_of_date_query(
         # If multiple types, use $in operator
         else:
             query["ledger_type"] = {"$in": ledger_types}
+
     return query
 
 
 def filter_sum_credit_debit_pipeline(
     account: LedgerAccount | None = None,
+    cust_id: str | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
@@ -137,6 +147,7 @@ def filter_sum_credit_debit_pipeline(
     """
     query = filter_by_account_as_of_date_query(
         account=account,
+        cust_id=cust_id,
         as_of_date=as_of_date,
         ledger_types=ledger_types,
         age=age,

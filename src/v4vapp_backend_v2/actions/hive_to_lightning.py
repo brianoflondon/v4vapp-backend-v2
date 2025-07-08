@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 from nectar.amount import Amount
 from nectar.hive import Hive
 
-from v4vapp_backend_v2.accounting.account_balances import check_hive_lightning_limits
+from v4vapp_backend_v2.accounting.account_balances import check_hive_conversion_limits
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
@@ -120,7 +120,7 @@ async def check_user_limits(extra_spend_sats: int, hive_transfer: TrackedTransfe
         str: An empty string if the user has sufficient limits; otherwise, a message describing the limit violation.
 
     """
-    limit_check = await check_hive_lightning_limits(
+    limit_check = await check_hive_conversion_limits(
         hive_accname=hive_transfer.from_account, extra_spend_sats=extra_spend_sats
     )
     for limit in limit_check:

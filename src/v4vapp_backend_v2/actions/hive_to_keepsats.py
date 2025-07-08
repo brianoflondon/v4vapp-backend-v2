@@ -174,7 +174,7 @@ async def hive_to_keepsats_deposit(
     )
     ledger_entries_list.append(fee_ledger_entry)
 
-    # MARK: 5 Convert to Keepsats in account
+    # MARK: 5 Convert to Keepsats in customer account into the Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
@@ -190,7 +190,7 @@ async def hive_to_keepsats_deposit(
         debit_unit=hive_transfer.unit,
         debit_amount=hive_deposit_value,
         debit_conv=amount_to_deposit_conv,
-        credit=LiabilityAccount(name="Customer Liability", sub=server_id),
+        credit=LiabilityAccount(name="Customer Liability", sub=cust_id),
         credit_unit=Currency.MSATS,
         credit_amount=amount_to_deposit_msats,
         credit_conv=amount_to_deposit_conv,

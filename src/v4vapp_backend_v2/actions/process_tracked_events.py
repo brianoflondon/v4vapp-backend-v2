@@ -340,7 +340,7 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
             collection_name=LedgerEntry.collection(), query={"group_id": op.group_id}
         )
         if existing_entry:
-            logger.warning(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
+            logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
             try:
                 ledger_entry = LedgerEntry.model_validate(existing_entry)
             except Exception as e:
@@ -494,7 +494,7 @@ async def process_transfer_op(
         if hive_transfer.extract_reply_short_id:
             follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
 
-    # MARK: Customer account to server account
+    # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:
         customer = hive_transfer.from_account
         server = hive_transfer.to_account

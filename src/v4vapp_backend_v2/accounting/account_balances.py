@@ -7,11 +7,11 @@ import pandas as pd
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
+    LightningConvSummary,
     LightningLimitSummary,
-    LightningSpendSummary,
     UnitSummary,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
@@ -19,7 +19,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     list_all_accounts_pipeline,
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
@@ -409,13 +409,13 @@ async def get_all_accounts(
     return result
 
 
-async def get_account_lightning_spend(
-    account: LedgerAccount,
+async def get_account_lightning_conv(
+    cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(hours=4),
-) -> LightningSpendSummary:
+) -> LightningConvSummary:
     """
-    Retrieves the lightning spend for a specific account as of a given date.
+    Retrieves the lightning conversion for a specific customer as of a given date.
     This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
     i.e. conversions from HIVE/HBD to SATS.
 
@@ -427,40 +427,65 @@ async def get_account_lightning_spend(
         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
     """
 
-    #TODO: issue: we should be tracking conversions only h_conv_k etc, but these happen within the
+    # TODO: issue: we should be tracking conversions only h_conv_k etc, but these happen within the
     # server account and not designated by the customer.
+    hive_config = InternalConfig().config.hive
+    server_account, treasury_account, funding_account, exchange_account = (
+        hive_config.all_account_names
+    )
+    # This account is the transit point through which all keepsats and conversions happen.
+    account = AssetAccount(
+        name="Customer Deposits Hive",
+        sub=server_account,
+    )
 
-    
     pipeline = filter_sum_credit_debit_pipeline(
         account=account,
+        cust_id=cust_id,
         age=age,
+        as_of_date=as_of_date,
         ledger_types=[
-            LedgerType.LIGHTNING_OUT,
-            LedgerType.DEPOSIT_KEEPSATS,
-            LedgerType.WITHDRAW_KEEPSATS,
+            LedgerType.CONV_HIVE_TO_KEEPSATS,
+            LedgerType.CONV_KEEPSATS_TO_HIVE,
+            LedgerType.CONV_HIVE_TO_LIGHTNING,
+            LedgerType.CONV_LIGHTNING_TO_HIVE,
         ],
     )
     collection = await TrackedBaseModel.db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
-    ans = LightningSpendSummary(account=account, age=int(age.total_seconds()))
+    ans = LightningConvSummary(
+        cust_id=cust_id,
+        age=int(age.total_seconds()),
+    )
     async for entry in cursor:
-        totals = entry.get("totals", {})
-        ans = LightningSpendSummary(
-            account=account,
+        totals_list = entry.get("total", [])
+        if not totals_list:
+            return ans
+        totals = totals_list[0]
+        ans = LightningConvSummary(
+            cust_id=cust_id,
             age=int(age.total_seconds()),
-            total_hive=totals.get("credit_total_hive", 0.0),
-            total_hbd=totals.get("credit_total_hbd", 0.0),
-            total_usd=totals.get("credit_total_usd", 0.0),
-            total_sats=totals.get("credit_total_sats", 0.0),
-            total_msats=totals.get("credit_total_msats", 0.0),
+            hive=totals.get("credit_total_hive", 0.0),
+            hbd=totals.get("credit_total_hbd", 0.0),
+            usd=totals.get("credit_total_usd", 0.0),
+            sats=totals.get("credit_total_sats", 0.0),
+            msats=totals.get("credit_total_msats", 0.0),
         )
+        for item in entry.get("by_ledger_type", []):  # Get as a list, not a dict
+            ledger_type = item.get("_id", "unknown")  # Get the ledger type from _id
+            ans.by_ledger_type[ledger_type] = ConvertedSummary(
+                hive=item.get("credit_total_hive", 0.0),
+                hbd=item.get("credit_total_hbd", 0.0),
+                usd=item.get("credit_total_usd", 0.0),
+                sats=item.get("credit_total_sats", 0.0),
+                msats=item.get("credit_total_msats", 0.0),
+            )
     return ans
 
 
-async def check_hive_lightning_limits(
+async def check_hive_conversion_limits(
     hive_accname: str, extra_spend_sats: int = 0
 ) -> List[LightningLimitSummary]:
-    account = LiabilityAccount(name="Customer Liability", sub=hive_accname, contra=False)
     v4v_config = V4VConfig()
     lightning_rate_limits = v4v_config.data.lightning_rate_limits
     ans = []
@@ -474,16 +499,16 @@ async def check_hive_lightning_limits(
     for limit in lightning_rate_limits:
         age = timedelta(hours=limit.hours)
         limit_timedelta = timedelta(hours=limit.hours)
-        lightning_spend = await get_account_lightning_spend(account=account, age=age)
+        lightning_spend = await get_account_lightning_conv(cust_id=hive_accname, age=age)
         limit_summary = LightningLimitSummary(
             spend_summary=lightning_spend,
-            total_sats=lightning_spend.total_sats,
-            total_msats=lightning_spend.total_msats,
+            total_sats=lightning_spend.sats,
+            total_msats=lightning_spend.msats,
             output_text=(
                 f"Lightning spend for {hive_accname} in the last {limit_timedelta} : "
-                f"{lightning_spend.total_sats:,.0f} SATS (limit: {limit.sats:,.0f} SATS)\n"
+                f"{lightning_spend.sats:,.0f} SATS (limit: {limit.sats:,.0f} SATS)\n"
             ),
-            limit_ok=(lightning_spend.total_sats + extra_spend_sats) <= limit.sats,
+            limit_ok=(lightning_spend.sats + extra_spend_sats) <= limit.sats,
         )
         ans.append(limit_summary)
     return ans

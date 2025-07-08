@@ -214,7 +214,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         logger.info(f"{ICON} Operation not implemented for {op.group_id}")
         return
     except LedgerEntryException as e:
-        logger.warning(f"{ICON} Ledger entry error: {e}", extra={"error": e})
+        logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
         return
     for ledger_entry in ledger_entries:
         logger.info("\n" + str(ledger_entry))

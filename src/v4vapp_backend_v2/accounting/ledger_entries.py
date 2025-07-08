@@ -15,6 +15,7 @@ async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
+    cust_id: str | None = None,
     filter_by_ledger_types: list[LedgerType] | None = None,
 ) -> list[LedgerEntry]:
     """
@@ -40,7 +41,10 @@ async def get_ledger_entries(
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
     query = filter_by_account_as_of_date_query(
-        account=filter_by_account, as_of_date=as_of_date, ledger_types=filter_by_ledger_types
+        account=filter_by_account,
+        cust_id=cust_id,
+        as_of_date=as_of_date,
+        ledger_types=filter_by_ledger_types,
     )
     ledger_entries = []
     if not TrackedBaseModel.db_client:

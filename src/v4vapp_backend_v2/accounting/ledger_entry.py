@@ -1,6 +1,7 @@
 import textwrap
 from datetime import datetime, timezone
 from enum import StrEnum
+from math import isclose
 from typing import Any, ClassVar, Dict, Tuple
 
 from bson import ObjectId
@@ -128,6 +129,8 @@ class LedgerType(StrEnum):
     UNSET = "unset"  # Default value for unset ledger type
 
     CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
+    CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
+
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
 
@@ -228,7 +231,9 @@ class LedgerEntry(BaseModel):
         Returns:
             str: The string representation of the ledger type.
         """
-        return "".join(word.capitalize() for word in self.ledger_type.name.split("_"))
+        ans = "".join(word.capitalize() for word in self.ledger_type.name.split("_"))
+        ans = f"{ans} ({self.ledger_type.value})"
+        return ans
 
     @property
     def is_completed(self) -> bool:
@@ -236,15 +241,29 @@ class LedgerEntry(BaseModel):
             return False
         if not self.debit_amount and not self.credit_amount:
             return False
-        if abs(self.debit_conv.msats - self.credit_conv.msats) > 1_000:
-            logger.error(
-                f"Debit and Credit Conversion mismatch: "
-                f"{self.debit_conv.msats} vs {self.credit_conv.msats}",
-                extra={"notification": False},
-            )
+        if message := self.credit_debit_balance_str:
+            logger.error(message, extra={"notification": False, **self.log_extra})
             return False
-
         return True
+
+    @property
+    def credit_debit_balance_str(self) -> str:
+        """
+        Returns a message indicating a mismatch between debit and credit conversion amounts if
+        their values differ by more than a specified tolerance.
+
+        Returns:
+            str: An error message detailing the mismatch between debit and credit conversions,
+            including group ID and ledger type, if the amounts differ by more than 10 msats.
+            Returns an empty string if the amounts are within the tolerance.
+        """
+        if not isclose(self.debit_conv.msats, self.credit_conv.msats, rel_tol=0.1, abs_tol=10):
+            message = (
+                f"Debit and Credit Conversion mismatch {self.group_id} {self.ledger_type_str}: "
+                f"{self.debit_conv.msats} vs {self.credit_conv.msats}"
+            )
+            return message
+        return ""
 
     @property
     def credit_debit(self) -> tuple[LedgerAccountAny | None, LedgerAccountAny | None]:
@@ -620,10 +639,12 @@ class LedgerEntry(BaseModel):
         if len(description) > 100:
             # Split description into lines at word boundaries, max 100 chars per line
             description = "\n".join(textwrap.wrap(description, width=100))
+        if self.credit_debit_balance_str:
+            description += f"{description}\n{self.credit_debit_balance_str}"
         entry = (
             f"\n"
             f"J/E NUMBER  : {self.group_id or '#####'}\n"
-            f"LEDGER TYPE : {self.ledger_type_str}\n"
+            f"LEDGER TYPE : {self.ledger_type_str:<40} CUSTOMER_ID : {self.cust_id:<20}\n"
             f"{formatted_date}\n\n"
             f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
             f"{'-' * 100}\n"
