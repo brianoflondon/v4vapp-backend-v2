@@ -130,9 +130,7 @@ class LiabilityAccount(LedgerAccount):
     Liabilities INCREASE with a CREDIT and DECREASE with a DEBIT.
     Attributes:
         name (Literal): The specific name of the liability account. Must be one of:
-            - "Customer Liability Hive"
-            - "Customer Liability Keepsats"
-            - "Tax Liabilities"
+            - "Customer Liability"
         account_type (Literal[AccountType.LIABILITY]): The type of account, which is always set to `AccountType.LIABILITY`.
     Methods:
         __init__(name: str = "", sub: str = ""):
@@ -141,11 +139,8 @@ class LiabilityAccount(LedgerAccount):
     """
 
     name: Literal[
-        "Customer Liability Hive",
-        "Customer Liability Keepsats",
-        "Lightning Payment Clearing",
+        "Customer Liability",
         "Owner Loan Payable (funding)",
-        "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
         AccountType.LIABILITY, description="Type of account"
@@ -252,7 +247,7 @@ AccountAny = Union[
 if __name__ == "__main__":
     # Example usage
     asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
-    liability_account = LiabilityAccount(name="Customer Liability Hive", sub="Sub-account 2")
+    liability_account = LiabilityAccount(name="Customer Liability", sub="Sub-account 2")
     equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
     revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
     expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")

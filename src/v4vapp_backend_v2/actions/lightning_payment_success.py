@@ -168,7 +168,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     op=payment,
                     description=f"Fee Lightning {hive_transfer.from_account} {cost_of_payment_msat / 1000:,.0f} sats",
                     debit=LiabilityAccount(
-                        name="Customer Liability Hive",
+                        name="Customer Liability",
                         sub=hive_transfer.from_account,  # This is the CUSTOMER
                     ),
                     debit_unit=hive_transfer.unit,
@@ -199,7 +199,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     op=payment,
                     description=f"Allocate outgoing {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
                     debit=LiabilityAccount(
-                        name="Customer Liability Hive",
+                        name="Customer Liability",
                         sub=hive_transfer.from_account,  # This is the CUSTOMER
                         contra=False,
                     ),

@@ -478,7 +478,7 @@ async def process_transfer_op(
     elif hive_transfer.from_account == server_account:
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
-        ledger_entry.debit = LiabilityAccount("Customer Liability Hive", sub=customer)
+        ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
@@ -490,7 +490,7 @@ async def process_transfer_op(
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.credit = LiabilityAccount("Customer Liability Hive", sub=customer)
+        ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
         # Now we need to see if we can take action for this invoice

@@ -153,7 +153,7 @@ async def hive_to_keepsats_deposit(
         op=hive_transfer,
         description=f"Fee for Keepsats deposit {hive_transfer.amount_str} to {amount_to_deposit_msats / 1000:,.0f} sats deposit",
         debit=LiabilityAccount(
-            name="Customer Liability Hive",
+            name="Customer Liability",
             sub=hive_transfer.from_account,  # This is the Customer Keepsats Lightning balance
         ),
         debit_unit=hive_transfer.unit,
@@ -178,13 +178,13 @@ async def hive_to_keepsats_deposit(
         op=hive_transfer,
         description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {hive_transfer.from_account}",
         debit=LiabilityAccount(
-            name="Customer Liability Hive",
+            name="Customer Liability",
             sub=hive_transfer.from_account,  # This is the CUSTOMER
         ),
         debit_unit=hive_transfer.unit,
         debit_amount=hive_deposit_value,
         debit_conv=amount_to_deposit_conv,
-        credit=LiabilityAccount(name="Customer Liability Hive", sub=hive_transfer.from_account),
+        credit=LiabilityAccount(name="Customer Liability", sub=hive_transfer.from_account),
         credit_unit=Currency.MSATS,
         credit_amount=amount_to_deposit_msats,
         credit_conv=amount_to_deposit_conv,

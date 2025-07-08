@@ -4,7 +4,6 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
@@ -12,6 +11,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LightningSpendSummary,
     UnitSummary,
 )
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
@@ -450,7 +450,7 @@ async def get_account_lightning_spend(
 async def check_hive_lightning_limits(
     hive_accname: str, extra_spend_sats: int = 0
 ) -> List[LightningLimitSummary]:
-    account = LiabilityAccount(name="Customer Liability Hive", sub=hive_accname, contra=False)
+    account = LiabilityAccount(name="Customer Liability", sub=hive_accname, contra=False)
     v4v_config = V4VConfig()
     lightning_rate_limits = v4v_config.data.lightning_rate_limits
     ans = []
