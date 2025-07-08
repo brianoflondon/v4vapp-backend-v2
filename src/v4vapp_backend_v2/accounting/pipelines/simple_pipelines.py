@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Sequence
 
-from v4vapp_backend_v2.accounting.account_type import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 
 
@@ -58,7 +58,7 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
-    ledger_type: LedgerType = LedgerType.UNSET,
+    ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
 ) -> Mapping[str, Any]:
     """
@@ -97,22 +97,27 @@ def filter_by_account_as_of_date_query(
             },
         ]
 
-    # Add ledger_type condition if provided
-    if ledger_type != LedgerType.UNSET:
-        query["ledger_type"] = ledger_type
+    # Add ledger_types condition if provided and not empty
+    if ledger_types:
+        # If there's only one type, use simple equality
+        if len(ledger_types) == 1:
+            query["ledger_type"] = ledger_types[0]
+        # If multiple types, use $in operator
+        else:
+            query["ledger_type"] = {"$in": ledger_types}
     return query
 
 
 def filter_sum_credit_debit_pipeline(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
-    ledger_type: LedgerType = LedgerType.UNSET,
+    ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
 ) -> List[Mapping[str, Any]]:
     query = filter_by_account_as_of_date_query(
         account=account,
         as_of_date=as_of_date,
-        ledger_type=ledger_type,
+        ledger_types=ledger_types,
         age=age,
     )
     pipeline: List[Mapping[str, Any]] = [
