@@ -7,7 +7,7 @@ from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.results import UpdateResult
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import AccountAny
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -15,6 +15,7 @@ from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defa
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
 class LedgerEntryException(Exception):
@@ -167,7 +168,7 @@ class LedgerEntry(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
     description: str = Field("", description="Description of the ledger entry")
-    cust_id: str = Field(
+    cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )
     debit_amount: float = Field(0.0, description="Amount of the debit transaction")
@@ -184,8 +185,8 @@ class LedgerEntry(BaseModel):
     credit_conv: CryptoConv = Field(
         default_factory=CryptoConv, description="Conversion details for the credit transaction"
     )
-    debit: AccountAny | None = Field(None, description="Account to be debited")
-    credit: AccountAny | None = Field(None, description="Account to be credited")
+    debit: LedgerAccountAny | None = Field(None, description="Account to be debited")
+    credit: LedgerAccountAny | None = Field(None, description="Account to be credited")
     op: TrackedAny = Field(..., description="Associated operation")
     op_type: str = Field(
         default="ledger_entry",
@@ -246,7 +247,7 @@ class LedgerEntry(BaseModel):
         return True
 
     @property
-    def credit_debit(self) -> tuple[AccountAny | None, AccountAny | None]:
+    def credit_debit(self) -> tuple[LedgerAccountAny | None, LedgerAccountAny | None]:
         """
         Returns a tuple of the credit and debit accounts.
         """
