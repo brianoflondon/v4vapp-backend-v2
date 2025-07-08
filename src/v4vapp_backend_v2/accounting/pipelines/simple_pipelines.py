@@ -114,32 +114,82 @@ def filter_sum_credit_debit_pipeline(
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
 ) -> List[Mapping[str, Any]]:
+    """
+    Creates a MongoDB aggregation pipeline to filter ledger entries by account, date, ledger types, and age,
+    then computes the sum of credit and debit amounts in various currencies.
+
+    The pipeline uses MongoDB's $facet operator to run two parallel aggregation pipelines:
+
+    by_ledger_type: Groups documents by their ledger_type field
+    overall: Groups all matching documents together
+    Each group calculates the same set of totals for credits and debits this is somewhat redundant as credis and
+    debits should always be equal, but it allows for more granular analysis if needed.
+
+    Args:
+        account (LedgerAccount | None): The ledger account to filter by. If None, no account filtering is applied.
+        as_of_date (datetime): The date up to which entries are considered. Defaults to the current UTC datetime.
+        ledger_types (list[LedgerType] | None): List of ledger types to filter by. If None, all types are included.
+        age (timedelta | None): Optional age filter for entries. If None, no age filtering is applied.
+
+    Returns:
+        List[Mapping[str, Any]]: A MongoDB aggregation pipeline that filters and groups ledger entries,
+        returning the total sums for credit and debit in HIVE, HBD, SATS, MSATS, and USD.
+    """
     query = filter_by_account_as_of_date_query(
         account=account,
         as_of_date=as_of_date,
         ledger_types=ledger_types,
         age=age,
     )
+
     pipeline: List[Mapping[str, Any]] = [
         {"$match": query},  # Apply the filtering criteria
         {
-            "$group": {
-                "_id": None,  # Group all documents together
-                # Sum fields from credit_conv
-                "credit_total_hive": {"$sum": "$credit_conv.hive"},
-                "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
-                "credit_total_sats": {"$sum": "$credit_conv.sats"},
-                "credit_total_msats": {"$sum": "$credit_conv.msats"},
-                "credit_total_usd": {"$sum": "$credit_conv.usd"},
-                # Sum fields from debit_conv
-                "debit_total_hive": {"$sum": "$debit_conv.hive"},
-                "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
-                "debit_total_sats": {"$sum": "$debit_conv.sats"},
-                "debit_total_msats": {"$sum": "$debit_conv.msats"},
-                "debit_total_usd": {"$sum": "$debit_conv.usd"},
+            "$facet": {
+                # Group by ledger_type
+                "by_ledger_type": [
+                    {
+                        "$group": {
+                            "_id": "$ledger_type",  # Group by ledger_type
+                            # Sum fields from credit_conv
+                            "credit_total_hive": {"$sum": "$credit_conv.hive"},
+                            "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
+                            "credit_total_sats": {"$sum": "$credit_conv.sats"},
+                            "credit_total_msats": {"$sum": "$credit_conv.msats"},
+                            "credit_total_usd": {"$sum": "$credit_conv.usd"},
+                            # Sum fields from debit_conv
+                            "debit_total_hive": {"$sum": "$debit_conv.hive"},
+                            "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
+                            "debit_total_sats": {"$sum": "$debit_conv.sats"},
+                            "debit_total_msats": {"$sum": "$debit_conv.msats"},
+                            "debit_total_usd": {"$sum": "$debit_conv.usd"},
+                        }
+                    }
+                ],
+                # Calculate overall totals across all matching documents
+                "total": [
+                    {
+                        "$group": {
+                            "_id": "total",  # Use "total" as identifier for overall group
+                            # Sum fields from credit_conv
+                            "credit_total_hive": {"$sum": "$credit_conv.hive"},
+                            "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
+                            "credit_total_sats": {"$sum": "$credit_conv.sats"},
+                            "credit_total_msats": {"$sum": "$credit_conv.msats"},
+                            "credit_total_usd": {"$sum": "$credit_conv.usd"},
+                            # Sum fields from debit_conv
+                            "debit_total_hive": {"$sum": "$debit_conv.hive"},
+                            "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
+                            "debit_total_sats": {"$sum": "$debit_conv.sats"},
+                            "debit_total_msats": {"$sum": "$debit_conv.msats"},
+                            "debit_total_usd": {"$sum": "$debit_conv.usd"},
+                        }
+                    }
+                ],
             }
         },
     ]
+
     return pipeline
 
 

@@ -125,9 +125,14 @@ class LedgerType(StrEnum):
     """
 
     UNSET = "unset"  # Default value for unset ledger type
+
     CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
+    CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
+
     DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
+    WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
+
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
 
@@ -162,6 +167,9 @@ class LedgerEntry(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
     description: str = Field("", description="Description of the ledger entry")
+    cust_id: str = Field(
+        "", description="Customer ID of any type associated with the ledger entry"
+    )
     debit_amount: float = Field(0.0, description="Amount of the debit transaction")
     debit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the debit transaction"

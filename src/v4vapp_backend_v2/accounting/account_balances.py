@@ -416,7 +416,7 @@ async def get_account_lightning_spend(
 ) -> LightningSpendSummary:
     """
     Retrieves the lightning spend for a specific account as of a given date.
-    This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS
+    This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
     i.e. conversions from HIVE/HBD to SATS.
 
     Args:
@@ -426,23 +426,33 @@ async def get_account_lightning_spend(
     Returns:
         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
     """
+
+    #TODO: issue: we should be tracking conversions only h_conv_k etc, but these happen within the
+    # server account and not designated by the customer.
+
+    
     pipeline = filter_sum_credit_debit_pipeline(
         account=account,
         age=age,
-        ledger_types=[LedgerType.LIGHTNING_OUT, LedgerType.DEPOSIT_KEEPSATS],
+        ledger_types=[
+            LedgerType.LIGHTNING_OUT,
+            LedgerType.DEPOSIT_KEEPSATS,
+            LedgerType.WITHDRAW_KEEPSATS,
+        ],
     )
     collection = await TrackedBaseModel.db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
     ans = LightningSpendSummary(account=account, age=int(age.total_seconds()))
     async for entry in cursor:
+        totals = entry.get("totals", {})
         ans = LightningSpendSummary(
             account=account,
             age=int(age.total_seconds()),
-            total_hive=entry.get("credit_total_hive", 0.0),
-            total_hbd=entry.get("credit_total_hbd", 0.0),
-            total_usd=entry.get("credit_total_usd", 0.0),
-            total_sats=entry.get("credit_total_sats", 0.0),
-            total_msats=entry.get("credit_total_msats", 0.0),
+            total_hive=totals.get("credit_total_hive", 0.0),
+            total_hbd=totals.get("credit_total_hbd", 0.0),
+            total_usd=totals.get("credit_total_usd", 0.0),
+            total_sats=totals.get("credit_total_sats", 0.0),
+            total_msats=totals.get("credit_total_msats", 0.0),
         )
     return ans
 
