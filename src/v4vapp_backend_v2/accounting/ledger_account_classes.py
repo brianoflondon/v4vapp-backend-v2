@@ -235,7 +235,7 @@ class ExpenseAccount(LedgerAccount):
         self.contra = contra
 
 
-AccountAny = Union[
+LedgerAccountAny = Union[
     AssetAccount,
     LiabilityAccount,
     EquityAccount,

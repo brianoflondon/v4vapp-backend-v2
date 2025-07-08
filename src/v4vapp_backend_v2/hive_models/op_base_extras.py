@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import AccountAny
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 # This list needs to be synced with op_all.py
@@ -143,9 +143,9 @@ class WatchPair(BaseModel):
 
     from_account: str | None = None
     to_account: str | None = None
-    ledger_debit: AccountAny | None = None
-    ledger_credit: AccountAny | None = None
-    ledger_fee: AccountAny | None = None
+    ledger_debit: LedgerAccountAny | None = None
+    ledger_credit: LedgerAccountAny | None = None
+    ledger_fee: LedgerAccountAny | None = None
 
     def __init__(self, **data):
         super().__init__(**data)
