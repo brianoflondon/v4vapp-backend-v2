@@ -1,7 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from v4vapp_backend_v2.accounting.account_type import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+
+"""
+Helper classes for accounting summaries, including account balances and lightning spend summaries.
+"""
 
 
 @dataclass
@@ -63,3 +67,21 @@ class LightningSpendSummary:
     total_usd: float = 0.0
     total_sats: float = 0.0
     total_msats: float = 0.0
+
+
+@dataclass
+class LightningLimitSummary:
+    """
+    Represents a summary of lightning spend limits for an account.
+
+    Attributes:
+        total_sats (int): Total lightning spend in satoshis.
+        total_msats (int): Total lightning spend in millisatoshis.
+        output_text (str): A formatted string representation of the lightning spend limits.
+    """
+
+    spend_summary: LightningSpendSummary
+    total_sats: float
+    total_msats: float
+    output_text: str
+    limit_ok: bool
