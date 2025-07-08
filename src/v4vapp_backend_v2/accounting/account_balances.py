@@ -1,14 +1,14 @@
 from asyncio import TaskGroup
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.account_type import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
+    LightningLimitSummary,
     LightningSpendSummary,
     UnitSummary,
 )
@@ -22,6 +22,12 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+
+UNIT_TOLERANCE = {
+    "HIVE": 0.001,
+    "HBD": 0.001,
+    "MSATS": 10,
+}
 
 
 async def get_account_balance(
@@ -175,6 +181,7 @@ async def get_account_balance_printout(
     title_line = f"Balance for {account}"
     output = ["=" * max_width]
     output.append(title_line)
+    output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
     output.append("-" * max_width)
 
     if combined_df.empty:
@@ -249,7 +256,8 @@ async def get_account_balance_printout(
         # Get the final balance for this unit and calculate converted values
         final_balance = unit_df["running_balance"].iloc[-1]
         unit_balances[unit] = final_balance
-        if final_balance != 0:
+
+        if abs(final_balance) > UNIT_TOLERANCE.get(unit, 0):
             # Use the conversion rates from the latest transaction for this unit
             latest_row = unit_df.iloc[-1]
             if latest_row["debit_unit"] == unit:
@@ -299,20 +307,22 @@ async def get_account_balance_printout(
                 f"{total_sats_for_unit:>12,.0f} SATS "
                 f"{total_msats:>16,.0f} msats"
             )
-            output.append("-" * max_width)
-            # Display final balance in SATS if unit is MSATS
-            display_balance = (
-                final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
-            )
-            balance_str = (
-                f"{display_balance:,.0f}"
-                if unit.upper() == "MSATS"
-                else f"{display_balance:>10,.3f}"
-            )
-            output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
+        else:
+            total_usd_for_unit = 0.0
+            total_sats_for_unit = 0.0
 
-            total_usd += total_usd_for_unit
-            total_sats += total_sats_for_unit
+        output.append("-" * max_width)
+        # Display final balance in SATS if unit is MSATS
+        display_balance = (
+            final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
+        )
+        balance_str = (
+            f"{display_balance:,.0f}" if unit.upper() == "MSATS" else f"{display_balance:>10,.3f}"
+        )
+        output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
+
+        total_usd += total_usd_for_unit
+        total_sats += total_sats_for_unit
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>19,.3f}")
@@ -406,6 +416,8 @@ async def get_account_lightning_spend(
 ) -> LightningSpendSummary:
     """
     Retrieves the lightning spend for a specific account as of a given date.
+    This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS
+    i.e. conversions from HIVE/HBD to SATS.
 
     Args:
         account (LedgerAccount): The account for which to retrieve the lightning spend.
@@ -417,7 +429,7 @@ async def get_account_lightning_spend(
     pipeline = filter_sum_credit_debit_pipeline(
         account=account,
         age=age,
-        ledger_type=LedgerType.LIGHTNING_OUT,
+        ledger_types=[LedgerType.LIGHTNING_OUT, LedgerType.DEPOSIT_KEEPSATS],
     )
     collection = await TrackedBaseModel.db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
@@ -433,24 +445,6 @@ async def get_account_lightning_spend(
             total_msats=entry.get("credit_total_msats", 0.0),
         )
     return ans
-
-
-@dataclass
-class LightningLimitSummary:
-    """
-    Represents a summary of lightning spend limits for an account.
-
-    Attributes:
-        total_sats (int): Total lightning spend in satoshis.
-        total_msats (int): Total lightning spend in millisatoshis.
-        output_text (str): A formatted string representation of the lightning spend limits.
-    """
-
-    spend_summary: LightningSpendSummary
-    total_sats: float
-    total_msats: float
-    output_text: str
-    limit_ok: bool
 
 
 async def check_hive_lightning_limits(
