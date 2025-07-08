@@ -3,7 +3,7 @@ from typing import Any, List, Union
 
 from pydantic import ValidationError
 
-from v4vapp_backend_v2.accounting.account_type import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
     LedgerEntryCreationException,

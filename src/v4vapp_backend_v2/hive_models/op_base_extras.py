@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.accounting.account_type import AccountAny
+from v4vapp_backend_v2.accounting.ledger_account_classes import AccountAny
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 # This list needs to be synced with op_all.py
