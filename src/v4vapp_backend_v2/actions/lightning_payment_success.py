@@ -88,6 +88,10 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 node_name = InternalConfig().config.lnd_config.default
                 ledger_entries_list = []
 
+                # Identify the customer and server
+                cust_id = hive_transfer.from_account
+                server_id = hive_transfer.to_account
+
                 # Note: step 1 of this process is receipt of Hive and that is handled in the
                 # hive_to_lightning.py file, so we start from step 2 here.
                 # MARK: 2 Conversion of Hive to Sats
@@ -100,11 +104,12 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 ).conversion
                 ledger_type = LedgerType.CONV_HIVE_TO_LIGHTNING
                 conversion_ledger_entry = LedgerEntry(
+                    cust_id=cust_id,
                     ledger_type=ledger_type,
                     group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=next(timestamp),
                     op=payment,
-                    description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {hive_transfer.to_account}",
+                    description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {server_id}",
                     debit=AssetAccount(
                         name="Treasury Lightning",
                         sub=node_name,  # This is the SERVER Lightning
@@ -114,7 +119,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     debit_conv=conversion_credit_debit_conv,
                     credit=AssetAccount(
                         name="Customer Deposits Hive",
-                        sub=hive_transfer.to_account,  # This is the Server
+                        sub=server_id,  # This is the Server
                     ),
                     credit_unit=hive_transfer.unit,
                     credit_amount=conversion_credit_amount.amount,
@@ -125,6 +130,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 # MARK: 3 Contra Reconciliation Entry
                 ledger_type = LedgerType.CONTRA_HIVE_TO_LIGHTNING
                 contra_h_conversion_ledger_entry = LedgerEntry(
+                    cust_id=cust_id,
                     ledger_type=ledger_type,
                     group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=next(timestamp),
@@ -132,7 +138,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
                     debit=AssetAccount(
                         name="Customer Deposits Hive",
-                        sub=hive_transfer.to_account,  # This is the Server
+                        sub=server_id,  # This is the Server
                         contra=False,  # This removes funds from the Server's Hive account
                     ),
                     debit_unit=hive_transfer.unit,
@@ -140,7 +146,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     debit_conv=conversion_credit_debit_conv,
                     credit=AssetAccount(
                         name="Converted Hive Offset",
-                        sub=hive_transfer.to_account,  # This is the Server
+                        sub=server_id,  # This is the Server
                         contra=True,  # Adds them to the Converted Hive Offset account
                     ),
                     credit_unit=hive_transfer.unit,
@@ -162,14 +168,15 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 )
 
                 fee_ledger_entry_hive = LedgerEntry(
+                    cust_id=cust_id,
                     ledger_type=ledger_type,
                     group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=next(timestamp),
                     op=payment,
-                    description=f"Fee Lightning {hive_transfer.from_account} {cost_of_payment_msat / 1000:,.0f} sats",
+                    description=f"Fee Lightning {cust_id} {cost_of_payment_msat / 1000:,.0f} sats",
                     debit=LiabilityAccount(
                         name="Customer Liability",
-                        sub=hive_transfer.from_account,  # This is the CUSTOMER
+                        sub=cust_id,  # This is the CUSTOMER
                     ),
                     debit_unit=hive_transfer.unit,
                     debit_amount=fee_debit_amount_hive.amount,
@@ -193,6 +200,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     quote=quote,
                 ).conversion
                 outgoing_ledger_entry = LedgerEntry(
+                    cust_id=cust_id,
                     ledger_type=ledger_type,
                     group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=next(timestamp),
@@ -200,7 +208,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     description=f"Allocate outgoing {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
                     debit=LiabilityAccount(
                         name="Customer Liability",
-                        sub=hive_transfer.from_account,  # This is the CUSTOMER
+                        sub=cust_id,  # This is the CUSTOMER
                         contra=False,
                     ),
                     debit_unit=hive_transfer.unit,
@@ -218,6 +226,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                 # MARK: 6 Send Lightning Payment
                 ledger_type = LedgerType.LIGHTNING_CONTRA
                 external_payment_ledger_entry = LedgerEntry(
+                    cust_id=cust_id,
                     ledger_type=ledger_type,
                     group_id=f"{payment.group_id}-{ledger_type.value}",
                     timestamp=next(timestamp),
@@ -248,6 +257,7 @@ async def payment_success(payment: Payment, nobroadcast: bool = False) -> list[L
                     ).conversion
                     ledger_type = LedgerType.FEE_EXPENSE
                     fee_ledger_entry_sats = LedgerEntry(
+                        cust_id=cust_id,
                         ledger_type=ledger_type,
                         group_id=f"{payment.group_id}-{ledger_type.value}",
                         timestamp=next(timestamp),
