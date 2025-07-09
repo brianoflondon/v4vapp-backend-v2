@@ -322,8 +322,11 @@ async def process_hive_to_lightning(
                         )
 
             else:
+                # Any transfer that ends up here will be recorded as a liability in the
+                # Customer Liability (Liability) account for the send of the transfer.
+                # TODO: #127 Consider turning all empty memo deposits into Keepsats automatically
                 logger.warning(
-                    f"Failed to take action on Hive Transfer {hive_transfer.group_id_p}",
+                    f"🟥 Failed to take action on Hive Transfer {hive_transfer.notification_str}",
                     extra={"notification": True, **hive_transfer.log_extra},
                 )
 
