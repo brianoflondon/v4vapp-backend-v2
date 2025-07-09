@@ -89,6 +89,7 @@ class TransferBase(OpBase):
         Args:
             hive_inst (Hive): An instance of the Hive class used for decoding the memo.
         """
+        #TODO: #125 BUG if an encrypted memo starts with a hash say #SATS it will mess up here.
         if not self.memo:
             self.d_memo = ""
             return
