@@ -11,7 +11,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LightningLimitSummary,
     UnitSummary,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
@@ -564,7 +564,7 @@ async def get_keepsats_balance(
     Returns:
         AccountBalanceSummary: An object containing the balance summary for the specified customer.
     """
-    account = AssetAccount(
+    account = LiabilityAccount(
         name="Customer Liability",
         sub=cust_id,
     )
