@@ -599,15 +599,16 @@ async def convert_hive_to_keepsats(
                 f"Successfully converted Hive to Keepsats: {hive_transfer.log_str}",
                 extra={"notification": True, **hive_transfer.log_extra},
             )
-            reply_msat = hive_transfer.change_conv.msats if hive_transfer.change_conv else 0
-            hive_transfer.add_reply(
-                reply_id=trx.get("trx_id", ""),
-                reply_type="transfer",
-                reply_msat=reply_msat,
-                reply_error=None,
-                reply_message=f"Converted Hive to Keepsats: {hive_transfer.short_id}",
-            )
-            # hive_transfer will be saved to disk once the lock is released in the calling function
+            # reply_msat = hive_transfer.change_conv.msats if hive_transfer.change_conv else 0
+            # hive_transfer.add_reply(
+            #     reply_id=trx.get("trx_id", ""),
+            #     reply_type="transfer",
+            #     reply_msat=reply_msat,
+            #     reply_error=None,
+            #     reply_message=f"Converted Hive to Keepsats: {hive_transfer.short_id}",
+            # )
+            # hive_transfer reply is set within the return_hive_transfer
+            # and will be saved to disk once the lock is released in the calling function
             return
         else:
             logger.error(
@@ -618,7 +619,7 @@ async def convert_hive_to_keepsats(
 
         return None
     except Exception as e:
-        logger.error(f"Failed to convert Hive to Keepsats: {e}")
+        logger.exception(f"Failed to convert Hive to Keepsats: {e}")
         return None
 
 
@@ -646,8 +647,12 @@ async def return_hive_transfer(
     """
     # Placeholder for actual implementation
     logger.info(
-        f"Repaying Hive to Lightning operation: {hive_transfer.log_str}",
+        f"Processing return/change for: {hive_transfer.log_str}",
         extra={"notification": False, **hive_transfer.log_extra},
+    )
+    logger.info(
+        f"Reason: {reason} amount: {amount}",
+        extra={"reason": reason, "amount": amount, "nobroadcast": nobroadcast},
     )
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
 
@@ -699,9 +704,8 @@ async def return_hive_transfer(
                 reply_error=None,
                 reply_message=reason,
             )
-            ans = await hive_transfer.save()
             logger.info(
-                f"Updated Hive transfer with reply: {ans}",
+                f"Updated Hive transfer with reply: {hive_transfer.replies[-1]}",
                 extra={"notification": False, **hive_transfer.log_extra},
             )
             return trx
