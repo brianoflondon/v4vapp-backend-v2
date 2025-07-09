@@ -29,7 +29,7 @@
     },
     "file_json": {
       "class": "logging.handlers.RotatingFileHandler",
-      "level": "DEBUG",
+      "level": "INFO",
       "formatter": "json",
       "filename": "logs/v4vapp-backend-v2.log.jsonl",
       "maxBytes": 10000000,
@@ -38,7 +38,7 @@
   },
   "loggers": {
     "root": {
-      "level": "DEBUG",
+      "level": "INFO",
       "handlers": [
         "stderr",
         "file_json"

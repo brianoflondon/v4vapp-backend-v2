@@ -1,7 +1,7 @@
 import asyncio
 import pickle
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from timeit import default_timer as timer
 from typing import Annotated, Any, ClassVar, Dict, List
@@ -24,12 +24,26 @@ ALL_PRICES_COINMARKETCAP = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/
 
 SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 
+TESTING_CACHE_TIMES = {
+    "CoinGecko": 360,
+    "Binance": 360,
+    "CoinMarketCap": 360,
+    "HiveInternalMarket": 360,
+}
+
 CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
     "CoinMarketCap": 180,
     "HiveInternalMarket": 60,
 }
+
+
+DB_RATES_COLLECTION: str = "rates"  # Collection name for storing rates in the database
+
+DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
+
+ICON = "💱"
 
 
 class Currency(StrEnum):
@@ -48,6 +62,31 @@ class CurrencyPair(StrEnum):
     HIVE_HBD = "hive_hbd"
     SATS_HIVE = "hive_sats"
     SATS_HBD = "hbd_sats"
+
+
+class HiveRatesDB(BaseModel):
+    """
+    HiveRatesDB is a model that represents the database structure for storing
+    cryptocurrency exchange rates.
+
+    Attributes:
+        timestamp (datetime): The timestamp when the rates were fetched.
+        hive_usd (float): The exchange rate of HIVE to USD.
+        btc_usd (float): The exchange rate of BTC to USD.
+        sats_hive (float): The exchange rate of Satoshi to HIVE.
+        sats_usd (float): The exchange rate of Satoshi to USD.
+        sats_hbd (float): The exchange rate of Satoshi to HBD.
+        hive_hbd (float): The exchange rate of HIVE to HBD.
+    """
+
+    timestamp: datetime
+    hive_usd: float
+    hbd_usd: float
+    btc_usd: float
+    hive_hbd: float
+    sats_hive: float
+    sats_usd: float
+    sats_hbd: float
 
 
 # Define the annotated type
@@ -252,6 +291,7 @@ class AllQuotes(BaseModel):
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_client: ClassVar[MongoDBClient | None] = None
+    db_store_timestamp: ClassVar[datetime | None] = None
 
     def get_binance_quote(self) -> QuoteResponse:
         """
@@ -271,7 +311,7 @@ class AllQuotes(BaseModel):
         global_cache = await self.check_global_cache()
         if use_cache and global_cache:
             logger.debug(
-                f"Quotes fetched from main cache in {timer() - start:.4f} seconds",
+                f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
             )
             return
         all_services = [
@@ -284,7 +324,7 @@ class AllQuotes(BaseModel):
         tasks: dict[str, asyncio.Task] = {}
         try:
             async with asyncio.timeout(timeout):
-                logger.debug(f"Fetching quotes with timeout of {timeout} seconds")
+                logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
                     tasks: dict[str, asyncio.Task] = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
@@ -297,7 +337,7 @@ class AllQuotes(BaseModel):
                 for service in all_services
             }
             logger.error(
-                f"Quote fetching exceeded timeout of {timeout} seconds",
+                f"{ICON} Quote fetching exceeded timeout of {timeout} seconds",
                 extra={"timeout": timeout, "error": e},
             )
 
@@ -310,7 +350,7 @@ class AllQuotes(BaseModel):
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
         logger.info(
-            f"Quotes fetched successfully in {timer() - start:.4f} seconds",
+            f"{ICON} Quotes fetched successfully in {timer() - start:.4f} seconds",
             extra={
                 "quotes": self.quotes,
                 "fetch_date": self.fetch_date,
@@ -319,7 +359,7 @@ class AllQuotes(BaseModel):
         for quote in self.quotes.values():
             if quote.error:
                 logger.error(
-                    f"Error in quote from {quote.source}: {quote.error}",
+                    f"{ICON} Error in quote from {quote.source}: {quote.error}",
                     extra={"notification": False, **quote.log_data},
                 )
         self.fetch_date = self.quote.fetch_date
@@ -386,6 +426,7 @@ class AllQuotes(BaseModel):
             for service_name, quote_data in cache_data.get("quotes", {}).items()
         }
 
+    # MARK: DB Store Quote
     async def db_store_quote(self):
         """
         Store cryptocurrency quotes in the database.
@@ -407,15 +448,35 @@ class AllQuotes(BaseModel):
         """
         if not self.db_client:
             return
+        if (
+            AllQuotes.db_store_timestamp
+            and self.fetch_date - AllQuotes.db_store_timestamp
+            < timedelta(seconds=DB_RATES_MIN_INTERVAL)
+        ):
+            logger.info(
+                f"{ICON} Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
+            )
+            return
         async with self.db_client as db_client:
-            records = [
-                {"timestamp": self.fetch_date, "pair": "hive_usd", "value": self.quote.hive_usd},
-                {"timestamp": self.fetch_date, "pair": "btc_usd", "value": self.quote.btc_usd},
-                {"timestamp": self.fetch_date, "pair": "sats_hive", "value": self.quote.sats_hive},
-                {"timestamp": self.fetch_date, "pair": "hive_hbd", "value": self.quote.hive_hbd},
-            ]
-            db_ans = await db_client.insert_many("hive_rates", records)
-            logger.debug(f"Inserted rates into database: {db_ans}")
+            try:
+                record = HiveRatesDB(
+                    timestamp=self.fetch_date,
+                    hive_usd=self.quote.hive_usd,
+                    hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
+                    btc_usd=self.quote.btc_usd,
+                    sats_hive=self.quote.sats_hive_p,
+                    sats_usd=self.quote.sats_usd,
+                    sats_hbd=self.quote.sats_hbd_p,
+                    hive_hbd=self.quote.hive_hbd,
+                )
+                db_ans = await db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
+                logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
+                AllQuotes.db_store_timestamp = self.fetch_date
+            except Exception as e:
+                logger.warning(
+                    f"{ICON} Failed to insert rates into database: {e}",
+                    extra={"notification": False},
+                )
 
     @property
     def quote(self) -> QuoteResponse:
@@ -442,11 +503,13 @@ class AllQuotes(BaseModel):
                 return ans
             else:
                 self.source = "average"
-                return self.calculate_average_quote()
+                average = self.calculate_average_quote()
+                if average:
+                    return average
 
         return QuoteResponse(error="No valid quote found")
 
-    def calculate_average_quote(self):
+    def calculate_average_quote(self) -> QuoteResponse | None:
         """
         Calculate the average values of various cryptocurrency quotes.
 
@@ -555,7 +618,11 @@ class QuoteService(ABC):
 
     async def set_cache(self, quote: QuoteResponse) -> None:
         key = f"{self.__class__.__name__}:get_quote"
-        expiry = CACHE_TIMES[self.__class__.__name__]
+        if InternalConfig().config.development.enabled:
+            cache_times = TESTING_CACHE_TIMES
+        else:
+            cache_times = CACHE_TIMES
+        expiry = cache_times[self.__class__.__name__]
         async with V4VAsyncRedis(decode_responses=False) as redis_client:
             await redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
 
@@ -664,7 +731,7 @@ class Binance(QuoteService):
             # calc hive to btc price based on hiveusdt and btcusdt
             hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
             # check
-            logger.debug(f"Binance Hive to BTC price : {hive_sats:.1f}")
+            logger.debug(f"{ICON} Binance Hive to BTC price : {hive_sats:.1f}")
 
             quote_response = QuoteResponse(
                 hive_usd=hive_usd,
@@ -802,64 +869,3 @@ def per_diff(a: float, b: float) -> float:
     if b == 0:
         return 0
     return ((a - b) / b) * 100
-
-
-# class QuoteResponse(BaseModel):
-#     pairs: Any
-
-#     Hive_USD: float = 0
-#     HBD_USD: float = 0
-#     BTC_USD: float = 0
-#     Hive_HBD: float = 0
-#     percentage: bool = False
-#     error: str = ""
-#     fetch_date: datetime = datetime.now(tz=timezone.utc)
-#     quote_age: int = 0
-
-#     def __init__(
-#         self, HIVE_USD: float, HBD_USD: float, BTC_USD: float, HIVE_HBD: float
-#     ) -> None:
-#         super().__init__()
-#         pairs = {
-#             CurrencyPair.HIVE_USD: HIVE_USD,
-#             CurrencyPair.HBD_USD: HBD_USD,
-#             CurrencyPair.BTC_USD: BTC_USD,
-#             CurrencyPair.HIVE_HBD: HIVE_HBD,
-#         }
-
-#         quote_age = datetime.now(tz=timezone.utc) - self.fetch_date
-#         self.quote_age = int(quote_age.total_seconds())
-
-#     def output(self) -> str:
-#         """Produce nicely formatted output for a quote."""
-#         per = "%" if self.percentage else " "
-#         ans = (
-#             f"Hive_USD = {self.Hive_USD:>7.3f}{per} | "
-#             f"HBD_USD = {self.HBD_USD:>7.3f}{per} | "
-#             f"Hive_HBD = {self.Hive_HBD:>7.3f}{per} | "
-#             f"BTC_USD = {self.BTC_USD:>7.1f}{per} | "
-#         )
-#         return ans
-
-#     def divergence(self, other):
-#         """Returns the divergence of two quotes."""
-#         if isinstance(other, QuoteResponse):
-#             return QuoteResponse(
-#                 Hive_USD=per_diff(self.Hive_USD, other.Hive_USD),
-#                 HBD_USD=per_diff(self.HBD_USD, other.HBD_USD),
-#                 BTC_USD=per_diff(self.BTC_USD, other.BTC_USD),
-#                 Hive_HBD=per_diff(self.Hive_HBD, other.Hive_HBD),
-#                 percentage=True,
-#             )
-#         return None
-
-#     def average(self, other):
-#         """Returns the average of two quotes."""
-#         if isinstance(other, QuoteResponse):
-#             return QuoteResponse(
-#                 Hive_USD=(self.Hive_USD + other.Hive_USD) / 2,
-#                 HBD_USD=(self.HBD_USD + other.HBD_USD) / 2,
-#                 BTC_USD=(self.BTC_USD + other.BTC_USD) / 2,
-#                 Hive_HBD=(self.Hive_HBD + other.Hive_HBD) / 2,
-#             )
-#         return None

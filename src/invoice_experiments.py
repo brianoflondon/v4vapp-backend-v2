@@ -2,15 +2,15 @@ import asyncio
 from base64 import b64encode
 from hashlib import sha256
 from secrets import token_hex
-from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from google.protobuf.json_format import MessageToDict
-
-import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-import v4vapp_backend_v2.lnd_grpc.invoices_pb2 as invoicesrpc
 
 import httpx
+from google.protobuf.json_format import MessageToDict
+
+import v4vapp_backend_v2.lnd_grpc.invoices_pb2 as invoicesrpc
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 config = InternalConfig().config
 
@@ -28,12 +28,8 @@ async def add_invoice(
     # https://lightning.engineering/api-docs/api/lnd/router/add-invoice/
     async with LNDClient(connection_name=connection_name) as client:
         request = lnrpc.Invoice(value=value, memo=memo)
-        response: lnrpc.AddInvoiceResponse = await client.lightning_stub.AddInvoice(
-            request
-        )
-        add_invoice_response_dict = MessageToDict(
-            response, preserving_proto_field_name=True
-        )
+        response: lnrpc.AddInvoiceResponse = await client.lightning_stub.AddInvoice(request)
+        add_invoice_response_dict = MessageToDict(response, preserving_proto_field_name=True)
         logger.info(
             f"Invoice generated: {memo} {value} sats",
             extra={"add_invoice_response_dict": add_invoice_response_dict},
@@ -55,19 +51,14 @@ async def add_hold_invoice(
 ) -> invoicesrpc.AddHoldInvoiceResp:
     # https://lightning.engineering/api-docs/api/lnd/invoices/add-hold-invoice/#rest
     async with LNDClient(connection_name=connection_name) as client:
-
         logger.info(f"pre_image: {pre_image}")
         payment_hash = sha256(bytes.fromhex(pre_image)).digest()
 
         request = invoicesrpc.AddHoldInvoiceRequest(
             value=value, memo=memo, expiry=600, cltv_expiry=18, hash=payment_hash
         )
-        response: lnrpc.AddHoldInvoiceResp = await client.invoices_stub.AddHoldInvoice(
-            request
-        )
-        add_invoice_response_dict = MessageToDict(
-            response, preserving_proto_field_name=True
-        )
+        response: lnrpc.AddHoldInvoiceResp = await client.invoices_stub.AddHoldInvoice(request)
+        add_invoice_response_dict = MessageToDict(response, preserving_proto_field_name=True)
         logger.info(
             f"Hold Invoice generated: {memo} {value} sats",
             extra={"add_invoice_response_dict": add_invoice_response_dict},
@@ -80,9 +71,7 @@ async def settle_hold_invoice(
 ) -> invoicesrpc.SettleInvoiceResp:
     async with LNDClient(connection_name=connection_name) as client:
         request = invoicesrpc.SettleInvoiceRequest(preimage=bytes.fromhex(pre_image))
-        response: invoicesrpc.SettleInvoiceResp = (
-            await client.invoices_stub.SettleInvoice(request)
-        )
+        response: invoicesrpc.SettleInvoiceResp = await client.invoices_stub.SettleInvoice(request)
         logger.info(f"Hold Invoice settled with preimage: {pre_image}")
         return response
 
@@ -125,8 +114,8 @@ async def send_payment_v2(
 async def main():
     # Add invoice
     # generate a random word
-    connection = "umbrel"
-    hold_invoice = False
+    connection = "voltage"
+    hold_invoice = True
 
     random_word = await fetch_random_word()
     if not hold_invoice:
@@ -153,8 +142,11 @@ async def main():
         )
 
     await asyncio.sleep(10)
+
     await send_payment_v2(
-        payment_request, connection_name=connection
+        payment_request=payment_request,
+        connection_name=connection,
+        pre_image="e5284a6c7d4a45cae8c33b7a96fbfc72d73416ca2b3caf076f6e06876753a2c4",
     )
     await asyncio.sleep(0.1)
 
@@ -165,6 +157,4 @@ if __name__ == "__main__":
         logger.info(f"✅ {__file__} stopped")
 
     except KeyboardInterrupt:
-        logger.warning(
-            f"✅ {__file__} stopped by keyboard", extra={"notification": False}
-        )
+        logger.warning(f"✅ {__file__} stopped by keyboard", extra={"notification": False})

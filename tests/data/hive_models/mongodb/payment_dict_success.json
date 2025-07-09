@@ -1,0 +1,57 @@
+{
+    "level": "INFO",
+    "human_time": "10:31:18.458 Wed 28 May",
+    "message": "Status: SUCCEEDED - Failure FAILURE_REASON_NONE",
+    "timestamp": "2025-05-28T10:31:18.458202+00:00",
+    "logger": "db_monitor",
+    "module": "lnd_functions",
+    "function": "send_lightning_to_pay_req",
+    "line": 314,
+    "thread_name": "MainThread",
+    "notification": false,
+    "payment": {
+        "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+        "value": "2233",
+        "creation_date": "1748428258",
+        "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+        "value_sat": "2233",
+        "value_msat": "2233000",
+        "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+        "status": "SUCCEEDED",
+        "creation_time_ns": "1748428258724745783",
+        "htlcs": [
+            {
+                "status": "SUCCEEDED",
+                "route": {
+                    "total_time_lock": 898808,
+                    "total_amt": "2233",
+                    "hops": [
+                        {
+                            "chan_id": "800082725764071425",
+                            "chan_capacity": "2333033",
+                            "amt_to_forward": "2233",
+                            "expiry": 898808,
+                            "amt_to_forward_msat": "2233000",
+                            "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+                            "tlv_payload": true,
+                            "mpp_record": {
+                                "total_amt_msat": "2233000",
+                                "payment_addr": "P9c/5e7PLSt+oVTElDnLSWwEE2fWhXqg8SvZjKk2Na0="
+                            },
+                            "custom_records": {
+                                "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+                                "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+                            }
+                        }
+                    ],
+                    "total_amt_msat": "2233000"
+                },
+                "attempt_time_ns": "1748428258786537165",
+                "resolve_time_ns": "1748428262997238271",
+                "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+                "attempt_id": "90085"
+            }
+        ],
+        "payment_index": "74474"
+    }
+}

@@ -1,10 +1,10 @@
-from datetime import datetime
-
 from nectar.amount import Amount
 from pydantic import Field
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 
@@ -18,7 +18,6 @@ class FillOrder(OpBase):
     open_orderid: int
     open_owner: str
     open_pays: AmountPyd
-    timestamp: datetime
     debit_conv: CryptoConv = CryptoConv()
     credit_conv: CryptoConv = CryptoConv()
 
@@ -36,24 +35,31 @@ class FillOrder(OpBase):
     def __init__(self, **data: dict):
         super().__init__(**data)
         # Debit conv should match the debit side in the ledger (open_pays, HIVE received)
-        if self.last_quote.sats_usd == 0:
-            logger.warning(
-                f"FillOrder: {self.current_orderid} {self.open_orderid} last_quote.sats_usd is 0",
-                extra={"notification": False, "last_quote": self.last_quote, "fill_order": self},
+        if self.debit_conv.is_unset() or self.credit_conv.is_unset():
+            if TrackedBaseModel.last_quote.sats_usd == 0:
+                logger.warning(
+                    f"FillOrder: {self.current_orderid} {self.open_orderid} last_quote.sats_usd is 0",
+                    extra={
+                        "notification": False,
+                        "last_quote": TrackedBaseModel.last_quote,
+                        "fill_order": self,
+                    },
+                )
+            self.debit_conv = CryptoConv(
+                conv_from=self.open_pays.unit,  # HIVE
+                value=self.open_pays.amount_decimal,  # 25.052 HIVE
+                converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
+                quote=TrackedBaseModel.last_quote,
+                timestamp=self.timestamp,
             )
-        self.debit_conv = CryptoConv(
-            conv_from=self.open_pays.unit,  # HIVE
-            value=self.open_pays.amount_decimal,  # 25.052 HIVE
-            converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
-            quote=self.last_quote,
-        )
-        # Credit conv should match the credit side in the ledger (current_pays, HBD given)
-        self.credit_conv = CryptoConv(
-            conv_from=self.current_pays.unit,  # HBD
-            value=self.current_pays.amount_decimal,  # 6.738 HBD
-            converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
-            quote=self.last_quote,
-        )
+            # Credit conv should match the credit side in the ledger (current_pays, HBD given)
+            self.credit_conv = CryptoConv(
+                conv_from=self.current_pays.unit,  # HBD
+                value=self.current_pays.amount_decimal,  # 6.738 HBD
+                converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
+                quote=TrackedBaseModel.last_quote,
+                timestamp=self.timestamp,
+            )
         # Set the log_internal string to None to force it to be generated
         self.log_internal = self._log_internal()
 
@@ -157,3 +163,31 @@ class FillOrder(OpBase):
                 self.completed_order = True
                 return f"✅ Order {open_order.orderid} has been filled (xs {amount_remaining})"
         return f"id {self.open_orderid}"
+
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+        if quote is None:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+        self.debit_conv = CryptoConv(
+            conv_from=self.open_pays.unit,  # HIVE
+            value=self.open_pays.amount_decimal,  # 25.052 HIVE
+            converted_value=self.current_pays.amount_decimal,  # 6.738 HBD
+            quote=quote,
+        )
+        # Credit conv should match the credit side in the ledger (current_pays, HBD given)
+        self.credit_conv = CryptoConv(
+            conv_from=self.current_pays.unit,  # HBD
+            value=self.current_pays.amount_decimal,  # 6.738 HBD
+            converted_value=self.open_pays.amount_decimal,  # 25.052 HIVE
+            quote=quote,
+        )

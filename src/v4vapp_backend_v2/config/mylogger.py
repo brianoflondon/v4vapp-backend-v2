@@ -77,8 +77,12 @@ class MyJSONFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
-        message = self._prepare_log_dict(record)
-        return json.dumps(message, default=str)
+        try:
+            message = self._prepare_log_dict(record)
+            return json.dumps(message, default=str)
+        except Exception as e:
+            print(f"Error formatting log record: {e}")
+            return super().format(record)
 
     def _prepare_log_dict(self, record: logging.LogRecord):
         human_readable_str = human_readable_datetime_str(

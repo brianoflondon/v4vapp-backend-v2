@@ -5,7 +5,6 @@ logging:
   log_config_file: 2-stderr-json-file.json
   default_log_level: DEBUG
   log_folder: logs/
-  log_file: test.log.jsonl
   log_levels:
     grpc: WARNING
     asyncio: WARNING
@@ -152,12 +151,11 @@ dbs_config:
             credit_compound:
               index_key: [["credit.account_type", 1], ["credit.name", 1], ["credit.sub", 1]]
               unique: false
+        test_collection3: {}
+      timeseries:
         rates:
-          timeseries:
-            timeField: "timestamp"
-            metaField: "pair"
-            granularity: minutes
-        test_collection3:
+          timeField: "timestamp"
+          granularity: minutes
 
     test_db2:
       db_users:
@@ -171,8 +169,8 @@ dbs_config:
           roles:
             - read
       collections:
-        test2_collection:
-        test2_collection2:
+        test2_collection: {}
+        test2_collection2: {}
     lnd_monitor_v2_voltage:
       db_users:
         lnd_monitor:

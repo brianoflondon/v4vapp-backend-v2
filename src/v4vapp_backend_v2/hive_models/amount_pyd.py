@@ -1,3 +1,5 @@
+from typing import Any
+
 from nectar.amount import Amount
 from pydantic import BaseModel
 
@@ -23,9 +25,14 @@ class AmountPyd(BaseModel):
     nai: str
     precision: int
 
-    def __init__(self, **data) -> None:
+    def __init__(self, **data: Any) -> None:
         if "asset" in data and data.get("asset", None):
             beam_amount = Amount(**data)
+            new_data = beam_amount.json()
+            super().__init__(**new_data)
+        elif "amount" in data and isinstance(data["amount"], Amount):
+            # If data contains an Amount object, convert it to a dictionary
+            beam_amount = data["amount"]
             new_data = beam_amount.json()
             super().__init__(**new_data)
         else:

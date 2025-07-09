@@ -9,7 +9,7 @@ class BlockMarker(OpBase):
         super().__init__(
             block_num=block_num,
             trx_id="block_marker",
-            type="block_marker",
+            op_type="block_marker",
             timestamp=timestamp or datetime.now(tz=timezone.utc),
         )
 

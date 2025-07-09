@@ -13,6 +13,7 @@ from pymongo.errors import BulkWriteError
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
@@ -203,12 +204,16 @@ def get_mongodb_client() -> MongoDBClient:
     Returns:
         MongoDBClient: The MongoDB client instance.
     """
-    dbs_config = InternalConfig().config.dbs_config
-    return MongoDBClient(
-        db_conn=dbs_config.default_connection,
-        db_name=dbs_config.default_name,
-        db_user=dbs_config.default_user,
-    )
+    if TrackedBaseModel.db_client:
+        return TrackedBaseModel.db_client
+    else:
+        dbs_config = InternalConfig().config.dbs_config
+        TrackedBaseModel.db_client = MongoDBClient(
+            db_conn=dbs_config.default_connection,
+            db_name=dbs_config.default_name,
+            db_user=dbs_config.default_user,
+        )
+        return TrackedBaseModel.db_client
 
 
 async def db_store_invoice(
@@ -240,7 +245,9 @@ async def db_store_invoice(
             logger.warning(e)
             return
         query = {"r_hash": invoice_pyd.r_hash}
-        invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        invoice_dict = invoice_pyd.model_dump(
+            exclude_none=True, exclude_unset=True, exclude={"conv"}
+        )
         ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
         logger.debug(
             f"{lnd_client.icon}{DATABASE_ICON} "
@@ -283,7 +290,9 @@ async def db_store_payment(
                 f"{db_client.hex_id} {payment_pyd.route_str}"
             )
             query = {"payment_hash": payment_pyd.payment_hash}
-            payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
+            payment_dict = payment_pyd.model_dump(
+                exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
+            )
             ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
             logger.info(
                 f"{lnd_client.icon}{DATABASE_ICON} "
@@ -409,6 +418,7 @@ async def invoices_loop(
             ):
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
+                await TrackedBaseModel.update_quote()
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
                     event_name=Events.LND_INVOICE,
@@ -454,6 +464,7 @@ async def payments_loop(
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 lnrpc_payment: lnrpc.Payment
+                await TrackedBaseModel.update_quote()
                 async_publish(
                     event_name=Events.LND_PAYMENT,
                     htlc_event=lnrpc_payment,
@@ -597,7 +608,9 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                 index_offset = list_invoices.first_index_offset
                 bulk_updates = []
                 for invoice in list_invoices.invoices:
-                    insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_one = invoice.model_dump(
+                        exclude_none=True, exclude_unset=True, exclude={"conv"}
+                    )
                     query = {"r_hash": invoice.r_hash}
                     read_invoice = await db_client.find_one(
                         collection_name="invoices",
@@ -702,7 +715,9 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                         fill_cache=True,
                         col_pub_keys="pub_keys",
                     )
-                    insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
+                    insert_one = payment.model_dump(
+                        exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
+                    )
                     query = {"payment_hash": payment.payment_hash}
                     read_payment = await db_client.find_one(
                         collection_name="payments",
@@ -710,7 +725,7 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
                     )
                     if read_payment:
                         try:
-                            db_payment = Payment(**read_payment)
+                            db_payment = Payment.model_validate(read_payment)
                             if db_payment == payment:
                                 continue
                         except Exception as e:
@@ -928,6 +943,8 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             db_client = get_mongodb_client()
+            await TrackedBaseModel.update_quote()
+            TrackedBaseModel.db_client = db_client
 
             tasks = [
                 invoices_loop(
@@ -1050,7 +1067,9 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig(config_filename=config_filename).config
+    CONFIG = InternalConfig(
+        config_filename=config_filename, log_filename="lnd_monitor_v2.log.jsonl"
+    ).config
     lnd_node = CONFIG.lnd_config.default
     icon = CONFIG.lnd_config.connections[lnd_node].icon
     if not lnd_node:

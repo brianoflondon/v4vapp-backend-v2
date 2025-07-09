@@ -61,7 +61,7 @@ def test_emit_with_error_code_clear(handler, mock_sender, caplog):
         with caplog.at_level(logging.DEBUG):
             handler.emit(record)
             # first call is to report config filename, then log error and clear
-            assert mock_logger_info.call_count == 3
+            assert mock_logger_info.call_count == 4
             assert "Error code E123 cleared" in mock_logger_info.call_args[0][0]
 
 

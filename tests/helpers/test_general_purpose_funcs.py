@@ -17,6 +17,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     sanitize_markdown_v1,
     seconds_only,
     snake_case,
+    timestamp_inc,
 )
 
 
@@ -59,7 +60,7 @@ def test_seconds_only():
 def test_format_time_delta():
     # Test cases without fractions
     test_cases = [
-        (timedelta(days=1, hours=2), "1 days, 2 hours"),
+        (timedelta(days=1, hours=2), "1 day, 2 hours"),
         (timedelta(hours=5, minutes=6, seconds=7), "05:06:07"),
         (timedelta(minutes=8, seconds=9), "08:09"),
         (timedelta(seconds=10), "00:10"),
@@ -86,6 +87,17 @@ def test_format_time_delta():
     for delta, expected in test_cases_with_fractions:
         assert format_time_delta(delta, fractions=True) == expected
 
+    test_cases_just_hours = [
+        (timedelta(days=1, hours=2, seconds=1002), "1 day, 2 hours"),
+        (timedelta(hours=5, minutes=6, seconds=7), "5 hours"),
+        (timedelta(minutes=8, seconds=9), "0 hours"),
+        (timedelta(seconds=10), "0 hours"),
+        (timedelta(days=0, hours=0, minutes=0, seconds=0), "0 hours"),
+    ]
+    for delta, expected in test_cases_just_hours:
+        ans = format_time_delta(delta, just_days_or_hours=True)
+        assert ans == expected, f"Expected: {expected}, Got: {ans}"
+
 
 def test_get_in_flight_time_future_date():
     # Test case where the current time is before the creation date
@@ -98,7 +110,7 @@ def test_get_in_flight_time_past_date():
     # Test case where the current time is after the creation date
     past_date = datetime.now(tz=timezone.utc) - timedelta(days=1, hours=5, minutes=30)
     result = get_in_flight_time(past_date)
-    assert result == "1 days, 5 hours", f"Expected '1 days, 5 hours', but got {result}"
+    assert result == "1 day, 5 hours", f"Expected '1 day, 5 hours', but got {result}"
 
 
 def test_get_in_flight_time_exact_date():
@@ -216,8 +228,6 @@ def test_is_markdown():
 def test_re_escape(text, reserved_chars, expected):
     result = re_escape(text, reserved_chars)
     assert result == expected, f"Expected '{expected}', got '{result}'"
-
-
 
 
 @pytest.mark.parametrize(
@@ -351,5 +361,22 @@ def test_check_time_diff_large_time_difference():
     )
 
 
-if __name__ == "__main__":
-    pytest.main([__file__])
+def test_timestamp_inc():
+    # Test incrementing a timestamp by 1 second
+    base_time = datetime(2023, 10, 1, 12, 0, 0, tzinfo=timezone.utc)
+    incremented_time = timestamp_inc(base_time, inc=timedelta(seconds=1))
+    expected_time = base_time + timedelta(seconds=1)
+    assert next(incremented_time) == expected_time, (
+        f"Expected {expected_time}, got {incremented_time}"
+    )
+
+    # Test incrementing a timestamp with microseconds
+    base_time_with_micro = datetime(2023, 10, 1, 12, 0, 0, 500000, tzinfo=timezone.utc)
+    incremented_time_with_micro = timestamp_inc(base_time_with_micro, inc=timedelta(seconds=1))
+    expected_time_with_micro = base_time_with_micro + timedelta(seconds=1)
+    assert next(incremented_time_with_micro) == expected_time_with_micro, (
+        f"Expected {expected_time_with_micro}, got {incremented_time_with_micro}"
+    )
+    inc_time = timestamp_inc(base_time_with_micro, inc=timedelta(seconds=0.01))
+    for i in range(0, 100):
+        print(f"Increment {i}: {next(inc_time)}")

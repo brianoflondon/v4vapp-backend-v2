@@ -22,7 +22,14 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
-                // "--start-block",
+                "--start-block",
+                "-1"
+                // "97487339",
+                // "96797571",
+                // "96596334"
+                // "96512346"
+                // "96484810"
+                // "96224872"
                 // "95793083",
                 // "95801581",
                 // "95802587",
@@ -60,6 +67,21 @@
                 "devhive.config.yaml"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Hive Monitor v4vapp",
+            "type": "debugpy",
+            "consoleName": "Hive Monitor v4vapp no SALE",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/hive_monitor_v2.py",
+            "args": [
+                "--config-filename",
+                "config.yaml",
+                "--watch-only",
+                // "--start-block",
+                // "96228302"
+            ],
+            "justMyCode": true,
         },
         {
             "name": "DB Monitor App",
@@ -107,7 +129,6 @@
             ],
             "console": "integratedTerminal"
         },
-
         {
             "name": "VSC Hive Monitor HBD No SALE",
             "type": "debugpy",

@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from v4vapp_backend_v2.hive_models.op_base import HiveExp, OpBase
-from v4vapp_backend_v2.hive_models.op_base_extras import  get_hive_block_explorer_link
+from v4vapp_backend_v2.hive_models.op_base_extras import get_hive_block_explorer_link
 from v4vapp_backend_v2.hive_models.real_virtual_ops import HIVE_REAL_OPS, HIVE_VIRTUAL_OPS
 
 
@@ -34,7 +34,7 @@ def test_log_extra_real():
 
     op_base = OpBase(
         trx_id=trx_id,
-        type=op_type,
+        op_type=op_type,
         op_in_trx=1,
         block_num=94425724,
         trx_num=1,
@@ -51,7 +51,7 @@ def test_log_extra_virtual():
 
     op_base = OpBase(
         trx_id=trx_id,
-        type=op_type,
+        op_type=op_type,
         op_in_trx=1,
         block_num=94425724,
         trx_num=1,
@@ -67,7 +67,7 @@ def test_op_base_model_dump():
 
     op_base = OpBase(
         trx_id=trx_id,
-        type=op_type,
+        op_type=op_type,
         op_in_trx=1,
         block_num=94425724,
         trx_num=1,
@@ -78,6 +78,8 @@ def test_op_base_model_dump():
     print(op_base.log_str)
     print(op_base.notification_str)
     print(op_base.logs)
+    print(op_base.short_id)
+    print(OpBase.short_id_query(op_base.short_id))
 
 
 # TODO: need far better testing of this

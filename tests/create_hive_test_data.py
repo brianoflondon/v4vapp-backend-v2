@@ -94,17 +94,17 @@ async def scan_hive(op_real_virtual: OpRealm):
                         all_links.append(op_base.link)
                         all_tasks.append(asyncio.create_task(client.get(url=op_base.link)))
 
-                    if found_ops.get(op_base.type):
-                        found_ops[op_base.type] += 1
+                    if found_ops.get(op_base.op_type):
+                        found_ops[op_base.op_type] += 1
                     else:
-                        found_ops[op_base.type] = 1
+                        found_ops[op_base.op_type] = 1
 
                 op_base = OpBase.model_validate(hive_event)
                 op_in_trx_counter_new.op_in_trx_inc(op_base)
-                if found_ops.get(op_base.type):
-                    found_ops[op_base.type] += 1
+                if found_ops.get(op_base.op_type):
+                    found_ops[op_base.op_type] += 1
                 else:
-                    found_ops[op_base.type] = 1
+                    found_ops[op_base.op_type] = 1
 
                 print(op_base.log_str)
                 all_links.append(op_base.link)
