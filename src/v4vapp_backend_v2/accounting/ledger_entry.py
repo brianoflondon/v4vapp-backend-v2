@@ -190,7 +190,7 @@ class LedgerEntry(BaseModel):
     )
     debit: LedgerAccountAny | None = Field(None, description="Account to be debited")
     credit: LedgerAccountAny | None = Field(None, description="Account to be credited")
-    op: TrackedAny = Field(..., description="Associated operation")
+    op: TrackedAny | None = Field(None, description="Associated operation")
     op_type: str = Field(
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
