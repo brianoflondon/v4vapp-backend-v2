@@ -4,7 +4,10 @@ from typing import Dict, Tuple
 from nectar.amount import Amount
 from nectar.hive import Hive
 
-from v4vapp_backend_v2.accounting.account_balances import check_hive_conversion_limits
+from v4vapp_backend_v2.accounting.account_balances import (
+    check_hive_conversion_limits,
+    get_account_lightning_conv,
+)
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
@@ -67,6 +70,23 @@ async def check_for_hive_to_lightning(op: OpAny) -> bool:
     """
     # Placeholder for actual implementation
     return True
+
+
+async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
+    """
+    Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
+    """
+    keepsats_balance = await get_account_lightning_conv(cust_id=hive_transfer.from_account)
+    if not keepsats_balance:
+        raise HiveToLightningError(
+            "Pay with sats operation detected, but no Keepsats balance found."
+        )
+    # TODO: Need to account for routing fees in Keepsats payments
+    if keepsats_balance.sats < pay_req.value:
+        raise HiveToLightningError(
+            f"Not enough Keepsats balance ({keepsats_balance.sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+        )
+    return ""
 
 
 async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
@@ -248,13 +268,12 @@ async def process_hive_to_lightning(
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
                         raise HiveToLightningError(message)
+                # MARK: 2b Pay with Keepsats
                 elif hive_transfer.paywithsats:
                     logger.info(
                         f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
-                    return_hive_message = "Pay with sats operation detected, skipping processing."
-                    raise HiveToLightningError(return_hive_message)
 
                 try:
                     async with hive_transfer:
@@ -371,14 +390,15 @@ async def decode_incoming_and_checks(
         )
         raise HiveToLightningError("Conversion details not found for operation")
 
-    try:
-        hive_transfer.conv.limit_test()
-    except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
-        logger.error(
-            f"Conversion limits exceeded for operation {hive_transfer.group_id_p}: {e}",
-            extra={"notification": False, **hive_transfer.log_extra},
-        )
-        raise HiveToLightningError(f"Conversion limits: {e}")
+    if not hive_transfer.paywithsats:
+        try:
+            hive_transfer.conv.limit_test()
+        except (V4VMinimumInvoice, V4VMaximumInvoice) as e:
+            logger.error(
+                f"Conversion limits exceeded for operation {hive_transfer.group_id_p}: {e}",
+                extra={"notification": False, **hive_transfer.log_extra},
+            )
+            raise HiveToLightningError(f"Conversion limits: {e}")
 
     try:
         pay_req = await decode_any_lightning_string(
@@ -392,7 +412,13 @@ async def decode_incoming_and_checks(
         logger.error(f"Error decoding Lightning invoice: {e}")
         raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
 
-    result = await check_amount_sent(hive_transfer, pay_req)
+    # NOTE: this will not use the limit tests (maybe that is OK?)
+    if hive_transfer.paywithsats:
+        # get the sats balance for the sending account
+        result = await check_keepsats_balance(hive_transfer, pay_req)
+    else:
+        result = await check_amount_sent(hive_transfer, pay_req)
+
     if result:
         raise HiveToLightningError(result)
 

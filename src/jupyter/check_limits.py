@@ -6,6 +6,7 @@ from pprint import pprint
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
+    get_keepsats_balance,
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -38,7 +39,7 @@ async def main():
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
 
-    keepsats_balance = await get_account_lightning_conv(cust_id=cust_id)
+    keepsats_balance = await get_keepsats_balance(cust_id=cust_id)
     print("Keepsats Balance Summary:")
     pprint(keepsats_balance)
 
