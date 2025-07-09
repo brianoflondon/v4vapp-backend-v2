@@ -23,17 +23,24 @@ async def main():
     pprint(ans.sats)
 
     # Example usage of check_hive_conversion_limits
-    limits = await check_hive_conversion_limits(cust_id)
+    limits = await check_hive_conversion_limits(cust_id, line_items=True)
+
     for limit in limits:
-        print(limit.output_text)
         print("Limit OK:", limit.limit_ok)
         print("Spend Summary:")
-        pprint(limit.spend_summary)
+        pprint(limit.conv_summary)
         print("Total Sats:", limit.total_sats)
         print("Total Msats:", limit.total_msats)
 
+    for limit in limits:
+        print(limit.output_text)
+
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
+
+    keepsats_balance = await get_account_lightning_conv(cust_id=cust_id)
+    print("Keepsats Balance Summary:")
+    pprint(keepsats_balance)
 
 
 if __name__ == "__main__":
