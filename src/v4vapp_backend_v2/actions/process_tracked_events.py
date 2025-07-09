@@ -17,8 +17,8 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     process_hive_to_lightning,
     return_hive_transfer,
 )
-from v4vapp_backend_v2.actions.lightning_payment_success import payment_success
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
+from v4vapp_backend_v2.actions.payment_success import hive_to_lightning_payment_success
 from v4vapp_backend_v2.actions.tracked_any import (
     DiscriminatedTracked,
     TrackedAny,
@@ -31,6 +31,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -255,6 +256,8 @@ async def process_lightning_payment(
     payment memo contains specific keywords (e.g., "Funding"), it assigns the correct
     asset and liability accounts. For other cases, it raises a NotImplementedError.
 
+    Payment verification moved to he
+
     Args:
         payment (Payment): The Lightning payment object containing payment details.
         ledger_entry (LedgerEntry): The ledger entry to be updated based on the payment.
@@ -271,8 +274,25 @@ async def process_lightning_payment(
         await payment.update_conv()
     v4vapp_group_id = ""
     if payment.succeeded and payment.custom_records:
-        ledger_entries_list = await payment_success(payment=payment, nobroadcast=nobroadcast)
-        return ledger_entries_list
+        v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
+        keysend_message = payment.custom_records.keysend_message or ""
+        existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
+            collection_name=LedgerEntry.collection(), query={"group_id": v4vapp_group_id}
+        )
+        if existing_ledger_entry:
+            old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
+            initiating_op = old_ledger_entry.op
+            if isinstance(initiating_op, TransferBase):
+                ledger_entries_list = await hive_to_lightning_payment_success(
+                    payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
+                )
+                return ledger_entries_list
+            elif isinstance(initiating_op, CustomJson):
+                raise NotImplementedError(
+                    f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
+                )
+
+        raise NotImplementedError(f"Not implemented yet {v4vapp_group_id} {keysend_message}")
 
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
