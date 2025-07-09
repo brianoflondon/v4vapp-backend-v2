@@ -60,7 +60,7 @@ def test_seconds_only():
 def test_format_time_delta():
     # Test cases without fractions
     test_cases = [
-        (timedelta(days=1, hours=2), "1 days, 2 hours"),
+        (timedelta(days=1, hours=2), "1 day, 2 hours"),
         (timedelta(hours=5, minutes=6, seconds=7), "05:06:07"),
         (timedelta(minutes=8, seconds=9), "08:09"),
         (timedelta(seconds=10), "00:10"),
@@ -87,6 +87,17 @@ def test_format_time_delta():
     for delta, expected in test_cases_with_fractions:
         assert format_time_delta(delta, fractions=True) == expected
 
+    test_cases_just_hours = [
+        (timedelta(days=1, hours=2, seconds=1002), "1 day, 2 hours"),
+        (timedelta(hours=5, minutes=6, seconds=7), "5 hours"),
+        (timedelta(minutes=8, seconds=9), "0 hours"),
+        (timedelta(seconds=10), "0 hours"),
+        (timedelta(days=0, hours=0, minutes=0, seconds=0), "0 hours"),
+    ]
+    for delta, expected in test_cases_just_hours:
+        ans = format_time_delta(delta, just_days_or_hours=True)
+        assert ans == expected, f"Expected: {expected}, Got: {ans}"
+
 
 def test_get_in_flight_time_future_date():
     # Test case where the current time is before the creation date
@@ -99,7 +110,7 @@ def test_get_in_flight_time_past_date():
     # Test case where the current time is after the creation date
     past_date = datetime.now(tz=timezone.utc) - timedelta(days=1, hours=5, minutes=30)
     result = get_in_flight_time(past_date)
-    assert result == "1 days, 5 hours", f"Expected '1 days, 5 hours', but got {result}"
+    assert result == "1 day, 5 hours", f"Expected '1 day, 5 hours', but got {result}"
 
 
 def test_get_in_flight_time_exact_date():

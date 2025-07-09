@@ -64,7 +64,9 @@ def seconds_only(delta: timedelta) -> timedelta:
     return timedelta(days=delta.days, seconds=delta.seconds)
 
 
-def format_time_delta(delta: timedelta | float | int, fractions: bool = False) -> str:
+def format_time_delta(
+    delta: timedelta | float | int, fractions: bool = False, just_days_or_hours: bool = False
+) -> str:
     """
     Formats a timedelta object as a string.
     If Days are present, the format is "X days, Y hours".
@@ -78,8 +80,16 @@ def format_time_delta(delta: timedelta | float | int, fractions: bool = False) -
     if isinstance(delta, (int, float)):
         delta = timedelta(seconds=delta)
     if delta.days:
-        return f"{delta.days} days, {delta.seconds // 3600} hours"
+        hours = delta.seconds // 3600
+        if hours == 0 and just_days_or_hours:
+            return f"{delta.days} {'days' if delta.days != 1 else 'day'}"
+
+        return (
+            f"{delta.days} {'days' if delta.days != 1 else 'day'}, {delta.seconds // 3600} hours"
+        )
     hours, remainder = divmod(delta.seconds, 3600)
+    if just_days_or_hours:
+        return f"{hours} {'hours' if hours != 1 else 'hour'}"
     minutes, seconds = divmod(remainder, 60)
     hours_text = f"{hours:02}:" if hours > 0 else ""
     if fractions:
