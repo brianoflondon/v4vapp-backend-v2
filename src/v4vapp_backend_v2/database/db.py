@@ -662,6 +662,7 @@ class MongoDBClient:
             self.health_check = MongoDBStatus.DISCONNECTED
             self.client.close()
 
+    @retry_on_failure()
     async def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
         if self.client is None or self.db is None or self.health_check != MongoDBStatus.CONNECTED:
             await self.connect()
