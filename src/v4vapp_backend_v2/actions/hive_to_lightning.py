@@ -274,6 +274,8 @@ async def process_hive_to_lightning(
                         f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
+                    # if we're using pay with keepsats, we must record the trial ledger entries
+                    # HERE before attempting the payment and update them on success.
 
                 try:
                     async with hive_transfer:
@@ -412,7 +414,7 @@ async def decode_incoming_and_checks(
         logger.error(f"Error decoding Lightning invoice: {e}")
         raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
 
-    # NOTE: this will not use the limit tests (maybe that is OK?)
+    # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
     if hive_transfer.paywithsats:
         # get the sats balance for the sending account
         result = await check_keepsats_balance(hive_transfer, pay_req)
@@ -531,38 +533,46 @@ async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: 
         )
         raise HiveToLightningError("Conversion details not found for operation")
 
-    # payment.fee_msat is the lightning fee
-    cost_of_payment_msat_pre_fee = payment.value_msat + payment.fee_msat
-    # payment.conv.msats_fee is the Hive to Lightning conversion fee
-    cost_of_payment_msat = cost_of_payment_msat_pre_fee + payment.conv.msats_fee
+    if hive_transfer.paywithsats:
+        change_hive_amount = hive_transfer.amount.beam
 
-    # Value of payment and fee in Hive or HBD
-    cost_of_payment_amount = Amount(
-        "0.001 HIVE"
-    )  # Default amount to return if no change is needed
-    if hive_transfer.conv.conv_from == Currency.HIVE:
-        cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hive
-        cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HIVE")
-    elif hive_transfer.conv.conv_from == Currency.HBD:
-        cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hbd
-        cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HBD")
     else:
-        raise HiveToLightningError(
-            f"Unknown currency: {hive_transfer.conv.conv_from} for change calculation"
+        # payment.fee_msat is the lightning fee
+        cost_of_payment_msat_pre_fee = payment.value_msat + payment.fee_msat
+        # payment.conv.msats_fee is the Hive to Lightning conversion fee
+        cost_of_payment_msat = cost_of_payment_msat_pre_fee + payment.conv.msats_fee
+
+        # Value of payment and fee in Hive or HBD
+        cost_of_payment_amount = Amount(
+            "0.001 HIVE"
+        )  # Default amount to return if no change is needed
+        if hive_transfer.conv.conv_from == Currency.HIVE:
+            cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hive
+            cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HIVE")
+        elif hive_transfer.conv.conv_from == Currency.HBD:
+            cost_of_payment_hive_hbd = cost_of_payment_msat / 1_000 / hive_transfer.conv.sats_hbd
+            cost_of_payment_amount = Amount(f"{cost_of_payment_hive_hbd:.3f} HBD")
+        else:
+            raise HiveToLightningError(
+                f"Unknown currency: {hive_transfer.conv.conv_from} for change calculation"
+            )
+
+        logger.info(
+            f"Cost of payment in {hive_transfer.conv.conv_from}: {cost_of_payment_amount} ({cost_of_payment_msat / 1_000:,.0f} sats)",
+            extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
         )
 
-    logger.info(
-        f"Cost of payment in {hive_transfer.conv.conv_from}: {cost_of_payment_amount} ({cost_of_payment_msat / 1_000:,.0f} sats)",
-        extra={"notification": False, **hive_transfer.log_extra, **payment.log_extra},
-    )
+        change_hive_amount = hive_transfer.amount.beam - cost_of_payment_amount
 
-    change_hive_amount = hive_transfer.amount.beam - cost_of_payment_amount
-
-    # If change is less than 0.001 HIVE, no change transaction is needed just notification minimum
-    if hive_transfer.conv.conv_from == Currency.HIVE and change_hive_amount < Amount("0.001 HIVE"):
-        change_hive_amount = Amount("0.001 HIVE")
-    elif hive_transfer.conv.conv_from == Currency.HBD and change_hive_amount < Amount("0.001 HBD"):
-        change_hive_amount = Amount("0.001 HBD")
+        # If change is less than 0.001 HIVE, no change transaction is needed just notification minimum
+        if hive_transfer.conv.conv_from == Currency.HIVE and change_hive_amount < Amount(
+            "0.001 HIVE"
+        ):
+            change_hive_amount = Amount("0.001 HIVE")
+        elif hive_transfer.conv.conv_from == Currency.HBD and change_hive_amount < Amount(
+            "0.001 HBD"
+        ):
+            change_hive_amount = Amount("0.001 HBD")
 
     hive_transfer.change_amount = AmountPyd(amount=change_hive_amount)
     hive_transfer.fee_conv = CryptoConversion(

@@ -245,6 +245,7 @@ async def send_lightning_to_pay_req(
         amount_msat (int, optional): Amount to pay in millisatoshis, required for zero-value invoices.
                     Defaults to 0. If set will be ignored if the pay_req includes an amount
         fee_limit_ppm (int, optional): Fee limit in parts per million. Defaults to setting in config.
+        use_keepsats (bool, optional): Whether to use Keepsats for the payment. Defaults to False.
 
     Raises:
         ValueError: If the LNDClient instance is not provided.

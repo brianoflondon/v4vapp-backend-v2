@@ -22,6 +22,7 @@ class CustomJson(OpBase):
     required_posting_auths: List[str]
 
     # Extra Fields
+    #TODO #128 Remove the conv from the CustomJson class because it is redundant and imported via OpBase Tracked
     conv: CryptoConv | None = Field(
         default=None,
         description="If the custom_json relates to an amount, store a conversion object.",
