@@ -89,11 +89,18 @@ class TransferBase(OpBase):
         Args:
             hive_inst (Hive): An instance of the Hive class used for decoding the memo.
         """
-        #TODO: #125 BUG if an encrypted memo starts with a hash say #SATS it will mess up here.
         if not self.memo:
             self.d_memo = ""
             return
-        if self.d_memo and not self.d_memo.startswith("#"):
+        if (
+            self.d_memo
+            and not self.d_memo.startswith(
+                "#"
+            )  # This catches d_memos which legitimately start with a #
+            or self.d_memo
+            and self.d_memo
+            != self.memo  # This catches d_memos which are already decoded and start with #
+        ):
             return
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
