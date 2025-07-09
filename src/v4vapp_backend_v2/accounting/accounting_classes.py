@@ -1,8 +1,12 @@
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+
 """
-Helper classes for accounting summaries, including account balances and lightning spend summaries.
+Helper classes for accounting summaries, including account balances and lightning conv summaries.
 """
 
 
@@ -45,39 +49,38 @@ class AccountBalanceSummary:
 
 
 @dataclass
-class LightningConvSummary(ConvertedSummary):
+class LedgerConvSummary(ConvertedSummary):
     """
-    Represents a summary of lightning conversion, including total amounts and a formatted output.
+    Represents a summary of ledger conversions or any transactions,
+    including total amounts and a formatted output.
 
     Attributes:
         cust_id (str): The customer ID associated with the summary.
         age (int): The age in seconds for filtering purposes.
         by_ledger_type (Dict[str, ConvertedSummary]): A dictionary mapping ledger types to their
-        output_text (str): A formatted string representation of the lightning spend summary.
+        output_text (str): A formatted string representation of the lightning conv summary.
     """
 
     cust_id: str = ""
-    age: int = 0  # Age in seconds, used for filtering
-    # total_hive: float = 0.0
-    # total_hbd: float = 0.0
-    # total_usd: float = 0.0
-    # total_sats: float = 0.0
-    # total_msats: float = 0.0
+    account: LedgerAccount | None = None
+    as_of_date: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    age: timedelta | None = None
     by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
+    ledger_entries: List[LedgerEntry] = field(default_factory=list)
 
 
 @dataclass
 class LightningLimitSummary:
     """
-    Represents a summary of lightning spend limits for an account.
+    Represents a summary of lightning conv limits for an account.
 
     Attributes:
-        total_sats (int): Total lightning spend in satoshis.
-        total_msats (int): Total lightning spend in millisatoshis.
-        output_text (str): A formatted string representation of the lightning spend limits.
+        total_sats (int): Total lightning conv in satoshis.
+        total_msats (int): Total lightning conv in millisatoshis.
+        output_text (str): A formatted string representation of the lightning conv limits.
     """
 
-    spend_summary: LightningConvSummary
+    conv_summary: LedgerConvSummary
     total_sats: float
     total_msats: float
     output_text: str
