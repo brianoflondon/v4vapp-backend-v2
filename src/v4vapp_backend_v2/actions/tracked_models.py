@@ -124,8 +124,7 @@ class TrackedBaseModel(BaseModel):
                     extra={"notification": False},
                 )
                 await self.unlock_op()
-
-                # raise TimeoutError("Timeout waiting for lock to be released.")
+                raise TimeoutError("Timeout waiting for lock to be released.")
         await self.lock_op()
         return self
 
