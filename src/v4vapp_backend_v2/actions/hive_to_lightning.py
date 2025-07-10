@@ -15,7 +15,7 @@ from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
@@ -775,24 +775,42 @@ async def return_hive_transfer(
         raise HiveToLightningError(message)
 
 
-async def get_verified_hive_client(nobroadcast: bool = False) -> Tuple[Hive, str]:
+async def get_verified_hive_client(
+    nobroadcast: bool = False, hive_role: HiveRoles = HiveRoles.server
+) -> Tuple[Hive, str]:
+    """
+    Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
+
+    Args:
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+        hive_role (HiveRoles, optional): The role to use for the Hive client. Defaults to HiveRoles.server.
+
+    Returns:
+        Tuple[Hive, str]: A tuple containing the initialized Hive client and the server account name.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
     hive_config = InternalConfig().config.hive
-    if not hive_config.server_account:
+
+    hive_account = hive_config.get_hive_role_account(hive_role)
+
+    if not hive_account:
         raise HiveToLightningError("Missing Hive server account configuration for repayment")
 
-    memo_key = hive_config.server_account.memo_key or ""
-    active_key = hive_config.server_account.active_key or ""
+    memo_key = hive_account.memo_key or ""
+    active_key = hive_account.active_key or ""
     if not memo_key or not active_key:
         raise HiveToLightningError("Missing Hive server account keys for repayment")
 
     hive_client = get_hive_client(
         keys=[
-            hive_config.server_account.memo_key,
-            hive_config.server_account.active_key,
+            hive_account.memo_key,
+            hive_account.active_key,
         ],
         nobroadcast=nobroadcast,
     )
-    return hive_client, hive_config.server_account.name
+    return hive_client, hive_account.name
 
 
 async def complete_hive_to_lightning(

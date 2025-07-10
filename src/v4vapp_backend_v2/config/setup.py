@@ -246,6 +246,21 @@ class HiveConfig(BaseConfig):
         """
         return list(self.hive_accs.keys())
 
+    def get_hive_role_account(self, hive_role: HiveRoles) -> HiveAccountConfig | None:
+        """
+        Retrieve the first Hive account with the specified role.
+
+        Args:
+            hive_role (HiveRoles): The role of the Hive account to retrieve.
+
+        Returns:
+            HiveAccountConfig: The first Hive account with the specified role, or None if not found.
+        """
+        for acc in self.hive_accs.values():
+            if acc.role == hive_role:
+                return acc
+        return None
+
     @property
     def server_accounts(self) -> List[HiveAccountConfig]:
         """
