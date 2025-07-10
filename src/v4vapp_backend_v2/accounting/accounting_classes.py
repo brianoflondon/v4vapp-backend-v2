@@ -62,7 +62,7 @@ class LedgerConvSummary(ConvertedSummary):
     age: timedelta | None = None
     by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
     ledger_entries: List[LedgerEntry] = field(default_factory=list)
-    net_balance: ConvertedSummary | None = None
+    net_balance: ConvertedSummary = field(default_factory=ConvertedSummary)
 
 
 @dataclass

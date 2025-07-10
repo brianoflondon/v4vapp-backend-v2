@@ -12,6 +12,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     detect_keepsats,
     detect_paywithsats,
     find_short_id,
+    paywithsats_amount,
     seconds_only_time_diff,
 )
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
@@ -231,6 +232,21 @@ class TransferBase(OpBase):
         """
         return detect_paywithsats(self.d_memo)
 
+    @property
+    def paywithsats_amount(self) -> int:
+        """
+        Extracts and returns the 'paywithsats' amount from the memo if present.
+        This is in sats, not msats.
+
+        Returns:
+            int: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+
+        Notes:
+            - The memo is expected to be in the format "paywithsats:amount".
+            - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
+        """
+        return paywithsats_amount(self.d_memo)
+
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
         Updates the conversion for the transaction.
@@ -262,6 +278,8 @@ class TransferBase(OpBase):
         Returns:
             int: The maximum amount that can be sent after fees and fee estimates.
         """
+        if self.paywithsats:
+            return self.paywithsats_amount * 1_000
         lnd_config = InternalConfig().config.lnd_config
         amount_sent = self.conv.msats - self.conv.msats_fee
         max_payment_amount = amount_sent - lnd_config.lightning_fee_base_msats

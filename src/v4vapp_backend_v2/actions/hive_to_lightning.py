@@ -6,12 +6,13 @@ from nectar.hive import Hive
 
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
-    get_account_lightning_conv,
+    get_keepsats_balance,
 )
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
+from v4vapp_backend_v2.actions.keepsats_ledger_entries import withdraw_keepsats_to_treasury
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -76,15 +77,15 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    keepsats_balance = await get_account_lightning_conv(cust_id=hive_transfer.from_account)
+    keepsats_balance = await get_keepsats_balance(cust_id=hive_transfer.from_account)
     if not keepsats_balance:
         raise HiveToLightningError(
             "Pay with sats operation detected, but no Keepsats balance found."
         )
     # TODO: Need to account for routing fees in Keepsats payments
-    if keepsats_balance.sats < pay_req.value:
+    if keepsats_balance.net_balance.sats < pay_req.value:
         raise HiveToLightningError(
-            f"Not enough Keepsats balance ({keepsats_balance.sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+            f"Not enough Keepsats balance ({keepsats_balance.net_balance.sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
         )
     return ""
 
@@ -268,21 +269,28 @@ async def process_hive_to_lightning(
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
                         raise HiveToLightningError(message)
-                # MARK: 2b Pay with Keepsats
-                elif hive_transfer.paywithsats:
-                    logger.info(
-                        f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
-                        extra={"notification": False, **hive_transfer.log_extra},
-                    )
-                    # if we're using pay with keepsats, we must record the trial ledger entries
-                    # HERE before attempting the payment and update them on success.
-                    
 
                 try:
                     async with hive_transfer:
                         pay_req, lnd_client = await decode_incoming_and_checks(
                             hive_transfer=hive_transfer
                         )
+                        # MARK: 2b Pay with Keepsats
+                        if hive_transfer.paywithsats:
+                            logger.info(
+                                f"Detected paywithsats operation in memo: {hive_transfer.d_memo}",
+                                extra={"notification": False, **hive_transfer.log_extra},
+                            )
+                            # if we're using pay with keepsats, we must record the trial ledger entries
+                            # HERE before attempting the payment and update them on success.
+                            # This trial entry (signified by a prefix of hold_ in the group_id) will
+                            # be updated to the final entry on success.
+                            await withdraw_keepsats_to_treasury(
+                                amount_msats=pay_req.value_msat + pay_req.fee_estimate,
+                                cust_id=hive_transfer.from_account,
+                                hive_transfer=hive_transfer,
+                            )
+
                         chat_message = f"Sending sats from v4v.app | § {hive_transfer.short_id} |"
                         payment = await send_lightning_to_pay_req(
                             pay_req=pay_req,
@@ -404,10 +412,11 @@ async def decode_incoming_and_checks(
             raise HiveToLightningError(f"Conversion limits: {e}")
 
     try:
+        max_send_msats = hive_transfer.max_send_amount_msats()
         pay_req = await decode_any_lightning_string(
             input=hive_transfer.d_memo,
             lnd_client=lnd_client,
-            msats=hive_transfer.max_send_amount_msats(),
+            zero_amount_invoice_send_msats=max_send_msats,
         )
         if not pay_req:
             raise HiveToLightningError("Failed to decode Lightning invoice")
@@ -777,7 +786,8 @@ async def return_hive_transfer(
 
 
 async def get_verified_hive_client(
-    nobroadcast: bool = False, hive_role: HiveRoles = HiveRoles.server
+    hive_role: HiveRoles = HiveRoles.server,
+    nobroadcast: bool = False,
 ) -> Tuple[Hive, str]:
     """
     Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.

@@ -106,7 +106,7 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 
 async def decode_any_lightning_string(
     input: str,
-    msats: int = 0,
+    zero_amount_invoice_send_msats: int = 0,
     comment: str = "",
     ignore_limits: bool = False,
     lnd_client: LNDClient | None = None,
@@ -159,17 +159,17 @@ async def decode_any_lightning_string(
         response = await decode_any_lnurp_or_lightning_address(data)
         if response.tag != "payRequest":
             raise LnurlException("Not a valid LNURLp or Lightning Address")
-        if not (response.min_sendable <= msats <= response.max_sendable):
+        if not (response.min_sendable <= zero_amount_invoice_send_msats <= response.max_sendable):
             raise LnurlException(
-                f"Amount {msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
+                f"Amount {zero_amount_invoice_send_msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
                 failure={"error": "amount out of range"},
             )
         if not response.comment_allowed:
-            params = {"amount": msats}
+            params = {"amount": zero_amount_invoice_send_msats}
         else:
             if len(comment) > response.comment_allowed:
                 comment = comment[: response.comment_allowed]
-            params = {"amount": msats, "comment": comment}
+            params = {"amount": zero_amount_invoice_send_msats, "comment": comment}
 
     except LnurlException as ex:
         logger.error(
