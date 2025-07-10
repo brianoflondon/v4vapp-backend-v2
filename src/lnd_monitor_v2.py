@@ -530,7 +530,55 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
             pass
 
 
-async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+    """Subscribe to channel events from LND"""
+    request = lnrpc.ChannelEventSubscription()
+
+    while True:
+        try:
+            async for channel_event in lnd_client.call_async_generator(
+                lnd_client.lightning_stub.SubscribeChannelEvents,
+                request,
+                call_name="SubscribeChannelEvents",
+            ):
+                # channel_event is of type lnrpc.ChannelEventUpdate
+                # It has different types including:
+                # - OPEN_CHANNEL
+                # - CLOSED_CHANNEL
+                # - ACTIVE_CHANNEL
+                # - INACTIVE_CHANNEL
+                # - PENDING_OPEN_CHANNEL
+
+                event_type = channel_event.type
+
+                # Process the different event types
+                if hasattr(channel_event, "open_channel"):
+                    channel = channel_event.open_channel
+                    await fill_channel_names(lnd_client, lnd_events_group)
+                    logger.info(
+                        f"{lnd_client.icon} Channel opened: {channel.chan_id} "
+                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        extra={"notification": True},
+                    )
+
+                elif hasattr(channel_event, "closed_channel"):
+                    channel = channel_event.closed_channel
+                    logger.info(
+                        f"{lnd_client.icon} Channel closed: {channel.chan_id} "
+                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        extra={"notification": True},
+                    )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+        except Exception as e:
+            logger.exception(e)
+            await asyncio.sleep(5)  # Wait before retrying
+
+
+async def fill_channel_names(
+    lnd_client: LNDClient,
+    lnd_events_group: LndEventsGroup,
+) -> None:
     """
     Asynchronously fills the channel names for a given LND client and appends them to the provided LndEventsGroup.
 
@@ -544,32 +592,42 @@ async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsG
     Returns:
         None: This function does not return a value. It performs asynchronous operations and updates the provided group.
     """
-    request = lnrpc.ListChannelsRequest()
-    channels = await lnd_client.call(
-        lnd_client.lightning_stub.ListChannels,
-        request,
-    )
-    channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-    if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
-        logger.debug("No new channels to fill")
-        await asyncio.sleep(60)
-        return
-    # Get the name of each channel
-    tasks = []
-    for channel in channels_dict.get("channels", []):
-        tasks.append(
-            get_channel_name(
-                channel_id=int(channel["chan_id"]),
-                lnd_client=lnd_client,
+    try:
+        request = lnrpc.ListChannelsRequest()
+        channels = await lnd_client.call(
+            lnd_client.lightning_stub.ListChannels,
+            request,
+        )
+        channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+        if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
+            logger.debug("No new channels to fill")
+            return
+        # Get the name of each channel
+        tasks = []
+        for channel in channels_dict.get("channels", []):
+            tasks.append(
+                get_channel_name(
+                    channel_id=int(channel["chan_id"]),
+                    lnd_client=lnd_client,
+                )
             )
-        )
-    names_list: List[LndChannelName] = await asyncio.gather(*tasks)
-    for channel_name in names_list:
-        lnd_events_group.append(channel_name)
-        logger.info(
-            (f"{lnd_client.icon} Channel {channel_name.channel_id} -> {channel_name.name}"),
-            extra={"channel_name": channel_name.to_dict()},
-        )
+        names_list: List[LndChannelName] = await asyncio.gather(*tasks)
+        for channel_name in names_list:
+            lnd_events_group.append(channel_name)
+            logger.info(
+                (f"{lnd_client.icon} Channel {channel_name.channel_id} -> {channel_name.name}"),
+                extra={"channel_name": channel_name.to_dict()},
+            )
+
+    except LNDConnectionError:
+        logger.error("🔴 Connection error in fill_channel_names", extra={"notification": False})
+        await asyncio.sleep(59)
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        return
+    except Exception as e:
+        logger.exception(e, extra={"notification": False})
+        await asyncio.sleep(10)
 
 
 async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
@@ -964,7 +1022,7 @@ async def main_async_start(connection_name: str) -> None:
                 tasks.append(synchronize_db(lnd_client, db_client, delay=10))
             tasks += [
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                fill_channel_names(lnd_client, lnd_events_group),
+                channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 check_for_shutdown(),
             ]
             await asyncio.gather(*tasks)

@@ -122,14 +122,13 @@ async def db_store_op(
                 db_name=HIVE_DATABASE,
                 db_user=HIVE_DATABASE_USER,
             )
-        async with TrackedBaseModel.db_client as db_client:
-            db_ans = await db_client.update_one_buffer(
-                db_collection,
-                query=op.group_id_query,
-                update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
-                upsert=True,
-            )
-            return db_ans
+        db_ans = await TrackedBaseModel.db_client.update_one_buffer(
+            db_collection,
+            query=op.group_id_query,
+            update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
+            upsert=True,
+        )
+        return db_ans
     except DuplicateKeyError as e:
         logger.info(
             f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
@@ -213,27 +212,25 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
                 db_name=HIVE_DATABASE,
                 db_user=HIVE_DATABASE_USER,
             )
-        async with TrackedBaseModel.db_client as db_client:
-            ans = await db_client.find_one(
-                collection_name=collection, query={}, sort=[("block_num", -1)]
+        ans = await TrackedBaseModel.db_client.find_one(
+            collection_name=collection, query={}, sort=[("block_num", -1)]
+        )
+        if ans and "block_num" in ans:
+            time_diff = check_time_diff(ans["timestamp"])
+            logger.info(
+                f"{icon} Last good block: {ans['block_num']:,} {ans['timestamp']} {time_diff} ago",
+                extra={"db": ans},
             )
-            if ans and "block_num" in ans:
-                time_diff = check_time_diff(ans["timestamp"])
-                logger.info(
-                    f"{icon} Last good block: {ans['block_num']:,} "
-                    f"{ans['timestamp']} {time_diff} ago",
-                    extra={"db": ans},
-                )
-                last_good_block = int(ans["block_num"])
-            else:
-                try:
-                    last_good_block = get_hive_client().get_dynamic_global_properties()[
-                        "head_block_number"
-                    ]
-                except Exception as e:
-                    logger.error(e)
-                    last_good_block = 93692232
-            return last_good_block
+            last_good_block = int(ans["block_num"])
+        else:
+            try:
+                last_good_block = get_hive_client().get_dynamic_global_properties()[
+                    "head_block_number"
+                ]
+            except Exception as e:
+                logger.error(e)
+                last_good_block = 93692232
+        return last_good_block
 
     except Exception as e:
         logger.error(e)
@@ -260,51 +257,50 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             db_name=HIVE_DATABASE,
             db_user=HIVE_DATABASE_USER,
         )
-    async with TrackedBaseModel.db_client as db_client:
-        last_good_event = await db_client.find_one(
-            HIVE_OPS_COLLECTION,
-            {"producer": watch_witness},
-            sort=[("block_num", -1)],
+    last_good_event = await TrackedBaseModel.db_client.find_one(
+        HIVE_OPS_COLLECTION,
+        {"producer": watch_witness},
+        sort=[("block_num", -1)],
+    )
+    if last_good_event:
+        producer_reward = ProducerReward.model_validate(last_good_event)
+        await producer_reward.get_witness_details()
+        time_diff = check_time_diff(producer_reward.timestamp)
+        logger.info(
+            f"{icon} Last recorded witness producer block: "
+            f"{producer_reward.block_num:,} "
+            f"for {producer_reward.producer} "
+            f"{producer_reward.timestamp} "
+            f"{time_diff} "
+            f"{producer_reward.log_str}",
+            extra={"notification": True, **producer_reward.log_extra},
         )
-        if last_good_event:
-            producer_reward = ProducerReward.model_validate(last_good_event)
-            await producer_reward.get_witness_details()
-            time_diff = check_time_diff(producer_reward.timestamp)
-            logger.info(
-                f"{icon} Last recorded witness producer block: "
-                f"{producer_reward.block_num:,} "
-                f"for {producer_reward.producer} "
-                f"{producer_reward.timestamp} "
-                f"{time_diff} "
-                f"{producer_reward.log_str}",
-                extra={"notification": True, **producer_reward.log_extra},
-            )
-            return producer_reward
+        return producer_reward
 
-        # Empty database
-        look_back = timedelta(hours=3)
-        async for op in stream_ops_async(
-            opNames=["producer_reward"], look_back=look_back, stop_now=True
-        ):
-            if not isinstance(op, ProducerReward):
-                continue
-            if op.producer == watch_witness:
-                await op.get_witness_details()
-                op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
-                op.delta = op.timestamp - last_witness_timestamp
-                _ = await db_client.insert_one(
-                    HIVE_OPS_COLLECTION,
-                    op.model_dump(),
-                )
-                logger.info(
-                    f"{icon} {op.log_str}",
-                    extra={
-                        "notification": False,
-                        **op.log_extra,
-                    },
-                )
-        if op:
-            return op
+    # Empty database
+    look_back = timedelta(hours=3)
+    async for op in stream_ops_async(
+        opNames=["producer_reward"], look_back=look_back, stop_now=True
+    ):
+        if not isinstance(op, ProducerReward):
+            continue
+        if op.producer == watch_witness:
+            await op.get_witness_details()
+            op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
+            op.delta = op.timestamp - last_witness_timestamp
+            _ = await TrackedBaseModel.db_client.insert_one(
+                HIVE_OPS_COLLECTION,
+                op.model_dump(),
+            )
+            logger.info(
+                f"{icon} {op.log_str}",
+                extra={
+                    "notification": False,
+                    **op.log_extra,
+                },
+            )
+    if op:
+        return op
     return None
 
 
@@ -329,20 +325,19 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
             db_name=HIVE_DATABASE,
             db_user=HIVE_DATABASE_USER,
         )
-    async with TrackedBaseModel.db_client as db_client:
-        cursor = await db_client.find(
-            HIVE_OPS_COLLECTION,
-            {"producer": watch_witness},
-            sort=[("block_num", -1)],
-        )
-        # loop through the blocks and calculate the average block time
-        block_timestamps: List[datetime] = []
-        counter = 0
-        async for block in cursor:
-            block_timestamps.append((block["timestamp"]))
-            counter += 1
-            if counter > count_back:
-                break
+    cursor = await TrackedBaseModel.db_client.find(
+        HIVE_OPS_COLLECTION,
+        {"producer": watch_witness},
+        sort=[("block_num", -1)],
+    )
+    # loop through the blocks and calculate the average block time
+    block_timestamps: List[datetime] = []
+    counter = 0
+    async for block in cursor:
+        block_timestamps.append((block["timestamp"]))
+        counter += 1
+        if counter > count_back:
+            break
 
     # Calculate the time differences between consecutive timestamps
     time_differences = [
