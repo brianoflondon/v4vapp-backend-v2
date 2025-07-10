@@ -305,7 +305,7 @@ async def test_account_balances():
     all_accounts = await list_all_accounts()
     for account in all_accounts:
         account_balances = await get_account_balance_printout(
-            account=account, full_history=True, as_of_date=datetime.now(tz=timezone.utc)
+            account=account, line_items=True, as_of_date=datetime.now(tz=timezone.utc)
         )
         print(account_balances)
 
@@ -389,7 +389,7 @@ async def test_process_hive_ops_invoices():
     all_accounts = await list_all_accounts()
     for account in all_accounts:
         account_balances = await get_account_balance_printout(
-            account=account, full_history=True, as_of_date=datetime.now(tz=timezone.utc)
+            account=account, line_items=True, as_of_date=datetime.now(tz=timezone.utc)
         )
         print(account_balances)
 

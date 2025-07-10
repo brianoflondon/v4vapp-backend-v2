@@ -276,6 +276,7 @@ async def process_hive_to_lightning(
                     )
                     # if we're using pay with keepsats, we must record the trial ledger entries
                     # HERE before attempting the payment and update them on success.
+                    
 
                 try:
                     async with hive_transfer:
