@@ -14,10 +14,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
 
-node_alias_cache = {}
-LIGHTNING_FEE_LIMIT_PPM = 1_000
-LIGHTNING_FEE_BASE_MSAT = 50_000
-
 
 class LNDPaymentError(Exception):
     pass
