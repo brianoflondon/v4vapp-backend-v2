@@ -599,8 +599,10 @@ async def get_keepsats_balance(
             ledger_entries.append(ledger_entry)
         ans.ledger_entries = ledger_entries
 
-    deposit_balance = ans.by_ledger_type[LedgerType.DEPOSIT_KEEPSATS.value]
-    withdraw_balance = ans.by_ledger_type[LedgerType.WITHDRAW_KEEPSATS.value]
+    deposit_balance = ans.by_ledger_type.get(LedgerType.DEPOSIT_KEEPSATS.value, ConvertedSummary())
+    withdraw_balance = ans.by_ledger_type.get(
+        LedgerType.WITHDRAW_KEEPSATS.value, ConvertedSummary()
+    )
     net_balance = deposit_balance - withdraw_balance
     ans.net_balance = net_balance
 
