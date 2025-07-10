@@ -215,12 +215,10 @@ class OpBase(TrackedBaseModel):
         This is used to determine the key in the database where the operation
         """
         # Give the last 4 digits of the block number and first 5 chars of the trx_id
-        short_block_num = f"{self.block_num}"
-        short_trx_id = self.trx_id[:5]
-        if self.op_in_trx > 1:
-            short_op_in_trx = f"_{self.op_in_trx}"
-        else:
-            short_op_in_trx = ""
+        block_num_str = str(self.block_num)
+        short_block_num = f"{block_num_str[-4:]}"
+        short_trx_id = self.trx_id[:6]
+        short_op_in_trx = f"_{self.op_in_trx}"
         return f"{short_block_num}_{short_trx_id}{short_op_in_trx}"
 
     @classmethod
