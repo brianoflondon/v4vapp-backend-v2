@@ -168,9 +168,9 @@ def paywithsats_amount(memo: str) -> int:
     Returns:
         int: The extracted amount as an integer if found; otherwise, 0.
     """
-    
+
     # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
-    match = re.search(r"paywithsats:(\d+)", self.d_memo)
+    match = re.search(r"paywithsats:(\d+)", memo)
     if match:
         return int(match.group(1))
     return 0
