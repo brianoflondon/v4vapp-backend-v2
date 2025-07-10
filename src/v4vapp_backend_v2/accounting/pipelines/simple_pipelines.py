@@ -210,21 +210,7 @@ def filter_sum_credit_debit_pipeline(
         # This section will project the relevant fields for each ledger entry
         # and sort them by timestamp.
         facet_sections["line_items"] = [
-            {
-                "$project": {
-                    "_id": 1,
-                    "group_id": 1,
-                    "ledger_type": 1,
-                    "timestamp": 1,
-                    "description": 1,
-                    "cust_id": 1,
-                    "debit_amount": 1,
-                    "debit_unit": 1,
-                    "credit_amount": 1,
-                    "credit_unit": 1,
-                    # Include other fields as needed
-                }
-            },
+            {"$project": {"_id": 0}},
             {"$sort": {"timestamp": 1}},
         ]
 
