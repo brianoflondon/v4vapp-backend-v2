@@ -201,7 +201,8 @@ class LedgerEntry(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.op_type = get_tracked_any_type(self.op)
+        if self.op:
+            self.op_type = get_tracked_any_type(self.op)
         if not LedgerEntry.db_client:
             LedgerEntry.db_client = TrackedBaseModel.db_client or get_mongodb_client_defaults()
 
