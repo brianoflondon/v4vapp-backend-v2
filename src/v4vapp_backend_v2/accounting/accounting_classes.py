@@ -2,21 +2,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
+from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 
 """
 Helper classes for accounting summaries, including account balances and lightning conv summaries.
 """
-
-
-@dataclass
-class ConvertedSummary:
-    hive: float = 0.0
-    hbd: float = 0.0
-    usd: float = 0.0
-    sats: float = 0.0
-    msats: float = 0.0
 
 
 @dataclass
@@ -56,9 +48,12 @@ class LedgerConvSummary(ConvertedSummary):
 
     Attributes:
         cust_id (str): The customer ID associated with the summary.
+        account (LedgerAccount | None): The ledger account associated with the summary.
+        as_of_date (datetime): The date and time when the summary was generated.
         age (int): The age in seconds for filtering purposes.
         by_ledger_type (Dict[str, ConvertedSummary]): A dictionary mapping ledger types to their
-        output_text (str): A formatted string representation of the lightning conv summary.
+        ledger_entries (List[LedgerEntry]): A list of ledger entries associated with the summary.
+        net_balance (ConvertedSummary | None): The net balance calculated from the ledger entries.
     """
 
     cust_id: str = ""
@@ -67,6 +62,7 @@ class LedgerConvSummary(ConvertedSummary):
     age: timedelta | None = None
     by_ledger_type: Dict[str, ConvertedSummary] = field(default_factory=dict)
     ledger_entries: List[LedgerEntry] = field(default_factory=list)
+    net_balance: ConvertedSummary | None = None
 
 
 @dataclass

@@ -11,9 +11,13 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LightningLimitSummary,
     UnitSummary,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AssetAccount,
+    LedgerAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
     list_all_accounts_pipeline,
@@ -140,7 +144,7 @@ async def get_account_balance(
 async def get_account_balance_printout(
     account: LedgerAccount,
     df: pd.DataFrame = pd.DataFrame(),
-    full_history: bool = False,
+    line_items: bool = False,
     as_of_date: datetime | None = None,
 ) -> Tuple[str, AccountBalanceSummary]:
     """
@@ -167,7 +171,7 @@ async def get_account_balance_printout(
     combined_df = await get_account_balance(
         account=account,
         df=df,
-        full_history=full_history,
+        full_history=line_items,
         as_of_date=as_of_date,
     )
     if combined_df.empty:
@@ -216,7 +220,7 @@ async def get_account_balance_printout(
         # Format output for this unit
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
-        if full_history:
+        if line_items:
             for _, row in unit_df.iterrows():
                 contra_str = (
                     "(-)"
@@ -383,7 +387,7 @@ async def get_all_accounts(
                     get_account_balance_printout(
                         account=account,
                         df=ledger_df,
-                        full_history=False,
+                        line_items=False,
                         as_of_date=as_of_date,
                     )
                 )
@@ -418,6 +422,7 @@ async def ledger_pipeline_result(
 ) -> LedgerConvSummary:
     """
     Executes a MongoDB aggregation pipeline and returns the result as a LedgerConvSummary.
+    THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
 
     Args:
         pipeline (Mapping[str, any]): The aggregation pipeline to execute.
@@ -471,6 +476,7 @@ async def get_account_lightning_conv(
     Retrieves the lightning conversion for a specific customer as of a given date.
     This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
     i.e. conversions from HIVE/HBD to SATS.
+    THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
 
     Args:
         account (LedgerAccount): The account for which to retrieve the lightning spend.
@@ -556,6 +562,9 @@ async def get_keepsats_balance(
 ) -> LedgerConvSummary:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
+    This looks at the `credit` values because credits to a Liability account
+    represent deposits, while debits represent withdrawals.
+    Adds a net_balance field to the output summing up deposits and withdrawls
 
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
@@ -583,4 +592,16 @@ async def get_keepsats_balance(
         account=account,
         pipeline=pipeline,
     )
+    if line_items:
+        ledger_entries = []
+        for item in ans.ledger_entries:
+            ledger_entry = LedgerEntry.model_validate(item)
+            ledger_entries.append(ledger_entry)
+        ans.ledger_entries = ledger_entries
+
+    deposit_balance = ans.by_ledger_type[LedgerType.DEPOSIT_KEEPSATS.value]
+    withdraw_balance = ans.by_ledger_type[LedgerType.WITHDRAW_KEEPSATS.value]
+    net_balance = deposit_balance - withdraw_balance
+    ans.net_balance = net_balance
+
     return ans
