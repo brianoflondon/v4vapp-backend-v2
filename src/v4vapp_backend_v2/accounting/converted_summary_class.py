@@ -10,17 +10,9 @@ class ConvertedSummary:
     sats: float = 0.0
     msats: float = 0.0
 
-    def __add__(self, other: Union["ConvertedSummary", float, int]) -> "ConvertedSummary":
+    def __add__(self, other: "ConvertedSummary") -> "ConvertedSummary":
         """Add two ConvertedSummary instances or a scalar to all fields."""
-        if isinstance(other, (float, int)):
-            return ConvertedSummary(
-                hive=self.hive + other,
-                hbd=self.hbd + other,
-                usd=self.usd + other,
-                sats=self.sats + other,
-                msats=self.msats + other,
-            )
-        elif isinstance(other, ConvertedSummary):
+        if isinstance(other, ConvertedSummary):
             return ConvertedSummary(
                 hive=self.hive + other.hive,
                 hbd=self.hbd + other.hbd,
@@ -30,17 +22,9 @@ class ConvertedSummary:
             )
         raise TypeError(f"Unsupported operand type for +: '{type(other)}'")
 
-    def __sub__(self, other: Union["ConvertedSummary", float, int]) -> "ConvertedSummary":
+    def __sub__(self, other: "ConvertedSummary") -> "ConvertedSummary":
         """Subtract a ConvertedSummary instance or a scalar from all fields."""
-        if isinstance(other, (float, int)):
-            return ConvertedSummary(
-                hive=self.hive - other,
-                hbd=self.hbd - other,
-                usd=self.usd - other,
-                sats=self.sats - other,
-                msats=self.msats - other,
-            )
-        elif isinstance(other, ConvertedSummary):
+        if isinstance(other, ConvertedSummary):
             return ConvertedSummary(
                 hive=self.hive - other.hive,
                 hbd=self.hbd - other.hbd,
@@ -81,22 +65,6 @@ class ConvertedSummary:
             and abs(self.sats - other.sats) < 1e-10
             and abs(self.msats - other.msats) < 1e-10
         )
-
-    def __radd__(self, other: Union[float, int]) -> "ConvertedSummary":
-        """Support addition when the scalar is on the left (e.g., 2 + obj)."""
-        return self.__add__(other)
-
-    def __rsub__(self, other: Union[float, int]) -> "ConvertedSummary":
-        """Support subtraction when the scalar is on the left (e.g., 2 - obj)."""
-        if isinstance(other, (float, int)):
-            return ConvertedSummary(
-                hive=other - self.hive,
-                hbd=other - self.hbd,
-                usd=other - self.usd,
-                sats=other - self.sats,
-                msats=other - self.msats,
-            )
-        raise TypeError(f"Unsupported operand type for -: '{type(other)}'")
 
     def __rmul__(self, other: Union[float, int]) -> "ConvertedSummary":
         """Support multiplication when the scalar is on the left (e.g., 2 * obj)."""
