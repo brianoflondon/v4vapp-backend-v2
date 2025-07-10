@@ -255,7 +255,16 @@ class CryptoConversion(BaseModel):
             self._compute_conversions()
 
     async def get_quote(self, use_cache: bool = True):
-        """Fetch the quote and compute all conversions once."""
+        """
+        Asynchronously retrieves the latest cryptocurrency quotes and updates the instance with the fetched data.
+        Args:
+            use_cache (bool, optional): Whether to use cached quotes if available. Defaults to True.
+        Side Effects:
+            - Updates the instance's `quote` attribute with the latest quote data.
+            - Calls a private method `_compute_conversions()` to update conversion values.
+            - Sets the `fetch_date` attribute to the date when the quote was fetched.
+        """
+        
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
         self.quote = all_quotes.quote
