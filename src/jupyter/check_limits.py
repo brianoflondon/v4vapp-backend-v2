@@ -51,7 +51,6 @@ async def main():
     for ledger_entry in keepsats_balance.ledger_entries:
         print(ledger_entry)
 
-    ledger_type = LedgerType.WITHDRAW_KEEPSATS
     amount_msats = 3_000_000
 
     debit_conversion = CryptoConversion(conv_from=Currency.MSATS, value=amount_msats)
@@ -64,6 +63,7 @@ async def main():
     print(account_printout_str)
     pprint(account_details)
 
+    ledger_type = LedgerType.WITHDRAW_KEEPSATS
     withdraw_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         ledger_type=ledger_type,
