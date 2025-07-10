@@ -457,26 +457,25 @@ class AllQuotes(BaseModel):
                 f"{ICON} Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
             )
             return
-        async with self.db_client as db_client:
-            try:
-                record = HiveRatesDB(
-                    timestamp=self.fetch_date,
-                    hive_usd=self.quote.hive_usd,
-                    hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
-                    btc_usd=self.quote.btc_usd,
-                    sats_hive=self.quote.sats_hive_p,
-                    sats_usd=self.quote.sats_usd,
-                    sats_hbd=self.quote.sats_hbd_p,
-                    hive_hbd=self.quote.hive_hbd,
-                )
-                db_ans = await db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
-                logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
-                AllQuotes.db_store_timestamp = self.fetch_date
-            except Exception as e:
-                logger.warning(
-                    f"{ICON} Failed to insert rates into database: {e}",
-                    extra={"notification": False},
-                )
+        try:
+            record = HiveRatesDB(
+                timestamp=self.fetch_date,
+                hive_usd=self.quote.hive_usd,
+                hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
+                btc_usd=self.quote.btc_usd,
+                sats_hive=self.quote.sats_hive_p,
+                sats_usd=self.quote.sats_usd,
+                sats_hbd=self.quote.sats_hbd_p,
+                hive_hbd=self.quote.hive_hbd,
+            )
+            db_ans = await self.db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
+            logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
+            AllQuotes.db_store_timestamp = self.fetch_date
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to insert rates into database: {e}",
+                extra={"notification": False},
+            )
 
     @property
     def quote(self) -> QuoteResponse:

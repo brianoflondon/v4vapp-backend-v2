@@ -4,7 +4,7 @@ from collections import deque
 from datetime import datetime, timezone
 from enum import Enum, StrEnum
 from timeit import default_timer as timer
-from typing import Any, List
+from typing import Any, List, Mapping
 from urllib.parse import quote_plus
 
 from bson import ObjectId
@@ -745,7 +745,9 @@ class MongoDBClient:
         return document
 
     @retry_on_failure()
-    async def find(self, collection_name: str, query: dict, *args, **kwargs) -> AsyncIOMotorCursor:
+    async def find(
+        self, collection_name: str, query: Mapping[str, Any], *args, **kwargs
+    ) -> AsyncIOMotorCursor:
         """
         Asynchronously find multiple documents in a specified collection
         based on a query.

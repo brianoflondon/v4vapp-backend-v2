@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any, Dict, Mapping
 
 import pandas as pd
 
@@ -40,7 +41,7 @@ async def get_ledger_entries(
           corresponds to the specified account name and sub-account.
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
-    query = filter_by_account_as_of_date_query(
+    query  = filter_by_account_as_of_date_query(
         account=filter_by_account,
         cust_id=cust_id,
         as_of_date=as_of_date,
@@ -57,22 +58,22 @@ async def get_ledger_entries(
             },
         )
         return ledger_entries
-    async with TrackedBaseModel.db_client as db_client:
-        cursor = await db_client.find(
-            collection_name=collection_name,
-            query=query,
-            sort=[("timestamp", 1)],
-        )
-        async for entry in cursor:
-            try:
-                ledger_entry = LedgerEntry.model_validate(entry)
-                ledger_entries.append(ledger_entry)
-            except Exception as e:
-                logger.error(
-                    f"Error validating ledger entry: {entry}. Error: {e}",
-                    extra={"notification": False, "entry": entry, "error": str(e)},
-                )
-                continue
+    db_client = TrackedBaseModel.db_client
+    cursor = await db_client.find(
+        collection_name=collection_name,
+        query=query,
+        sort=[("timestamp", 1)],
+    )
+    async for entry in cursor:
+        try:
+            ledger_entry = LedgerEntry.model_validate(entry)
+            ledger_entries.append(ledger_entry)
+        except Exception as e:
+            logger.error(
+                f"Error validating ledger entry: {entry}. Error: {e}",
+                extra={"notification": False, "entry": entry, "error": str(e)},
+            )
+            continue
     return ledger_entries
 
 

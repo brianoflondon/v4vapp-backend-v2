@@ -61,7 +61,7 @@ def filter_by_account_as_of_date_query(
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
-) -> Mapping[str, Any]:
+) -> Dict[str, Any]:
     """
     Generates a MongoDB query to filter documents by a specific account and date.
 

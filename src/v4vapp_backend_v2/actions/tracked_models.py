@@ -307,12 +307,11 @@ class TrackedBaseModel(BaseModel):
             bool: True if the operation is locked, False otherwise.
         """
         if TrackedBaseModel.db_client:
-            async with TrackedBaseModel.db_client as db_client:
-                result: dict[str, Any] | None = await db_client.find_one(
-                    collection_name=self.collection,
-                    query=self.group_id_query,
-                    projection={"locked": True},
-                )
+            result: dict[str, Any] | None = await TrackedBaseModel.db_client.find_one(
+                collection_name=self.collection,
+                query=self.group_id_query,
+                projection={"locked": True},
+            )
             if result:
                 return result.get("locked", False)
         return False
@@ -329,13 +328,12 @@ class TrackedBaseModel(BaseModel):
             None
         """
         if TrackedBaseModel.db_client:
-            async with TrackedBaseModel.db_client as db_client:
-                ans: UpdateResult = await db_client.update_one(
-                    collection_name=self.collection,
-                    query=self.group_id_query,
-                    update={"$set": {"locked": True}},
-                )
-                return ans
+            ans: UpdateResult = await TrackedBaseModel.db_client.update_one(
+                collection_name=self.collection,
+                query=self.group_id_query,
+                update={"$set": {"locked": True}},
+            )
+            return ans
         return None
 
     async def unlock_op(self) -> UpdateResult | None:
@@ -350,15 +348,14 @@ class TrackedBaseModel(BaseModel):
             None
         """
         if TrackedBaseModel.db_client:
-            async with TrackedBaseModel.db_client as db_client:
-                # Remember my update_one already has the $set
-                ans: UpdateResult = await db_client.update_one(
-                    collection_name=self.collection,
-                    query=self.group_id_query,
-                    update={"$unset": {"locked": ""}},
-                    upsert=True,
-                )
-                return ans
+            # Remember my update_one already has the $set
+            ans: UpdateResult = await TrackedBaseModel.db_client.update_one(
+                collection_name=self.collection,
+                query=self.group_id_query,
+                update={"$unset": {"locked": ""}},
+                upsert=True,
+            )
+            return ans
         return None
 
     async def save(
@@ -524,50 +521,49 @@ class TrackedBaseModel(BaseModel):
             await cls.update_quote()
             return cls.last_quote
 
-        async with cls.db_client as db_client:
-            try:
-                # Find the nearest quote by timestamp
-                collection = await db_client.get_collection(DB_RATES_COLLECTION)
-                cursor = collection.aggregate(
-                    [
-                        {"$match": {"timestamp": {"$exists": True}}},
-                        {
-                            "$project": {
-                                "originalDoc": "$$ROOT",
-                                "time_diff_ms": {"$abs": {"$subtract": ["$timestamp", timestamp]}},
-                            }
-                        },
-                        {"$sort": {"time_diff_ms": 1}},
-                        {"$limit": 1},
-                        {"$replaceRoot": {"newRoot": "$originalDoc"}},
-                    ]
-                )
-                nearest_quote = await cursor.to_list(length=1)
+        try:
+            # Find the nearest quote by timestamp
+            collection = await cls.db_client.get_collection(DB_RATES_COLLECTION)
+            cursor = collection.aggregate(
+                [
+                    {"$match": {"timestamp": {"$exists": True}}},
+                    {
+                        "$project": {
+                            "originalDoc": "$$ROOT",
+                            "time_diff_ms": {"$abs": {"$subtract": ["$timestamp", timestamp]}},
+                        }
+                    },
+                    {"$sort": {"time_diff_ms": 1}},
+                    {"$limit": 1},
+                    {"$replaceRoot": {"newRoot": "$originalDoc"}},
+                ]
+            )
+            nearest_quote = await cursor.to_list(length=1)
 
-                if nearest_quote:
-                    quote = HiveRatesDB.model_validate(nearest_quote[0])
-                    quote_response = QuoteResponse(
-                        hive_usd=quote.hive_usd,
-                        hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
-                        btc_usd=quote.btc_usd,
-                        hive_hbd=quote.hive_hbd,
-                        raw_response={},
-                        source="HiveRatesDB",
-                        fetch_date=quote.timestamp,
-                        error="",  # No error in this case
-                        error_details={},
-                    )
-                    logger.info(
-                        f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
-                        extra={"notification": False, "quote": quote.model_dump()},
-                    )
-                    return quote_response
-                else:
-                    logger.warning(
-                        f"No quotes found for timestamp {timestamp}",
-                        extra={"notification": False},
-                    )
-                    return cls.last_quote
-            except Exception as e:
-                logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
+            if nearest_quote:
+                quote = HiveRatesDB.model_validate(nearest_quote[0])
+                quote_response = QuoteResponse(
+                    hive_usd=quote.hive_usd,
+                    hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
+                    btc_usd=quote.btc_usd,
+                    hive_hbd=quote.hive_hbd,
+                    raw_response={},
+                    source="HiveRatesDB",
+                    fetch_date=quote.timestamp,
+                    error="",  # No error in this case
+                    error_details={},
+                )
+                logger.info(
+                    f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
+                    extra={"notification": False, "quote": quote.model_dump()},
+                )
+                return quote_response
+            else:
+                logger.warning(
+                    f"No quotes found for timestamp {timestamp}",
+                    extra={"notification": False},
+                )
+                return cls.last_quote
+        except Exception as e:
+            logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
         return cls.last_quote

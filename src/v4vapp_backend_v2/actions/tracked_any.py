@@ -100,38 +100,36 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
     """
     if not TrackedBaseModel.db_client:
         return None
+    client = TrackedBaseModel.db_client
 
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
         if "_" in short_id:
             # This is a for a hive_ops object
-            async with TrackedBaseModel.db_client as client:
-                collection_name = "hive_ops"
+            collection_name = "hive_ops"
+            query = TrackedBaseModel.short_id_query(short_id=short_id)
+            result = await client.find_one(collection_name=collection_name, query=query)
+            if result:
+                value = {"value": result}
+                answer = DiscriminatedTracked.model_validate(value)
+                return answer.value
+        else:
+            collections = [Invoice.collection, Payment.collection]
+            for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
                 result = await client.find_one(collection_name=collection_name, query=query)
                 if result:
                     value = {"value": result}
                     answer = DiscriminatedTracked.model_validate(value)
                     return answer.value
-        else:
-            collections = [Invoice.collection, Payment.collection]
-            async with TrackedBaseModel.db_client as client:
-                for collection_name in collections:
-                    query = TrackedBaseModel.short_id_query(short_id=short_id)
-                    result = await client.find_one(collection_name=collection_name, query=query)
-                    if result:
-                        value = {"value": result}
-                        answer = DiscriminatedTracked.model_validate(value)
-                        return answer.value
 
-    async with TrackedBaseModel.db_client as client:
-        collection_name = tracked_obj.collection
-        result = await client.find_one(
-            collection_name=collection_name,
-            query=tracked_obj.group_id_query,
-        )
-        if result:
-            value = {"value": result}
-            answer = DiscriminatedTracked.model_validate(value)
-            return answer.value
+    collection_name = tracked_obj.collection
+    result = await client.find_one(
+        collection_name=collection_name,
+        query=tracked_obj.group_id_query,
+    )
+    if result:
+        value = {"value": result}
+        answer = DiscriminatedTracked.model_validate(value)
+        return answer.value
     return None
