@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -8,7 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 
 async def generate_profit_and_loss_report(
     df: pd.DataFrame = pd.DataFrame(),
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     collection_name: str = "",
 ) -> dict:
     """
@@ -245,7 +245,7 @@ async def generate_profit_and_loss_report(
 
 
 def profit_and_loss_printout(
-    pl_report: dict, as_of_date: datetime = datetime.now(tz=timezone.utc)
+    pl_report: dict, as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1)
 ) -> str:
     """
     Formats a Profit and Loss report, displaying SATS, msats, HIVE, HBD, and USD, with Net Income by sub-account and total.

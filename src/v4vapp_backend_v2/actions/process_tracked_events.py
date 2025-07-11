@@ -18,7 +18,10 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     return_hive_transfer,
 )
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
-from v4vapp_backend_v2.actions.payment_success import hive_to_lightning_payment_success
+from v4vapp_backend_v2.actions.payment_success import (
+    hive_to_lightning_payment_success,
+    keepsats_to_lightning_payment_success,
+)
 from v4vapp_backend_v2.actions.tracked_any import (
     DiscriminatedTracked,
     TrackedAny,
@@ -283,9 +286,14 @@ async def process_lightning_payment(
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
             initiating_op = old_ledger_entry.op
             if isinstance(initiating_op, TransferBase):
-                ledger_entries_list = await hive_to_lightning_payment_success(
-                    payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
-                )
+                if getattr(initiating_op, "paywithsats", None):
+                    ledger_entries_list = await keepsats_to_lightning_payment_success(
+                        payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
+                    )
+                else:
+                    ledger_entries_list = await hive_to_lightning_payment_success(
+                        payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
+                    )
                 return ledger_entries_list
             elif isinstance(initiating_op, CustomJson):
                 raise NotImplementedError(

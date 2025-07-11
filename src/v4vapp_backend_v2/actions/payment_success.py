@@ -46,6 +46,7 @@ async def hive_to_lightning_payment_success(
     Handle successful Lightning payment.
 
     """
+    # MARK: Hive to Lightning Payment Success
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
     timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
     hive_transfer = old_ledger_entry.op
@@ -53,7 +54,6 @@ async def hive_to_lightning_payment_success(
         raise NotImplementedError(
             f"Unhandled operation type: {type(hive_transfer)} for hive_to_lightning_payment_success {payment.group_id_p}"
         )
-    # MARK: Hive to Lightning Payment Success
 
     # This means we have found an inbound Hive payment and this is the matching
     # payment
@@ -273,6 +273,143 @@ async def hive_to_lightning_payment_success(
             credit_conv=lightning_fee_conv,
         )
         ledger_entries_list.append(fee_ledger_entry_sats)
+
+    hive_transfer.add_reply(
+        reply_id=payment.group_id_p,
+        reply_type="payment",
+        reply_msat=cost_of_payment_msat,
+        reply_error=None,
+        reply_message=message,
+    )
+
+    asyncio.create_task(
+        lightning_payment_sent(
+            payment=payment,
+            hive_transfer=hive_transfer,
+            nobroadcast=nobroadcast,
+        )
+    )
+    return ledger_entries_list
+
+
+async def keepsats_to_lightning_payment_success(
+    payment: Payment, old_ledger_entry: LedgerEntry, nobroadcast: bool = False
+) -> list[LedgerEntry]:
+    """
+    Handle successful Keepsats payment and generate corresponding ledger entries.
+
+    This function processes a successful Keepsats payment, updates related ledger entries,
+    and manages the conversion and reconciliation between Hive and Lightning assets.
+    It handles various accounting steps such as conversion, contra reconciliation, fee income,
+    payment fulfillment, and fee expenses.
+
+        payment (Payment): The Keepsats payment object containing payment details and custom records.
+        nobroadcast (bool, optional): If True, prevents broadcasting of certain events. Defaults to False.
+
+    Returns:
+        list[LedgerEntry]: A list of new ledger entries created as a result of the successful payment.
+    """
+    # MARK: Keepsats Payment Success
+    quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
+    timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
+    hive_transfer = old_ledger_entry.op
+    if not isinstance(hive_transfer, TransferBase):
+        raise NotImplementedError(
+            f"Unhandled operation type: {type(hive_transfer)} for hive_to_lightning_payment_success {payment.group_id_p}"
+        )
+
+    # Identify the customer and server
+    cust_id = hive_transfer.from_account
+    server_id = hive_transfer.to_account
+
+    # Mark: Record the Payment in the Hive Op
+    cost_of_payment_msat = payment.value_msat + payment.fee_msat
+    message = f"Keepsats payment sent for operation {hive_transfer.group_id_p}: {payment.payment_hash} {payment.route_str} {cost_of_payment_msat / 1000:,.0f} sats"
+
+    node_name = "keepsats"
+    ledger_entries_list = []
+
+    # MARK: 2 Outflow Send Lightning Payment
+    ledger_type = LedgerType.LIGHTNING_OUT
+    outgoing_ledger_entry = LedgerEntry(
+        cust_id=cust_id,
+        ledger_type=ledger_type,
+        group_id=f"{payment.group_id}-{ledger_type.value}",
+        timestamp=next(timestamp),
+        op=payment,
+        description=f"Keepsats outgoing {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
+        debit=LiabilityAccount(
+            name="Customer Liability",
+            sub=cust_id,  # This is the CUSTOMER
+            contra=False,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=payment.value_msat,
+        debit_conv=payment.conv,
+        credit=AssetAccount(name="Treasury Lightning", sub=node_name),
+        credit_unit=Currency.MSATS,
+        credit_amount=payment.value_msat,
+        credit_conv=payment.conv,
+    )
+    ledger_entries_list.append(outgoing_ledger_entry)
+
+    # MARK: 3: Lightning Network Fee Charge Entry
+    # Only record the Lightning fee if it is greater than 0 msats
+    if payment.fee_msat > 0:
+        lightning_fee_conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=payment.fee_msat,
+            quote=quote,
+        ).conversion
+
+        ledger_type = LedgerType.FEE_CHARGE
+        external_payment_ledger_entry = LedgerEntry(
+            cust_id=cust_id,
+            ledger_type=ledger_type,
+            group_id=f"{payment.group_id}-{ledger_type.value}",
+            timestamp=next(timestamp),
+            op=payment,
+            description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
+            debit=LiabilityAccount(
+                name="Customer Liability",
+                sub=cust_id,
+            ),
+            debit_unit=Currency.MSATS,
+            debit_amount=payment.fee_msat,
+            debit_conv=lightning_fee_conv,
+            credit=RevenueAccount(name="Fee Income Keepsats", sub=node_name),
+            credit_unit=Currency.MSATS,
+            credit_amount=cost_of_payment_msat,
+            credit_conv=payment.conv,
+        )
+        ledger_entries_list.append(external_payment_ledger_entry)
+
+        ledger_type = LedgerType.FEE_EXPENSE
+        fee_ledger_entry_sats = LedgerEntry(
+            cust_id=cust_id,
+            ledger_type=ledger_type,
+            group_id=f"{payment.group_id}-{ledger_type.value}",
+            timestamp=next(timestamp),
+            op=payment,
+            description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
+            debit=ExpenseAccount(
+                name="Fee Expenses Lightning",
+                sub=node_name,  # This is paid from the node
+            ),
+            debit_unit=Currency.MSATS,
+            debit_amount=payment.fee_msat,
+            debit_conv=lightning_fee_conv,
+            credit=AssetAccount(
+                name="Treasury Lightning",
+                sub=node_name,  # This is the SERVER
+            ),
+            credit_unit=Currency.MSATS,
+            credit_amount=payment.fee_msat,
+            credit_conv=lightning_fee_conv,
+        )
+        ledger_entries_list.append(fee_ledger_entry_sats)
+
+    hive_transfer.change_amount = hive_transfer.amount
 
     hive_transfer.add_reply(
         reply_id=payment.group_id_p,

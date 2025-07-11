@@ -136,12 +136,14 @@ class LedgerType(StrEnum):
 
     DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
     WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
+    HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
 
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
+    FEE_CHARGE = "fee_charge"  # Fee charges from a customer
 
     LIGHTNING_CONTRA = "l_contra"
     LIGHTNING_OUT = "l_out"
@@ -642,6 +644,20 @@ class LedgerEntry(BaseModel):
             description = "\n".join(textwrap.wrap(description, width=100))
         if self.credit_debit_balance_str:
             description += f"{description}\n{self.credit_debit_balance_str}"
+
+        # Create a conversion line which looks
+        # like Converted              -0.000 HIVE       -0.000 HBD       -0.000 USD           -0 SATS               -0 msats
+        if self.debit_conv and self.credit_conv:
+            conversion_line = (
+                f"Converted   "
+                f"{self.debit_conv.hive:>12,.3f} HIVE "
+                f"{self.debit_conv.hbd:>12,.3f} HBD "
+                f"{self.debit_conv.usd:>12,.3f} USD "
+                f"{self.debit_conv.sats:>15,.0f} SATS "
+            )
+        else:
+            conversion_line = "Converted              N/A"
+
         entry = (
             f"\n"
             f"J/E NUMBER  : {self.group_id or '#####'}\n"
@@ -651,6 +667,7 @@ class LedgerEntry(BaseModel):
             f"{'-' * 100}\n"
             f"{debit_account_with_type:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
             f"{' ' * 4}{credit_account_with_type:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
+            f"{conversion_line}\n"
             f"DESCRIPTION\n{description or 'N/A'}"
             f"\n{'=' * 100}\n"
         )

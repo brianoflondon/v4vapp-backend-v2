@@ -58,7 +58,7 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
 ) -> Dict[str, Any]:
@@ -120,7 +120,7 @@ def filter_by_account_as_of_date_query(
 def filter_sum_credit_debit_pipeline(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
     line_items: bool = False,

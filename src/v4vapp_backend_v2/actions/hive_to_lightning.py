@@ -1,4 +1,5 @@
 import asyncio
+from pprint import pprint
 from typing import Dict, Tuple
 
 from nectar.amount import Amount
@@ -12,7 +13,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
-from v4vapp_backend_v2.actions.keepsats_ledger_entries import withdraw_keepsats_to_treasury
+from v4vapp_backend_v2.actions.keepsats_ledger_entries import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -78,6 +79,10 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
     keepsats_balance = await get_keepsats_balance(cust_id=hive_transfer.from_account)
+    logger.info(
+        f"Checking Keepsats balance for {hive_transfer.from_account}: {keepsats_balance.net_balance.sats:,.0f} sats"
+    )
+    pprint(keepsats_balance)
     if not keepsats_balance:
         raise HiveToLightningError(
             "Pay with sats operation detected, but no Keepsats balance found."
@@ -270,6 +275,7 @@ async def process_hive_to_lightning(
                         )
                         raise HiveToLightningError(message)
 
+                release_hold = True  # Default to releasing the hold at the end.
                 try:
                     async with hive_transfer:
                         pay_req, lnd_client = await decode_incoming_and_checks(
@@ -285,7 +291,7 @@ async def process_hive_to_lightning(
                             # HERE before attempting the payment and update them on success.
                             # This trial entry (signified by a prefix of hold_ in the group_id) will
                             # be updated to the final entry on success.
-                            await withdraw_keepsats_to_treasury(
+                            await hold_keepsats(
                                 amount_msats=pay_req.value_msat + pay_req.fee_estimate,
                                 cust_id=hive_transfer.from_account,
                                 hive_transfer=hive_transfer,
@@ -308,6 +314,8 @@ async def process_hive_to_lightning(
                                 **payment.log_extra,
                             },
                         )
+                        # The hold will be released in the finally block if necessary.
+
                     return
 
                 except HiveToLightningError as e:
@@ -336,18 +344,27 @@ async def process_hive_to_lightning(
                         "Unexpected error during Hive to Lightning processing",
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
+                    # we don't release a keepsats hold if an unknown error occurred
+                    release_hold = False
 
                 finally:
+                    if hive_transfer.paywithsats and release_hold:
+                        # If we are here, the payment failed, we need to release the held Keepsats
+                        release_task = asyncio.create_task(
+                            release_keepsats(hive_transfer=hive_transfer)
+                        )
+                        release_task.add_done_callback(lambda t: handle_tasks([t]))
+                        release_task.set_name(f"Release Keepsats for {hive_transfer.group_id_p}")
                     if return_hive_message:
-                        task = asyncio.create_task(
+                        return_task = asyncio.create_task(
                             return_hive_transfer(
                                 hive_transfer=hive_transfer,
                                 reason=return_hive_message,
                                 nobroadcast=nobroadcast,
                             )
                         )
-                        task.add_done_callback(lambda t: handle_tasks([t]))
-                        task.set_name(
+                        return_task.add_done_callback(lambda t: handle_tasks([t]))
+                        return_task.set_name(
                             f"Return Hive to Lightning transfer for {hive_transfer.group_id_p}"
                         )
 
@@ -421,22 +438,23 @@ async def decode_incoming_and_checks(
         if not pay_req:
             raise HiveToLightningError("Failed to decode Lightning invoice")
     except Exception as e:
-        logger.error(f"Error decoding Lightning invoice: {e}")
+        logger.exception(
+            f"Error decoding Lightning invoice: {e}",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
         raise HiveToLightningError(f"Error decoding Lightning invoice: {e}")
 
     # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
     if hive_transfer.paywithsats:
         # get the sats balance for the sending account
         result = await check_keepsats_balance(hive_transfer, pay_req)
-    else:
+    else:  # both these tests are for conversions not paywithsats
         result = await check_amount_sent(hive_transfer, pay_req)
+        if not result:
+            result = await check_user_limits(pay_req.value, hive_transfer)
 
     if result:
         raise HiveToLightningError(result)
-
-    user_limits_text = await check_user_limits(pay_req.value, hive_transfer)
-    if user_limits_text:
-        raise HiveToLightningError(f"{user_limits_text}")
 
     return pay_req, lnd_client
 
@@ -632,10 +650,21 @@ async def convert_hive_to_keepsats(
     """
     try:
         # Perform the conversion logic here
+        keepsats_balance_before = await get_keepsats_balance(cust_id=hive_transfer.from_account)
+        logger.info(
+            f"Keepsats balance for {hive_transfer.from_account}: {keepsats_balance_before.net_balance.sats:,.0f} sats"
+        )
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
         for entry in ledger_entries:
+            logger.info(f"Ledger Entries for hive to keepsats conversion: {hive_transfer.log_str}")
             logger.info(entry)
             await entry.save()
+        await asyncio.sleep(5)
+        keepsats_balance_after = await get_keepsats_balance(cust_id=hive_transfer.from_account)
+        logger.info(
+            f"Keepsats balance for {hive_transfer.from_account}: {keepsats_balance_after.net_balance.sats:,.0f} sats "
+            f"change: {keepsats_balance_after.net_balance.sats - keepsats_balance_before.net_balance.sats:,.0f} sats"
+        )
 
         trx = await return_hive_transfer(
             hive_transfer=hive_transfer,
@@ -757,6 +786,13 @@ async def return_hive_transfer(
                 f"Updated Hive transfer with reply: {hive_transfer.replies[-1]}",
                 extra={"notification": False, **hive_transfer.log_extra},
             )
+            if hive_transfer.paywithsats:
+                # If this was a keepsats operation, we need to update the ledger entry
+                # with the change transaction
+                logger.warning(
+                    "Need to remove or release the hold transaction or change it to a permanent"
+                )
+
             return trx
         else:
             raise HiveTransferError("No transaction created during Hive to Lightning repayment")
