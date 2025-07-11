@@ -24,6 +24,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
@@ -59,7 +60,7 @@ async def get_account_balance(
         - The resulting DataFrame includes both debit and credit transactions, sorted by timestamp.
     """
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
     if df.empty:
         df = await get_ledger_dataframe(
             as_of_date=as_of_date,
@@ -166,7 +167,7 @@ async def get_account_balance_printout(
     """
     max_width = 135
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
 
     combined_df = await get_account_balance(
         account=account,
@@ -358,7 +359,7 @@ async def list_all_accounts() -> List[LedgerAccount]:
 
 
 async def get_all_accounts(
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
 ) -> Dict[LedgerAccount, AccountBalanceSummary]:
     """
     Fetches the balance summaries for all accounts as of a specified date.
@@ -418,7 +419,7 @@ async def ledger_pipeline_result(
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
     age: timedelta | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
 ) -> LedgerConvSummary:
     """
     Executes a MongoDB aggregation pipeline and returns the result as a LedgerConvSummary.
@@ -430,7 +431,9 @@ async def ledger_pipeline_result(
     Returns:
         LedgerConvSummary: The result of the aggregation as a LedgerConvSummary.
     """
-    collection = await TrackedBaseModel.db_client.get_collection("ledger")
+    # Get a brand new MongoDB client with defaults
+    db_client = get_mongodb_client_defaults()
+    collection = await db_client.get_collection("ledger")
     cursor = collection.aggregate(pipeline=pipeline)
     ans = LedgerConvSummary(
         cust_id=cust_id,
@@ -468,7 +471,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -557,7 +560,7 @@ async def check_hive_conversion_limits(
 
 async def get_keepsats_balance(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     line_items: bool = False,
 ) -> LedgerConvSummary:
     """
@@ -584,6 +587,7 @@ async def get_keepsats_balance(
         ledger_types=[
             LedgerType.DEPOSIT_KEEPSATS,
             LedgerType.WITHDRAW_KEEPSATS,
+            LedgerType.HOLD_KEEPSATS,
         ],
         line_items=line_items,
     )
