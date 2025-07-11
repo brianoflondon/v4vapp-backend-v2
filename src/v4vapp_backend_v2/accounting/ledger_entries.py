@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, Mapping
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -8,12 +7,12 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 
 
 async def get_ledger_entries(
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
     cust_id: str | None = None,
@@ -41,24 +40,14 @@ async def get_ledger_entries(
           corresponds to the specified account name and sub-account.
     """
     collection_name = LedgerEntry.collection() if not collection_name else collection_name
-    query  = filter_by_account_as_of_date_query(
+    query = filter_by_account_as_of_date_query(
         account=filter_by_account,
         cust_id=cust_id,
         as_of_date=as_of_date,
         ledger_types=filter_by_ledger_types,
     )
     ledger_entries = []
-    if not TrackedBaseModel.db_client:
-        logger.error(
-            "Database client is not initialized. Cannot fetch ledger entries.",
-            extra={
-                "notification": False,
-                "as_of_date": as_of_date,
-                "collection_name": collection_name,
-            },
-        )
-        return ledger_entries
-    db_client = TrackedBaseModel.db_client
+    db_client = get_mongodb_client_defaults()
     cursor = await db_client.find(
         collection_name=collection_name,
         query=query,
@@ -78,7 +67,7 @@ async def get_ledger_entries(
 
 
 async def get_ledger_dataframe(
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
 ) -> pd.DataFrame:
