@@ -135,9 +135,9 @@ async def main():
     # await clear_database()
 
     # Deposit Hive as Keepsats
-    # trx = await send_hive_customer_to_server(amount=Amount("20 HIVE"), memo="Deposit #sats")
-    # pprint(trx)
-
+    trx = await send_hive_customer_to_server(amount=Amount("50 HIVE"), memo="Deposit #sats")
+    pprint(trx)
+    await asyncio.sleep(5)  # Wait for the transaction to be processed
     hive_config = InternalConfig().config.hive
     hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name

@@ -330,7 +330,7 @@ async def keepsats_to_lightning_payment_success(
     ledger_entries_list = []
 
     # MARK: 2 Outflow Send Lightning Payment
-    ledger_type = LedgerType.LIGHTNING_OUT
+    ledger_type = LedgerType.WITHDRAW_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         ledger_type=ledger_type,

@@ -600,6 +600,7 @@ async def get_keepsats_balance(
         ledger_types=[
             LedgerType.DEPOSIT_KEEPSATS,
             LedgerType.WITHDRAW_KEEPSATS,
+            LedgerType.CONV_KEEPSATS_TO_HIVE,
             LedgerType.HOLD_KEEPSATS,
         ],
         line_items=line_items,

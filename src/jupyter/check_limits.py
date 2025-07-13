@@ -62,33 +62,6 @@ async def main():
     print(account_printout_str)
     pprint(account_details)
 
-    # await withdraw_keepsats_to_treasury(
-    #     amount_msats=amount_msats,
-    #     cust_id=cust_id,
-    #     hive_transfer=OpTransfer(),  # Assuming no tracked transfer for this example
-    # )
-    # ledger_type = LedgerType.HOLD_KEEPSATS
-    # withdraw_ledger_entry = LedgerEntry(
-    #     cust_id=cust_id,
-    #     ledger_type=ledger_type,
-    #     group_id=f"test_entry001-{ledger_type.value}",
-    #     timestamp=datetime.now(tz=timezone.utc),
-    #     description=f"Withdrawal Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
-    #     debit=LiabilityAccount(
-    #         name="Customer Liability",
-    #         sub=cust_id,  # This is the CUSTOMER
-    #     ),
-    #     debit_unit=Currency.MSATS,
-    #     debit_amount=amount_msats,
-    #     debit_conv=debit_conversion.conversion,
-    #     credit=AssetAccount(name="Treasury Lightning", sub="keepsats"),
-    #     credit_unit=Currency.MSATS,
-    #     credit_amount=amount_msats,
-    #     credit_conv=debit_conversion.conversion,
-    # )
-    # print(withdraw_ledger_entry)
-    # await withdraw_ledger_entry.save()
-
     print("-------------- Keepsats balance ----------------")
     print("Keepsats Balance Summary:")
     pprint(keepsats_balance)
