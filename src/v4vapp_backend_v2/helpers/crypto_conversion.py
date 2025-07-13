@@ -132,6 +132,10 @@ class CryptoConv(BaseModel):
 
     def __eq__(self, other):
         if isinstance(other, CryptoConv):
+            if not self.fetch_date and not other.fetch_date:
+                return True
+            if self.msats == 0 and other.msats == 0:
+                return True
             if not isclose(
                 self.hive, other.hive, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["HIVE"]
             ):
