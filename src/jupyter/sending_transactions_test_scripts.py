@@ -8,16 +8,22 @@ from nectar.account import Account
 from nectar.amount import Amount
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.accounting.balance_sheet import (
+    balance_sheet_all_currencies_printout,
+    generate_balance_sheet_pandas_from_accounts,
+)
+from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.actions.hive_to_lightning import get_verified_hive_client
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.hive_extras import send_transfer
+from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 
-async def send_server_to_customer():
+async def send_server_to_customer() -> dict[str, Any]:
     """
     Sends a transaction from the server to the customer.
     """
@@ -35,6 +41,8 @@ async def send_server_to_customer():
                 memo="Clearing balance transfer from v4vapp backend to v4vapp-test account",
             )
             pprint(f"Transfer transaction: {trx}")
+            return trx
+    return {}
 
 
 async def clear_database():
@@ -42,8 +50,10 @@ async def clear_database():
     Clears the MongoDB database by dropping all collections.
     """
     db_client = get_mongodb_client_defaults()
-    await send_server_to_customer()
+    trx = await send_server_to_customer()
+
     await asyncio.sleep(10)  # Wait for database operations to complete
+
     async with db_client as client:
         db = client.get_db()
         await db["hive_ops"].delete_many({})
@@ -119,18 +129,53 @@ async def main():
     #     send_sats=5000, memo=f"Payment for invoice {invoice.payment_request}"
     # )
     # pprint(trx)
+    db_client = get_mongodb_client_defaults()
+    TrackedBaseModel.db_client = db_client
 
-    await clear_database()
+    # await clear_database()
 
     # Deposit Hive as Keepsats
-    trx = await send_hive_customer_to_server(amount=Amount("20 HIVE"), memo="Deposit #sats")
-    pprint(trx)
+    # trx = await send_hive_customer_to_server(amount=Amount("20 HIVE"), memo="Deposit #sats")
+    # pprint(trx)
+
+    hive_config = InternalConfig().config.hive
+    hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
+    server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
     # pay with keepsats
-    invoice = await get_lightning_invoice(1000, "Test Invoice with Keepsats")
-    trx = await send_hive_customer_to_server(
-        amount=Amount("0.001 HIVE"), memo=f"{invoice.payment_request} #paywithsats"
+    transfer_list = []
+    for sats in [1000, 2000, 3000, 4000, 5000]:
+        invoice = await get_lightning_invoice(sats, f"Test Invoice with Keepsats {sats}")
+        hive_transfer = SendHiveTransfer(
+            from_account=customer,
+            to_account=server,
+            amount="0.001 HIVE",
+            memo=f"{invoice.payment_request} #paywithsats",
+        )
+        transfer_list.append(hive_transfer)
+
+    await send_transfer(
+        from_account=customer,
+        to_account=server,
+        hive_client=hive_client,
+        amount=Amount("0.001 HIVE"),
+        memo=f"Payment for invoice {invoice.payment_request}",
+        transfer_list=transfer_list,
     )
+
+    # for transfer in transfer_list:
+    #     trx = await send_hive_customer_to_server(amount=transfer.amount, memo=transfer.memo)
+
+    # invoice = await get_lightning_invoice(3000, "Test Invoice with Keepsats")
+    # trx = await send_hive_customer_to_server(
+    #     amount=Amount("0.001 HIVE"), memo=f"{invoice.payment_request} #paywithsats"
+    # )
+
+    ledger_df = await get_ledger_dataframe()
+    balance_sheet_dict = await generate_balance_sheet_pandas_from_accounts(df=ledger_df)
+    balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet_dict)
+
+    print(balance_sheet_currencies_str)
 
     await graceful_shutdown()
 

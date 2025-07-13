@@ -211,6 +211,21 @@ async def get_account_balance_printout(
         if unit_df.empty:
             continue
 
+        # Fill NaN in conv fields with 0 to avoid NaN propagation
+        conv_columns = [
+            "debit_conv_hive",
+            "debit_conv_hbd",
+            "debit_conv_usd",
+            "debit_conv_sats",
+            "debit_conv_msats",
+            "credit_conv_hive",
+            "credit_conv_hbd",
+            "credit_conv_usd",
+            "credit_conv_sats",
+            "credit_conv_msats",
+        ]
+        unit_df[conv_columns] = unit_df[conv_columns].fillna(0)
+
         # Calculate running balance for this unit
         unit_df["running_balance"] = unit_df["signed_amount"].cumsum()
 
@@ -263,29 +278,27 @@ async def get_account_balance_printout(
         unit_balances[unit] = final_balance
 
         if abs(final_balance) > UNIT_TOLERANCE.get(unit, 0):
-            # Use the conversion rates from the latest transaction for this unit
-            latest_row = unit_df.iloc[-1]
-            if latest_row["debit_unit"] == unit:
-                conv_hive = latest_row["debit_conv_hive"]
-                conv_hbd = latest_row["debit_conv_hbd"]
-                conv_usd = latest_row["debit_conv_usd"]
-                conv_sats = latest_row["debit_conv_sats"]
-                conv_msats = latest_row["debit_conv_msats"]
-                amount = latest_row["debit_amount"]
-            else:
-                conv_hive = latest_row["credit_conv_hive"]
-                conv_hbd = latest_row["credit_conv_hbd"]
-                conv_usd = latest_row["credit_conv_usd"]
-                conv_sats = latest_row["credit_conv_sats"]
-                conv_msats = latest_row["credit_conv_msats"]
-                amount = latest_row["credit_amount"]
+            # Sum signed conversions row by row
+            total_hive = 0.0
+            total_hbd = 0.0
+            total_usd_for_unit = 0.0
+            total_sats_for_unit = 0.0
+            total_msats = 0.0
 
-            factor = final_balance / amount if amount != 0 else 0.0
-            total_hive = conv_hive * factor
-            total_hbd = conv_hbd * factor
-            total_usd_for_unit = conv_usd * factor
-            total_sats_for_unit = conv_sats * factor
-            total_msats = conv_msats * factor
+            for _, row in unit_df.iterrows():
+                sign_factor = 1 if row["signed_amount"] > 0 else -1
+
+                conv_hive = sign_factor * max(row["debit_conv_hive"], row["credit_conv_hive"])
+                conv_hbd = sign_factor * max(row["debit_conv_hbd"], row["credit_conv_hbd"])
+                conv_usd = sign_factor * max(row["debit_conv_usd"], row["credit_conv_usd"])
+                conv_sats = sign_factor * max(row["debit_conv_sats"], row["credit_conv_sats"])
+                conv_msats = sign_factor * max(row["debit_conv_msats"], row["credit_conv_msats"])
+
+                total_hive += conv_hive
+                total_hbd += conv_hbd
+                total_usd_for_unit += conv_usd
+                total_sats_for_unit += conv_sats
+                total_msats += conv_msats
 
             summary.unit_summaries[unit] = UnitSummary(
                 final_balance=final_balance,

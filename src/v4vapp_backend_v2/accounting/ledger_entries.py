@@ -105,17 +105,17 @@ async def get_ledger_dataframe(
     data = []
     for entry in ledger_entries:
         if entry.debit and entry.credit:
-            debit_modifier = -1 if entry.debit.contra else 1
-            credit_modifier = -1 if entry.credit.contra else 1
-            debit_modifier = 1
-            credit_modifier = 1
+            # debit_modifier = -1 if entry.debit.contra else 1
+            # credit_modifier = -1 if entry.credit.contra else 1
+            # debit_modifier = 1
+            # credit_modifier = 1
 
-            debit_amount = debit_modifier * entry.debit_amount
-            debit_unit = entry.debit_unit.value if entry.debit_unit else None
-            debit_conv = debit_modifier * entry.debit_conv
-            credit_amount = credit_modifier * entry.credit_amount
-            credit_unit = entry.credit_unit.value if entry.credit_unit else None
-            credit_conv = credit_modifier * entry.credit_conv
+            # debit_amount = debit_modifier * entry.debit_amount
+            # debit_unit = entry.debit_unit.value if entry.debit_unit else None
+            # debit_conv = debit_modifier * entry.debit_conv
+            # credit_amount = credit_modifier * entry.credit_amount
+            # credit_unit = entry.credit_unit.value if entry.credit_unit else None
+            # credit_conv = credit_modifier * entry.credit_conv
 
             data.append(
                 {
@@ -124,20 +124,20 @@ async def get_ledger_dataframe(
                     "short_id": entry.short_id,
                     "description": entry.description,
                     "ledger_type": entry.ledger_type,
-                    "debit_amount": debit_amount,
-                    "debit_unit": debit_unit,
-                    "debit_conv_sats": debit_conv.sats,
-                    "debit_conv_msats": debit_conv.msats,
-                    "debit_conv_hive": debit_conv.hive,
-                    "debit_conv_hbd": debit_conv.hbd,
-                    "debit_conv_usd": debit_conv.usd,
-                    "credit_amount": credit_amount,
-                    "credit_unit": credit_unit,
-                    "credit_conv_sats": credit_conv.sats,
-                    "credit_conv_msats": credit_conv.msats,
-                    "credit_conv_hive": credit_conv.hive,
-                    "credit_conv_hbd": credit_conv.hbd,
-                    "credit_conv_usd": credit_conv.usd,
+                    "debit_amount": entry.debit_amount,
+                    "debit_unit": entry.debit_unit,
+                    "debit_conv_sats": entry.debit_conv.sats,
+                    "debit_conv_msats": entry.debit_conv.msats,
+                    "debit_conv_hive": entry.debit_conv.hive,
+                    "debit_conv_hbd": entry.debit_conv.hbd,
+                    "debit_conv_usd": entry.debit_conv.usd,
+                    "credit_amount": entry.credit_amount,
+                    "credit_unit": entry.credit_unit,
+                    "credit_conv_sats": entry.credit_conv.sats,
+                    "credit_conv_msats": entry.credit_conv.msats,
+                    "credit_conv_hive": entry.credit_conv.hive,
+                    "credit_conv_hbd": entry.credit_conv.hbd,
+                    "credit_conv_usd": entry.credit_conv.usd,
                     "debit_name": entry.debit.name,
                     "debit_account_type": entry.debit.account_type,
                     "debit_sub": entry.debit.sub,

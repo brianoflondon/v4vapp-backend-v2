@@ -13,7 +13,9 @@ from nectar.hive import Hive
 from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
+from nectar.transactionbuilder import TransactionBuilder
 from nectarapi.exceptions import UnhandledRPCError
+from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
@@ -491,6 +493,19 @@ async def perform_transfer_checks(
     #     )
 
 
+class SendHiveTransfer(BaseModel):
+    """
+    Model representing a Hive transfer operation.
+    This model is used to encapsulate the details of a transfer operation
+    including the sender, recipient, amount, asset, and memo.
+    """
+
+    from_account: str
+    to_account: str
+    amount: str
+    memo: str = ""
+
+
 async def send_transfer(
     to_account: str,
     amount: Amount,
@@ -500,6 +515,7 @@ async def send_transfer(
     keys: List[str] = [],
     nobroadcast: bool = False,
     is_private: bool = False,
+    transfer_list: List[SendHiveTransfer] | None = None,
 ) -> Dict[str, str]:
     """
     Asynchronously sends a transfer operation to the Hive blockchain.
@@ -525,28 +541,43 @@ async def send_transfer(
     if is_private:
         memo = f"#{memo}"
     try:
-        trx = account.transfer(
-            to=to_account,
-            amount=amount.amount,
-            asset=amount.asset,
-            account=from_account,
-            memo=memo,
-        )
-        check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
-        logger.info(
-            f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
-            f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
-            f"Memo: {memo} {trx.get('trx_id', '')}",
-            extra={
-                "notification": True,
-                "to_account": to_account,
-                "from_account": from_account,
-                "amount": amount.amount_decimal,
-                "symbol": amount.symbol,
-                "memo": memo,
-            },
-        )
-        return trx
+        if not transfer_list:
+            trx = account.transfer(
+                to=to_account,
+                amount=amount.amount,
+                asset=amount.asset,
+                account=from_account,
+                memo=memo,
+            )
+            check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
+            logger.info(
+                f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
+                f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
+                f"Memo: {memo} {trx.get('trx_id', '')}",
+                extra={
+                    "notification": True,
+                    "to_account": to_account,
+                    "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
+                },
+            )
+            return trx
+        else:
+            tx = TransactionBuilder(blockchain_instance=hive_client)
+            for transfer in transfer_list:
+                transfer_nectar = {
+                    "from": transfer.from_account,
+                    "to": transfer.to_account,
+                    "amount": transfer.amount,
+                    "memo": transfer.memo,
+                }
+                tx.appendOps(Transfer(transfer_nectar))
+                tx.appendSigner(transfer.from_account, "active")
+            signed_tx = tx.sign()
+            broadcast_tx = tx.broadcast()
+            return broadcast_tx or {}
     except UnhandledRPCError as ex:
         # Handle insufficient funds
         for arg in ex.args:
@@ -581,6 +612,16 @@ async def send_transfer(
                 },
             )
             raise HiveSomeOtherRPCException(f"{ex}")
+    except Exception as ex:
+        logger.error(
+            f"UnhandledRPCError during send_transfer: {ex}",
+            extra={
+                "notification": False,
+                "to_account": to_account,
+                "from_account": from_account,
+            },
+        )
+        raise HiveSomeOtherRPCException(f"{ex}")
 
 
 if __name__ == "__main__":

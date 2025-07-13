@@ -261,9 +261,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                     f"{truncate_text(account_name, 40):<40} "
                     f"{truncate_text(sub, 17):<17} "
                     f"{balance.get('sats', 0):>10,.0f} "
-                    f"{balance.get('hive', 0):>12,.2f} "
-                    f"{balance.get('hbd', 0):>12,.2f} "
-                    f"{balance.get('usd', 0):>12,.2f}"
+                    f"{balance.get('hive', 0):>12,.3f} "
+                    f"{balance.get('hbd', 0):>12,.3f} "
+                    f"{balance.get('usd', 0):>12,.3f}"
                 )
             if "Total" not in sub_accounts:
                 total_usd = sum(
@@ -298,9 +298,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                 f"{'Total ' + truncate_text(account_name, 35):<40} "
                 f"{'':<17} "
                 f"{total.get('sats', 0):>10,.0f} "
-                f"{total.get('hive', 0):>12,.2f} "
-                f"{total.get('hbd', 0):>12,.2f} "
-                f"{total.get('usd', 0):>12,.2f}"
+                f"{total.get('hive', 0):>12,.3f} "
+                f"{total.get('hbd', 0):>12,.3f} "
+                f"{total.get('usd', 0):>12,.3f}"
             )
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
@@ -308,9 +308,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             f"{'Total ' + category:<40} "
             f"{'':<17} "
             f"{total.get('sats', 0):>10,.0f} "
-            f"{total.get('hive', 0):>12,.2f} "
-            f"{total.get('hbd', 0):>12,.2f} "
-            f"{total.get('usd', 0):>12,.2f}"
+            f"{total.get('hive', 0):>12,.3f} "
+            f"{total.get('hbd', 0):>12,.3f} "
+            f"{total.get('usd', 0):>12,.3f}"
         )
         output.append("-" * max_width)
 
@@ -320,9 +320,9 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
         f"{'Total Liab. & Equity':<40} "
         f"{'':<17} "
         f"{total.get('sats', 0):>10,.0f} "
-        f"{total.get('hive', 0):>12,.2f} "
-        f"{total.get('hbd', 0):>12,.2f} "
-        f"{total.get('usd', 0):>12,.2f}"
+        f"{total.get('hive', 0):>12,.3f} "
+        f"{total.get('hbd', 0):>12,.3f} "
+        f"{total.get('usd', 0):>12,.3f}"
     )
 
     if balance_sheet["is_balanced"]:
