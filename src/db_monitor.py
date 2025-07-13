@@ -216,15 +216,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     except LedgerEntryException as e:
         logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
         return
-    for ledger_entry in ledger_entries:
-        logger.info("\n" + str(ledger_entry))
-        balance_sheet = await generate_balance_sheet_pandas_from_accounts()
-        if not balance_sheet["is_balanced"]:
-            logger.warning(
-                f"{ICON} The balance sheet is not balanced for {op.group_id_query} "
-                f"{ledger_entry.group_id}",
-                extra={"notification": False},
-            )
+
 
 
 async def subscribe_stream(
