@@ -3,6 +3,7 @@ from typing import Any, List, Union
 
 from pydantic import ValidationError
 
+from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
@@ -142,16 +143,22 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             if not ledger_entries:
                 raise LedgerEntryCreationException("Ledger entry cannot be created.")
             for ledger_entry in ledger_entries:
-                logger.info(
-                    f"Ledger entry saved: {ledger_entry.group_id}",
-                    extra={**ledger_entry.log_extra, "notification": False},
-                )
                 try:
                     ans = await ledger_entry.save()
                     logger.info(
                         f"Ledger entry saved: {ans}",
                         extra={**ledger_entry.log_extra, "notification": False},
                     )
+
+                    # DEBUG section
+                    logger.info("\n" + str(ledger_entry))
+                    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
+                    if not balance_sheet["is_balanced"]:
+                        logger.warning(
+                            f"The balance sheet is not balanced for\n"
+                            f"{ledger_entry.group_id}",
+                            extra={"notification": False},
+                        )
                 except Exception as e:
                     logger.error(
                         f"Error saving ledger entry: {e}",

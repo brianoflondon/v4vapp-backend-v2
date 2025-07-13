@@ -2,10 +2,10 @@ import textwrap
 from datetime import datetime, timezone
 from enum import StrEnum
 from math import isclose
-from typing import Any, ClassVar, Dict, Tuple
+from typing import Any, ClassVar, Dict, Self, Tuple
 
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
@@ -137,6 +137,7 @@ class LedgerType(StrEnum):
     DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
     WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
+    RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
@@ -208,21 +209,25 @@ class LedgerEntry(BaseModel):
         if not LedgerEntry.db_client:
             LedgerEntry.db_client = TrackedBaseModel.db_client or get_mongodb_client_defaults()
 
-    # @field_validator("ledger_type", mode="before")
-    # @classmethod
-    # def convert_ledger_type(cls, value):
-    #     if isinstance(value, str):
-    #         try:
-    #             return LedgerType(value)  # Try direct conversion
-    #         except ValueError:
-    #             # Handle mapping of non-standard values
-    #             mapping = {
-    #                 "hive_conv": LedgerType.CONV_H_L,
-    #                 "fee_in": LedgerType.FEE_INCOME,
-    #                 # Add other mappings as needed
-    #             }
-    #             return mapping.get(value, LedgerType.UNSET)
-    #     return value
+    @model_validator(mode="after")
+    def credit_debit_equality(self) -> Self:
+        if self.credit_unit == self.debit_unit and self.credit_amount == self.debit_amount:
+            return self
+        if self.credit_conv == self.debit_conv:
+            credit_amount_in_debit_unit = getattr(self.credit_conv, self.debit_unit)
+            debit_amount_in_credit_unit = getattr(self.debit_conv, self.credit_unit)
+            if self.debit_amount == credit_amount_in_debit_unit:
+                return self
+            if self.credit_amount == debit_amount_in_credit_unit:
+                return self
+            raise ValueError(
+                f"Debit and Credit amounts do not match "
+                f"{credit_amount_in_debit_unit} != {self.debit_amount} "
+                f"and {debit_amount_in_credit_unit} != {self.credit_amount}"
+            )
+        raise ValueError(
+            f"Debit and Credit conversions do not match: {self.credit_conv} vs {self.debit_conv}"
+        )
 
     @property
     def ledger_type_str(self) -> str:

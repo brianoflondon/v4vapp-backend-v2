@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 
-from pymongo.results import DeleteResult
-
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
@@ -31,7 +29,7 @@ async def hold_keepsats(
     withdraw_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"hold_{hive_transfer.group_id}-{ledger_type.value}",
+        group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         op=hive_transfer,
         description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
@@ -51,18 +49,42 @@ async def hold_keepsats(
     return withdraw_ledger_entry
 
 
-async def release_keepsats(hive_transfer: TrackedTransfer) -> DeleteResult:
+async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None:
     ledger_type = LedgerType.HOLD_KEEPSATS
-    group_id = f"hold_{hive_transfer.group_id}-{ledger_type.value}"
+    group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
     assert LedgerEntry.db_client is not None, "Database client is not initialized"
-    del_result = await LedgerEntry.db_client.delete_one(
+    existing_entry_raw = await LedgerEntry.db_client.find_one(
         collection_name=LedgerEntry.collection(),
         query={"group_id": group_id},
     )
-    if del_result.deleted_count == 0:
-        logger.info(f"No ledger entry found for group_id {group_id} to release Keepsats.")
-    else:
-        logger.info(
-            f"Released Keepsats for group_id {group_id}. Deleted {del_result.deleted_count} entry."
-        )
-    return del_result
+    if existing_entry_raw is None:
+        logger.warning(f"No ledger entry found for group_id: {group_id}")
+        return None
+    existing_entry = LedgerEntry.model_validate(existing_entry_raw)
+    if existing_entry is None:
+        logger.warning(f"Failed to validate ledger entry for group_id: {group_id}")
+        return None
+
+    ledger_type = LedgerType.RELEASE_KEEPSATS
+    group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
+    release_ledger_entry = LedgerEntry(
+        cust_id=existing_entry.cust_id,
+        ledger_type=ledger_type,
+        group_id=group_id,
+        timestamp=datetime.now(tz=timezone.utc),
+        op=hive_transfer,
+        description=f"Release Keepsats for {existing_entry.cust_id}",
+        debit=LiabilityAccount(name="Keepsats Hold", sub="keepsats"),
+        debit_unit=Currency.MSATS,
+        debit_amount=existing_entry.debit_amount,
+        debit_conv=existing_entry.debit_conv,
+        credit=LiabilityAccount(
+            name="Customer Liability",
+            sub=existing_entry.cust_id,  # This is the CUSTOMER
+        ),
+        credit_unit=Currency.MSATS,
+        credit_amount=existing_entry.credit_amount,
+        credit_conv=existing_entry.credit_conv,
+    )
+    await release_ledger_entry.save()
+    return release_ledger_entry

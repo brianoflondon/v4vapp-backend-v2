@@ -16,9 +16,18 @@ def handle_tasks(tasks: List[asyncio.Task]) -> None:
             logger.info(
                 f"Waiting for task {task.get_name()} to complete", extra={"notification": False}
             )
-            task.result()  # Wait for the task to complete
-            logger.info(
-                f"Task {task.get_name()} completed successfully", extra={"notification": False}
-            )
+            result = task.result()  # Wait for the task to complete
+            if result is not None:
+                logger.info(
+                    f"Task {task.get_name()} completed with a result",
+                    extra={"notification": False, "result": result},
+                )
+                logger.info(f"{result}", extra={"notification": False})
+            else:
+                logger.info(
+                    f"Task {task.get_name()} completed successfully", extra={"notification": False}
+                )
         except Exception as e:
-            logger.error(f"Task {task.get_name()} failed with exception: {e}", extra={"notification": False})
+            logger.error(
+                f"Task {task.get_name()} failed with exception: {e}", extra={"notification": False}
+            )
