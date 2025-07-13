@@ -218,6 +218,8 @@ def balance_sheet_printout(
     else:
         output.append(f"\n{'******* The balance sheet is NOT balanced. ********':^94}")
 
+    output.append("=" * max_width)
+
     return "\n".join(output)
 
 

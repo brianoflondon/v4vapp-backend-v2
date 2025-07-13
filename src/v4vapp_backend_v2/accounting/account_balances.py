@@ -184,7 +184,7 @@ async def get_account_balance_printout(
         set(combined_df["credit_unit"].dropna().unique())
     )
     title_line = f"Balance for {account}"
-    output = ["=" * max_width]
+    output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
     output.append("-" * max_width)
