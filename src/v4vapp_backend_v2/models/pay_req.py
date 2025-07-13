@@ -289,10 +289,10 @@ class PayReq(BaseModel):
             int: The estimated fee in millisatoshis.
         """
         # This is a placeholder implementation. Actual fee estimation logic should be implemented.
+        lnd_config = InternalConfig().config.lnd_config
         return int(
-            self.value_msat
-            * InternalConfig().config.lnd_config.lightning_fee_estimate_ppm
-            / 1_000_000
+            lnd_config.lightning_fee_base_msats
+            + (self.value_msat * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
         )
 
 
