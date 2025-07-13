@@ -12,9 +12,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import Currency
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -22,7 +20,6 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     )
     yield
     # No need to restore the original value, monkeypatch will handle it
-
 
 
 @pytest.mark.asyncio
@@ -84,6 +81,8 @@ async def test_crypto_conversion_parameterized(conv_from, value):
 
     assert conv.conversion.model_dump()
     assert conv2.conversion.model_dump()
+
+    assert conv.conversion == conv2.conversion, "Conversion objects should be equal"
 
 
 @pytest.mark.asyncio

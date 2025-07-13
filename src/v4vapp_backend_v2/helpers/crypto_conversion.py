@@ -2,7 +2,8 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from math import isclose
+from typing import Any, ClassVar
 
 from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -40,6 +41,17 @@ class CryptoConv(BaseModel):
     model_config = ConfigDict(
         use_enum_values=True,  # Serializes enum as its value
     )
+
+    UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
+        "HIVE": 0.003,
+        "HBD": 0.002,
+        "USD": 0.002,
+        "SATS": 0.5,
+        "MSATS": 500,
+        "BTC": 5e-9,
+    }
+
+    REL_TOL: ClassVar[float] = 1e-7
 
     def __init__(
         self,
@@ -117,6 +129,42 @@ class CryptoConv(BaseModel):
 
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __eq__(self, other):
+        if isinstance(other, CryptoConv):
+            if not isclose(
+                self.hive, other.hive, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["HIVE"]
+            ):
+                return False
+            if not isclose(
+                self.hbd, other.hbd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["HBD"]
+            ):
+                return False
+            if not isclose(
+                self.usd, other.usd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["USD"]
+            ):
+                return False
+            if not isclose(
+                self.sats, other.sats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["SATS"]
+            ):
+                return False
+            if not isclose(
+                self.msats, other.msats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["MSATS"]
+            ):
+                return False
+            if not isclose(
+                self.btc, other.btc, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["BTC"]
+            ):
+                return False
+            if not isclose(
+                self.msats_fee,
+                other.msats_fee,
+                rel_tol=self.REL_TOL,
+                abs_tol=self.UNIT_TOLERANCE["MSATS"],
+            ):
+                return False
+            return True
+        return NotImplemented
 
     def is_unset(self) -> bool:
         """
@@ -198,6 +246,26 @@ class CryptoConv(BaseModel):
         """
         return self.log_str
 
+    @property
+    def amount_hive(self) -> Amount:
+        """
+        Returns the conversion value in HIVE as an Amount object.
+
+        Returns:
+            Amount: The conversion value in HIVE.
+        """
+        return Amount(f"{self.hive:.3f} HIVE")
+
+    @property
+    def amount_hbd(self) -> Amount:
+        """
+        Returns the conversion value in HBD as an Amount object.
+
+        Returns:
+            Amount: The conversion value in HBD.
+        """
+        return Amount(f"{self.hbd:.3f} HBD")
+
 
 class CryptoConversion(BaseModel):
     conv_from: Currency = Currency.HIVE
@@ -264,7 +332,7 @@ class CryptoConversion(BaseModel):
             - Calls a private method `_compute_conversions()` to update conversion values.
             - Sets the `fetch_date` attribute to the date when the quote was fetched.
         """
-        
+
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
         self.quote = all_quotes.quote
