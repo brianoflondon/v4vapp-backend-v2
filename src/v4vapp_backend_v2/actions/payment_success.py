@@ -379,8 +379,8 @@ async def keepsats_to_lightning_payment_success(
             debit_conv=lightning_fee_conv,
             credit=RevenueAccount(name="Fee Income Keepsats", sub=node_name),
             credit_unit=Currency.MSATS,
-            credit_amount=cost_of_payment_msat,
-            credit_conv=payment.conv,
+            credit_amount=payment.fee_msat,
+            credit_conv=lightning_fee_conv,
         )
         ledger_entries_list.append(external_payment_ledger_entry)
 
