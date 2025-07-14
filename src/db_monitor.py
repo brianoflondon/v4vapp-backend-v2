@@ -9,13 +9,12 @@ from pydantic import BaseModel, Field
 from pymongo.errors import OperationFailure
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.process_tracked_events import (
     process_tracked_event,
     tracked_any_filter,
 )
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
@@ -207,6 +206,10 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     logger.info(f"Processing {op.group_id_query}")
     try:
         ledger_entries = await process_tracked_event(op)
+        for entry in ledger_entries:
+            logger.info(
+                f"{ICON} Processed ledger entry for {entry.op.log_str}",
+            )
     except ValueError as e:
         logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
         return
@@ -236,9 +239,7 @@ async def subscribe_stream(
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
     client = InternalConfig.db_client
-    TrackedBaseModel.db_client = get_mongodb_client()
-    LedgerEntry.db_client = get_mongodb_client()
-    
+
     collection = client.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
