@@ -235,11 +235,10 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-    db_conn = DBConn()
-    client = db_conn.client()
+    client = InternalConfig.db_client
     TrackedBaseModel.db_client = get_mongodb_client()
     LedgerEntry.db_client = get_mongodb_client()
-
+    
     collection = client.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:

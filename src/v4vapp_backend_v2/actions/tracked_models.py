@@ -5,6 +5,7 @@ from timeit import default_timer as timer
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo import AsyncMongoClient
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, logger
@@ -79,6 +80,7 @@ class TrackedBaseModel(BaseModel):
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     db_client: ClassVar[MongoDBClient | None] = None
+    db_client_2: ClassVar[AsyncMongoClient[Dict[str, Any]]] = AsyncMongoClient()
 
     def __init__(self, **data):
         """
@@ -566,4 +568,8 @@ class TrackedBaseModel(BaseModel):
                 return cls.last_quote
         except Exception as e:
             logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
+        return cls.last_quote
+        return cls.last_quote
+        return cls.last_quote
+        return cls.last_quote
         return cls.last_quote

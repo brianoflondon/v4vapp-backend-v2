@@ -6,6 +6,7 @@ from typing import Any, Dict
 import pytest
 from pymongo import AsyncMongoClient
 
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 os.environ["TESTING"] = "True"
@@ -91,6 +92,7 @@ timeseries_data = {
 }
 
 
+@pytest.mark.asyncio
 async def test_insert_timeseries() -> None:
     db_conn = DBConn(db_conn="conn_1", db_name="test_db", db_user="test_user")
     await db_conn.setup_database()
@@ -100,10 +102,36 @@ async def test_insert_timeseries() -> None:
         collection = client[db_conn.db_name]["rates"]
         await collection.insert_one(timeseries_data)
 
-        result = await collection.find_one(
-            {"timestamp": datetime(2023, 10, 1, 0, 0, tzinfo=timezone.utc)}
-        )
-        assert result is not None
-        assert result["hive_usd"] == 0.2359
+    # Test with a direct access to a collection
+    collection2 = db_conn.db()["rates"]
+    result = await collection2.find_one(
+        {"timestamp": datetime(2023, 10, 1, 0, 0, tzinfo=timezone.utc)}
+    )
+    assert result is not None
+    assert result["hive_usd"] == 0.2359
+    await collection2.database.client.close()
+
+    # Use a client from inside the collection
+    collection3 = db_conn.db()["rates"]
+    async with collection3.database.client:
+        result2 = await collection3.find_one({})
+        assert result2 is not None
+        assert result2["hbd_usd"] == 1
+
+    await drop_database(conn_name="conn_1", db_name="test_db", db_user="test_user")
+
+
+@pytest.mark.asyncio
+async def test_internal_config_database():
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
+    assert InternalConfig.db_client is not None
+    assert InternalConfig.db is not None
+    assert InternalConfig.db.name == db_conn.db_name
+
+    db = InternalConfig.db
+    collection_names = await db.list_collection_names()
+    print(collection_names)
 
     await drop_database(conn_name="conn_1", db_name="test_db", db_user="test_user")

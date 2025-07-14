@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from urllib.parse import quote_plus
 
-from pydantic import BaseModel
 from pymongo import AsyncMongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import CollectionInvalid, OperationFailure
@@ -12,22 +11,19 @@ from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, log
 DATABASE_ICON = "📁"
 
 
-class DBConn(BaseModel):
-    db_conn: str = "localhost"
-    db_name: str = "admin"
-    db_user: str = "admin"
+class DBConn:
+    db_conn: str = ""
+    db_name: str = ""
+    db_user: str = ""
     _setup: bool = False
 
-    def __init__(self, **data):
+    def __init__(self, db_conn: str = "", db_name: str = "", db_user: str = ""):
         config = InternalConfig().config
         dbs_config = config.dbs_config
-        if "db_conn" not in data:
-            data["db_conn"] = dbs_config.default_connection
-        if "db_name" not in data:
-            data["db_name"] = dbs_config.default_name
-        if "db_user" not in data:
-            data["db_user"] = dbs_config.default_user
-        super().__init__(**data)
+
+        self.db_conn = db_conn if db_conn else dbs_config.default_connection
+        self.db_name = db_name if db_name else dbs_config.default_name
+        self.db_user = db_user if db_user else dbs_config.default_user
 
     def client(self) -> AsyncMongoClient[Dict[str, Any]]:
         """
@@ -184,6 +180,7 @@ class DBConn(BaseModel):
         except Exception as e:
             raise ConnectionError(f"Failed to connect to the database: {e}") from e
 
+    # MARK: Database setup methods
     async def setup_database(self) -> None:
         """
         Set up the database connection and perform initial setup tasks.
@@ -203,6 +200,13 @@ class DBConn(BaseModel):
             logger.info(
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
+            )
+            if InternalConfig.db_client:
+                await InternalConfig.db_client.close()
+            InternalConfig.db_client = AsyncMongoClient(self.uri, tz_aware=True)
+            InternalConfig.db = InternalConfig.db_client[self.db_name]
+            logger.info(
+                f"{DATABASE_ICON} Database {self.db_name} client is set up for InternalConfig"
             )
         logger.info(f"{DATABASE_ICON} {logger.name} Database {self.db_name} is already set up.")
 
@@ -349,4 +353,24 @@ class DBConn(BaseModel):
                 )
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
                 logger.error(message, extra={"notification": False})

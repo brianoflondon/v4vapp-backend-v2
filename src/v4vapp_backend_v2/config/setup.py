@@ -15,6 +15,8 @@ from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 import colorlog
 from packaging import version
 from pydantic import BaseModel, model_validator
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
 
@@ -566,6 +568,7 @@ class LoggerFunction(Protocol):
     def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
 
 
+# MARK: InternalConfig class
 class InternalConfig:
     """
     Singleton class to manage internal configuration and logging setup.
@@ -597,6 +600,8 @@ class InternalConfig:
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
     notification_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
     notification_lock: ClassVar[bool] = False
+    db_client: ClassVar[AsyncMongoClient] = AsyncMongoClient()
+    db: ClassVar[AsyncDatabase] = AsyncDatabase(client=db_client, name="default_db")
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
