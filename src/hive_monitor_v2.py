@@ -11,14 +11,13 @@ from nectar.amount import Amount
 
 # from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
-from pymongo.results import BulkWriteResult
+from pymongo.results import BulkWriteResult, UpdateResult
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.database.db import MongoDBClient
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
@@ -85,7 +84,7 @@ async def db_store_op(
     db_collection: str | None = None,
     *args: Any,
     **kwargs: Any,
-) -> List[BulkWriteResult | None]:
+) -> List[BulkWriteResult | None] | UpdateResult:
     """
     Stores a Hive transaction in the database.
 
@@ -116,16 +115,16 @@ async def db_store_op(
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
-        if not TrackedBaseModel.db_client:
-            TrackedBaseModel.db_client = MongoDBClient(
-                db_conn=HIVE_DATABASE_CONNECTION,
-                db_name=HIVE_DATABASE,
-                db_user=HIVE_DATABASE_USER,
-            )
-        db_ans = await TrackedBaseModel.db_client.update_one_buffer(
-            db_collection,
-            query=op.group_id_query,
-            update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
+        # db_ans = await OpBase.db_client.update_one_buffer(
+        #     db_collection,
+        #     query=op.group_id_query,
+        #     update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
+        #     upsert=True,
+        # )
+        collection = OpBase.collection()
+        db_ans = await collection.update_one(
+            filter=op.group_id_query,
+            update={"$set": op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)},
             upsert=True,
         )
         return db_ans
@@ -206,15 +205,7 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
         int: The last good block.
     """
     try:
-        if not TrackedBaseModel.db_client:
-            TrackedBaseModel.db_client = MongoDBClient(
-                db_conn=HIVE_DATABASE_CONNECTION,
-                db_name=HIVE_DATABASE,
-                db_user=HIVE_DATABASE_USER,
-            )
-        ans = await TrackedBaseModel.db_client.find_one(
-            collection_name=collection, query={}, sort=[("block_num", -1)]
-        )
+        ans = await OpBase.collection().find_one(filter={}, sort=[("block_num", -1)])
         if ans and "block_num" in ans:
             time_diff = check_time_diff(ans["timestamp"])
             logger.info(
@@ -251,15 +242,8 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
-    if not TrackedBaseModel.db_client:
-        TrackedBaseModel.db_client = MongoDBClient(
-            db_conn=HIVE_DATABASE_CONNECTION,
-            db_name=HIVE_DATABASE,
-            db_user=HIVE_DATABASE_USER,
-        )
-    last_good_event = await TrackedBaseModel.db_client.find_one(
-        HIVE_OPS_COLLECTION,
-        {"producer": watch_witness},
+    last_good_event = await OpBase.collection().find_one(
+        filter={"producer": watch_witness},
         sort=[("block_num", -1)],
     )
     if last_good_event:
@@ -288,8 +272,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             await op.get_witness_details()
             op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
             op.delta = op.timestamp - last_witness_timestamp
-            _ = await TrackedBaseModel.db_client.insert_one(
-                HIVE_OPS_COLLECTION,
+            _ = await OpBase.collection().insert_one(
                 op.model_dump(),
             )
             logger.info(
@@ -319,15 +302,8 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         timedelta: The average block time for the specified witness.
     """
     count_back = 10
-    if not TrackedBaseModel.db_client:
-        TrackedBaseModel.db_client = MongoDBClient(
-            db_conn=HIVE_DATABASE_CONNECTION,
-            db_name=HIVE_DATABASE,
-            db_user=HIVE_DATABASE_USER,
-        )
-    cursor = await TrackedBaseModel.db_client.find(
-        HIVE_OPS_COLLECTION,
-        {"producer": watch_witness},
+    cursor = OpBase.collection().find(
+        filter={"producer": watch_witness},
         sort=[("block_num", -1)],
     )
     # loop through the blocks and calculate the average block time
@@ -601,6 +577,9 @@ async def main_async_start(
     Returns:
         None
     """
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
     loop = asyncio.get_running_loop()
 
     # Register signal handlers for SIGTERM and SIGINT
@@ -727,13 +706,7 @@ def main(
         HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
-
-    TrackedBaseModel.db_client = MongoDBClient(
-        db_conn=HIVE_DATABASE_CONNECTION,
-        db_name=HIVE_DATABASE,
-        db_user=HIVE_DATABASE_USER,
-    )
-    AllQuotes.db_client = TrackedBaseModel.db_client
+    # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
         f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
