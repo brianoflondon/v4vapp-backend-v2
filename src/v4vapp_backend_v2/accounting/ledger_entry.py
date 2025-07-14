@@ -139,6 +139,9 @@ class LedgerType(StrEnum):
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
+    WITHDRAW_LIGHTNING = "withdraw_l"
+    LIGHTNING_EXTERNAL_SEND = "l_contra_e"
+
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
 
@@ -146,9 +149,6 @@ class LedgerType(StrEnum):
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
     FEE_CHARGE = "fee_charge"  # Fee charges from a customer
 
-    LIGHTNING_CONTRA = "l_contra"
-    LIGHTNING_OUT = "l_out"
-    LIGHTNING_IN = "l_in"
     CUSTOMER_HIVE_IN = "cust_h_in"
     CUSTOMER_HIVE_OUT = "cust_h_out"
     SERVER_TO_TREASURY = "serv_to_t"  # Server to Treasury transfer
@@ -216,9 +216,19 @@ class LedgerEntry(BaseModel):
         if self.credit_conv == self.debit_conv:
             credit_amount_in_debit_unit = getattr(self.credit_conv, self.debit_unit)
             debit_amount_in_credit_unit = getattr(self.debit_conv, self.credit_unit)
-            if self.debit_amount == credit_amount_in_debit_unit:
+            if isclose(
+                self.debit_amount,
+                credit_amount_in_debit_unit,
+                rel_tol=CryptoConv.REL_TOL,
+                abs_tol=CryptoConv.UNIT_TOLERANCE[self.debit_unit.value],
+            ):
                 return self
-            if self.credit_amount == debit_amount_in_credit_unit:
+            if isclose(
+                self.credit_amount,
+                debit_amount_in_credit_unit,
+                rel_tol=CryptoConv.REL_TOL,
+                abs_tol=CryptoConv.UNIT_TOLERANCE[self.credit_unit.value],
+            ):
                 return self
             raise ValueError(
                 f"Debit and Credit amounts do not match "
