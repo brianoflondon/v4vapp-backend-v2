@@ -18,6 +18,7 @@ class BalanceSheetDict:
     Liabilities: "defaultdict[str, dict]"
     Equity: "defaultdict[str, dict]"
     is_balanced: bool
+    tolerance: float
     as_of_date: datetime
 
 
@@ -133,6 +134,7 @@ async def generate_balance_sheet_pandas_from_accounts(
 
     # Check if the balance sheet is balanced (Assets = Liabilities + Equity)
     balance_sheet["is_balanced"] = bool(check_balance_sheet(balance_sheet=balance_sheet))
+    balance_sheet["tolerance"] = get_balance_tolerance(balance_sheet=balance_sheet)
 
     return balance_sheet
 
@@ -145,7 +147,6 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
     """
     tolerance_msats = 10_000  # tolerance of 10 sats.
-
     is_balanced = math.isclose(
         balance_sheet["Assets"]["Total"]["msats"],
         balance_sheet["Liabilities"]["Total"]["msats"] + balance_sheet["Equity"]["Total"]["msats"],
@@ -153,6 +154,18 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
         abs_tol=tolerance_msats,
     )
     return is_balanced
+
+
+def get_balance_tolerance(balance_sheet: Dict) -> float:
+    """
+    Gets the balance tolerance for the given balance sheet.
+    """
+    # calculate the actual absolute tolerance for the balance sheet
+    assets_total = balance_sheet["Assets"]["Total"]["msats"]
+    liabilities_total = balance_sheet["Liabilities"]["Total"]["msats"]
+    equity_total = balance_sheet["Equity"]["Total"]["msats"]
+    total_liabilities_and_equity = liabilities_total + equity_total
+    return total_liabilities_and_equity - assets_total
 
 
 def balance_sheet_printout(
@@ -326,9 +339,15 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     )
 
     if balance_sheet["is_balanced"]:
-        output.append(f"\n{'The balance sheet is balanced.':^94}")
+        balance_line_text = (
+            f"The balance sheet is balanced ({balance_sheet['tolerance']:.1f} msats tolerance)."
+        )
     else:
-        output.append(f"\n{'******* The balance sheet is NOT balanced. ********':^94}")
+        balance_line_text = (
+            f"******* The balance sheet is NOT balanced. "
+            f"Tolerance: {balance_sheet['tolerance']:.1f} msats. ********"
+        )
+    output.append(f"\n{balance_line_text:^94}")
 
     output.append("=" * max_width)
 
