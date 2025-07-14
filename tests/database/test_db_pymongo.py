@@ -47,6 +47,16 @@ def test_database_connection_init() -> None:
     assert "admin" in db_conn.admin_uri
 
 
+def test_default_connection() -> None:
+    db_conn = DBConn()
+    assert db_conn.db_conn == "conn_1"
+    assert db_conn.db_name == "test_db"
+    assert db_conn.db_user == "test_user"
+    assert db_conn.uri is not None
+    assert "mongodb://" in db_conn.uri
+    assert "admin" in db_conn.admin_uri
+
+
 @pytest.mark.asyncio
 async def test_admin_database_connection_uri() -> None:
     db_conn = DBConn(db_conn="conn_1", db_name="test_db", db_user="test_user")
@@ -85,7 +95,7 @@ async def test_insert_timeseries() -> None:
     db_conn = DBConn(db_conn="conn_1", db_name="test_db", db_user="test_user")
     await db_conn.setup_database()
 
-    client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(db_conn.uri, tz_aware=True)
+    client = db_conn.client()
     async with client:
         collection = client[db_conn.db_name]["rates"]
         await collection.insert_one(timeseries_data)

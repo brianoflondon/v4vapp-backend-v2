@@ -4,6 +4,7 @@ from urllib.parse import quote_plus
 
 from pydantic import BaseModel
 from pymongo import AsyncMongoClient, timeout
+from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.errors import CollectionInvalid, OperationFailure
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
@@ -18,7 +19,50 @@ class DBConn(BaseModel):
     _setup: bool = False
 
     def __init__(self, **data):
+        config = InternalConfig().config
+        dbs_config = config.dbs_config
+        if "db_conn" not in data:
+            data["db_conn"] = dbs_config.default_connection
+        if "db_name" not in data:
+            data["db_name"] = dbs_config.default_name
+        if "db_user" not in data:
+            data["db_user"] = dbs_config.default_user
         super().__init__(**data)
+
+    def client(self) -> AsyncMongoClient[Dict[str, Any]]:
+        """
+        Returns an instance of AsyncMongoClient with the constructed URI.
+
+        This method creates a MongoDB client using the URI built from the
+        database connection, name, and user.
+
+        Returns:
+            AsyncMongoClient: An instance of AsyncMongoClient connected to the database.
+        """
+        return AsyncMongoClient(self.uri, tz_aware=True)
+
+    def admin_client(self) -> AsyncMongoClient[Dict[str, Any]]:
+        """
+        Returns an instance of AsyncMongoClient for the admin database.
+
+        This method creates a MongoDB client specifically for the admin database
+        using the admin URI.
+
+        Returns:
+            AsyncMongoClient: An instance of AsyncMongoClient connected to the admin database.
+        """
+        return AsyncMongoClient(self.admin_uri, tz_aware=True)
+
+    def db(self) -> AsyncDatabase[Dict[str, Any]]:
+        """
+        Returns the database instance for the specified database name.
+
+        This method retrieves the database instance using the constructed URI.
+
+        Returns:
+            AsyncDatabase[Dict[str, Any]]: The database instance for the specified database name.
+        """
+        return self.client()[self.db_name]
 
     def _build_uri_from_config(
         self, db_conn: str = "", db_name: str = "", db_user: str = ""
