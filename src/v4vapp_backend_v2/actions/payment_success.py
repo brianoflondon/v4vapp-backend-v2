@@ -188,7 +188,7 @@ async def hive_to_lightning_payment_success(
     ledger_entries_list.append(fee_ledger_entry_hive)
 
     # MARK: 5 Fulfill Main Payment Obligation
-    ledger_type = LedgerType.LIGHTNING_OUT
+    ledger_type = LedgerType.WITHDRAW_LIGHTNING
     outgoing_debit_amount = conversion_credit_amount - fee_debit_amount_hive
     outgoing_conv = CryptoConversion(
         conv_from=hive_transfer.unit,
@@ -201,7 +201,7 @@ async def hive_to_lightning_payment_success(
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
         op=payment,
-        description=f"Allocate outgoing {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
+        description=f"Allocate outgoing Lightning {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
             sub=cust_id,  # This is the CUSTOMER
@@ -218,14 +218,14 @@ async def hive_to_lightning_payment_success(
     ledger_entries_list.append(outgoing_ledger_entry)
 
     # MARK: 6 Send Lightning Payment
-    ledger_type = LedgerType.LIGHTNING_CONTRA
+    ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
     external_payment_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
         op=payment,
-        description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
+        description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
         debit=AssetAccount(
             name="External Lightning Payments",
             sub=node_name,
@@ -320,7 +320,7 @@ async def keepsats_to_lightning_payment_success(
 
     # Identify the customer and server
     cust_id = hive_transfer.from_account
-    server_id = hive_transfer.to_account
+    # server_id = hive_transfer.to_account
 
     # Mark: Record the Payment in the Hive Op
     cost_of_payment_msat = payment.value_msat + payment.fee_msat
@@ -329,7 +329,7 @@ async def keepsats_to_lightning_payment_success(
     node_name = "keepsats"
     ledger_entries_list = []
 
-    # MARK: 2 Outflow Send Lightning Payment
+    # MARK: 2z Fulfill Main Payment Obligation
     ledger_type = LedgerType.WITHDRAW_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
@@ -337,7 +337,7 @@ async def keepsats_to_lightning_payment_success(
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
         op=payment,
-        description=f"Keepsats outgoing {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
+        description=f"Allocate outgoing Keepsats {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
             sub=cust_id,  # This is the CUSTOMER
@@ -346,7 +346,31 @@ async def keepsats_to_lightning_payment_success(
         debit_unit=Currency.MSATS,
         debit_amount=payment.value_msat,
         debit_conv=payment.conv,
-        credit=AssetAccount(name="Treasury Lightning", sub=node_name),
+        credit=AssetAccount(name="External Lightning Payments", sub=node_name, contra=True),
+        credit_unit=Currency.MSATS,
+        credit_amount=payment.value_msat,
+        credit_conv=payment.conv,
+    )
+    ledger_entries_list.append(outgoing_ledger_entry)
+
+    # MARK: 2b Send Lightning Payment
+    ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
+    outgoing_ledger_entry = LedgerEntry(
+        cust_id=cust_id,
+        ledger_type=ledger_type,
+        group_id=f"{payment.group_id}-{ledger_type.value}",
+        timestamp=next(timestamp),
+        op=payment,
+        description=f"External Lightning payment {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
+        debit=AssetAccount(
+            name="External Lightning Payments",
+            sub=node_name,
+            contra=True,
+        ),
+        debit_unit=Currency.MSATS,
+        debit_amount=payment.value_msat,
+        debit_conv=payment.conv,
+        credit=AssetAccount(name="Treasury Lightning", sub=node_name, contra=False),
         credit_unit=Currency.MSATS,
         credit_amount=payment.value_msat,
         credit_conv=payment.conv,
