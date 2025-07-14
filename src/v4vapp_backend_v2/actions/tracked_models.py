@@ -5,13 +5,13 @@ from timeit import default_timer as timer
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import AsyncMongoClient
 from pymongo.results import UpdateResult
 
-from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, logger
-from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.config.setup import (DB_RATES_COLLECTION,
+                                            InternalConfig, logger)
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import (AllQuotes, HiveRatesDB,
+                                                     QuoteResponse)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
@@ -79,8 +79,6 @@ class TrackedBaseModel(BaseModel):
     )
 
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
-    db_client: ClassVar[MongoDBClient | None] = None
-    db_client_2: ClassVar[AsyncMongoClient[Dict[str, Any]]] = AsyncMongoClient()
 
     def __init__(self, **data):
         """
@@ -232,7 +230,7 @@ class TrackedBaseModel(BaseModel):
         return snake_case(cls.__name__)
 
     @property
-    def collection(self) -> str:
+    def collection_name(self) -> str:
         """
         Returns the name of the collection associated with this model.
 
@@ -241,6 +239,19 @@ class TrackedBaseModel(BaseModel):
 
         Returns:
             str: The name of the collection.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """
+        Returns the collection associated with this model.
+
+        This method should be overridden in subclasses to provide the
+        specific collection.
+
+        Returns:
+            AsyncCollection: The collection associated with this model.
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
@@ -288,7 +299,7 @@ class TrackedBaseModel(BaseModel):
         Returns:
             bool: True if the operation was unlocked, False if the timeout was reached.
         """
-        # TODO: #113 Make this much more efficient in the way it handles the db_client
+        # TODO: #113 Make this much more efficient in the way it handles the db
         start_time = timer()
         while await self.locked:
             if (timer() - start_time) > timeout:
@@ -308,17 +319,15 @@ class TrackedBaseModel(BaseModel):
         Returns:
             bool: True if the operation is locked, False otherwise.
         """
-        if TrackedBaseModel.db_client:
-            result: dict[str, Any] | None = await TrackedBaseModel.db_client.find_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
-                projection={"locked": True},
-            )
-            if result:
-                return result.get("locked", False)
+        result: dict[str, Any] | None = await InternalConfig.db[self.collection_name].find_one(
+            filter=self.group_id_query,
+            projection={"locked": True},
+        )
+        if result:
+            return result.get("locked", False)
         return False
 
-    async def lock_op(self) -> UpdateResult | None:
+    async def lock_op(self) -> UpdateResult:
         """
         Locks the operation to prevent concurrent processing.
 
@@ -329,16 +338,13 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        if TrackedBaseModel.db_client:
-            ans: UpdateResult = await TrackedBaseModel.db_client.update_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
-                update={"$set": {"locked": True}},
-            )
-            return ans
-        return None
+        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
+            filter=self.group_id_query,
+            update={"$set": {"locked": True}},
+        )
+        return ans
 
-    async def unlock_op(self) -> UpdateResult | None:
+    async def unlock_op(self) -> UpdateResult:
         """
         Unlocks the operation to allow concurrent processing.
 
@@ -349,20 +355,17 @@ class TrackedBaseModel(BaseModel):
         Returns:
             None
         """
-        if TrackedBaseModel.db_client:
-            # Remember my update_one already has the $set
-            ans: UpdateResult = await TrackedBaseModel.db_client.update_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
-                update={"$unset": {"locked": ""}},
-                upsert=True,
-            )
-            return ans
-        return None
+        # Remember my update_one already has the $set
+        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
+            filter=self.group_id_query,
+            update={"$unset": {"locked": ""}},
+            upsert=True,
+        )
+        return ans
 
     async def save(
         self, exclude_unset: bool = False, exclude_none: bool = True, **kwargs: Any
-    ) -> UpdateResult | None:
+    ) -> UpdateResult:
         """
         Saves the current state of the operation to the database.
 
@@ -372,20 +375,13 @@ class TrackedBaseModel(BaseModel):
         Returns:
             UpdateResult | None: The result of the update operation, or None if no database client is available.
         """
-        if self.db_client:
-            return await self.db_client.update_one(
-                collection_name=self.collection,
-                query=self.group_id_query,
-                update=self.model_dump(
-                    exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
-                ),
-                upsert=True,
-            )
-        logger.warning(
-            "No database client available for saving the operation",
-            extra={"notification": False},
+        return await InternalConfig.db[self.collection_name].update_one(
+            filter=self.group_id_query,
+            update=self.model_dump(
+                exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+            ),
+            upsert=True,
         )
-        return None
 
     def tracked_type(self) -> str:
         """
@@ -449,8 +445,6 @@ class TrackedBaseModel(BaseModel):
         if quote:
             cls.last_quote = quote
         else:
-            if cls.db_client and AllQuotes.db_client is None:
-                AllQuotes.db_client = cls.db_client
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes()
             cls.last_quote = all_quotes.quote
@@ -510,12 +504,6 @@ class TrackedBaseModel(BaseModel):
             - Updates self.quotes["HiveRatesDB"] with a QuoteResponse object containing the quote data.
             - Logs information about the found quote or warnings if an error occurs.
         """
-        if not cls.db_client:
-            logger.warning(
-                "No database client available for HiveRatesDB", extra={"notification": False}
-            )
-            return cls.last_quote
-
         if not isinstance(timestamp, datetime):
             raise ValueError("timestamp must be a datetime object")
 
@@ -525,8 +513,8 @@ class TrackedBaseModel(BaseModel):
 
         try:
             # Find the nearest quote by timestamp
-            collection = await cls.db_client.get_collection(DB_RATES_COLLECTION)
-            cursor = collection.aggregate(
+            collection = InternalConfig.db[DB_RATES_COLLECTION]
+            cursor = await collection.aggregate(
                 [
                     {"$match": {"timestamp": {"$exists": True}}},
                     {
@@ -568,8 +556,4 @@ class TrackedBaseModel(BaseModel):
                 return cls.last_quote
         except Exception as e:
             logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
-        return cls.last_quote
-        return cls.last_quote
-        return cls.last_quote
-        return cls.last_quote
         return cls.last_quote

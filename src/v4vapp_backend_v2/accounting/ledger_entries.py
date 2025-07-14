@@ -8,7 +8,6 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 
 
 async def get_ledger_entries(
@@ -39,7 +38,6 @@ async def get_ledger_entries(
         - If filter_by_account is provided, matches entries where either the debit or credit side
           corresponds to the specified account name and sub-account.
     """
-    collection_name = LedgerEntry.collection() if not collection_name else collection_name
     query = filter_by_account_as_of_date_query(
         account=filter_by_account,
         cust_id=cust_id,
@@ -47,10 +45,9 @@ async def get_ledger_entries(
         ledger_types=filter_by_ledger_types,
     )
     ledger_entries = []
-    db_client = get_mongodb_client_defaults()
-    cursor = await db_client.find(
-        collection_name=collection_name,
-        query=query,
+
+    cursor = LedgerEntry.collection().find(
+        filter=query,
         sort=[("timestamp", 1)],
     )
     async for entry in cursor:
@@ -98,9 +95,8 @@ async def get_ledger_dataframe(
             - credit_account_type: The type of the credit account.
             - credit_sub: The sub-account of the credit account.
     """
-    collection_name = LedgerEntry.collection() if not collection_name else collection_name
     ledger_entries = await get_ledger_entries(
-        as_of_date=as_of_date, collection_name=collection_name, filter_by_account=filter_by_account
+        as_of_date=as_of_date, filter_by_account=filter_by_account
     )
     data = []
     for entry in ledger_entries:

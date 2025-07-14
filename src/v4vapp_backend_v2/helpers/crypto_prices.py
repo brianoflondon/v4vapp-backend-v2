@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field, computed_field
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -259,7 +258,6 @@ class AllQuotes(BaseModel):
         source (str): The source of the quotes.
 
         Class Var:
-        db_client (MongoDBClient): A MongoDB client for database operations.
 
     Methods:
         get_all_quotes(use_cache: bool = True, timeout: float = 30.0):
@@ -290,7 +288,6 @@ class AllQuotes(BaseModel):
     source: str = ""
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
-    db_client: ClassVar[MongoDBClient | None] = None
     db_store_timestamp: ClassVar[datetime | None] = None
 
     def get_binance_quote(self) -> QuoteResponse:
@@ -446,8 +443,6 @@ class AllQuotes(BaseModel):
         Returns:
             None
         """
-        if not self.db_client:
-            return
         if (
             AllQuotes.db_store_timestamp
             and self.fetch_date - AllQuotes.db_store_timestamp
@@ -468,7 +463,9 @@ class AllQuotes(BaseModel):
                 sats_hbd=self.quote.sats_hbd_p,
                 hive_hbd=self.quote.hive_hbd,
             )
-            db_ans = await self.db_client.insert_one(DB_RATES_COLLECTION, record.model_dump())
+            db_ans = await InternalConfig.db[DB_RATES_COLLECTION].insert_one(
+                document=record.model_dump()
+            )
             logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
             AllQuotes.db_store_timestamp = self.fetch_date
         except Exception as e:

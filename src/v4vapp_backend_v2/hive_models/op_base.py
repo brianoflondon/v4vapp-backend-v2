@@ -3,8 +3,10 @@ from typing import Any, ClassVar, Dict, List
 
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field, computed_field
+from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
 from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
@@ -164,7 +166,7 @@ class OpBase(TrackedBaseModel):
         return ans
 
     @property
-    def collection(self) -> str:
+    def collection_name(self) -> str:
         """
         Returns the name of the collection associated with this model.
 
@@ -175,6 +177,20 @@ class OpBase(TrackedBaseModel):
             str: The name of the collection.
         """
         return "hive_ops"
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """
+        Returns the collection associated with this model.
+        Remember to use the parenthesis when calling this.
+
+        This method is used to determine where the operation data will be stored
+        in the database.
+
+        Returns:
+            Collection: The collection object for this model.
+        """
+        return InternalConfig.db["hive_ops"]
 
     @computed_field
     def group_id(self) -> str:

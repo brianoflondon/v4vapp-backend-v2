@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Discriminator, Tag
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
@@ -98,38 +99,37 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
         TrackedAny | None: The loaded tracked object if found, otherwise None.
 
     """
-    if not TrackedBaseModel.db_client:
-        return None
-    client = TrackedBaseModel.db_client
-
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
         if "_" in short_id:
             # This is a for a hive_ops object
             collection_name = "hive_ops"
             query = TrackedBaseModel.short_id_query(short_id=short_id)
-            result = await client.find_one(collection_name=collection_name, query=query)
+            result = await InternalConfig.db[collection_name].find_one(filter=query)
             if result:
                 value = {"value": result}
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
         else:
-            collections = [Invoice.collection, Payment.collection]
+            collections = [Invoice.collection_name, Payment.collection_name]
             for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
-                result = await client.find_one(collection_name=collection_name, query=query)
+                result = await InternalConfig.db[collection_name].find_one(filter=query)
                 if result:
                     value = {"value": result}
                     answer = DiscriminatedTracked.model_validate(value)
                     return answer.value
 
-    collection_name = tracked_obj.collection
-    result = await client.find_one(
-        collection_name=collection_name,
-        query=tracked_obj.group_id_query,
-    )
-    if result:
-        value = {"value": result}
-        answer = DiscriminatedTracked.model_validate(value)
-        return answer.value
+    if getattr(tracked_obj, "collection_name", None):
+        collection_name = tracked_obj.collection_name
+        result = await InternalConfig.db[collection_name].find_one(
+            filter=tracked_obj.group_id_query,
+        )
+        if result:
+            value = {"value": result}
+            answer = DiscriminatedTracked.model_validate(value)
+            return answer.value
     return None
+
+
+# End of the file

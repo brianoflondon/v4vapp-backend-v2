@@ -155,8 +155,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                     balance_sheet = await generate_balance_sheet_pandas_from_accounts()
                     if not balance_sheet["is_balanced"]:
                         logger.warning(
-                            f"The balance sheet is not balanced for\n"
-                            f"{ledger_entry.group_id}",
+                            f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
                             extra={"notification": False},
                         )
                 except Exception as e:
@@ -287,7 +286,7 @@ async def process_lightning_payment(
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
         existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection(), query={"group_id": v4vapp_group_id}
+            collection_name=LedgerEntry.collection_name(), query={"group_id": v4vapp_group_id}
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
@@ -313,7 +312,7 @@ async def process_lightning_payment(
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
         existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection(), query={"group_id": v4vapp_group_id}
+            collection_name=LedgerEntry.collection_name(), query={"group_id": v4vapp_group_id}
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
@@ -372,7 +371,7 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     # Check if a ledger entry with the same group_id already exists
     if TrackedBaseModel.db_client:
         existing_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection(), query={"group_id": op.group_id}
+            collection_name=LedgerEntry.collection_name(), query={"group_id": op.group_id}
         )
         if existing_entry:
             logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")

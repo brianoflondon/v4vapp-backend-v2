@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import LoggerFunction, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
@@ -270,7 +270,7 @@ class Invoice(TrackedBaseModel):
         ).conversion
 
     @property
-    def collection(self) -> str:
+    def collection_name(self) -> str:
         """
         Returns the collection name for the invoice.
 
@@ -278,6 +278,16 @@ class Invoice(TrackedBaseModel):
             str: The collection name for the invoice.
         """
         return "invoices"
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """
+        Returns the collection associated with this model.
+
+        Returns:
+            AsyncCollection: The collection object for this model.
+        """
+        return InternalConfig.db["invoices"]
 
     @property
     def group_id_query(self) -> Dict[str, Any]:

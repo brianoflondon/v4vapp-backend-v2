@@ -17,7 +17,6 @@ from v4vapp_backend_v2.actions.process_tracked_events import (
 )
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 ICON = "🏆"
@@ -25,24 +24,6 @@ app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
-
-
-def get_mongodb_client() -> MongoDBClient:
-    """
-    Returns a MongoDB client instance using the defaults from the config.
-
-    This function creates a MongoDB client instance using the default connection
-    and database name from the configuration.
-
-    Returns:
-        MongoDBClient: The MongoDB client instance.
-    """
-    dbs_config = InternalConfig().config.dbs_config
-    return MongoDBClient(
-        db_conn=dbs_config.default_connection,
-        db_name=dbs_config.default_name,
-        db_user=dbs_config.default_user,
-    )
 
 
 class ResumeToken(BaseModel):

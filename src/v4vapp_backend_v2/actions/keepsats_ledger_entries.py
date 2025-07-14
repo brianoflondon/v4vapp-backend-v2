@@ -52,10 +52,8 @@ async def hold_keepsats(
 async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None:
     ledger_type = LedgerType.HOLD_KEEPSATS
     group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
-    assert LedgerEntry.db_client is not None, "Database client is not initialized"
-    existing_entry_raw = await LedgerEntry.db_client.find_one(
-        collection_name=LedgerEntry.collection(),
-        query={"group_id": group_id},
+    existing_entry_raw = await LedgerEntry.collection().find_one(
+        filter={"group_id": group_id},
     )
     if existing_entry_raw is None:
         logger.warning(f"No ledger entry found for group_id: {group_id}")
