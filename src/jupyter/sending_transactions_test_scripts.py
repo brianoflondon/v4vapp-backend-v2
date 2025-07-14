@@ -122,29 +122,29 @@ async def graceful_shutdown():
 
 
 async def main():
+    # await clear_database()
+
     # invoice = await get_lightning_invoice(5000, "Test Invoice")
     # pprint(invoice)
     # # Pay invoice with Hive transfer
-    # trx = await send_hive_customer_to_server(
-    #     send_sats=5000, memo=f"Payment for invoice {invoice.payment_request}"
-    # )
+    # trx = await send_hive_customer_to_server(send_sats=5000, memo=f"{invoice.payment_request}")
     # pprint(trx)
     db_client = get_mongodb_client_defaults()
     TrackedBaseModel.db_client = db_client
 
-    # await clear_database()
+    # # Deposit Hive as Keepsats
+    # trx = await send_hive_customer_to_server(amount=Amount("25 HBD"), memo="Deposit #sats")
+    # pprint(trx)
+    # await asyncio.sleep(5)  # Wait for the transaction to be processed
 
-    # Deposit Hive as Keepsats
-    trx = await send_hive_customer_to_server(amount=Amount("50 HIVE"), memo="Deposit #sats")
-    pprint(trx)
-    await asyncio.sleep(5)  # Wait for the transaction to be processed
+
     hive_config = InternalConfig().config.hive
     hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
     # pay with keepsats
     transfer_list = []
-    for sats in [1000, 2000, 3000, 4000, 5000]:
+    for sats in [3000, 4000, 5000]:
         invoice = await get_lightning_invoice(sats, f"Test Invoice with Keepsats {sats}")
         hive_transfer = SendHiveTransfer(
             from_account=customer,
@@ -163,8 +163,8 @@ async def main():
         transfer_list=transfer_list,
     )
 
-    # for transfer in transfer_list:
-    #     trx = await send_hive_customer_to_server(amount=transfer.amount, memo=transfer.memo)
+    for transfer in transfer_list:
+        trx = await send_hive_customer_to_server(amount=transfer.amount, memo=transfer.memo)
 
     # invoice = await get_lightning_invoice(3000, "Test Invoice with Keepsats")
     # trx = await send_hive_customer_to_server(
