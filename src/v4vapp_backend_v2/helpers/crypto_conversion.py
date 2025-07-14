@@ -43,12 +43,13 @@ class CryptoConv(BaseModel):
     )
 
     UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
-        "HIVE": 0.003,
-        "HBD": 0.002,
-        "USD": 0.002,
-        "SATS": 0.5,
-        "MSATS": 500,
-        "BTC": 5e-9,
+        "hive": 0.003,
+        "hbd": 0.002,
+        "usd": 0.002,
+        "sats": 0.5,
+        "msats": 500,
+        "btc": 5e-9,
+        "msats_fee": 2000,  # the fee is so tiny I don't want failures for this
     }
 
     REL_TOL: ClassVar[float] = 1e-7
@@ -137,34 +138,34 @@ class CryptoConv(BaseModel):
             if self.msats == 0 and other.msats == 0:
                 return True
             if not isclose(
-                self.hive, other.hive, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["HIVE"]
+                self.hive, other.hive, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["hive"]
             ):
                 return False
             if not isclose(
-                self.hbd, other.hbd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["HBD"]
+                self.hbd, other.hbd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["hbd"]
             ):
                 return False
             if not isclose(
-                self.usd, other.usd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["USD"]
+                self.usd, other.usd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["usd"]
             ):
                 return False
             if not isclose(
-                self.sats, other.sats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["SATS"]
+                self.sats, other.sats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["sats"]
             ):
                 return False
             if not isclose(
-                self.msats, other.msats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["MSATS"]
+                self.msats, other.msats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["msats"]
             ):
                 return False
             if not isclose(
-                self.btc, other.btc, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["BTC"]
+                self.btc, other.btc, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["btc"]
             ):
                 return False
             if not isclose(
                 self.msats_fee,
                 other.msats_fee,
                 rel_tol=self.REL_TOL,
-                abs_tol=self.UNIT_TOLERANCE["MSATS"],
+                abs_tol=self.UNIT_TOLERANCE["msats_fee"],
             ):
                 return False
             return True
