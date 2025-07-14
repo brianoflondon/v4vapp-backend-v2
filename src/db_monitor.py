@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from pymongo.errors import OperationFailure
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.process_tracked_events import (
@@ -20,6 +19,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 ICON = "🏆"
 app = typer.Typer()
@@ -218,7 +218,6 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         return
 
 
-
 async def subscribe_stream(
     collection_name: str = "invoices", pipeline: Sequence[Mapping[str, Any]] | None = None
 ):
@@ -236,15 +235,16 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-    client = get_mongodb_client()
+    db_conn = DBConn()
+    client = db_conn.client()
     TrackedBaseModel.db_client = get_mongodb_client()
     LedgerEntry.db_client = get_mongodb_client()
 
-    collection = await client.get_collection(collection_name)
+    collection = client.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
         resume_token = resume.token
-        async with collection.watch(
+        async with await collection.watch(
             pipeline=pipeline,
             full_document="updateLookup",
             resume_after=resume_token,
@@ -327,6 +327,9 @@ async def main_async_start():
         f"🔗 Database Monitor connection: {CONFIG.dbs_config.default_connection} "
         f"🔗 Database Monitor name: {CONFIG.dbs_config.default_name} "
     )
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
