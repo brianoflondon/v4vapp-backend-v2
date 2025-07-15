@@ -1,12 +1,18 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, override
 
 from google.protobuf.json_format import MessageToDict
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
@@ -36,6 +42,7 @@ class Hop(BaseModel):
     blinding_point: Optional[bytes] = None
     encrypted_data: Optional[bytes] = None
     total_amt_msat: Optional[BSONInt64] = None
+    custom_records: Dict[str, str] | None = None
 
 
 class Route(BaseModel):
@@ -48,15 +55,19 @@ class Route(BaseModel):
 
 
 class HTLCAttempt(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     attempt_id: BSONInt64
     status: str | None = None
-    attempt_time_ns: BSONInt64
-    resolve_time_ns: Optional[BSONInt64] = None
+    attempt_time_ns: datetime | None = None
+    resolve_time_ns: datetime | None = None
     preimage: Optional[str] = None
     route: Optional[Route] = None
     failure: Optional[dict] = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def __init__(self, **data: Any) -> None:
+        htlc_attempt_data = convert_datetime_fields(data)
+        super().__init__(**htlc_attempt_data)
 
 
 class NodeAlias(BaseModel):
@@ -64,9 +75,18 @@ class NodeAlias(BaseModel):
     alias: str
 
 
+class FirstHopCustomRecords(BaseModel):
+    key: BSONInt64
+    value: str | None = None
+
+
 class Payment(TrackedBaseModel):
     """
     Payment model representing a payment transaction.
+
+    **Note**: in order to use a `conv` object you need to call `update_conv` method
+    after initializing the object with a `QuoteResponse` or `None`.
+    This model extends `TrackedBaseModel` and includes additional fields
 
     Attributes:
         payment_hash (str | None): The hash of the payment.
@@ -94,21 +114,29 @@ class Payment(TrackedBaseModel):
     route: list[NodeAlias] | None = []
 
     # Attributes from Payment
-    payment_hash: str | None = None
-    value: Optional[BSONInt64] = None
-    creation_date: datetime | None = None
-    fee: Optional[BSONInt64] = None
-    payment_preimage: str | None = None
-    value_sat: BSONInt64 | None = None
-    value_msat: BSONInt64 | None = None
-    payment_request: str | None = None
+    payment_hash: str = ""
+    value: BSONInt64 = BSONInt64(0)
+    creation_date: datetime = datetime.now(tz=timezone.utc)
+    fee: BSONInt64 = BSONInt64(0)
+    payment_preimage: str = ""
+    value_sat: BSONInt64 = BSONInt64(0)
+    value_msat: BSONInt64 = BSONInt64(0)
+    payment_request: str = ""
     status: PaymentStatus | None = None
-    fee_sat: BSONInt64 | None = None
-    fee_msat: BSONInt64 | None = None
-    creation_time_ns: datetime | None = None
-    payment_index: BSONInt64 | None = None
-    failure_reason: str | None = None
+    fee_sat: BSONInt64 = BSONInt64(0)
+    fee_msat: BSONInt64 = BSONInt64(0)
+    creation_time_ns: datetime | None = None  # This is a datetime object, not an int
+    payment_index: BSONInt64 = BSONInt64(0)
+    failure_reason: str = ""
     htlcs: List[HTLCAttempt] | None = None
+    first_hop_custom_record: List[FirstHopCustomRecords] | None = None
+
+    conv_fee: CryptoConv | None = Field(
+        default=None, description="Conversion of the fee for this payment"
+    )
+    custom_records: DecodedCustomRecord | None = Field(
+        default=None, description="Other custom records associated with the invoice"
+    )
 
     def __init__(self, lnrpc_payment: lnrpc.Payment | None = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
@@ -117,6 +145,60 @@ class Payment(TrackedBaseModel):
         else:
             payment_dict = convert_datetime_fields(data)
         super().__init__(**payment_dict)
+        self.fill_custom_record()
+
+    @override
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion rate for the payment.
+        Includes the fee in the value for conversion.
+        Also sets fee_conv if fee_msat is present
+
+        This method retrieves the latest conversion rate and updates the
+        `conv` attribute of the payment instance.
+        """
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+        if self.fee_msat:
+            self.fee_conv = CryptoConversion(
+                conv_from=Currency.MSATS,
+                value=float(self.fee_msat),
+                quote=quote,
+            ).conversion
+        self.conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=float(self.value_msat + self.fee_msat),
+            quote=quote,
+        ).conversion
+
+    def fill_custom_record(self) -> None:
+        """
+        Populates the `custom_record` attribute by decoding and validating a custom record
+        from the first HTLC's custom records, if available.
+
+        The method performs the following steps:
+        1. Checks if `htlcs` exists and contains at least one entry with `custom_records`.
+        2. Attempts to retrieve and decode the custom record with the key "7629169".
+        3. Validates the decoded custom record using the `KeysendCustomRecord` model.
+        4. Assigns the validated custom record to the `custom_record` attribute.
+
+        If an error occurs during validation, a warning is logged without raising an exception.
+
+        Raises:
+            None: All exceptions during validation are caught and logged.
+
+        Logs:
+            A warning message if an error occurs during custom record validation.
+
+        Attributes:
+            custom_record (KeysendCustomRecord): The validated custom record, if successfully decoded and validated.
+        """
+
+        if self.htlcs and self.htlcs[0].route and self.htlcs[0].route.hops:
+            for hop in self.htlcs[0].route.hops:
+                if custom_records := hop.custom_records:
+                    self.custom_records = decode_all_custom_records(custom_records=custom_records)
+                    return
 
     # Methods from PaymentExtra
     @computed_field
@@ -134,6 +216,27 @@ class Payment(TrackedBaseModel):
             elif self.route[-2].alias == "ACINQ":
                 return "Phoenix User"
         return self.route[-1].alias
+
+    @property
+    def succeeded(self) -> bool:
+        """
+        Checks if the payment has succeeded.
+        """
+        return self.status == PaymentStatus.SUCCEEDED
+
+    @property
+    def failed(self) -> bool:
+        """
+        Checks if the payment has failed.
+        """
+        return self.status == PaymentStatus.FAILED
+
+    @property
+    def in_flight(self) -> bool:
+        """
+        Checks if the payment is currently in flight.
+        """
+        return self.status == PaymentStatus.IN_FLIGHT
 
     @property
     def get_succeeded_htlc(self) -> HTLCAttempt | None:
@@ -184,12 +287,49 @@ class Payment(TrackedBaseModel):
 
     # Methods from Payment
     @property
-    def collection(self) -> str:
+    def collection_name(self) -> str:
+        """
+        Returns the name of the collection used for storing payment records.
+
+        Returns:
+            str: The name of the collection ("payments").
+        """
         return "payments"
 
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """
+        Returns the collection associated with this model.
+
+        Returns:
+            AsyncCollection: The collection object for this model.
+        """
+        return InternalConfig.db["payments"]
+
     @property
-    def group_id_query(self) -> dict:
+    def group_id_query(self) -> Dict[str, str]:
         return {"payment_hash": self.payment_hash}
+
+    @computed_field
+    def group_id(self) -> str:
+        """
+        Returns the group ID for the payment.
+        """
+        return self.payment_hash
+
+    @property
+    def group_id_p(self) -> str:
+        """
+        Returns the group ID for the payment.
+        """
+        return self.payment_hash
+
+    @property
+    def short_id(self) -> str:
+        """
+        Returns a short identifier for the payment, which is the first 10 characters of the payment hash.
+        """
+        return self.group_id_p[:10]
 
     @property
     def destination_pub_keys(self) -> List[str | None]:
@@ -212,6 +352,72 @@ class Payment(TrackedBaseModel):
             return int((self.fee_msat / self.value_msat) * 1_000_000)
         return 0
 
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the payment log.
+        """
+        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+
+    @property
+    def log_extra(self) -> dict[str, Any]:
+        """
+        Returns a dictionary containing additional information for logging.
+
+        Returns:
+            dict: A dictionary with additional information for logging.
+        """
+        return {
+            "payment": self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "group_id": self.payment_hash,
+            "log_str": self.log_str,
+        }
+
+    # Properties which are not
+    @property
+    def timestamp(self) -> datetime:
+        """
+        Returns the timestamp of the invoice, which is the creation date.
+
+        Returns:
+            datetime: The creation date of the invoice.
+        """
+        timestamp = self.creation_time_ns or self.creation_date
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return timestamp
+
+    @property
+    def op_type(self) -> str:
+        """
+        Returns the operation type for the payment.
+
+        Returns:
+            str: The operation type for the payment, which is always "payment".
+        """
+        return "payment"
+
+    @property
+    def age(self) -> float:
+        """
+        Returns the age of the payment as a float representing the total seconds.
+
+        Returns:
+            float: The age of the invoice in seconds.
+        """
+        return (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds()
+
+    @property
+    def age_str(self) -> str:
+        """
+        Returns the age of the payment as a formatted string.
+
+        Returns:
+            str: The age of the payment in a human-readable format.
+        """
+        age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
+        return age_text
+
 
 class ListPaymentsResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -219,11 +425,11 @@ class ListPaymentsResponse(BaseModel):
     payments: List[Payment]
     first_index_offset: BSONInt64
     last_index_offset: BSONInt64
-    total_num_payments: Optional[BSONInt64] = None
+    total_num_payments: BSONInt64 = BSONInt64(0)
 
     def __init__(
-        __pydantic_self__,
-        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse = None,
+        self,
+        lnrpc_list_payments_response: lnrpc.ListPaymentsResponse | None = None,
         **data: Any,
     ) -> None:
         if lnrpc_list_payments_response and isinstance(
@@ -238,5 +444,5 @@ class ListPaymentsResponse(BaseModel):
             super().__init__(**list_payments_dict)
         else:
             super().__init__(**data)
-            if not __pydantic_self__.payments:
-                __pydantic_self__.payments = []
+            if not self.payments:
+                self.payments = []

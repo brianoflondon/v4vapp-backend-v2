@@ -4,6 +4,8 @@ from timeit import default_timer as timer
 
 import pytest
 
+from tests.get_last_quote import last_quote
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_all import op_any_or_base
 from v4vapp_backend_v2.models.invoice_models import Invoice
@@ -40,6 +42,7 @@ async def test_db_collections(collection_name, validator):
     Parameterized test for validating documents in different collections.
     """
     # Initialize the database client
+    TrackedBaseModel.last_quote = last_quote()
     async with MongoDBClient(
         db_conn="conn_1",
         db_name="lnd_monitor_v2_voltage",
@@ -56,11 +59,12 @@ async def test_db_collections(collection_name, validator):
             count += 1
             try:
                 # Validate the document using the provided validator
+                id = doc.get("_id")
                 validated_doc = validator(doc)
                 assert validated_doc
             except Exception as e:
                 print(f"Error validating document in collection '{collection_name}': {e}")
-                print(f"Document: {doc['_id']}")
+                print(f"Document: {id}")
                 print("--------------------------------------")
                 pprint(doc, indent=2)
 

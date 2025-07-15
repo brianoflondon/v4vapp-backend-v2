@@ -1,6 +1,6 @@
 import re
 from typing import Dict, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from bech32 import convertbits
@@ -13,9 +13,12 @@ from v4vapp_backend_v2.actions.lnurl_models import (
     lnurl_bech32_decode,
     strip_lightning,
 )
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_pay_req_from_pay_request
+from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
+    get_node_alias_from_pub_key,
+    get_pay_req_from_pay_request,
+)
 from v4vapp_backend_v2.models.pay_req import PayReq, protobuf_pay_req_to_pydantic
 
 # Get this from the config
@@ -103,17 +106,17 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 
 async def decode_any_lightning_string(
     input: str,
-    sats: int = 0,
+    zero_amount_invoice_send_msats: int = 0,
     comment: str = "",
     ignore_limits: bool = False,
-    lnd_client: LNDClient = None,
+    lnd_client: LNDClient | None = None,
 ) -> PayReq:
     """
     Takes in a string and checks if it is a valid LNURL or a valid Lightning Address.
 
     Args:
         input (str): The input string to decode.
-        sats (int, optional): The amount in satoshis. Defaults to 0.
+        msats (int, optional): The amount in millisatoshis. Defaults to 0.
         comment (str, optional): A comment to include. Defaults to "".
         ignore_limits (bool, optional): Whether to ignore limits. Defaults to False.
 
@@ -125,14 +128,15 @@ async def decode_any_lightning_string(
         LNDInvoiceError: If the amount is out of the allowed range or the comment is too long
         some other error with the LNDInvoice.
     """
-    if sats:
-        sats = round(sats)
     input = strip_lightning(input)
-
     extras = input.split(" ", 1)
     if len(extras) > 1:
         comment = extras[1] if not comment else comment
         input = extras[0]
+
+    if not lnd_client:
+        lnd_config = InternalConfig().config.lnd_config
+        lnd_client = LNDClient(connection_name=lnd_config.default)
 
     if input.startswith("lnbc"):
         lnrpc_pay_req = await get_pay_req_from_pay_request(
@@ -141,7 +145,11 @@ async def decode_any_lightning_string(
         # # Dealing with a zero sat invoice record the amount to be sent.
         # if ln_invoice.zero_sat:
         #     ln_invoice.force_send_sats = sats
-        pay_req = protobuf_pay_req_to_pydantic(lnrpc_pay_req)
+        pay_req = protobuf_pay_req_to_pydantic(lnrpc_pay_req, pay_req_str=input)
+        pay_req.dest_alias = await get_node_alias_from_pub_key(
+            pay_req.destination, lnd_client=lnd_client
+        )
+        pay_req.send_everything = pay_req.is_zero_value or False
         return pay_req
 
     data = LnurlProxyData(
@@ -149,31 +157,43 @@ async def decode_any_lightning_string(
     )
     try:
         response = await decode_any_lnurp_or_lightning_address(data)
-        milisats = sats * 1_000
         if response.tag != "payRequest":
             raise LnurlException("Not a valid LNURLp or Lightning Address")
-        if not (response.min_sendable <= milisats <= response.max_sendable):
+        if not (response.min_sendable <= zero_amount_invoice_send_msats <= response.max_sendable):
             raise LnurlException(
-                f"Amount {sats:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
+                f"Amount {zero_amount_invoice_send_msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
                 failure={"error": "amount out of range"},
             )
         if not response.comment_allowed:
-            params = {"amount": milisats}
+            params = {"amount": zero_amount_invoice_send_msats}
         else:
             if len(comment) > response.comment_allowed:
                 comment = comment[: response.comment_allowed]
-            params = {"amount": milisats, "comment": comment}
+            params = {"amount": zero_amount_invoice_send_msats, "comment": comment}
 
     except LnurlException as ex:
         logger.error(
-            f"LnurlException: {ex}", extra={"notification": False, "lnurl_failure": ex.failure}
+            f"LnurlException: {ex}", extra={"notification": False, "lnurl_failure": str(ex)}
         )
-        raise LnurlException(failure=ex.failure)
+        raise LnurlException(failure={"error": str(ex)})
 
+    # Parse the query string from response.callback
+    parsed_url = urlparse(str(response.callback))
+    query_params = parse_qs(parsed_url.query)  # Convert query string to a dictionary
+
+    # Flatten the query_params dictionary (parse_qs returns lists for each key)
+    query_params = {key: value[0] for key, value in query_params.items()}
+
+    # Merge query_params with the existing params
+    merged_params = {**query_params, **params}
+
+    # Make the HTTP request with the merged parameters
     with httpx.Client() as httpx_client:
         try:
             response = httpx_client.get(
-                str(response.callback), params=params, follow_redirects=True
+                parsed_url._replace(query="").geturl(),  # Use the base URL without the query
+                params=merged_params,  # Pass the merged parameters
+                follow_redirects=True,
             )
             response.raise_for_status()
             response_data = response.json()
@@ -182,7 +202,9 @@ async def decode_any_lightning_string(
                     pay_request=response_data["pr"], lnd_client=lnd_client
                 )
                 if lnrpc_pay_req:
-                    return protobuf_pay_req_to_pydantic(lnrpc_pay_req)
+                    return protobuf_pay_req_to_pydantic(
+                        lnrpc_pay_req, pay_req_str=response_data["pr"]
+                    )
             raise LnurlException("No payment request found in response")
         except (httpx.RequestError, httpx.HTTPStatusError) as ex:
             logger.error(f"HTTP error: {str(ex)}", extra={"notification": False})

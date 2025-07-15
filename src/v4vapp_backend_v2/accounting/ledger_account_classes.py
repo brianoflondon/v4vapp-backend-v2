@@ -1,3 +1,4 @@
+import re
 from enum import StrEnum
 from typing import Literal, Union
 
@@ -14,16 +15,71 @@ class AccountType(StrEnum):
 
 
 # MARK: Base class for all accounts
-class Account(BaseModel):
+class LedgerAccount(BaseModel):
     name: str = Field(..., description="Name of the ledger account")
     account_type: AccountType = Field(..., description="Type of account")
     sub: str = Field("", description="Sub-account name for more specific categorization")
+    contra: bool = Field(
+        False, description="Indicates if this is a contra account (default: False) Contra"
+    )
 
     model_config = ConfigDict(use_enum_values=True)
 
+    def __repr__(self) -> str:
+        contra_str = " (Contra)" if self.contra else ""
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}{contra_str}"
+
+    def __str__(self) -> str:
+        contra_str = " (Contra)" if self.contra else ""
+        return f"{self.name} ({self.account_type}) - Sub: {self.sub}{contra_str}"
+
+    def __eq__(self, other):
+        if not isinstance(other, LedgerAccount):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.account_type == other.account_type
+            and self.sub == other.sub
+        )
+
+    def __hash__(self):
+        return hash((self.name, self.account_type, self.sub))
+
+    @classmethod
+    def from_string(cls, s: str):
+        """
+        Parse a string like 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp'
+        or 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp (Contra)'
+        and return an Account (or subclass) instance.
+        """
+        # Allow optional (Contra) at the end
+        pattern = r"^(.*?) \((.*?)\) - Sub: (.*?)(?: \(Contra\))?$"
+        match = re.match(pattern, s)
+        if not match:
+            raise ValueError(f"String does not match expected format: {s}")
+        name, account_type_str, sub = match.groups()
+        contra = s.strip().endswith("(Contra)")
+        account_type_str = account_type_str.strip()
+
+        # Convert string to AccountType enum
+        try:
+            account_type = AccountType(account_type_str)
+        except ValueError:
+            raise ValueError(f"Unknown account type: {account_type_str}")
+
+        # Try to instantiate the correct subclass based on account_type
+        for subclass in cls.__subclasses__():
+            if (
+                hasattr(subclass, "account_type")
+                and getattr(subclass, "account_type") == account_type
+            ):
+                return subclass(name=name.strip(), sub=sub.strip(), contra=contra)
+        # Fallback to base class if no subclass matches
+        return cls(name=name.strip(), account_type=account_type, sub=sub.strip(), contra=contra)
+
 
 # MARK: Asset Accounts
-class AssetAccount(Account):
+class AssetAccount(LedgerAccount):
     """
     Represents an asset account in the accounting system.
     Assets INCREASE with a DEBIT and DECREASE with a CREDIT.
@@ -44,28 +100,37 @@ class AssetAccount(Account):
         "Treasury Lightning",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
+        "Converted Hive Offset",
+        "Converted Keepsats Offset",
+        "External Lightning Payments",
+        "Keepsats Lightning Movements",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"
     )
 
-    def __init__(self, name="", sub="", account_type: AccountType = AccountType.ASSET):
-        super().__init__(name=name, sub=sub, account_type=account_type)
+    def __init__(
+        self,
+        name: str = "",
+        sub: str = "",
+        account_type: AccountType = AccountType.ASSET,
+        contra: bool = False,
+    ):
+        super().__init__(name=name, sub=sub, account_type=account_type, contra=contra)
         self.account_type = AccountType.ASSET
         self.name = name
         self.sub = sub
+        self.contra = contra
 
 
 # MARK: Liability Accounts
-class LiabilityAccount(Account):
+class LiabilityAccount(LedgerAccount):
     """
     LiabilityAccount is a subclass of Account that represents a specific type of liability account.
     Liabilities INCREASE with a CREDIT and DECREASE with a DEBIT.
     Attributes:
         name (Literal): The specific name of the liability account. Must be one of:
-            - "Customer Liability Hive"
-            - "Customer Liability Lightning"
-            - "Tax Liabilities"
+            - "Customer Liability"
         account_type (Literal[AccountType.LIABILITY]): The type of account, which is always set to `AccountType.LIABILITY`.
     Methods:
         __init__(name: str = "", sub: str = ""):
@@ -74,24 +139,26 @@ class LiabilityAccount(Account):
     """
 
     name: Literal[
-        "Customer Liability Hive",
-        "Customer Liability Lightning",
+        "Customer Liability",
+        "Keepsats Hold",
         "Owner Loan Payable (funding)",
-        "Tax Liabilities",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
         AccountType.LIABILITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub="", account_type: AccountType = AccountType.LIABILITY):
-        super().__init__(name=name, sub=sub, account_type=account_type)
+    def __init__(
+        self, name="", sub="", account_type: AccountType = AccountType.LIABILITY, contra=False
+    ):
+        super().__init__(name=name, sub=sub, account_type=account_type, contra=contra)
         self.account_type = AccountType.LIABILITY
         self.name = name
         self.sub = sub
+        self.contra = contra
 
 
 # MARK: Equity Accounts
-class EquityAccount(Account):
+class EquityAccount(LedgerAccount):
     """
     Represents an equity account in the accounting system.
     Equity accounts INCREASE with a CREDIT and DECREASE with a DEBIT.
@@ -114,31 +181,41 @@ class EquityAccount(Account):
         AccountType.EQUITY, description="Type of account"
     )
 
-    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EQUITY):
-        super().__init__(name=name, sub=sub, account_type=account_type)
+    def __init__(
+        self, name="", sub="", account_type: AccountType = AccountType.EQUITY, contra=False
+    ):
+        super().__init__(name=name, sub=sub, account_type=account_type, contra=contra)
         self.account_type = AccountType.EQUITY
         self.name = name
         self.sub = sub
+        self.contra = contra
 
 
 # MARK: Revenue Accounts
-class RevenueAccount(Account):
-    name: Literal["Fee Income Hive", "Fee Income Lightning", "DHF Income", "Other Income"] = Field(
-        ..., description="Specific revenue account name"
-    )
+class RevenueAccount(LedgerAccount):
+    name: Literal[
+        "Fee Income Hive",
+        "Fee Income Lightning",
+        "Fee Income Keepsats",
+        "DHF Income",
+        "Other Income",
+    ] = Field(..., description="Specific revenue account name")
     account_type: Literal[AccountType.REVENUE] = Field(
         AccountType.REVENUE, description="Type of account"
     )
 
-    def __init__(self, name="", sub="", account_type: AccountType = AccountType.REVENUE):
-        super().__init__(name=name, sub=sub, account_type=account_type)
+    def __init__(
+        self, name="", sub="", account_type: AccountType = AccountType.REVENUE, contra=False
+    ):
+        super().__init__(name=name, sub=sub, account_type=account_type, contra=contra)
         self.account_type = AccountType.REVENUE
         self.name = name
         self.sub = sub
+        self.contra = contra
 
 
 # MARK: Expense Accounts
-class ExpenseAccount(Account):
+class ExpenseAccount(LedgerAccount):
     name: Literal[
         "Hosting Expenses Privex",
         "Hosting Expenses Voltage",
@@ -149,20 +226,29 @@ class ExpenseAccount(Account):
         AccountType.EXPENSE, description="Type of account"
     )
 
-    def __init__(self, name="", sub="", account_type: AccountType = AccountType.EXPENSE):
-        super().__init__(name=name, sub=sub, account_type=account_type)
+    def __init__(
+        self, name="", sub="", account_type: AccountType = AccountType.EXPENSE, contra=False
+    ):
+        super().__init__(name=name, sub=sub, account_type=account_type, contra=contra)
         self.account_type = AccountType.EXPENSE
         self.name = name
         self.sub = sub
+        self.contra = contra
 
 
-AccountAny = Union[AssetAccount, LiabilityAccount, EquityAccount, RevenueAccount, ExpenseAccount]
+LedgerAccountAny = Union[
+    AssetAccount,
+    LiabilityAccount,
+    EquityAccount,
+    RevenueAccount,
+    ExpenseAccount,
+]
 
 
 if __name__ == "__main__":
     # Example usage
     asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
-    liability_account = LiabilityAccount(name="Customer Liability Hive", sub="Sub-account 2")
+    liability_account = LiabilityAccount(name="Customer Liability", sub="Sub-account 2")
     equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
     revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
     expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")

@@ -7,9 +7,14 @@ from nectar.exceptions import NectarException
 from nectar.hive import Hive
 from nectarapi.exceptions import NumRetriesReached
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
-from v4vapp_backend_v2.hive.hive_extras import get_blockchain_instance, get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_blockchain_instance,
+    get_good_nodes,
+    get_hive_client,
+)
 from v4vapp_backend_v2.hive_models.custom_json_data import custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
@@ -27,11 +32,11 @@ class SwitchToLiveStream(Exception):
 
 
 async def stream_ops_async(
-    start: int = None,
-    stop: int = None,
+    start: int = 0,
+    stop: int | None = None,
     stop_now: bool = False,
-    look_back: timedelta = None,
-    hive: Hive = None,
+    look_back: timedelta | None = None,
+    hive: Hive | None = None,
     opNames: list[str] = OP_TRACKED,
     filter_custom_json: bool = True,
 ) -> AsyncGenerator[OpAny, None]:
@@ -68,11 +73,13 @@ async def stream_ops_async(
 
     """
     hive = hive or get_hive_client()
+    good_nodes = get_good_nodes()
+    hive.set_default_nodes(good_nodes)
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
     OpBase.hive_inst = hive
     if opNames:
-        op_realms = [op_realm(op) for op in opNames]
+        op_realms = [op_realm(op_type) for op_type in opNames]
         only_virtual_ops = all(realm == "virtual" for realm in op_realms)
     else:
         only_virtual_ops = False
@@ -99,10 +106,10 @@ async def stream_ops_async(
     else:
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
-    last_block = start_block
+    last_block = start_block or 1
 
-    while last_block < stop_block:
-        await OpBase.update_quote()
+    while last_block is not None and stop_block is not None and last_block < stop_block:
+        await TrackedBaseModel.update_quote()
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(
@@ -126,8 +133,8 @@ async def stream_ops_async(
             async for hive_event in async_stream_real:
                 if (
                     not only_virtual_ops
-                    and hive_event.get("block_num") > last_block
-                    and hive_event.get("block_num") <= stop_block
+                    and hive_event["block_num"] > last_block
+                    and hive_event["block_num"] <= stop_block
                 ):
                     start_block = last_block
                     for virtual_event in blockchain.stream(
@@ -139,15 +146,29 @@ async def stream_ops_async(
                         # opNames=opNames,      # we must filter them after updating op_in_trx counter
                         threading=False,
                     ):
-                        last_block = hive_event.get("block_num")
-                        op_virtual_base = op_any_or_base(virtual_event)
+                        last_block = hive_event.get("block_num", start_block)
+                        try:
+                            op_virtual_base = op_any_or_base(virtual_event)
+                        except ValueError as e:
+                            logger.warning(
+                                f"ValidationError in block_stream:{virtual_event.get('block_num')} {virtual_event.get('trx_id')}: {e}",
+                                extra={"notification": True, "virtual_event": virtual_event},
+                            )
+                            continue
                         op_in_trx_counter.op_in_trx_inc(op_virtual_base)
                         # print(op_virtual_base.type, op_virtual_base.block_num, op_virtual_base.trx_id, op_virtual_base.op_in_trx)
-                        if op_virtual_base.type in opNames:
+                        if op_virtual_base.op_type in opNames:
                             yield op_virtual_base
                 if not filter_custom_json and not custom_json_test_data(hive_event):
                     continue
-                op_base = op_any_or_base(hive_event)
+                try:
+                    op_base = op_any_or_base(hive_event)
+                except ValueError as e:
+                    logger.warning(
+                        f"ValidationError in block_stream:{hive_event.get('block_num')} {hive_event.get('trx_id')}: {e}",
+                        extra={"notification": True, "hive_event": hive_event},
+                    )
+                    continue
 
                 if only_virtual_ops:
                     # When streaming virtual ops ONLY we need to perform the updates to start and last_block
@@ -198,6 +219,11 @@ async def stream_ops_async(
                 )
             current_node = hive.rpc.url
             hive.rpc.next()
+            if current_node == hive.rpc.url:
+                good_nodes = get_good_nodes()
+                hive.set_default_nodes(good_nodes)
+                blockchain = get_blockchain_instance(hive_instance=hive)
+
             logger.info(
                 f"{start_block:,} Switching {current_node} -> {hive.rpc.url} no_preview",
                 extra={"notification": True, "error_code": "stream_restart"},

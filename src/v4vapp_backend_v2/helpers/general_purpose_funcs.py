@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Generator
 
 
 def snake_case(name: str) -> str:
@@ -11,6 +12,17 @@ def snake_case(name: str) -> str:
         str: The string converted to snake_case.
     """
     return "".join(["_" + i.lower() if i.isupper() else i for i in name]).lstrip("_")
+
+
+def from_snake_case(snake_str: str) -> str:
+    """
+    Convert a snake_case string to a human-readable format.
+    Args:
+        snake_str (str): The snake_case string to convert.
+    Returns:
+        str: The string converted to a human-readable format.
+    """
+    return " ".join(word.capitalize() for word in snake_str.split("_"))
 
 
 def camel_case(snake_str: str) -> str:
@@ -52,7 +64,9 @@ def seconds_only(delta: timedelta) -> timedelta:
     return timedelta(days=delta.days, seconds=delta.seconds)
 
 
-def format_time_delta(delta: timedelta | float | int, fractions: bool = False) -> str:
+def format_time_delta(
+    delta: timedelta | float | int, fractions: bool = False, just_days_or_hours: bool = False
+) -> str:
     """
     Formats a timedelta object as a string.
     If Days are present, the format is "X days, Y hours".
@@ -66,8 +80,16 @@ def format_time_delta(delta: timedelta | float | int, fractions: bool = False) -
     if isinstance(delta, (int, float)):
         delta = timedelta(seconds=delta)
     if delta.days:
-        return f"{delta.days} days, {delta.seconds // 3600} hours"
+        hours = delta.seconds // 3600
+        if hours == 0 and just_days_or_hours:
+            return f"{delta.days} {'days' if delta.days != 1 else 'day'}"
+
+        return (
+            f"{delta.days} {'days' if delta.days != 1 else 'day'}, {delta.seconds // 3600} hours"
+        )
     hours, remainder = divmod(delta.seconds, 3600)
+    if just_days_or_hours:
+        return f"{hours} {'hours' if hours != 1 else 'hour'}"
     minutes, seconds = divmod(remainder, 60)
     hours_text = f"{hours:02}:" if hours > 0 else ""
     if fractions:
@@ -138,6 +160,20 @@ def detect_paywithsats(memo: str) -> bool:
         return True
     return False
 
+def paywithsats_amount(memo: str) -> int:
+    """
+    Extracts the amount specified in a memo string formatted as "paywithsats:amount".
+    Args:
+        memo (str): The memo string containing the amount, expected in the format "paywithsats:amount".
+    Returns:
+        int: The extracted amount as an integer if found; otherwise, 0.
+    """
+
+    # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
+    match = re.search(r"paywithsats:(\d+)", memo)
+    if match:
+        return int(match.group(1))
+    return 0
 
 def detect_hbd(memo: str) -> bool:
     if not memo:
@@ -457,3 +493,42 @@ def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
     if len(text) > max_length:
         return text[: max_length - 3] + "..."
     return text
+
+
+def find_short_id(text: str) -> str | None:
+    """
+    Finds a short ID in the given text.
+    A short ID is defined as a string that starts with '§' and is followed by alphanumeric characters.
+
+    Args:
+        text (str): The input text to search for a short ID.
+
+    Returns:
+        str | None: The found short ID or None if no valid ID is found.
+    """
+    match = re.search(r"§\s*([a-zA-Z0-9_]+)", text)
+    if match:
+        return match.group(1)
+    return None
+
+
+def timestamp_inc(
+    start_time: datetime, inc: timedelta = timedelta(seconds=0.01)
+) -> Generator[datetime, None, None]:
+    """
+    Increment a timestamp by a given timedelta.
+
+    Args:
+        start_time (datetime): The initial timestamp.
+        inc (timedelta): The increment to apply.
+
+    Returns:
+        datetime: The incremented timestamp.
+    """
+    if start_time is None:
+        start_time = datetime.now(tz=timezone.utc)
+
+    current_time = start_time
+    while True:
+        current_time += inc
+        yield current_time

@@ -5,17 +5,22 @@ from typing import Any, Dict, List
 
 import httpx
 from ecdsa import MalformedPointError  # type: ignore
+from nectar.account import Account
+from nectar.amount import Amount
 from nectar.blockchain import Blockchain
 from nectar.exceptions import MissingKeyError
 from nectar.hive import Hive
 from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
+from nectar.transactionbuilder import TransactionBuilder
 from nectarapi.exceptions import UnhandledRPCError
+from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 
 DEFAULT_GOOD_NODES = [
     "https://api.hive.blog",
@@ -42,7 +47,7 @@ EXCLUDE_NODES = [
     # "https://hiveapi.actifit.io",
     # "https://api.syncad.com",
     # "https://hive-api.dlux.io",
-    # "https://hive-api.3speak.tv",
+    "https://hive-api.3speak.tv",
 ]
 
 MAX_HIVE_BATCH_SIZE = 25
@@ -59,18 +64,76 @@ class CustomJsonSendError(Exception):
         extra (dict): Additional information about the error.
     """
 
-    def __init__(self, message: str, extra: dict = None):
+    def __init__(self, message: str, extra: dict | None = None):
         super().__init__(message)
         self.extra = extra if extra else {}
 
 
-# TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
-def get_hive_client(stream_only: bool = False, *args, **kwargs) -> Hive:
+class HiveTransferError(Exception):
     """
-    Create a Hive client instance.
+    Custom exception for errors related to Hive transfers.
 
-    Returns:
-        HiveClient: A Hive client instance.
+    Args:
+        message (str): Error message.
+        extra (dict): Additional information about the error.
+    """
+
+    def __init__(self, message: str, extra: dict | None = None):
+        super().__init__(message)
+        self.extra = extra if extra else {}
+
+
+class HiveNotEnoughHiveInAccount(HiveTransferError):
+    """
+    Exception raised when there are not enough Hive funds in the account.
+    """
+
+    pass
+
+
+class HiveTryingToSendZeroOrNegativeAmount(HiveTransferError):
+    """
+    Exception raised when trying to send a zero or negative amount.
+    """
+
+    pass
+
+
+class HiveAccountNameOnExchangesList(HiveTransferError):
+    """
+    Exception raised when the Hive account name is on the bad accounts list.
+    """
+
+    pass
+
+
+class HiveSomeOtherRPCException(HiveTransferError):
+    """
+    Exception raised for other unhandled RPC errors.
+    This is a catch-all for any other exceptions that do not fit the specific cases.
+    """
+
+    pass
+
+
+# TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
+def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
+    """
+    Creates and returns a Hive client instance, selecting a working node from a list of available nodes.
+    If no node is provided in kwargs, retrieves a list of good nodes from Redis cache or regenerates it if necessary.
+    Optionally includes stream-only nodes if `stream_only` is True.
+    Attempts to instantiate a Hive client with each node in the list until successful, or raises an error if all nodes fail.
+
+    Args:
+        stream_only (bool, optional): If True, includes stream-only nodes in the selection. Defaults to False.
+        nobroadcast (bool, optional): If True, will not broadcast transactions. Defaults to False.
+        *args: Additional positional arguments to pass to the Hive client constructor.
+        **kwargs: Additional keyword arguments to pass to the Hive client constructor. If 'node' is not provided, it will be set internally.
+
+        Hive: An instance of the Hive client connected to a working node.
+
+    Raises:
+        ValueError: If no working node can be found after trying all available nodes.
     """
     if "node" not in kwargs:
         # shuffle good nodes
@@ -92,6 +155,8 @@ def get_hive_client(stream_only: bool = False, *args, **kwargs) -> Hive:
             good_nodes += BLOCK_STREAM_ONLY
         random.shuffle(good_nodes)
         kwargs["node"] = good_nodes
+    if "nobroadcast" not in kwargs:
+        kwargs["nobroadcast"] = nobroadcast
 
     count = len(kwargs["node"])
     errors = 0
@@ -136,6 +201,7 @@ def get_good_nodes() -> List[str]:
     Returns:
         List[str]: A list of endpoints for nodes with a score of 100.
     """
+    good_nodes: List[str] = []
     try:
         response = httpx.get(
             "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
@@ -153,7 +219,6 @@ def get_good_nodes() -> List[str]:
                 f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
             )
     except Exception as e:
-        good_nodes: List[str] = []
         with V4VAsyncRedis().sync_redis as redis_sync_client:
             good_nodes_json = redis_sync_client.get("good_nodes")
         if good_nodes_json and isinstance(good_nodes_json, str):
@@ -167,84 +232,6 @@ def get_good_nodes() -> List[str]:
                 redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
 
     return good_nodes
-
-
-# async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
-#     """
-#     Fetches details about a Hive witness.
-
-#     This function sends a GET request to "https://api.syncad.com/hafbe-api/witnesses"
-#     and retrieves the details of a Hive witness with the specified account name.
-
-#     Args:
-#         hive_accname (str): The account name of the Hive witness.
-
-#     Returns:
-#         dict: A dictionary containing the details of the Hive witness.
-#     """
-#     try:
-#         if not hive_accname:
-#             url = "https://api.syncad.com/hafbe-api/witnesses"
-#         else:
-#             url = f"https://api.syncad.com/hafbe-api/witnesses/{hive_accname}"
-#         async with httpx.AsyncClient() as client:
-#             response = await client.get(url, timeout=20)
-#             if response.status_code == 200:
-#                 answer = response.json()
-#                 async with V4VAsyncRedis() as redis_client:
-#                     await redis_client.set(
-#                         name=f"witness_{hive_accname}", value=json.dumps(answer)
-#                     )
-#             else:
-#                 async with V4VAsyncRedis() as redis_client:
-#                     answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-#                     if not answer:
-#                         logger.warning(
-#                             f"Failed to get_hive_witness_details "
-#                             f"from cache after error: {response.status_code}"
-#                         )
-#                         return None
-
-#             wd = WitnessDetails.model_validate(answer)
-#             return wd
-
-#     except httpx.ConnectTimeout as e:
-#         logger.warning(
-#             f"Failed to get_hive_witness_details: {e}",
-#             extra={"notification": False},
-#         )
-#         try:
-#             async with V4VAsyncRedis() as redis_client:
-#                 answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-#                 if answer:
-#                     wd = WitnessDetails.model_validate(answer)
-#                     return wd
-#             logger.warning(
-#                 f"Failed to get_hive_witness_details "
-#                 f"from cache after error: {response.status_code}"
-#             )
-#         except Exception as e:
-#             logger.error(
-#                 f"Failed to get_hive_witness_details from cache: {e}",
-#                 extra={"notification": False},
-#             )
-
-#     except Exception as e:
-#         logger.exception(f"Failed to get_hive_witness_details: {e}", extra={"notification": False})
-#         try:
-#             async with V4VAsyncRedis() as redis_client:
-#                 answer = json.loads(await redis_client.get(f"witness_{hive_accname}"))
-#                 if answer:
-#                     wd = WitnessDetails.model_validate(answer)
-#                     return wd
-
-#             logger.warning(
-#                 f"Failed to get_hive_witness_details "
-#                 f"from cache after error: {response.status_code}"
-#             )
-#         except Exception as e:
-#             logger.exception(f"Failed to get_hive_witness_details from cache: {e}")
-#     return None
 
 
 class HiveInternalQuote(BaseModel):
@@ -459,6 +446,259 @@ async def send_custom_json(
         logger.exception(ex, extra={"notification": False})
         logger.error(f"{send_account} {ex} {ex.__class__}", extra={"notification": False})
         raise CustomJsonSendError(f"Error sending custom_json: {ex}")
+
+
+async def perform_transfer_checks(
+    acc_name: str, amount: Amount, nobroadcast: bool = False
+) -> None:
+    """
+    Perform full validations, raise errors if a failure
+
+    Args:
+        acc_name (str): The account name to perform transfer checks on.
+        amount (float): The amount of the transfer.
+        symbol (str): The symbol of the transfer.
+        nobroadcast (bool, optional): Flag indicating whether to broadcast the transfer. Defaults to False.
+
+    Returns:
+        bool: True if all validations pass, False otherwise.
+
+    Raises:
+        HiveAccountNameOnExchangesList: If the account name is on the bad accounts list.
+        HiveNotEnoughHiveInAccount: If there is not enough balance in the account to
+        perform the transfer.
+
+    """
+    bad_accounts_list = await get_bad_hive_accounts()
+    if acc_name in bad_accounts_list:
+        raise HiveAccountNameOnExchangesList(f"{acc_name} is on bad accounts list")
+    # if not validate_account(acc_name):
+    #     # This means we're sending keepsats to a non-Hive account
+    #     # raise HiveBadHiveAccountName(f"{acc_name} is not a valid Hive account")
+    #     return False
+    # valid, avail_amount = validate_amount(amount, symbol)
+    # if nobroadcast and not valid:
+    #     logging.warning("Nobroadcast set, error NOT RAISED")
+    #     message = (
+    #         f"{Config.SERVER_ACCOUNT_NAME} Balance: {avail_amount:.3f} | "
+    #         f"Not enough to pay {amount:.3f} {symbol} | "
+    #         f"to: {acc_name}"
+    #     )
+    #     logging.warning(message)
+    # elif not valid:
+    #     raise HiveNotEnoughHiveInAccount(
+    #         f"{Config.SERVER_ACCOUNT_NAME} Balance: {avail_amount:.3f} | "
+    #         f"Not enough to pay {amount:.3f} {symbol} | "
+    #         f"to: {acc_name} | Shortfall: {avail_amount - amount:.3f}"
+    #     )
+
+
+class SendHiveTransfer(BaseModel):
+    """
+    Model representing a Hive transfer operation.
+    This model is used to encapsulate the details of a transfer operation
+    including the sender, recipient, amount, asset, and memo.
+    """
+
+    from_account: str
+    to_account: str
+    amount: str
+    memo: str = ""
+
+
+async def send_transfer_bulk(
+    transfer_list: List[SendHiveTransfer],
+    hive_client: Hive | None = None,
+    keys: List[str] = [],
+    nobroadcast: bool = False,
+    is_private: bool = False,
+) -> Dict[str, str]:
+    """
+    Send multiple Hive token transfers in bulk.
+
+    Args:
+        transfer_list (List[SendHiveTransfer]): List of transfer details, each containing sender, receiver, amount, and memo.
+        hive_client (Hive | None, optional): An instance of Hive client. If not provided, one will be created using the provided keys.
+        keys (List[str], optional): List of private keys to use for signing transactions if hive_client is not provided.
+        nobroadcast (bool, optional): If True, transactions will not be broadcasted to the network. Defaults to False.
+        is_private (bool, optional): If True, indicates the operation should be private. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The result of the broadcasted transaction, or an empty dictionary if not broadcasted.
+
+    Raises:
+        ValueError: If neither hive_client nor keys are provided, or if nobroadcast is True while hive_client is provided.
+        HiveNotEnoughHiveInAccount: If the sender does not have sufficient funds.
+        HiveTryingToSendZeroOrNegativeAmount: If attempting to send zero or negative amount, or duplicate transaction detected.
+        HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
+    """
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+    if not hive_client:
+        hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
+    if hive_client and nobroadcast:
+        raise ValueError("nobroadcast is not supported if hive_client")
+    transfer = transfer_list[0]
+    try:
+        tx = TransactionBuilder(blockchain_instance=hive_client)
+        for transfer in transfer_list:
+            transfer_nectar = {
+                "from": transfer.from_account,
+                "to": transfer.to_account,
+                "amount": transfer.amount,
+                "memo": transfer.memo,
+            }
+            tx.appendOps(Transfer(transfer_nectar))
+            tx.appendSigner(transfer.from_account, "active")
+        signed_tx = tx.sign()
+        broadcast_tx = tx.broadcast()
+        return broadcast_tx or {}
+    except UnhandledRPCError as ex:
+        # Handle insufficient funds
+        for arg in ex.args:
+            if "does not have sufficient funds" in arg:
+                raise HiveNotEnoughHiveInAccount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Not enough to pay {transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+            if "Cannot transfer a negative amount" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Can't send negative or zero {transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+            if "Duplicate transaction check failed" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Looks like we tried to send transaction twice | "
+                    f"{transfer.memo} | "
+                    f"{transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+        else:
+            trx = {"UnhandledRPCError": f"{ex}"}
+            logger.error(
+                f"UnhandledRPCError during send_transfer: {ex}",
+                extra={
+                    "notification": False,
+                    "transfer_list": transfer_list,
+                },
+            )
+            raise HiveSomeOtherRPCException(f"{ex}")
+    except Exception as ex:
+        logger.error(
+            f"UnhandledRPCError during send_transfer: {ex}",
+            extra={
+                "notification": False,
+                "to_account": to_account,
+                "from_account": from_account,
+            },
+        )
+        raise HiveSomeOtherRPCException(f"{ex}")
+
+
+async def send_transfer(
+    to_account: str,
+    amount: Amount,
+    from_account: str,
+    memo: str = "",
+    hive_client: Hive | None = None,
+    keys: List[str] = [],
+    nobroadcast: bool = False,
+    is_private: bool = False,
+) -> Dict[str, str]:
+    """
+    Asynchronously sends a transfer operation to the Hive blockchain.
+    This function allows sending a transfer operation with specified parameters
+    to the Hive blockchain. It supports both active and posting authority, and can
+    be configured to either broadcast the transaction or not.
+
+    """
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+    if not hive_client:
+        hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
+    if hive_client and nobroadcast:
+        raise ValueError("nobroadcast is not supported if hive_client")
+    account: Account = Account(from_account, blockchain_instance=hive_client)
+    if not account:
+        raise ValueError("Invalid account")
+    await perform_transfer_checks(
+        acc_name=from_account,
+        amount=amount,
+        nobroadcast=nobroadcast,
+    )
+    if is_private:
+        memo = f"#{memo}"
+    try:
+        trx = account.transfer(
+            to=to_account,
+            amount=amount.amount,
+            asset=amount.asset,
+            account=from_account,
+            memo=memo,
+        )
+        check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
+        logger.info(
+            f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
+            f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
+            f"Memo: {memo} {trx.get('trx_id', '')}",
+            extra={
+                "notification": True,
+                "to_account": to_account,
+                "from_account": from_account,
+                "amount": amount.amount_decimal,
+                "symbol": amount.symbol,
+                "memo": memo,
+            },
+        )
+        return trx
+
+    except UnhandledRPCError as ex:
+        # Handle insufficient funds
+        for arg in ex.args:
+            if "does not have sufficient funds" in arg:
+                raise HiveNotEnoughHiveInAccount(
+                    f"{from_account} Failure during send | "
+                    f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
+                    f"to: {to_account} | Hive error: {ex}"
+                )
+            if "Cannot transfer a negative amount" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{from_account} Failure during send | "
+                    f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
+                    f"to: {to_account} | Hive error: {ex}"
+                )
+            if "Duplicate transaction check failed" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{from_account} Failure during send | "
+                    f"Looks like we tried to send transaction twice | "
+                    f"{memo} | "
+                    f"{amount.amount_decimal:.3f} {amount.symbol} | "
+                    f"to: {to_account} | Hive error: {ex}"
+                )
+        else:
+            trx = {"UnhandledRPCError": f"{ex}"}
+            logger.error(
+                f"UnhandledRPCError during send_transfer: {ex}",
+                extra={
+                    "notification": False,
+                    "to_account": to_account,
+                    "from_account": from_account,
+                },
+            )
+            raise HiveSomeOtherRPCException(f"{ex}")
+    except Exception as ex:
+        logger.error(
+            f"UnhandledRPCError during send_transfer: {ex}",
+            extra={
+                "notification": False,
+                "to_account": to_account,
+                "from_account": from_account,
+            },
+        )
+        raise HiveSomeOtherRPCException(f"{ex}")
 
 
 if __name__ == "__main__":

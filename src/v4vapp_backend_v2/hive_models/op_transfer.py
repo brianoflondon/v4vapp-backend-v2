@@ -1,11 +1,20 @@
+import re
 from typing import Any, override
 
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import seconds_only_time_diff
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_keepsats,
+    detect_paywithsats,
+    find_short_id,
+    paywithsats_amount,
+    seconds_only_time_diff,
+)
 from v4vapp_backend_v2.hive.hive_extras import decode_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -53,7 +62,6 @@ class TransferBase(OpBase):
     to_account: AccNameType = Field(alias="to")
     amount: AmountPyd = Field(description="Amount being transferred")
     memo: str = Field("", description="Memo associated with the transfer")
-    conv: CryptoConv = CryptoConv()
     d_memo: str = Field("", description="Decoded memo string")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -67,10 +75,8 @@ class TransferBase(OpBase):
         super().__init__(**hive_event)
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
-        if hive_event.get("update_conv", True):
-            if self.last_quote.get_age() > 600.0:
-                self.update_quote_sync(AllQuotes().get_binance_quote())
-            self.update_conv()
+        if not self.amount:
+            raise ValueError("Amount is required for transfer operations")
 
     def post_process(self, hive_inst: Hive) -> None:
         """
@@ -87,7 +93,15 @@ class TransferBase(OpBase):
         if not self.memo:
             self.d_memo = ""
             return
-        if self.d_memo and not self.d_memo.startswith("#"):
+        if (
+            self.d_memo
+            and not self.d_memo.startswith(
+                "#"
+            )  # This catches d_memos which legitimately start with a #
+            or self.d_memo
+            and self.d_memo
+            != self.memo  # This catches d_memos which are already decoded and start with #
+        ):
             return
         if self.memo.startswith("#") and hive_inst:
             self.d_memo = decode_memo(memo=self.memo, hive_inst=hive_inst)
@@ -152,12 +166,125 @@ class TransferBase(OpBase):
                  - A markdown link for additional context.
                  - A hashtag indicating no preview.
         """
+        if self.conv:
+            conversion_str = self.conv.notification_str
+        else:
+            conversion_str = ""
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} "
             f"to {self.to_account.markdown_link}{self.recurrence_str} "
-            f"{self.conv.notification_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
+            f"{conversion_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
+
+    @property
+    def lightning_memo(self) -> str:
+        """
+        Removes and shortens a lightning invoice from a memo for output.
+
+        Returns:
+            str: The shortened memo string.
+        """
+        # Regex pattern to capture 'lnbc' followed by numbers and one letter
+        if not self.d_memo:
+            return ""
+        pattern = r"(lnbc\d+[a-zA-Z])"
+        match = re.search(pattern, self.d_memo)
+        if match:
+            # Replace the entire memo with the matched lnbc pattern
+            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
+        else:
+            memo = f"💬{self.d_memo}"
+        return memo
+
+    @property
+    def extract_reply_short_id(self) -> str:
+        """
+        Determines if the transfer is a reply to another transfer.
+
+        Returns:
+            str: The short_id if it is found or an empty string.
+        """
+        if not self.d_memo:
+            return ""
+        short_id = find_short_id(self.d_memo)
+        if not short_id:
+            return ""
+        return short_id
+
+    @property
+    def keepsats(self) -> bool:
+        """
+        Checks if the transfer memo indicates a keepsats operation.
+
+        Returns:
+            bool: True if the memo indicates a keepsats operation, False otherwise.
+        """
+        return detect_keepsats(self.d_memo)
+
+    @property
+    def paywithsats(self) -> bool:
+        """
+        Checks if the transfer memo indicates a paywithsats operation.
+
+        Returns:
+            bool: True if the memo indicates a paywithsats operation, False otherwise.
+        """
+        return detect_paywithsats(self.d_memo)
+
+    @property
+    def paywithsats_amount(self) -> int:
+        """
+        Extracts and returns the 'paywithsats' amount from the memo if present.
+        This is in sats, not msats.
+
+        Returns:
+            int: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+
+        Notes:
+            - The memo is expected to be in the format "paywithsats:amount".
+            - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
+        """
+        return paywithsats_amount(self.d_memo)
+
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+
+        if not quote:
+            quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+        self.conv = CryptoConversion(amount=self.amount, quote=quote).conversion
+        if self.change_amount:
+            self.change_conv = CryptoConversion(amount=self.change_amount, quote=quote).conversion
+
+    def max_send_amount_msats(self) -> int:
+        """
+        Calculate the maximum amount that can be sent after deducting fees and estimating Lightning fees.
+        This method calculates the maximum amount that can be sent in millisatoshis (msats) based on
+        the Hive or HBD value of the transfer, the conversion to millisatoshis,
+
+        Args:
+            self (TrackedTransfer): The tracked transfer object.
+
+        Returns:
+            int: The maximum amount that can be sent after fees and fee estimates.
+        """
+        if self.paywithsats:
+            return self.paywithsats_amount * 1_000
+        lnd_config = InternalConfig().config.lnd_config
+        amount_sent = self.conv.msats - self.conv.msats_fee
+        max_payment_amount = amount_sent - lnd_config.lightning_fee_base_msats
+        fee_estimate = int(max_payment_amount * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
+        return max_payment_amount - fee_estimate
 
 
 class Transfer(TransferBase):

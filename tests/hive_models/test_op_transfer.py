@@ -6,7 +6,9 @@ from pprint import pprint
 import pytest
 from nectar.amount import Amount
 
+from tests.get_last_quote import last_quote
 from tests.load_data import load_hive_events
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     is_markdown,
     sanitize_markdown_v1,
@@ -40,6 +42,7 @@ HIVE_MEMO_TEST_KEY = os.environ.get("HIVE_MEMO_TEST_KEY", "")
 
 
 def test_model_validate_transfer():
+    TrackedBaseModel.last_quote = last_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = TransferBase.model_validate(hive_event)
@@ -48,14 +51,15 @@ def test_model_validate_transfer():
 
 
 def test_op_transfer_watch_list():
-    OpBase.watch_list = ["john", "paul", "george", "ringo"]
+    TrackedBaseModel.last_quote = last_quote()
+    OpBase.watch_users = ["john", "paul", "george", "ringo"]
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = TransferBase.model_validate(hive_event)
             assert transfer.trx_id == hive_event["trx_id"]
             assert transfer.amount.amount == hive_event["amount"]["amount"]
-            assert transfer.from_account not in Transfer.watch_list
-            assert transfer.to_account not in Transfer.watch_list
+            assert transfer.from_account not in Transfer.watch_users
+            assert transfer.to_account not in Transfer.watch_users
             print(transfer.to_account)
 
 
@@ -81,6 +85,7 @@ def test_model_validate_transfer_enhanced():
     """
     if not HIVE_MEMO_TEST_KEY:
         pytest.skip("HIVE_MEMO_TEST_KEY is not available in environment variables")
+    TrackedBaseModel.last_quote = last_quote()
     hive_inst = get_hive_client(keys=[HIVE_MEMO_TEST_KEY])
     OpBase.hive_inst = hive_inst
     for hive_event in load_hive_events(op_type=OpTypes.TRANSFER):
@@ -102,27 +107,32 @@ def test_model_validate_transfer_enhanced():
 @pytest.mark.asyncio
 async def test_model_dump_transfer_enhanced():
     v4v_config = V4VConfig()
+    TrackedBaseModel.last_quote = last_quote()
     assert v4v_config.data.conv_fee_sats == 50
     await Transfer.update_quote()
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = Transfer.model_validate(hive_event)
+            await transfer.update_conv()
             hive_event_model = transfer.model_dump(by_alias=True)
             assert hive_event_model["d_memo"] == transfer.d_memo
             assert hive_event_model["from"] == transfer.from_account
             assert hive_event_model["to"] == transfer.to_account
             assert hive_event_model["memo"] == transfer.memo
-            assert transfer.conv.hive == hive_event_model["conv"]["hive"]
-            # This line tests the fees and conversion limits calculations
-            # in service_fees.py
-            if (
-                transfer.conv.sats >= v4v_config.data.minimum_invoice_payment_sats
-                and transfer.conv.sats <= v4v_config.data.maximum_invoice_payment_sats
-            ):
-                assert transfer.conv.msats_fee >= v4v_config.data.conv_fee_sats * 1_000
+            if transfer.conv:
+                assert transfer.conv.hive == hive_event_model["conv"]["hive"]
+                assert (
+                    transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
+                ), f"Failure in {transfer.trx_id}"
+                # This line tests the fees and conversion limits calculations
+                # in service_fees.py
+                if (
+                    transfer.conv.sats >= v4v_config.data.minimum_invoice_payment_sats
+                    and transfer.conv.sats <= v4v_config.data.maximum_invoice_payment_sats
+                ):
+                    assert transfer.conv.msats_fee >= v4v_config.data.conv_fee_sats * 1_000
             assert transfer.log_str
             assert transfer.notification_str
-            assert transfer.conv.conv_from == Amount(hive_event_model["amount"]).symbol.lower()
             print(transfer.notification_str)
 
 
@@ -137,11 +147,12 @@ async def test_lightning_invoices_replacement():
     3. Checks if the memo contains a lightning invoice and replaces it with a new one.
     4. Asserts that the replaced invoice is not empty and is different from the original memo.
     """
+    TrackedBaseModel.last_quote = last_quote()
     invoice = "lnbc565100n1p5qjqmqpp5r7z5qu9xmqfysuf5gtsp4dyhp6tc7ltmy2pz9axfzsyq47qdauysdqqcqzzsxqzrcrzjqfhv8c6rsvy9rxn4efzfdq32ds0z9yt5l092mm43w3cycdm3ztpnrapyqqqqqqqqmyqqqqqqqqqqqqqq2qsp5alqn0ntzfmh9vhmufqk9ymdqwr8tnaqczd6p4r4mdp7v4c0c0lqq9qxpqysgqqxdxepu42yegdzsfvemjeknrfmmnrx6j0e8my3wmg7d2ryc0s2nxxjpkke4sv7x9y0wwl7gw6z4qwzlj6f7aeslmvplwr2wjpqyvm9qp7fe8k3"
     op_transfer = Transfer(
         from_account="someone",
         to_account="v4vapp",
-        type="transfer",
+        op_type="transfer",
         block_num="95282089",
         trx_id="d54942972facb449d7a82590aad0d76c04d46d1c",
         amount=Amount("33.000 HIVE"),

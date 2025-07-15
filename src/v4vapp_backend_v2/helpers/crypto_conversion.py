@@ -1,7 +1,9 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any
+from decimal import Decimal
+from math import isclose
+from typing import Any, ClassVar
 
 from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -40,21 +42,58 @@ class CryptoConv(BaseModel):
         use_enum_values=True,  # Serializes enum as its value
     )
 
-    def __init__(self, **data: Any):
-        # Ensure data is a flat dictionary, not a nested one
-        if data.get("converted_value", None) and data.get("conv_from", None):
-            # If 'converted' is in data, we assume it's a conversion from one currency to another
-            # and we need to set the msats and sats values accordingly.
-            if data["conv_from"] == Currency.HIVE:
-                data["hive"] = data["value"]
-                data["hbd"] = data["converted_value"]
-            elif data["conv_from"] == Currency.HBD:
-                data["hbd"] = data["value"]
-                data["hive"] = data["converted_value"]
+    UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
+        "hive": 0.003,
+        "hbd": 0.002,
+        "usd": 0.002,
+        "sats": 0.5,
+        "msats": 500,
+        "btc": 5e-9,
+        "msats_fee": 2000,  # the fee is so tiny I don't want failures for this
+    }
+
+    REL_TOL: ClassVar[float] = 1e-7
+
+    def __init__(
+        self,
+        recalc_conv_from: Currency | None = None,
+        conv_from: Currency | None = None,
+        value: float | None = None,
+        converted_value: float | None = None,
+        timestamp: datetime | None = None,
+        quote: QuoteResponse | None = None,
+        **data: Any,
+    ):
+        if recalc_conv_from and value and quote:
+            # If recalc_conv_from and value are provided, we assume it's a conversion from one currency to another
+            conversion = CryptoConversion(
+                conv_from=recalc_conv_from,
+                value=value,
+                quote=quote,
+            )
+            data = conversion.c_dict
+        if value is not None:
+            # If value is provided, we set it as the original value
+            data["value"] = value
+        if conv_from is not None:
+            # If conv_from is provided, we set it as the conversion source
+            data["conv_from"] = conv_from
+        if data.get("converted_value", converted_value) and data.get("conv_from", conv_from):
+            # If 'converted' is in data, we assume it's a conversion from one Hive to HBD or vice versa,
+            # and we need to set the hive and hbd values accordingly using the internal market rates.
+            if data.get("conv_from", conv_from) == Currency.HIVE:
+                data["hive"] = data.get("value", value)
+                data["hbd"] = data.get("converted_value", converted_value)
+            elif data.get("conv_from", conv_from) == Currency.HBD:
+                data["hbd"] = data.get("value", value)
+                data["hive"] = data.get("converted_value", converted_value)
             data["source"] = "Hive Internal Trade"
-            data["fetch_date"] = datetime.now(tz=timezone.utc)
-            quote = data.get("quote", None)
+            data["fetch_date"] = data.get("fetch_date", timestamp) or datetime.now(tz=timezone.utc)
+            quote = data.get("quote", quote)
+            # TODO: #109 implement a way to look up historical quote
             if quote and quote.sats_usd > 0:
+                data["source"] = quote.source
+                data["fetch_date"] = quote.fetch_date or datetime.now(tz=timezone.utc)
                 data["sats_hive"] = quote.sats_hive
                 data["sats_hbd"] = quote.sats_hbd
                 data["sats"] = int(data["hive"] * quote.sats_hive)
@@ -70,6 +109,94 @@ class CryptoConv(BaseModel):
         if "sats" not in data:
             self.sats = int(self.msats / 1000)
 
+    def __neg__(self):
+        # List of fields NOT to invert
+        rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+        values = self.model_dump()
+        for key in values:
+            if key not in rate_fields and isinstance(values[key], (int, float)):
+                values[key] = -values[key]
+        return self.__class__(**values)
+
+    def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            values = self.model_dump()
+            rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
+            for key in values:
+                if key not in rate_fields and isinstance(values[key], (int, float)):
+                    values[key] = values[key] * other
+            return self.__class__(**values)
+        return NotImplemented
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __eq__(self, other):
+        if isinstance(other, CryptoConv):
+            if not self.fetch_date and not other.fetch_date:
+                return True
+            if self.msats == 0 and other.msats == 0:
+                return True
+            if not isclose(
+                self.hive, other.hive, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["hive"]
+            ):
+                return False
+            if not isclose(
+                self.hbd, other.hbd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["hbd"]
+            ):
+                return False
+            if not isclose(
+                self.usd, other.usd, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["usd"]
+            ):
+                return False
+            if not isclose(
+                self.sats, other.sats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["sats"]
+            ):
+                return False
+            if not isclose(
+                self.msats, other.msats, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["msats"]
+            ):
+                return False
+            if not isclose(
+                self.btc, other.btc, rel_tol=self.REL_TOL, abs_tol=self.UNIT_TOLERANCE["btc"]
+            ):
+                return False
+            if not isclose(
+                self.msats_fee,
+                other.msats_fee,
+                rel_tol=self.REL_TOL,
+                abs_tol=self.UNIT_TOLERANCE["msats_fee"],
+            ):
+                return False
+            return True
+        return NotImplemented
+
+    def is_unset(self) -> bool:
+        """
+        Check if the conversion values are unset (zero).
+
+        Returns:
+            bool: True if all conversion values are zero, False otherwise.
+        """
+        return (
+            self.hive == 0.0
+            and self.hbd == 0.0
+            and self.usd == 0.0
+            and self.sats == 0
+            and self.msats == 0
+            and self.btc == 0.0
+            and self.msats_fee == 0
+        )
+
+    def is_set(self) -> bool:
+        """
+        Check if the conversion values are set (non-zero).
+
+        Returns:
+            bool: True if any conversion value is non-zero, False otherwise.
+        """
+        return not self.is_unset()
+
     def limit_test(self) -> bool:
         """
         Check if the conversion is within the limits.
@@ -78,10 +205,12 @@ class CryptoConv(BaseModel):
             bool: True if the conversion is within limits, False otherwise.
 
         Raises:
-            ValueError: If the conversion amount is less than the minimum or greater than the maximum.
+            V4VMinimumInvoice: If the amount is less than the configured minimum invoice payment in satoshis.
+            V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
-        return limit_test(self.msats)
+        limit_test_result = limit_test(self.msats)
+        return limit_test_result
 
     @computed_field
     def in_limits(self) -> bool:
@@ -122,6 +251,26 @@ class CryptoConv(BaseModel):
         """
         return self.log_str
 
+    @property
+    def amount_hive(self) -> Amount:
+        """
+        Returns the conversion value in HIVE as an Amount object.
+
+        Returns:
+            Amount: The conversion value in HIVE.
+        """
+        return Amount(f"{self.hive:.3f} HIVE")
+
+    @property
+    def amount_hbd(self) -> Amount:
+        """
+        Returns the conversion value in HBD as an Amount object.
+
+        Returns:
+            Amount: The conversion value in HBD.
+        """
+        return Amount(f"{self.hbd:.3f} HBD")
+
 
 class CryptoConversion(BaseModel):
     conv_from: Currency = Currency.HIVE
@@ -142,6 +291,9 @@ class CryptoConversion(BaseModel):
     # model_config = ConfigDict(
     #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
     # )
+    model_config = ConfigDict(
+        use_enum_values=True,  # Serializes enum as its value
+    )
 
     def __init__(
         self,
@@ -152,6 +304,8 @@ class CryptoConversion(BaseModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if isinstance(value, Decimal):
+            value = float(value)
         if (
             isinstance(amount, Amount)
             or isinstance(amount, AmountPyd)
@@ -174,12 +328,18 @@ class CryptoConversion(BaseModel):
             self._compute_conversions()
 
     async def get_quote(self, use_cache: bool = True):
-        """Fetch the quote and compute all conversions once."""
+        """
+        Asynchronously retrieves the latest cryptocurrency quotes and updates the instance with the fetched data.
+        Args:
+            use_cache (bool, optional): Whether to use cached quotes if available. Defaults to True.
+        Side Effects:
+            - Updates the instance's `quote` attribute with the latest quote data.
+            - Calls a private method `_compute_conversions()` to update conversion values.
+            - Sets the `fetch_date` attribute to the date when the quote was fetched.
+        """
+
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(use_cache=use_cache)
-        for source, quote in all_quotes.quotes.items():
-            print(f"{source} {quote.source} {quote.fetch_date} {quote.error}")
-
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date
@@ -187,17 +347,22 @@ class CryptoConversion(BaseModel):
     def _compute_conversions(self):
         """Compute all currency conversions starting from msats."""
         # Step 1: Convert the input value to msats
-        if self.quote is None or self.quote.hive_hbd == 0:
+        if self.quote is None:
+            if self.quote.hive_hbd == 0:
+                raise ValueError("Quote is set but hive_hbd is zero")
             raise ValueError("Quote is not available or invalid")
+
         try:
-            if self.conv_from == Currency.HIVE:
+            if self.conv_from == Currency.MSATS:
+                self.msats = int(self.value)
+            elif self.conv_from == Currency.SATS:
+                self.msats = int(self.value * 1000)
+            elif self.conv_from == Currency.HIVE:
                 self.msats = int(self.value * self.quote.sats_hive_p * 1000)
             elif self.conv_from == Currency.HBD:
                 self.msats = int(self.value * self.quote.sats_hbd_p * 1000)
             elif self.conv_from == Currency.USD:
                 self.msats = int(self.value * self.quote.sats_usd_p * 1000)
-            elif self.conv_from == Currency.SATS:
-                self.msats = int(self.value * 1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 

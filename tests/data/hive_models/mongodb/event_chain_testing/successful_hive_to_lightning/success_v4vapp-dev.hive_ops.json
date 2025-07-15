@@ -1,0 +1,198 @@
+[{
+  "_id": {
+    "$oid": "6836e5b98257e3a4298a9c62"
+  },
+  "realm": "real",
+  "op_in_trx": 1,
+  "block_num": 96282823,
+  "trx_num": 12,
+  "amount": {
+    "amount": "14000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "from": "v4vapp-test",
+  "group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+  "link": "https://hivehub.dev/tx/05ed707763de2738e09d259de2e566f7fd3fcc0f",
+  "memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:12.000Z"
+  },
+  "to": "devser.v4vapp",
+  "trx_id": "05ed707763de2738e09d259de2e566f7fd3fcc0f",
+  "type": "transfer",
+  "replies": [
+    {
+      "reply_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+      "reply_type": "payment",
+      "reply_msat": 2233000,
+      "reply_message": "Lightning payment sent for operation 96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real: 3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d V4VAPP Hive Bridge 2,233 sats"
+    },
+    {
+      "reply_id": "8024e3f4424b21e4212a5cb6e817ebea730171bc",
+      "reply_type": "transfer",
+      "reply_msat": 922308,
+      "reply_message": "Change transaction for operation 96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real: 8024e3f4424b21e4212a5cb6e817ebea730171bc"
+    }
+  ],
+  "fee_conv": {
+    "hive": 0.47991,
+    "hbd": 0.110283,
+    "usd": 0.110283,
+    "sats": 107,
+    "msats": 106554,
+    "msats_fee": 0,
+    "btc": 0.00000106554,
+    "sats_hive": 222.029,
+    "sats_hbd": 966.1837,
+    "conv_from": "msats",
+    "value": 106554,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-31T10:25:17.244Z"
+    },
+    "in_limits": false
+  }
+},
+{
+  "_id": {
+    "$oid": "6836e5e28257e3a4298a9c63"
+  },
+  "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+  "creation_date": {
+    "$date": "2025-05-28T10:30:58.000Z"
+  },
+  "creation_time_ns": {
+    "$date": "2025-05-28T10:30:58.724Z"
+  },
+  "destination": "V4VAPP Hive Bridge",
+  "fee_ppm": 0,
+  "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+  "payment_index": {
+    "$numberLong": "74474"
+  },
+  "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+  "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "route_str": "V4VAPP Hive Bridge",
+  "status": "SUCCEEDED",
+  "value": {
+    "$numberLong": "2233"
+  },
+  "value_msat": {
+    "$numberLong": "2233000"
+  },
+  "value_sat": {
+    "$numberLong": "2233"
+  },
+  "custom_records": {
+    "keysend_message": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+    "v4vapp_group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real"
+  },
+  "htlcs": [
+    {
+      "attempt_id": {
+        "$numberLong": "90085"
+      },
+      "status": "SUCCEEDED",
+      "attempt_time_ns": {
+        "$date": "2025-05-28T10:30:58.786Z"
+      },
+      "resolve_time_ns": {
+        "$date": "2025-05-28T10:31:02.997Z"
+      },
+      "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+      "route": {
+        "total_time_lock": 898808,
+        "total_amt": {
+          "$numberLong": "2233"
+        },
+        "hops": [
+          {
+            "chan_id": "800082725764071425",
+            "chan_capacity": {
+              "$numberLong": "2333033"
+            },
+            "amt_to_forward": {
+              "$numberLong": "2233"
+            },
+            "expiry": 898808,
+            "amt_to_forward_msat": {
+              "$numberLong": "2233000"
+            },
+            "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+            "tlv_payload": true,
+            "custom_records": {
+              "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+              "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+            }
+          }
+        ],
+        "total_amt_msat": {
+          "$numberLong": "2233000"
+        }
+      }
+    }
+  ]
+},
+{
+  "_id": {
+    "$oid": "68416c0816c063bc6743cf9a"
+  },
+  "block_num": 96512348,
+  "trx_id": "ffb2d99c698b0b12714fd8c878dbbf78054f7c48",
+  "realm": "real",
+  "op_in_trx": 1,
+  "amount": {
+    "amount": "4154",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 4.154,
+    "hbd": 0.984082,
+    "usd": 0.984082,
+    "sats": 939,
+    "msats": 938547,
+    "msats_fee": 65955,
+    "btc": 0.00000938547,
+    "sats_hive": 225.9382,
+    "sats_hbd": 953.728,
+    "conv_from": "hive",
+    "value": 4.154,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-06-05T10:05:14.478Z"
+    },
+    "in_limits": true
+  },
+  "d_memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+  "from": "devser.v4vapp",
+  "group_id": "96512348_ffb2d99c698b0b12714fd8c878dbbf78054f7c48_1_real",
+  "link": "https://hivehub.dev/tx/ffb2d99c698b0b12714fd8c878dbbf78054f7c48",
+  "memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+  "timestamp": {
+    "$date": "2025-06-05T09:59:15.000Z"
+  },
+  "to": "v4vapp-test",
+  "trx_num": 3,
+  "type": "transfer"
+}]

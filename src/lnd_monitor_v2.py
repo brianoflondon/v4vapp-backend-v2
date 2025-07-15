@@ -13,8 +13,10 @@ from pymongo.errors import BulkWriteError
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.database.db import DATABASE_ICON, MongoDBClient
+from v4vapp_backend_v2.database.db import DATABASE_ICON
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
@@ -193,28 +195,9 @@ async def remove_event_group(
     lnd_events_group.remove_group(htlc_event)
 
 
-def get_mongodb_client() -> MongoDBClient:
-    """
-    Returns a MongoDB client instance.
-
-    This function creates a MongoDB client instance using the default connection
-    and database name from the configuration.
-
-    Returns:
-        MongoDBClient: The MongoDB client instance.
-    """
-    dbs_config = InternalConfig().config.dbs_config
-    return MongoDBClient(
-        db_conn=dbs_config.default_connection,
-        db_name=dbs_config.default_name,
-        db_user=dbs_config.default_user,
-    )
-
-
 async def db_store_invoice(
     htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
-    db_client: MongoDBClient | None = None,
     *args: Any,
     **kwargs,
 ) -> None:
@@ -227,32 +210,26 @@ async def db_store_invoice(
     Returns:
         None
     """
-    if not db_client:
-        db_client = get_mongodb_client()
-    async with db_client:
-        logger.debug(
-            f"{lnd_client.icon}{DATABASE_ICON} Storing invoice: {htlc_event.add_index} "
-            f"{db_client.hex_id}"
-        )
-        try:
-            invoice_pyd = Invoice(htlc_event)
-        except Exception as e:
-            logger.warning(e)
-            return
-        query = {"r_hash": invoice_pyd.r_hash}
-        invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
-        ans = await db_client.update_one("invoices", query, invoice_dict, upsert=True)
-        logger.debug(
-            f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
-            extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
-        )
+
+    try:
+        invoice_pyd = Invoice(htlc_event)
+    except Exception as e:
+        logger.warning(e)
+        return
+    query = {"r_hash": invoice_pyd.r_hash}
+    invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True, exclude={"conv"})
+    update = {"$set": invoice_dict}
+    ans = await Invoice.collection().update_one(filter=query, update=update, upsert=True)
+    logger.debug(
+        f"{lnd_client.icon}{DATABASE_ICON} "
+        f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+        extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
+    )
 
 
 async def db_store_payment(
     htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
-    db_client: MongoDBClient | None = None,
     *args: Any,
     **kwargs,
 ) -> None:
@@ -265,42 +242,40 @@ async def db_store_payment(
     Returns:
         None
     """
-    if not db_client:
-        db_client = get_mongodb_client()
-    async with db_client:
-        try:
-            payment_pyd = Payment(htlc_event)
-            await update_payment_route_with_alias(
-                db_client=db_client,
-                lnd_client=lnd_client,
-                payment=payment_pyd,
-                fill_cache=True,
-                col_pub_keys="pub_keys",
-            )
-            logger.info(
-                f"{lnd_client.icon}{DATABASE_ICON} "
-                f"Storing payment: {htlc_event.payment_index} "
-                f"{db_client.hex_id} {payment_pyd.route_str}"
-            )
-            query = {"payment_hash": payment_pyd.payment_hash}
-            payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
-            ans = await db_client.update_one("payments", query, payment_dict, upsert=True)
-            logger.info(
-                f"{lnd_client.icon}{DATABASE_ICON} "
-                f"New payment recorded: {payment_pyd.payment_index:>6} "
-                f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
-                extra={"db_ans": ans.raw_result, "payment": payment_dict},
-            )
-        except Exception as e:
-            logger.info(e)
-            return
+    try:
+        payment_pyd = Payment(htlc_event)
+        await update_payment_route_with_alias(
+            lnd_client=lnd_client,
+            payment=payment_pyd,
+            fill_cache=True,
+            col_pub_keys="pub_keys",
+        )
+        logger.info(
+            f"{lnd_client.icon}{DATABASE_ICON} "
+            f"Storing payment: {htlc_event.payment_index} "
+            f"{payment_pyd.route_str}"
+        )
+        query = {"payment_hash": payment_pyd.payment_hash}
+        payment_dict = payment_pyd.model_dump(
+            exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
+        )
+        update = {"$set": payment_dict}
+        ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
+        logger.info(
+            f"{lnd_client.icon}{DATABASE_ICON} "
+            f"New payment recorded: {payment_pyd.payment_index:>6} "
+            f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
+            extra={"db_ans": ans.raw_result, "payment": payment_dict},
+        )
+    except Exception as e:
+        logger.info(e)
+        return
 
 
 async def invoice_report(
     htlc_event: lnrpc.Invoice,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup | None = None,
-    db_client: MongoDBClient | None = None,
 ) -> None:
     expiry_datetime = datetime.fromtimestamp(
         htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
@@ -325,7 +300,6 @@ async def payment_report(
     htlc_event: lnrpc.Payment,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
-    db_client: MongoDBClient | None = None,
 ) -> None:
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
@@ -351,7 +325,6 @@ async def htlc_event_report(
     htlc_event: routerrpc.HtlcEvent,
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
-    db_client: MongoDBClient | None = None,
 ) -> None:
     event_type = (
         routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
@@ -374,7 +347,8 @@ async def htlc_event_report(
 
 
 async def invoices_loop(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup, db_client: MongoDBClient
+    lnd_client: LNDClient,
+    lnd_events_group: LndEventsGroup,
 ) -> None:
     """
     Asynchronously retrieves invoices from the LND node and logs them.
@@ -384,10 +358,8 @@ async def invoices_loop(
     Returns:
         None
     """
-    if not db_client:
-        db_client = get_mongodb_client()
-    await db_client.connect()
-    recent_invoice = await get_most_recent_invoice(db_client)
+
+    recent_invoice = await get_most_recent_invoice()
     if recent_invoice:
         add_index = recent_invoice.add_index
         settle_index = recent_invoice.settle_index
@@ -409,13 +381,13 @@ async def invoices_loop(
             ):
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
+                await TrackedBaseModel.update_quote()
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
                     event_name=Events.LND_INVOICE,
                     htlc_event=lnrpc_invoice,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
-                    db_client=db_client,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -437,12 +409,7 @@ async def invoices_loop(
             pass
 
 
-async def payments_loop(
-    lnd_client: LNDClient, lnd_events_group: LndEventsGroup, db_client: MongoDBClient
-) -> None:
-    if not db_client:
-        db_client = get_mongodb_client()
-    await db_client.connect()
+async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     request = routerrpc.TrackPaymentRequest(no_inflight_updates=False)
     while True:
         try:
@@ -454,12 +421,12 @@ async def payments_loop(
                 if shutdown_event.is_set():
                     raise asyncio.CancelledError("Docker Shutdown")
                 lnrpc_payment: lnrpc.Payment
+                await TrackedBaseModel.update_quote()
                 async_publish(
                     event_name=Events.LND_PAYMENT,
                     htlc_event=lnrpc_payment,
                     lnd_client=lnd_client,
                     lnd_events_group=lnd_events_group,
-                    db_client=db_client,
                 )
         except LNDSubscriptionError as e:
             await lnd_client.check_connection(
@@ -519,7 +486,55 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
             pass
 
 
-async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
+    """Subscribe to channel events from LND"""
+    request = lnrpc.ChannelEventSubscription()
+
+    while True:
+        try:
+            async for channel_event in lnd_client.call_async_generator(
+                lnd_client.lightning_stub.SubscribeChannelEvents,
+                request,
+                call_name="SubscribeChannelEvents",
+            ):
+                # channel_event is of type lnrpc.ChannelEventUpdate
+                # It has different types including:
+                # - OPEN_CHANNEL
+                # - CLOSED_CHANNEL
+                # - ACTIVE_CHANNEL
+                # - INACTIVE_CHANNEL
+                # - PENDING_OPEN_CHANNEL
+
+                event_type = channel_event.type
+
+                # Process the different event types
+                if hasattr(channel_event, "open_channel"):
+                    channel = channel_event.open_channel
+                    await fill_channel_names(lnd_client, lnd_events_group)
+                    logger.info(
+                        f"{lnd_client.icon} Channel opened: {channel.chan_id} "
+                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        extra={"notification": True},
+                    )
+
+                elif hasattr(channel_event, "closed_channel"):
+                    channel = channel_event.closed_channel
+                    logger.info(
+                        f"{lnd_client.icon} Channel closed: {channel.chan_id} "
+                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        extra={"notification": True},
+                    )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+        except Exception as e:
+            logger.exception(e)
+            await asyncio.sleep(5)  # Wait before retrying
+
+
+async def fill_channel_names(
+    lnd_client: LNDClient,
+    lnd_events_group: LndEventsGroup,
+) -> None:
     """
     Asynchronously fills the channel names for a given LND client and appends them to the provided LndEventsGroup.
 
@@ -533,35 +548,45 @@ async def fill_channel_names(lnd_client: LNDClient, lnd_events_group: LndEventsG
     Returns:
         None: This function does not return a value. It performs asynchronous operations and updates the provided group.
     """
-    request = lnrpc.ListChannelsRequest()
-    channels = await lnd_client.call(
-        lnd_client.lightning_stub.ListChannels,
-        request,
-    )
-    channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
-    if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
-        logger.debug("No new channels to fill")
-        await asyncio.sleep(60)
-        return
-    # Get the name of each channel
-    tasks = []
-    for channel in channels_dict.get("channels", []):
-        tasks.append(
-            get_channel_name(
-                channel_id=int(channel["chan_id"]),
-                lnd_client=lnd_client,
+    try:
+        request = lnrpc.ListChannelsRequest()
+        channels = await lnd_client.call(
+            lnd_client.lightning_stub.ListChannels,
+            request,
+        )
+        channels_dict = MessageToDict(channels, preserving_proto_field_name=True)
+        if len(channels_dict.get("channels", [])) == len(lnd_events_group.channel_names):
+            logger.debug("No new channels to fill")
+            return
+        # Get the name of each channel
+        tasks = []
+        for channel in channels_dict.get("channels", []):
+            tasks.append(
+                get_channel_name(
+                    channel_id=int(channel["chan_id"]),
+                    lnd_client=lnd_client,
+                )
             )
-        )
-    names_list: List[LndChannelName] = await asyncio.gather(*tasks)
-    for channel_name in names_list:
-        lnd_events_group.append(channel_name)
-        logger.info(
-            (f"{lnd_client.icon} Channel {channel_name.channel_id} -> {channel_name.name}"),
-            extra={"channel_name": channel_name.to_dict()},
-        )
+        names_list: List[LndChannelName] = await asyncio.gather(*tasks)
+        for channel_name in names_list:
+            lnd_events_group.append(channel_name)
+            logger.info(
+                (f"{lnd_client.icon} Channel {channel_name.channel_id} -> {channel_name.name}"),
+                extra={"channel_name": channel_name.to_dict()},
+            )
+
+    except LNDConnectionError:
+        logger.error("🔴 Connection error in fill_channel_names", extra={"notification": False})
+        await asyncio.sleep(59)
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        return
+    except Exception as e:
+        logger.exception(e, extra={"notification": False})
+        await asyncio.sleep(10)
 
 
-async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
+async def read_all_invoices(lnd_client: LNDClient) -> None:
     """
     Reads all invoices from the LND client and inserts them into a MongoDB collection.
 
@@ -577,89 +602,84 @@ async def read_all_invoices(lnd_client: LNDClient, db_client: MongoDBClient) -> 
         None
     """
     try:
-        async with db_client:
-            index_offset = 0
-            num_max_invoices = 1000
-            total_invoices = 0
-            logger.info(f"{lnd_client.icon} Reading all invoices...")
-            while True:
-                request = lnrpc.ListInvoiceRequest(
-                    pending_only=False,
-                    index_offset=index_offset,
-                    num_max_invoices=num_max_invoices,
-                    reversed=True,
+        index_offset = 0
+        num_max_invoices = 1000
+        total_invoices = 0
+        logger.info(f"{lnd_client.icon} Reading all invoices...")
+        while True:
+            request = lnrpc.ListInvoiceRequest(
+                pending_only=False,
+                index_offset=index_offset,
+                num_max_invoices=num_max_invoices,
+                reversed=True,
+            )
+            invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
+                lnd_client.lightning_stub.ListInvoices,
+                request,
+            )
+            list_invoices = ListInvoiceResponse(invoices_raw)
+            index_offset = list_invoices.first_index_offset
+            bulk_updates = []
+            for invoice in list_invoices.invoices:
+                insert_one = invoice.model_dump(
+                    exclude_none=True, exclude_unset=True, exclude={"conv"}
                 )
-                invoices_raw: lnrpc.ListInvoiceResponse = await lnd_client.call(
-                    lnd_client.lightning_stub.ListInvoices,
-                    request,
+                query = {"r_hash": invoice.r_hash}
+                read_invoice = await Invoice.collection().find_one(
+                    filter=query,
                 )
-                list_invoices = ListInvoiceResponse(invoices_raw)
-                index_offset = list_invoices.first_index_offset
-                bulk_updates = []
-                for invoice in list_invoices.invoices:
-                    insert_one = invoice.model_dump(exclude_none=True, exclude_unset=True)
-                    query = {"r_hash": invoice.r_hash}
-                    read_invoice = await db_client.find_one(
-                        collection_name="invoices",
-                        query=query,
+                if read_invoice:
+                    try:
+                        db_invoice = Invoice(**read_invoice)
+                        if db_invoice == invoice:
+                            continue
+                    except Exception as e:
+                        logger.warning(e, extra={"notification": False, "invoice": read_invoice})
+                        pass
+                bulk_updates.append(
+                    {
+                        "filter": query,
+                        "update": {"$set": insert_one},
+                        "upsert": True,
+                    }
+                )
+            try:
+                if bulk_updates:
+                    result = await Invoice.collection().bulk_write(
+                        requests=[
+                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
+                            for update in bulk_updates
+                        ],
                     )
-                    if read_invoice:
-                        try:
-                            db_invoice = Invoice(**read_invoice)
-                            if db_invoice == invoice:
-                                continue
-                        except Exception as e:
-                            logger.warning(
-                                e, extra={"notification": False, "invoice": read_invoice}
-                            )
-                            pass
-                    bulk_updates.append(
-                        {
-                            "filter": query,
-                            "update": {"$set": insert_one},
-                            "upsert": True,
-                        }
-                    )
-                try:
-                    if bulk_updates:
-                        result = await db_client.bulk_write(
-                            collection_name="invoices",
-                            operations=[
-                                UpdateOne(
-                                    update["filter"], update["update"], upsert=update["upsert"]
-                                )
-                                for update in bulk_updates
-                            ],
-                        )
-                        modified = result.modified_count
-                        inserted = result.inserted_count
-                    else:
-                        modified = 0
-                        inserted = 0
-                    logger.info(
-                        f"{lnd_client.icon} {DATABASE_ICON} "
-                        f"Invoices {index_offset}... "
-                        f"modified: {modified} inserted: {inserted}"
-                    )
-                    total_invoices += len(list_invoices.invoices)
-                except BulkWriteError as e:
-                    logger.debug(e.details)
-                    pass
-                except Exception as e:
-                    logger.exception(str(e), extra={"error": e})
-                    break
-                if len(list_invoices.invoices) < num_max_invoices:
-                    logger.info(
-                        f"{lnd_client.icon} {DATABASE_ICON} "
-                        f"Finished reading {total_invoices} invoices..."
-                    )
-                    break
+                    modified = result.modified_count
+                    inserted = result.inserted_count
+                else:
+                    modified = 0
+                    inserted = 0
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Invoices {index_offset}... "
+                    f"modified: {modified} inserted: {inserted}"
+                )
+                total_invoices += len(list_invoices.invoices)
+            except BulkWriteError as e:
+                logger.debug(e.details)
+                pass
+            except Exception as e:
+                logger.exception(str(e), extra={"error": e})
+                break
+            if len(list_invoices.invoices) < num_max_invoices:
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_invoices} invoices..."
+                )
+                break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         raise e
 
 
-async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> None:
+async def read_all_payments(lnd_client: LNDClient) -> None:
     """
     Reads all payments from the LND client and inserts them into a MongoDB collection.
 
@@ -675,89 +695,83 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
         None
     """
     try:
-        async with db_client:
-            index_offset = 0
-            num_max_payments = 1000
-            total_payments = 0
-            logger.info(f"{lnd_client.icon} Reading all payments...")
-            while True:
-                request = lnrpc.ListPaymentsRequest(
-                    include_incomplete=True,
-                    index_offset=index_offset,
-                    max_payments=num_max_payments,
-                    reversed=True,
+        index_offset = 0
+        num_max_payments = 1000
+        total_payments = 0
+        logger.info(f"{lnd_client.icon} Reading all payments...")
+        while True:
+            request = lnrpc.ListPaymentsRequest(
+                include_incomplete=True,
+                index_offset=index_offset,
+                max_payments=num_max_payments,
+                reversed=True,
+            )
+            payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
+                lnd_client.lightning_stub.ListPayments,
+                request,
+            )
+            list_payments = ListPaymentsResponse(payments_raw)
+            index_offset = payments_raw.first_index_offset
+            bulk_updates = []
+            for payment in list_payments.payments:
+                await update_payment_route_with_alias(
+                    lnd_client=lnd_client,
+                    payment=payment,
+                    fill_cache=True,
+                    col_pub_keys="pub_keys",
                 )
-                payments_raw: lnrpc.ListPaymentsResponse = await lnd_client.call(
-                    lnd_client.lightning_stub.ListPayments,
-                    request,
+                insert_one = payment.model_dump(
+                    exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
-                list_payments = ListPaymentsResponse(payments_raw)
-                index_offset = payments_raw.first_index_offset
-                bulk_updates = []
-                for payment in list_payments.payments:
-                    await update_payment_route_with_alias(
-                        db_client=db_client,
-                        lnd_client=lnd_client,
-                        payment=payment,
-                        fill_cache=True,
-                        col_pub_keys="pub_keys",
+                query = {"payment_hash": payment.payment_hash}
+                read_payment = await Payment.collection().find_one(
+                    filter=query,
+                )
+                if read_payment:
+                    try:
+                        db_payment = Payment.model_validate(read_payment)
+                        if db_payment == payment:
+                            continue
+                    except Exception as e:
+                        logger.warning(e, extra={"notification": False, "payment": read_payment})
+                        pass
+                bulk_updates.append(
+                    {
+                        "filter": query,
+                        "update": {"$set": insert_one},
+                        "upsert": True,
+                    }
+                )
+            try:
+                if bulk_updates:
+                    result = await Payment.collection().bulk_write(
+                        requests=[
+                            UpdateOne(update["filter"], update["update"], upsert=update["upsert"])
+                            for update in bulk_updates
+                        ],
                     )
-                    insert_one = payment.model_dump(exclude_none=True, exclude_unset=True)
-                    query = {"payment_hash": payment.payment_hash}
-                    read_payment = await db_client.find_one(
-                        collection_name="payments",
-                        query=query,
-                    )
-                    if read_payment:
-                        try:
-                            db_payment = Payment(**read_payment)
-                            if db_payment == payment:
-                                continue
-                        except Exception as e:
-                            logger.warning(
-                                e, extra={"notification": False, "payment": read_payment}
-                            )
-                            pass
-                    bulk_updates.append(
-                        {
-                            "filter": query,
-                            "update": {"$set": insert_one},
-                            "upsert": True,
-                        }
-                    )
-                try:
-                    if bulk_updates:
-                        result = await db_client.bulk_write(
-                            collection_name="payments",
-                            operations=[
-                                UpdateOne(
-                                    update["filter"], update["update"], upsert=update["upsert"]
-                                )
-                                for update in bulk_updates
-                            ],
-                        )
-                        modified = result.modified_count
-                        inserted = result.inserted_count
-                    else:
-                        modified = 0
-                        inserted = 0
-                    logger.info(
-                        f"{lnd_client.icon} {DATABASE_ICON} "
-                        f"Payments {index_offset}... "
-                        f"modified: {modified} inserted: {inserted}"
-                    )
-                    total_payments += len(list_payments.payments)
-                except BulkWriteError as e:
-                    logger.debug(e.details)
-                    pass
-                except Exception as e:
-                    logger.exception(str(e), extra={"error": e})
-                if len(list_payments.payments) < num_max_payments:
-                    logger.info(
-                        f"{lnd_client.icon} {DATABASE_ICON} "
-                        f"Finished reading {total_payments} payments..."
-                    )
-                    break
+                    modified = result.modified_count
+                    inserted = result.inserted_count
+                else:
+                    modified = 0
+                    inserted = 0
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Payments {index_offset}... "
+                    f"modified: {modified} inserted: {inserted}"
+                )
+                total_payments += len(list_payments.payments)
+            except BulkWriteError as e:
+                logger.debug(e.details)
+                pass
+            except Exception as e:
+                logger.exception(str(e), extra={"error": e})
+            if len(list_payments.payments) < num_max_payments:
+                logger.info(
+                    f"{lnd_client.icon} {DATABASE_ICON} "
+                    f"Finished reading {total_payments} payments..."
+                )
+                break
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         raise e
@@ -766,7 +780,7 @@ async def read_all_payments(lnd_client: LNDClient, db_client: MongoDBClient) -> 
         return
 
 
-async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice | None:
+async def get_most_recent_invoice() -> Invoice | None:
     """
     Fetches the most recent invoice from the MongoDB collection.
 
@@ -787,31 +801,30 @@ async def get_most_recent_invoice(db_client: MongoDBClient) -> Invoice | None:
         Logs the `add_index` and `settle_index` of the most recent invoice
         for debugging and monitoring purposes.
     """
-    async with db_client:
-        query = {}
-        sort = [("add_index", -1)]
-        collection = await db_client.get_collection("invoices")
-        cursor = collection.find(query)
-        cursor.sort(sort)
-        invoice = None
-        try:
-            async for ans in cursor:
-                invoice = Invoice(**ans)
-                break
-            if not invoice:
-                logger.warning("No invoices found, empty database")
-                return None
-            logger.info(
-                f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
-            )
-            if invoice:
-                return invoice
-        except Exception as e:
-            logger.warning(f"No invoices found, empty database {e}")
-        return None
+    query = {}
+    sort = [("add_index", -1)]
+    collection = Invoice.collection()
+    cursor = collection.find(query)
+    cursor.sort(sort)
+    invoice = None
+    try:
+        async for ans in cursor:
+            invoice = Invoice(**ans)
+            break
+        if not invoice:
+            logger.warning("No invoices found, empty database")
+            return None
+        logger.info(
+            f"{DATABASE_ICON} Most recent invoice: {invoice.add_index} {invoice.settle_index}"
+        )
+        if invoice:
+            return invoice
+    except Exception as e:
+        logger.warning(f"No invoices found, empty database {e}")
+    return None
 
 
-async def get_most_recent_payment(db_client: MongoDBClient) -> Payment | None:
+async def get_most_recent_payment() -> Payment | None:
     """
     Fetches the most recent payment from the MongoDB collection.
 
@@ -828,33 +841,31 @@ async def get_most_recent_payment(db_client: MongoDBClient) -> Payment | None:
         Exception: If there is an issue with database connectivity or data
         parsing.
     """
-    async with db_client:
-        query = {}
-        sort = [("creation_date", -1)]
-        collection = await db_client.get_collection("payments")
-        cursor = collection.find(query)
-        cursor.sort(sort)
-        payment = None
-        try:
-            async for ans in cursor:
-                payment = Payment(**ans)
-                break
-            if not payment:
-                logger.warning("No payments found, empty database")
-                return None
-            logger.info(
-                f"{DATABASE_ICON} Most recent payment: {payment.payment_index} {payment.creation_date}"
-            )
-            if payment:
-                return payment
-        except Exception as e:
-            logger.warning(f"No payments found, empty database {e}")
-        return None
+    query = {}
+    sort = [("creation_date", -1)]
+    collection = Payment.collection()
+    cursor = collection.find(query)
+    cursor.sort(sort)
+    payment = None
+    try:
+        async for ans in cursor:
+            payment = Payment(**ans)
+            break
+        if not payment:
+            logger.warning("No payments found, empty database")
+            return None
+        logger.info(
+            f"{DATABASE_ICON} Most recent payment: {payment.payment_index} {payment.creation_date}"
+        )
+        if payment:
+            return payment
+    except Exception as e:
+        logger.warning(f"No payments found, empty database {e}")
+    return None
 
 
 async def synchronize_db(
     lnd_client: LNDClient,
-    db_client: MongoDBClient,
     delay: int = 10,
 ) -> None:
     """
@@ -867,8 +878,6 @@ async def synchronize_db(
     Args:
         lnd_client (LNDClient): The LND client instance used to interact with
             the Lightning Network Daemon.
-        db_client (MongoDBClient): The MongoDB client instance used to store
-            the invoices.
         delay (int): The delay in seconds before starting the synchronization
             process. Default is 10 seconds.
 
@@ -877,8 +886,8 @@ async def synchronize_db(
             operations and updates the database after waiting for 10 seconds.
     """
     sync_tasks = [
-        read_all_invoices(lnd_client, db_client),
-        read_all_payments(lnd_client, db_client),
+        read_all_invoices(lnd_client),
+        read_all_payments(lnd_client),
     ]
     await asyncio.sleep(delay)
     await asyncio.gather(*sync_tasks)
@@ -895,6 +904,8 @@ async def main_async_start(connection_name: str) -> None:
     """
     lnd_client = None
     try:
+        db_conn = DBConn()
+        await db_conn.setup_database()
         # Get the current event loop
         loop = asyncio.get_event_loop()
 
@@ -927,27 +938,23 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_INVOICE, invoice_report)
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-            db_client = get_mongodb_client()
+            await TrackedBaseModel.update_quote()
 
             tasks = [
-                invoices_loop(
-                    lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
-                ),
-                payments_loop(
-                    lnd_client=lnd_client, lnd_events_group=lnd_events_group, db_client=db_client
-                ),
+                invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
             ]
 
             # If we haven't synced for a long time, do the sync first to avoid massive
             # load on the database
             pause_for_sync = await pause_for_database_sync()
             if pause_for_sync:
-                await synchronize_db(lnd_client, db_client, delay=0)
+                await synchronize_db(lnd_client, delay=0)
             else:
-                tasks.append(synchronize_db(lnd_client, db_client, delay=10))
+                tasks.append(synchronize_db(lnd_client, delay=10))
             tasks += [
                 htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                fill_channel_names(lnd_client, lnd_events_group),
+                channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                 check_for_shutdown(),
             ]
             await asyncio.gather(*tasks)
@@ -993,10 +1000,8 @@ async def main_async_start(connection_name: str) -> None:
 
 
 async def pause_for_database_sync() -> bool:
-    db_client = get_mongodb_client()
-    await db_client.connect()
-    recent_invoice = await get_most_recent_invoice(db_client)
-    recent_payment = await get_most_recent_payment(db_client)
+    recent_invoice = await get_most_recent_invoice()
+    recent_payment = await get_most_recent_payment()
     if (
         recent_invoice
         and recent_payment
@@ -1050,7 +1055,9 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig(config_filename=config_filename).config
+    CONFIG = InternalConfig(
+        config_filename=config_filename, log_filename="lnd_monitor_v2.log.jsonl"
+    ).config
     lnd_node = CONFIG.lnd_config.default
     icon = CONFIG.lnd_config.connections[lnd_node].icon
     if not lnd_node:

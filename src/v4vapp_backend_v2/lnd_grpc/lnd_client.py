@@ -5,11 +5,7 @@ from typing import Any, AsyncGenerator, Callable
 
 import backoff
 from google.protobuf.json_format import MessageToDict
-from grpc import (
-    composite_channel_credentials,
-    metadata_call_credentials,
-    ssl_channel_credentials,
-)
+from grpc import composite_channel_credentials, metadata_call_credentials, ssl_channel_credentials
 from grpc.aio import AioRpcError, secure_channel
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -128,9 +124,7 @@ class LNDClient:
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
                 lnrpc.GetInfoRequest()
             )
-            get_info_dict = MessageToDict(
-                self.get_info, preserving_proto_field_name=True
-            )
+            get_info_dict = MessageToDict(self.get_info, preserving_proto_field_name=True)
             logger.info(
                 f"{self.icon} Calling get_info {self.connection.name}",
                 extra={"get_info": get_info_dict},
@@ -163,9 +157,7 @@ class LNDClient:
             self.setup()
             try:
                 if self.lightning_stub is not None:
-                    _ = await self.lightning_stub.WalletBalance(
-                        lnrpc.WalletBalanceRequest()
-                    )
+                    _ = await self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest())
                     logger.warning(
                         f"{self.icon} Connection to LND is OK Error "
                         f"cleared error_count: {error_count}",
@@ -183,8 +175,7 @@ class LNDClient:
                     logger.warning(f"{self.icon} LNDClient stub is None")
             except AioRpcError as e:
                 if original_error is not None:
-                    e = original_error
-                    message = e.debug_error_string()
+                    message = original_error.debug_error_string()
                 else:
                     message = f"{self.icon} Error in {call_name} RPC call: {get_error_code(e)}"
                     original_error = e

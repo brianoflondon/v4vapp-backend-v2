@@ -104,9 +104,12 @@ async def test_decode_any_lightning_string():
     )
 
     input = "brianoflondon@sats.v4v.app"
-    sats = 1356
+    msats = 1_356_000
     result = await decode_any_lightning_string(
-        input=input, lnd_client=lnd_client, sats=sats, comment="test comment"
+        input=input,
+        lnd_client=lnd_client,
+        zero_amount_invoice_send_msats=msats,
+        comment="test comment",
     )
     assert isinstance(result, PayReq)
     assert (

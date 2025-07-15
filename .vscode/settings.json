@@ -7,6 +7,9 @@
         "ciphertext",
         "colorama",
         "convertbits",
+        "devhive",
+        "devser",
+        "devtre",
         "errmsg",
         "filterwarnings",
         "grpcio",
@@ -25,9 +28,11 @@
         "Muun",
         "mypy",
         "payreq",
+        "paywithsats",
         "protos",
         "pycache",
         "pyyaml",
+        "recalc",
         "routerrpc",
         "routerstub",
         "setex",
@@ -58,5 +63,6 @@
         "activityBar.background": "#4F134B",
         "titleBar.activeBackground": "#6F1B69",
         "titleBar.activeForeground": "#FDF8FD"
-    }
+    },
+    "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter",
 }

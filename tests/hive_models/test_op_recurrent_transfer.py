@@ -2,8 +2,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.get_last_quote import last_quote
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers, op_any_or_base, OpAllRecurrent
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.hive_models.op_all import OpAllRecurrent, OpAllTransfers, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
@@ -21,6 +23,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     yield
     # No need to restore the original value, monkeypatch will handle it
 
+
 @pytest.mark.asyncio
 async def test_find_recurrent_transfers():
     all_recurrent_ops = [
@@ -28,7 +31,7 @@ async def test_find_recurrent_transfers():
         "fill_recurrent_transfer",
         "failed_recurrent_transfer",
     ]
-    await OpBase.update_quote()
+    TrackedBaseModel.last_quote = last_quote()
     OpBase.watch_users = ["spartano", "risingstar2"]
     for hive_event in load_hive_events():
         op = op_any_or_base(hive_event)
@@ -36,15 +39,15 @@ async def test_find_recurrent_transfers():
             assert isinstance(op, OpAllTransfers)
             assert isinstance(op, OpBase)
             assert op.markdown_link
-            if op.type in all_recurrent_ops:
+            if op.op_type in all_recurrent_ops:
                 assert isinstance(op, OpAllTransfers)
                 assert isinstance(op, OpAllRecurrent)
                 assert isinstance(op, OpBase)
                 assert op.markdown_link
-                if op.type == "recurrent_transfer":
+                if op.op_type == "recurrent_transfer":
                     assert isinstance(op, RecurrentTransfer)
-                if op.type == "fill_recurrent_transfer":
+                if op.op_type == "fill_recurrent_transfer":
                     assert isinstance(op, FillRecurrentTransfer)
         if op.is_watched:
-            if op.type in all_recurrent_ops:
+            if op.op_type in all_recurrent_ops:
                 print(op.log_str)

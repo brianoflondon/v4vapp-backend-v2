@@ -1,0 +1,3684 @@
+[{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dbe"
+  },
+  "group_id": "95793083_8fc6b78d32c8c8050aae9117915b3c17757f65b6_1_real",
+  "timestamp": {
+    "$date": "2025-05-11T09:58:00.000Z"
+  },
+  "description": "Opening Balance for testing v2 backend",
+  "debit_amount": 100,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 100,
+    "hbd": 27.169998,
+    "usd": 27.169998,
+    "sats": 26158,
+    "msats": 26157690,
+    "msats_fee": 494680,
+    "btc": 0.0002615769,
+    "sats_hive": 261.5769,
+    "sats_hbd": 962.7417,
+    "conv_from": "hive",
+    "value": 100,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:18:45.146Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 100,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 100,
+    "hbd": 27.169998,
+    "usd": 27.169998,
+    "sats": 26158,
+    "msats": 26157690,
+    "msats_fee": 494680,
+    "btc": 0.0002615769,
+    "sats_hive": 261.5769,
+    "sats_hbd": 962.7417,
+    "conv_from": "hive",
+    "value": 100,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:18:45.146Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Owner Loan Payable (funding)",
+    "account_type": "Liability",
+    "sub": "v4vapp.dhf"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "8fc6b78d32c8c8050aae9117915b3c17757f65b6",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95793083,
+    "trx_num": 13,
+    "timestamp": {
+      "$date": "2025-05-11T09:58:00.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp.dhf",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "100000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Opening Balance for testing v2 backend",
+    "conv": {
+      "hive": 100,
+      "hbd": 27.169998,
+      "usd": 27.169998,
+      "sats": 26158,
+      "msats": 26157690,
+      "msats_fee": 494680,
+      "btc": 0.0002615769,
+      "sats_hive": 261.5769,
+      "sats_hbd": 962.7417,
+      "conv_from": "hive",
+      "value": 100,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:18:45.146Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Opening Balance for testing v2 backend",
+    "link": "https://hivehub.dev/tx/8fc6b78d32c8c8050aae9117915b3c17757f65b6"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dbf"
+  },
+  "group_id": "95801581_3284a7bf2900835e8b0d6d25fd235f38192f2dee_1_real",
+  "timestamp": {
+    "$date": "2025-05-11T17:03:15.000Z"
+  },
+  "description": "Opening Balance for testing v2 backend HBD",
+  "debit_amount": 50,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 183.75598,
+    "hbd": 50,
+    "usd": 50,
+    "sats": 48132,
+    "msats": 48132325,
+    "msats_fee": 868249,
+    "btc": 0.00048132325,
+    "sats_hive": 261.9361,
+    "sats_hbd": 962.6465,
+    "conv_from": "hbd",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:21:16.221Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 50,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 183.75598,
+    "hbd": 50,
+    "usd": 50,
+    "sats": 48132,
+    "msats": 48132325,
+    "msats_fee": 868249,
+    "btc": 0.00048132325,
+    "sats_hive": 261.9361,
+    "sats_hbd": 962.6465,
+    "conv_from": "hbd",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:21:16.221Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Owner Loan Payable (funding)",
+    "account_type": "Liability",
+    "sub": "v4vapp.dhf"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "3284a7bf2900835e8b0d6d25fd235f38192f2dee",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95801581,
+    "trx_num": 19,
+    "timestamp": {
+      "$date": "2025-05-11T17:03:15.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp.dhf",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "50000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "Opening Balance for testing v2 backend HBD",
+    "conv": {
+      "hive": 183.75598,
+      "hbd": 50,
+      "usd": 50,
+      "sats": 48132,
+      "msats": 48132325,
+      "msats_fee": 868249,
+      "btc": 0.00048132325,
+      "sats_hive": 261.9361,
+      "sats_hbd": 962.6465,
+      "conv_from": "hbd",
+      "value": 50,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:21:16.221Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Opening Balance for testing v2 backend HBD",
+    "link": "https://hivehub.dev/tx/3284a7bf2900835e8b0d6d25fd235f38192f2dee"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc0"
+  },
+  "group_id": "95802587_6472af41e3236308d08318594e977e18e4de572b_1_real",
+  "timestamp": {
+    "$date": "2025-05-11T17:53:45.000Z"
+  },
+  "description": "Send opening balance to Live Server",
+  "debit_amount": 50,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 50,
+    "hbd": 13.604999,
+    "usd": 13.604999,
+    "sats": 13097,
+    "msats": 13096805,
+    "msats_fee": 272645,
+    "btc": 0.00013096805,
+    "sats_hive": 261.9361,
+    "sats_hbd": 962.6465,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:21:16.221Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 50,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 50,
+    "hbd": 13.604999,
+    "usd": 13.604999,
+    "sats": 13097,
+    "msats": 13096805,
+    "msats_fee": 272645,
+    "btc": 0.00013096805,
+    "sats_hive": 261.9361,
+    "sats_hbd": 962.6465,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:21:16.221Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "6472af41e3236308d08318594e977e18e4de572b",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95802587,
+    "trx_num": 4,
+    "timestamp": {
+      "$date": "2025-05-11T17:53:45.000Z"
+    },
+    "extensions": [],
+    "from": "devtre.v4vapp",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "50000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Send opening balance to Live Server",
+    "conv": {
+      "hive": 50,
+      "hbd": 13.604999,
+      "usd": 13.604999,
+      "sats": 13097,
+      "msats": 13096805,
+      "msats_fee": 272645,
+      "btc": 0.00013096805,
+      "sats_hive": 261.9361,
+      "sats_hbd": 962.6465,
+      "conv_from": "hive",
+      "value": 50,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:21:16.221Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Send opening balance to Live Server",
+    "link": "https://hivehub.dev/tx/6472af41e3236308d08318594e977e18e4de572b"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc1"
+  },
+  "group_id": "95817721_ee45adfcb8a2261cc542ecec29b8775a94b55c95_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T06:31:03.000Z"
+  },
+  "description": "Send opening balance to Live Server HBD",
+  "debit_amount": 40,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 146.62758,
+    "hbd": 40,
+    "usd": 40,
+    "sats": 38479,
+    "msats": 38478596,
+    "msats_fee": 704136,
+    "btc": 0.00038478596,
+    "sats_hive": 262.424,
+    "sats_hbd": 961.9649,
+    "conv_from": "hbd",
+    "value": 40,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:38:21.079Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 40,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 146.62758,
+    "hbd": 40,
+    "usd": 40,
+    "sats": 38479,
+    "msats": 38478596,
+    "msats_fee": 704136,
+    "btc": 0.00038478596,
+    "sats_hive": 262.424,
+    "sats_hbd": 961.9649,
+    "conv_from": "hbd",
+    "value": 40,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:38:21.079Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "ee45adfcb8a2261cc542ecec29b8775a94b55c95",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95817721,
+    "trx_num": 10,
+    "timestamp": {
+      "$date": "2025-05-12T06:31:03.000Z"
+    },
+    "extensions": [],
+    "from": "devtre.v4vapp",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "40000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "Send opening balance to Live Server HBD",
+    "conv": {
+      "hive": 146.62758,
+      "hbd": 40,
+      "usd": 40,
+      "sats": 38479,
+      "msats": 38478596,
+      "msats_fee": 704136,
+      "btc": 0.00038478596,
+      "sats_hive": 262.424,
+      "sats_hbd": 961.9649,
+      "conv_from": "hbd",
+      "value": 40,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:38:21.079Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Send opening balance to Live Server HBD",
+    "link": "https://hivehub.dev/tx/ee45adfcb8a2261cc542ecec29b8775a94b55c95"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc2"
+  },
+  "group_id": "95819345_1fca07a6f39c5f82f8797bdbfc3a6d109981b409_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T07:52:21.000Z"
+  },
+  "description": "Test send back from server to treasury",
+  "debit_amount": 10,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 36.60322,
+    "hbd": 10,
+    "usd": 10,
+    "sats": 9606,
+    "msats": 9606115,
+    "msats_fee": 213303,
+    "btc": 0.00009606115,
+    "sats_hive": 262.4391,
+    "sats_hbd": 960.6115,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:41:12.657Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 36.60322,
+    "hbd": 10,
+    "usd": 10,
+    "sats": 9606,
+    "msats": 9606115,
+    "msats_fee": 213303,
+    "btc": 0.00009606115,
+    "sats_hive": 262.4391,
+    "sats_hbd": 960.6115,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:41:12.657Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "1fca07a6f39c5f82f8797bdbfc3a6d109981b409",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95819345,
+    "trx_num": 11,
+    "timestamp": {
+      "$date": "2025-05-12T07:52:21.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "Test send back from server to treasury",
+    "conv": {
+      "hive": 36.60322,
+      "hbd": 10,
+      "usd": 10,
+      "sats": 9606,
+      "msats": 9606115,
+      "msats_fee": 213303,
+      "btc": 0.00009606115,
+      "sats_hive": 262.4391,
+      "sats_hbd": 960.6115,
+      "conv_from": "hbd",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:41:12.657Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Test send back from server to treasury",
+    "link": "https://hivehub.dev/tx/1fca07a6f39c5f82f8797bdbfc3a6d109981b409"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc3"
+  },
+  "group_id": "95819821_d9c8d42fb805739faf5da9840e8615e58a6c19e6_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T08:16:12.000Z"
+  },
+  "description": "Reset for checks",
+  "debit_amount": 50,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 50,
+    "hbd": 13.660002,
+    "usd": 13.660002,
+    "sats": 13122,
+    "msats": 13121955,
+    "msats_fee": 273073,
+    "btc": 0.00013121955,
+    "sats_hive": 262.4391,
+    "sats_hbd": 960.6115,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:41:12.657Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 50,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 50,
+    "hbd": 13.660002,
+    "usd": 13.660002,
+    "sats": 13122,
+    "msats": 13121955,
+    "msats_fee": 273073,
+    "btc": 0.00013121955,
+    "sats_hive": 262.4391,
+    "sats_hbd": 960.6115,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:41:12.657Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "d9c8d42fb805739faf5da9840e8615e58a6c19e6",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95819821,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-12T08:16:12.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "50000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Reset for checks",
+    "conv": {
+      "hive": 50,
+      "hbd": 13.660002,
+      "usd": 13.660002,
+      "sats": 13122,
+      "msats": 13121955,
+      "msats_fee": 273073,
+      "btc": 0.00013121955,
+      "sats_hive": 262.4391,
+      "sats_hbd": 960.6115,
+      "conv_from": "hive",
+      "value": 50,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:41:12.657Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Reset for checks",
+    "link": "https://hivehub.dev/tx/d9c8d42fb805739faf5da9840e8615e58a6c19e6"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc4"
+  },
+  "group_id": "95819830_acf8f580b2f492eea8bbf288e29c9e0d3554b60c_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T08:16:39.000Z"
+  },
+  "description": "Reset for tests hbd",
+  "debit_amount": 30,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 109.89009,
+    "hbd": 30,
+    "usd": 30,
+    "sats": 28834,
+    "msats": 28833501,
+    "msats_fee": 540169,
+    "btc": 0.00028833501,
+    "sats_hive": 262.3849,
+    "sats_hbd": 961.1167,
+    "conv_from": "hbd",
+    "value": 30,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:43:32.951Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 30,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 109.89009,
+    "hbd": 30,
+    "usd": 30,
+    "sats": 28834,
+    "msats": 28833501,
+    "msats_fee": 540169,
+    "btc": 0.00028833501,
+    "sats_hive": 262.3849,
+    "sats_hbd": 961.1167,
+    "conv_from": "hbd",
+    "value": 30,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:43:32.951Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "acf8f580b2f492eea8bbf288e29c9e0d3554b60c",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95819830,
+    "trx_num": 12,
+    "timestamp": {
+      "$date": "2025-05-12T08:16:39.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "30000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "Reset for tests hbd",
+    "conv": {
+      "hive": 109.89009,
+      "hbd": 30,
+      "usd": 30,
+      "sats": 28834,
+      "msats": 28833501,
+      "msats_fee": 540169,
+      "btc": 0.00028833501,
+      "sats_hive": 262.3849,
+      "sats_hbd": 961.1167,
+      "conv_from": "hbd",
+      "value": 30,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:43:32.951Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Reset for tests hbd",
+    "link": "https://hivehub.dev/tx/acf8f580b2f492eea8bbf288e29c9e0d3554b60c"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc5"
+  },
+  "group_id": "95822146_aea8cab4a54fedab8ee76a526cfa3011d9ff9e3f_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T10:12:39.000Z"
+  },
+  "description": "Testing ingress of Hive from external",
+  "debit_amount": 10,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 10,
+    "hbd": 2.727,
+    "usd": 2.727,
+    "sats": 2622,
+    "msats": 2621712,
+    "msats_fee": 94569,
+    "btc": 0.00002621712,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 10,
+    "hbd": 2.727,
+    "usd": 2.727,
+    "sats": 2622,
+    "msats": 2621712,
+    "msats_fee": 94569,
+    "btc": 0.00002621712,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "aea8cab4a54fedab8ee76a526cfa3011d9ff9e3f",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95822146,
+    "trx_num": 13,
+    "timestamp": {
+      "$date": "2025-05-12T10:12:39.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp-test",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "#5w5N2Q7rgz8KnhnD6V4N6SkFTJLJg1yan8n6p8U4UBeLEsuGiWCnSURXM8ZAc3mbGkQtdw12CQWPZZz671EMjD6t7GeTMo2vyWz3oySfkgMJnLKYbnDtscTKJvV9sJw1kcxEqmUAowNwzejs6BXxaFjKzovmZkosQdpzpSdPmp3ZF",
+    "conv": {
+      "hive": 10,
+      "hbd": 2.727,
+      "usd": 2.727,
+      "sats": 2622,
+      "msats": 2621712,
+      "msats_fee": 94569,
+      "btc": 0.00002621712,
+      "sats_hive": 262.1712,
+      "sats_hbd": 961.3906,
+      "conv_from": "hive",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:48:11.985Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Testing ingress of Hive from external",
+    "link": "https://hivehub.dev/tx/aea8cab4a54fedab8ee76a526cfa3011d9ff9e3f"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc6"
+  },
+  "group_id": "95822927_6951255d4ec6ea02643ec99d21ec626f04e4f78f_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T10:51:42.000Z"
+  },
+  "description": "Test refund",
+  "debit_amount": 10,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 10,
+    "hbd": 2.727,
+    "usd": 2.727,
+    "sats": 2622,
+    "msats": 2621712,
+    "msats_fee": 94569,
+    "btc": 0.00002621712,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 10,
+    "hbd": 2.727,
+    "usd": 2.727,
+    "sats": 2622,
+    "msats": 2621712,
+    "msats_fee": 94569,
+    "btc": 0.00002621712,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "6951255d4ec6ea02643ec99d21ec626f04e4f78f",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95822927,
+    "trx_num": 10,
+    "timestamp": {
+      "$date": "2025-05-12T10:51:42.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "v4vapp-test",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "#DBewWVb9heaRBhSd1u6TJ3uDk5JZJqCcPfWMik3QQofynQEFb7Y2tC878Ahnwi4ifeJDBSDRU63DncfZyrUFA6s8MLCCeJzoRNNXyBsQxR4kwMKV2VxaStohrFPeX1tjb",
+    "conv": {
+      "hive": 10,
+      "hbd": 2.727,
+      "usd": 2.727,
+      "sats": 2622,
+      "msats": 2621712,
+      "msats_fee": 94569,
+      "btc": 0.00002621712,
+      "sats_hive": 262.1712,
+      "sats_hbd": 961.3906,
+      "conv_from": "hive",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:48:11.985Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Test refund",
+    "link": "https://hivehub.dev/tx/6951255d4ec6ea02643ec99d21ec626f04e4f78f"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc7"
+  },
+  "group_id": "95823857_6d29b5e169bfef10461c7831693de50362b02464_1_real",
+  "timestamp": {
+    "$date": "2025-05-12T11:38:15.000Z"
+  },
+  "description": "Another test with a private memo",
+  "debit_amount": 10,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 36.67033,
+    "hbd": 9.999999,
+    "usd": 9.999999,
+    "sats": 9614,
+    "msats": 9613905,
+    "msats_fee": 213436,
+    "btc": 0.00009613905,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 36.67033,
+    "hbd": 9.999999,
+    "usd": 9.999999,
+    "sats": 9614,
+    "msats": 9613905,
+    "msats_fee": 213436,
+    "btc": 0.00009613905,
+    "sats_hive": 262.1712,
+    "sats_hbd": 961.3906,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T11:48:11.985Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "6d29b5e169bfef10461c7831693de50362b02464",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95823857,
+    "trx_num": 12,
+    "timestamp": {
+      "$date": "2025-05-12T11:38:15.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp-test",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "#5w5N2Q7rgz8KnhnD6V4N6SkFTJLJg1yan8n6p8U4UBeLEsuGiWCnSURXM8ZAc3mbGkQtdw12CQWPZZz671EMjD6t7Gg26nb3AXa9MVRwqokxgyRYHVuYvrkhq5ecCi5foxCmGwA4pRaneJ5sK13poUQ7vTA6oAe8RsX6fr9xBCDFT",
+    "conv": {
+      "hive": 36.67033,
+      "hbd": 9.999999,
+      "usd": 9.999999,
+      "sats": 9614,
+      "msats": 9613905,
+      "msats_fee": 213436,
+      "btc": 0.00009613905,
+      "sats_hive": 262.1712,
+      "sats_hbd": 961.3906,
+      "conv_from": "hbd",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T11:48:11.985Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Another test with a private memo",
+    "link": "https://hivehub.dev/tx/6d29b5e169bfef10461c7831693de50362b02464"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc8"
+  },
+  "group_id": "95886649_da3fc6cf6327d3a08e20bb507e236aedd762da29_1_real",
+  "timestamp": {
+    "$date": "2025-05-14T16:01:24.000Z"
+  },
+  "description": "Refund to clear all debts to v4vapp-test",
+  "debit_amount": 10,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 37.23009,
+    "hbd": 10,
+    "usd": 10,
+    "sats": 9673,
+    "msats": 9672961,
+    "msats_fee": 214440,
+    "btc": 0.00009672961,
+    "sats_hive": 259.8157,
+    "sats_hbd": 967.2961,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T17:00:40.476Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 37.23009,
+    "hbd": 10,
+    "usd": 10,
+    "sats": 9673,
+    "msats": 9672961,
+    "msats_fee": 214440,
+    "btc": 0.00009672961,
+    "sats_hive": 259.8157,
+    "sats_hbd": 967.2961,
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T17:00:40.476Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "da3fc6cf6327d3a08e20bb507e236aedd762da29",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95886649,
+    "trx_num": 8,
+    "timestamp": {
+      "$date": "2025-05-14T16:01:24.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "v4vapp-test",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "#4cvNJYQ3iPYukm1p9mVdDdTxsmD25pUEAexSMqNAdfiYSftGMvd2c7sJboyGxLM6KeSdHb9cDBt7p5aAg4iR7CphPMwNtsqtttTyad5eLCpBaxM6NFcSy33mBPbW5qUy1hCHzp8csKrfwhmzvK5aVnHRaPogxa4R7PeSme3jM3a9D",
+    "conv": {
+      "hive": 37.23009,
+      "hbd": 10,
+      "usd": 10,
+      "sats": 9673,
+      "msats": 9672961,
+      "msats_fee": 214440,
+      "btc": 0.00009672961,
+      "sats_hive": 259.8157,
+      "sats_hbd": 967.2961,
+      "conv_from": "hbd",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T17:00:40.476Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Refund to clear all debts to v4vapp-test",
+    "link": "https://hivehub.dev/tx/da3fc6cf6327d3a08e20bb507e236aedd762da29"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dc9"
+  },
+  "group_id": "95887560_17ed634e4adc4db35137f37df84dfdaba12e95ee_1_real",
+  "timestamp": {
+    "$date": "2025-05-14T16:47:00.000Z"
+  },
+  "description": "More funds treasury to server",
+  "debit_amount": 25,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 93.04056,
+    "hbd": 24.999999,
+    "usd": 24.999999,
+    "sats": 24178,
+    "msats": 24177947,
+    "msats_fee": 461025,
+    "btc": 0.00024177947,
+    "sats_hive": 259.8646,
+    "sats_hbd": 967.1179,
+    "conv_from": "hbd",
+    "value": 25,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T16:43:17.248Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 25,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 93.04056,
+    "hbd": 24.999999,
+    "usd": 24.999999,
+    "sats": 24178,
+    "msats": 24177947,
+    "msats_fee": 461025,
+    "btc": 0.00024177947,
+    "sats_hive": 259.8646,
+    "sats_hbd": 967.1179,
+    "conv_from": "hbd",
+    "value": 25,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-14T16:43:17.248Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "17ed634e4adc4db35137f37df84dfdaba12e95ee",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95887560,
+    "trx_num": 4,
+    "timestamp": {
+      "$date": "2025-05-14T16:47:00.000Z"
+    },
+    "extensions": [],
+    "from": "devtre.v4vapp",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "25000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "memo": "More funds treasury to server",
+    "conv": {
+      "hive": 93.04056,
+      "hbd": 24.999999,
+      "usd": 24.999999,
+      "sats": 24178,
+      "msats": 24177947,
+      "msats_fee": 461025,
+      "btc": 0.00024177947,
+      "sats_hive": 259.8646,
+      "sats_hbd": 967.1179,
+      "conv_from": "hbd",
+      "value": 25,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-14T16:43:17.248Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "More funds treasury to server",
+    "link": "https://hivehub.dev/tx/17ed634e4adc4db35137f37df84dfdaba12e95ee"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dca"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_1_real",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "15.000  HBD for     55.643 HIVE devser.v4vapp created order 3419576683    0.270",
+  "debit_amount": 15,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 0,
+    "hbd": 0,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "CryptoConv",
+    "fetch_date": null,
+    "in_limits": false
+  },
+  "credit_amount": 15,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 0,
+    "hbd": 0,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "CryptoConv",
+    "fetch_date": null,
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 1,
+    "type": "limit_order_create",
+    "block_num": 95887860,
+    "trx_num": 2,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "amount_to_sell": {
+      "amount": "15000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "expiration": {
+      "$date": "2025-05-21T17:01:56.000Z"
+    },
+    "fill_or_kill": false,
+    "min_to_receive": {
+      "amount": "55643",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "orderid": {
+      "$numberLong": "3419576683"
+    },
+    "owner": "devser.v4vapp",
+    "conv": {
+      "hive": 0,
+      "hbd": 0,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 0,
+      "source": "CryptoConv",
+      "fetch_date": null,
+      "in_limits": false
+    },
+    "amount_remaining": {
+      "amount": "55643",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "link": "https://hivehub.dev/tx/8444006ec7b5a545b198fb5f5b051e3a4055e159"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dcb"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_2_virtual",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "6.738  HBD -->     25.052 HIVE honeybot filled order for devser.v4vapp id 496766945    0.269",
+  "debit_amount": 25.052,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 25.052,
+    "hbd": 6.738,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 25.052,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.641Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 6.738,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 25.052,
+    "hbd": 6.738,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 6.738,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.641Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 2,
+    "type": "fill_order",
+    "block_num": 95887860,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3419576683"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "6738",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": 496766945,
+    "open_owner": "honeybot",
+    "open_pays": {
+      "amount": "25052",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 25.052,
+      "hbd": 6.738,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 25.052,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.641Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 25.052,
+      "hbd": 6.738,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 6.738,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.641Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": false,
+    "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/2"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dcc"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_4_virtual",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "1.345  HBD -->      5.000 HIVE voltix filled order for devser.v4vapp id 241406113    0.269",
+  "debit_amount": 5,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 5,
+    "hbd": 1.345,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 5,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.664Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 1.345,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 5,
+    "hbd": 1.345,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 1.345,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.664Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 4,
+    "type": "fill_order",
+    "block_num": 95887860,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3419576683"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "1345",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": 241406113,
+    "open_owner": "voltix",
+    "open_pays": {
+      "amount": "5000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 5,
+      "hbd": 1.345,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 5,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.664Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 5,
+      "hbd": 1.345,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 1.345,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.664Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": false,
+    "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/4"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dcd"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_1_virtual",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "1.999  HBD -->      7.436 HIVE quicktrades filled order for devser.v4vapp id 2024336831    0.269",
+  "debit_amount": 7.436,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 7.436,
+    "hbd": 1.999,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 7.436,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.688Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 1.999,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 7.436,
+    "hbd": 1.999,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 1.999,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.688Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 1,
+    "type": "fill_order",
+    "block_num": 95887860,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3419576683"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "1999",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": 2024336831,
+    "open_owner": "quicktrades",
+    "open_pays": {
+      "amount": "7436",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 7.436,
+      "hbd": 1.999,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 7.436,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.688Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 7.436,
+      "hbd": 1.999,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 1.999,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.688Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": false,
+    "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/1"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dce"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_3_virtual",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "1.345  HBD -->      5.000 HIVE onlyhive filled order for devser.v4vapp id 241402854    0.269",
+  "debit_amount": 5,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 5,
+    "hbd": 1.345,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 5,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.711Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 1.345,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 5,
+    "hbd": 1.345,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 1.345,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.711Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 3,
+    "type": "fill_order",
+    "block_num": 95887860,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3419576683"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "1345",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": 241402854,
+    "open_owner": "onlyhive",
+    "open_pays": {
+      "amount": "5000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 5,
+      "hbd": 1.345,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 5,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.711Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 5,
+      "hbd": 1.345,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 1.345,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.711Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": false,
+    "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/3"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dcf"
+  },
+  "group_id": "95887860_8444006ec7b5a545b198fb5f5b051e3a4055e159_5_virtual",
+  "timestamp": {
+    "$date": "2025-05-14T17:02:00.000Z"
+  },
+  "description": "3.573  HBD -->     13.254 HIVE droida filled order for devser.v4vapp id 946594252    0.270",
+  "debit_amount": 13.254,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 13.254,
+    "hbd": 3.573,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 13.254,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.731Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 3.573,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 13.254,
+    "hbd": 3.573,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 3.573,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.731Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "8444006ec7b5a545b198fb5f5b051e3a4055e159",
+    "op_in_trx": 5,
+    "type": "fill_order",
+    "block_num": 95887860,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-14T17:02:00.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3419576683"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "3573",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": 946594252,
+    "open_owner": "droida",
+    "open_pays": {
+      "amount": "13254",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 13.254,
+      "hbd": 3.573,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 13.254,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.731Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 13.254,
+      "hbd": 3.573,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 3.573,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.731Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": true,
+    "link": "https://hivehub.dev/tx/95887860/8444006ec7b5a545b198fb5f5b051e3a4055e159/5"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd0"
+  },
+  "group_id": "95906035_cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6_1_real",
+  "timestamp": {
+    "$date": "2025-05-15T08:11:54.000Z"
+  },
+  "description": "35.000 HIVE for      9.376  HBD devser.v4vapp created order 1747296704    0.268",
+  "debit_amount": 35,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 34.88094,
+    "hbd": 9.375999,
+    "usd": 9.375999,
+    "sats": 9185,
+    "msats": 9184634,
+    "msats_fee": 206138,
+    "btc": 0.00009184634,
+    "sats_hive": 263.3138,
+    "sats_hbd": 979.5899,
+    "conv_from": "hbd",
+    "value": 9.376,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T08:18:40.178Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 35,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 34.88094,
+    "hbd": 9.375999,
+    "usd": 9.375999,
+    "sats": 9185,
+    "msats": 9184634,
+    "msats_fee": 206138,
+    "btc": 0.00009184634,
+    "sats_hive": 263.3138,
+    "sats_hbd": 979.5899,
+    "conv_from": "hbd",
+    "value": 9.376,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T08:18:40.178Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6",
+    "op_in_trx": 1,
+    "type": "limit_order_create",
+    "block_num": 95906035,
+    "trx_num": 1,
+    "timestamp": {
+      "$date": "2025-05-15T08:11:54.000Z"
+    },
+    "extensions": [],
+    "amount_to_sell": {
+      "amount": "35000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "expiration": {
+      "$date": "2025-06-11T08:11:44.000Z"
+    },
+    "fill_or_kill": true,
+    "min_to_receive": {
+      "amount": "9376",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "orderid": 1747296704,
+    "owner": "devser.v4vapp",
+    "conv": {
+      "hive": 34.88094,
+      "hbd": 9.375999,
+      "usd": 9.375999,
+      "sats": 9185,
+      "msats": 9184634,
+      "msats_fee": 206138,
+      "btc": 0.00009184634,
+      "sats_hive": 263.3138,
+      "sats_hbd": 979.5899,
+      "conv_from": "hbd",
+      "value": 9.376,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-15T08:18:40.178Z"
+      },
+      "in_limits": true
+    },
+    "amount_remaining": {
+      "amount": "9376",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "link": "https://hivehub.dev/tx/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd1"
+  },
+  "group_id": "95906035_cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6_1_virtual",
+  "timestamp": {
+    "$date": "2025-05-15T08:11:54.000Z"
+  },
+  "description": "7.428 HIVE -->      2.000  HBD quicktrades filled order for devser.v4vapp id 700850858    0.269",
+  "debit_amount": 2,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 7.428,
+    "hbd": 2,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 2,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.781Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 7.428,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 7.428,
+    "hbd": 2,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 7.428,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.781Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6",
+    "op_in_trx": 1,
+    "type": "fill_order",
+    "block_num": 95906035,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-15T08:11:54.000Z"
+    },
+    "extensions": [],
+    "current_orderid": 1747296704,
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "7428",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "open_orderid": 700850858,
+    "open_owner": "quicktrades",
+    "open_pays": {
+      "amount": "2000",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 7.428,
+      "hbd": 2,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 2,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.781Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 7.428,
+      "hbd": 2,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 7.428,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.781Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": false,
+    "link": "https://hivehub.dev/tx/95906035/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6/1"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd2"
+  },
+  "group_id": "95906035_cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6_2_virtual",
+  "timestamp": {
+    "$date": "2025-05-15T08:11:54.000Z"
+  },
+  "description": "27.572 HIVE -->      7.423  HBD konvik-hbd filled order for devser.v4vapp id 3915464607    0.269",
+  "debit_amount": 7.423,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 27.572,
+    "hbd": 7.423,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 7.423,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.802Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 27.572,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 27.572,
+    "hbd": 7.423,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 27.572,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.802Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6",
+    "op_in_trx": 2,
+    "type": "fill_order",
+    "block_num": 95906035,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-15T08:11:54.000Z"
+    },
+    "extensions": [],
+    "current_orderid": 1747296704,
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "27572",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "open_orderid": {
+      "$numberLong": "3915464607"
+    },
+    "open_owner": "konvik-hbd",
+    "open_pays": {
+      "amount": "7423",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 27.572,
+      "hbd": 7.423,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 7.423,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.802Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 27.572,
+      "hbd": 7.423,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 27.572,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.802Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": true,
+    "link": "https://hivehub.dev/tx/95906035/cbf5e3e4bd30227bb35460c62ce1e10ac501b1f6/2"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd3"
+  },
+  "group_id": "95907910_4c2699767bdca2a3ac10211f9fb092a596f6a2e5_1_real",
+  "timestamp": {
+    "$date": "2025-05-15T09:45:39.000Z"
+  },
+  "description": "Testing auto re-balance back to server and auto sell",
+  "debit_amount": 50,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 50,
+    "hbd": 13.235,
+    "usd": 13.235,
+    "sats": 12990,
+    "msats": 12990045,
+    "msats_fee": 270830,
+    "btc": 0.00012990045,
+    "sats_hive": 259.8009,
+    "sats_hbd": 981.4919,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:12.756Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 50,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 50,
+    "hbd": 13.235,
+    "usd": 13.235,
+    "sats": 12990,
+    "msats": 12990045,
+    "msats_fee": 270830,
+    "btc": 0.00012990045,
+    "sats_hive": 259.8009,
+    "sats_hbd": 981.4919,
+    "conv_from": "hive",
+    "value": 50,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:12.756Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "4c2699767bdca2a3ac10211f9fb092a596f6a2e5",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95907910,
+    "trx_num": 3,
+    "timestamp": {
+      "$date": "2025-05-15T09:45:39.000Z"
+    },
+    "extensions": [],
+    "from": "devtre.v4vapp",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "50000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Testing auto re-balance back to server and auto sell",
+    "conv": {
+      "hive": 50,
+      "hbd": 13.235,
+      "usd": 13.235,
+      "sats": 12990,
+      "msats": 12990045,
+      "msats_fee": 270830,
+      "btc": 0.00012990045,
+      "sats_hive": 259.8009,
+      "sats_hbd": 981.4919,
+      "conv_from": "hive",
+      "value": 50,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-15T09:52:12.756Z"
+      },
+      "in_limits": true
+    },
+    "d_memo": "Testing auto re-balance back to server and auto sell",
+    "link": "https://hivehub.dev/tx/4c2699767bdca2a3ac10211f9fb092a596f6a2e5"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd4"
+  },
+  "group_id": "95908095_c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c_1_real",
+  "timestamp": {
+    "$date": "2025-05-15T09:54:54.000Z"
+  },
+  "description": "9.423  HBD for     35.471 HIVE devser.v4vapp created order 3353244000    0.266",
+  "debit_amount": 9.423,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": 35.471,
+    "hbd": 9.385625,
+    "usd": 9.385625,
+    "sats": 9214,
+    "msats": 9213758,
+    "msats_fee": 206633,
+    "btc": 0.00009213758,
+    "sats_hive": 259.7547,
+    "sats_hbd": 981.6883,
+    "conv_from": "hive",
+    "value": 35.471,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:15.846Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 9.423,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 35.471,
+    "hbd": 9.385625,
+    "usd": 9.385625,
+    "sats": 9214,
+    "msats": 9213758,
+    "msats_fee": 206633,
+    "btc": 0.00009213758,
+    "sats_hive": 259.7547,
+    "sats_hbd": 981.6883,
+    "conv_from": "hive",
+    "value": 35.471,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T09:52:15.846Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "real",
+    "trx_id": "c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
+    "op_in_trx": 1,
+    "type": "limit_order_create",
+    "block_num": 95908095,
+    "trx_num": 14,
+    "timestamp": {
+      "$date": "2025-05-15T09:54:54.000Z"
+    },
+    "extensions": [],
+    "amount_to_sell": {
+      "amount": "9423",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "expiration": {
+      "$date": "2025-05-22T09:54:52.000Z"
+    },
+    "fill_or_kill": false,
+    "min_to_receive": {
+      "amount": "35471",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "orderid": {
+      "$numberLong": "3353244000"
+    },
+    "owner": "devser.v4vapp",
+    "conv": {
+      "hive": 35.471,
+      "hbd": 9.385625,
+      "usd": 9.385625,
+      "sats": 9214,
+      "msats": 9213758,
+      "msats_fee": 206633,
+      "btc": 0.00009213758,
+      "sats_hive": 259.7547,
+      "sats_hbd": 981.6883,
+      "conv_from": "hive",
+      "value": 35.471,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-15T09:52:15.846Z"
+      },
+      "in_limits": true
+    },
+    "amount_remaining": {
+      "amount": "35471",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "link": "https://hivehub.dev/tx/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825bbe9002aeb9ffd961dd5"
+  },
+  "group_id": "95908095_c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c_1_virtual",
+  "timestamp": {
+    "$date": "2025-05-15T09:54:51.000Z"
+  },
+  "description": "9.423  HBD -->     35.471 HIVE konvik-hbd filled order for devser.v4vapp id 3913190081    0.266",
+  "debit_amount": 35.471,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 35.471,
+    "hbd": 9.423,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 35.471,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.861Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 9.423,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": 35.471,
+    "hbd": 9.423,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hbd",
+    "value": 9.423,
+    "source": "Hive Internal Trade",
+    "fetch_date": {
+      "$date": "2025-05-15T10:03:21.861Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Escrow Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "realm": "virtual",
+    "trx_id": "c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c",
+    "op_in_trx": 1,
+    "type": "fill_order",
+    "block_num": 95908095,
+    "trx_num": 0,
+    "timestamp": {
+      "$date": "2025-05-15T09:54:51.000Z"
+    },
+    "extensions": [],
+    "current_orderid": {
+      "$numberLong": "3353244000"
+    },
+    "current_owner": "devser.v4vapp",
+    "current_pays": {
+      "amount": "9423",
+      "nai": "@@000000013",
+      "precision": 3
+    },
+    "open_orderid": {
+      "$numberLong": "3913190081"
+    },
+    "open_owner": "konvik-hbd",
+    "open_pays": {
+      "amount": "35471",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "debit_conv": {
+      "hive": 35.471,
+      "hbd": 9.423,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hive",
+      "value": 35.471,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.861Z"
+      },
+      "in_limits": false
+    },
+    "credit_conv": {
+      "hive": 35.471,
+      "hbd": 9.423,
+      "usd": 0,
+      "sats": 0,
+      "msats": 0,
+      "msats_fee": 0,
+      "btc": 0,
+      "sats_hive": 0,
+      "sats_hbd": 0,
+      "conv_from": "hbd",
+      "value": 9.423,
+      "source": "Hive Internal Trade",
+      "fetch_date": {
+        "$date": "2025-05-15T10:03:21.861Z"
+      },
+      "in_limits": false
+    },
+    "completed_order": true,
+    "link": "https://hivehub.dev/tx/95908095/c988d660f0c1e1fe95b6ba64532a3be3c2a7ed4c/1"
+  }
+},
+{
+  "_id": {
+    "$oid": "6825e01cb42e9f195db36673"
+  },
+  "group_id": "95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real",
+  "timestamp": {
+    "$date": "2025-05-15T12:37:39.000Z"
+  },
+  "description": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
+  "debit_amount": 10,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 10,
+    "hbd": 2.667,
+    "usd": 2.667,
+    "sats": 2597,
+    "msats": 2597254,
+    "msats_fee": 94153,
+    "btc": 0.00002597254,
+    "sats_hive": 259.7254,
+    "sats_hbd": 973.8484,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T12:37:46.015Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 10,
+    "hbd": 2.667,
+    "usd": 2.667,
+    "sats": 2597,
+    "msats": 2597254,
+    "msats_fee": 94153,
+    "btc": 0.00002597254,
+    "sats_hive": 259.7254,
+    "sats_hbd": 973.8484,
+    "conv_from": "hive",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-15T12:37:46.015Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "op": {
+    "locked": false,
+    "conv": {
+      "hive": 10,
+      "hbd": 2.662,
+      "usd": 2.662,
+      "sats": 2593,
+      "msats": 2592519,
+      "msats_fee": 94072,
+      "btc": 0.00002592519,
+      "sats_hive": 259.2519,
+      "sats_hbd": 973.8991,
+      "conv_from": "hive",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-15T12:32:43.912Z"
+      },
+      "in_limits": true
+    },
+    "realm": "real",
+    "trx_id": "a5f153f96ab572a8260703773d6c530d0dd86e41",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 95911346,
+    "trx_num": 3,
+    "timestamp": {
+      "$date": "2025-05-15T12:37:39.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp-test",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
+    "d_memo": "lnbc23430n1p5zth7rpp5405cclr553qslfjt0lm0ghzfjeutpcqq8tg3wrteaygj5fu340fqdzzwc68vctswqhxgetkyp7zq4mfw35zqcfqd4jhxumpvajjqgmkx3mxzursyq3hxct5wvcqzzsxqyjw5qsp50weger2gasz24x8tlx8kjsygkcqj0dzqssvqakynpkp7gmw7m0cq9qxpqysgqz8rdnhm7vsz4gd6zlvljmrnkw0m2y6hwfw24gzhc6nracwpp2ukqza8x4t809sy7gk2vr6r9nexqajwrhu64d34spf8a5y360j6vl0qp6g844d",
+    "group_id": "95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real",
+    "link": "https://hivehub.dev/tx/a5f153f96ab572a8260703773d6c530d0dd86e41"
+  }
+},
+{
+  "_id": {
+    "$oid": "683442b3449e5dba6ee3d619"
+  },
+  "group_id": "96224874_4fb71999f130fc6ead36171d938f64fa3fd00b8e_1_real",
+  "timestamp": {
+    "$date": "2025-05-26T10:09:30.000Z"
+  },
+  "description": "",
+  "debit_amount": 16.213,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 16.213,
+    "hbd": 4.176468,
+    "usd": 4.176468,
+    "sats": 3803,
+    "msats": 3803292,
+    "msats_fee": 114655,
+    "btc": 0.00003803292,
+    "sats_hive": 234.5829,
+    "sats_hbd": 910.648,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-26T10:29:41.914Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 16.213,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 16.213,
+    "hbd": 4.176468,
+    "usd": 4.176468,
+    "sats": 3803,
+    "msats": 3803292,
+    "msats_fee": 114655,
+    "btc": 0.00003803292,
+    "sats_hive": 234.5829,
+    "sats_hbd": 910.648,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-26T10:29:41.914Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Hive",
+    "account_type": "Asset",
+    "sub": "devtre.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "conv": {
+      "hive": 16.213,
+      "hbd": 4.176468,
+      "usd": 4.176468,
+      "sats": 3803,
+      "msats": 3803292,
+      "msats_fee": 114655,
+      "btc": 0.00003803292,
+      "sats_hive": 234.5829,
+      "sats_hbd": 910.648,
+      "conv_from": "hive",
+      "value": 0,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-26T10:29:41.914Z"
+      },
+      "in_limits": true
+    },
+    "realm": "real",
+    "trx_id": "4fb71999f130fc6ead36171d938f64fa3fd00b8e",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 96224874,
+    "trx_num": 2,
+    "timestamp": {
+      "$date": "2025-05-26T10:09:30.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "devtre.v4vapp",
+    "amount": {
+      "amount": "16213",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "",
+    "d_memo": "",
+    "link": "https://hivehub.dev/tx/4fb71999f130fc6ead36171d938f64fa3fd00b8e"
+  }
+},
+{
+  "_id": {
+    "$oid": "6835eeaa759aed8e70489cfd"
+  },
+  "group_id": "96255782_222616bceed2f9abbc36ff990cca3cf2eeb80768_1_real",
+  "timestamp": {
+    "$date": "2025-05-27T11:56:45.000Z"
+  },
+  "description": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
+  "debit_amount": 10,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 10,
+    "hbd": 2.598999,
+    "usd": 2.598999,
+    "sats": 2365,
+    "msats": 2365038,
+    "msats_fee": 90205,
+    "btc": 0.00002365038,
+    "sats_hive": 236.5039,
+    "sats_hbd": 909.9803,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-27T13:57:50.593Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 10,
+    "hbd": 2.598999,
+    "usd": 2.598999,
+    "sats": 2365,
+    "msats": 2365038,
+    "msats_fee": 90205,
+    "btc": 0.00002365038,
+    "sats_hive": 236.5039,
+    "sats_hbd": 909.9803,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-27T13:57:50.593Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "locked": true,
+    "reply_id": "",
+    "reply_error": null,
+    "conv": {
+      "hive": 10,
+      "hbd": 2.598999,
+      "usd": 2.598999,
+      "sats": 2365,
+      "msats": 2365038,
+      "msats_fee": 90205,
+      "btc": 0.00002365038,
+      "sats_hive": 236.5039,
+      "sats_hbd": 909.9803,
+      "conv_from": "hive",
+      "value": 0,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-05-27T13:57:50.593Z"
+      },
+      "in_limits": true
+    },
+    "realm": "real",
+    "trx_id": "222616bceed2f9abbc36ff990cca3cf2eeb80768",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 96255782,
+    "trx_num": 25,
+    "timestamp": {
+      "$date": "2025-05-27T11:56:45.000Z"
+    },
+    "extensions": [],
+    "from": "devser.v4vapp",
+    "to": "v4vapp-test",
+    "amount": {
+      "amount": "10000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
+    "d_memo": "Lightning invoice expired - 95911346_a5f153f96ab572a8260703773d6c530d0dd86e41_1_real - Thank you for using v4v.app",
+    "link": "https://hivehub.dev/tx/222616bceed2f9abbc36ff990cca3cf2eeb80768"
+  }
+},
+{
+  "_id": {
+    "$oid": "68413ca95a8f4d1662b6c236"
+  },
+  "group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:12.000Z"
+  },
+  "description": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+  "debit_amount": 14,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 14,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "credit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "op": {
+    "conv": {
+      "hive": 14,
+      "hbd": 3.613399,
+      "usd": 3.613399,
+      "sats": 3327,
+      "msats": 3326751,
+      "msats_fee": 106554,
+      "btc": 0.00003326751,
+      "sats_hive": 237.6251,
+      "sats_hbd": 920.6709,
+      "conv_from": "hive",
+      "value": 14,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-28T10:30:16.199Z"
+      },
+      "in_limits": true
+    },
+    "fee_conv": {
+      "hive": 0.44841,
+      "hbd": 0.115735,
+      "usd": 0.115735,
+      "sats": 107,
+      "msats": 106554,
+      "msats_fee": 0,
+      "btc": 0.00000106554,
+      "sats_hive": 237.6251,
+      "sats_hbd": 920.6709,
+      "conv_from": "msats",
+      "value": 106554,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-28T10:30:16.199Z"
+      },
+      "in_limits": false
+    },
+    "change_amount": {
+      "amount": "4154",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "change_conv": {
+      "hive": 4.154,
+      "hbd": 1.072146,
+      "usd": 1.072146,
+      "sats": 987,
+      "msats": 987094,
+      "msats_fee": 66780,
+      "btc": 0.00000987094,
+      "sats_hive": 237.6251,
+      "sats_hbd": 920.6709,
+      "conv_from": "hive",
+      "value": 4.154,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-28T10:30:16.199Z"
+      },
+      "in_limits": true
+    },
+    "realm": "real",
+    "trx_id": "05ed707763de2738e09d259de2e566f7fd3fcc0f",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 96282823,
+    "trx_num": 12,
+    "timestamp": {
+      "$date": "2025-05-28T10:30:12.000Z"
+    },
+    "extensions": [],
+    "from": "v4vapp-test",
+    "to": "devser.v4vapp",
+    "amount": {
+      "amount": "14000",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+    "d_memo": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+    "group_id": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+    "link": "https://hivehub.dev/tx/05ed707763de2738e09d259de2e566f7fd3fcc0f"
+  },
+  "op_type": "transfer"
+},
+{
+  "_id": {
+    "$oid": "68415095ccac0ad7bf3a3602"
+  },
+  "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d_conversion",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:58.724Z"
+  },
+  "description": "Conversion of 9.846 HIVE to Lightning 2,340 sats",
+  "debit_amount": 2339554,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": 9.39716,
+    "hbd": 2.425405,
+    "usd": 2.425405,
+    "sats": 2233,
+    "msats": 2233000,
+    "msats_fee": 87961,
+    "btc": 0.00002233,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "msats",
+    "value": 2233000,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 9.846,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Lightning",
+    "account_type": "Asset",
+    "sub": "umbrel"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "conv": {
+      "hive": 9.39716,
+      "hbd": 2.425405,
+      "usd": 2.425405,
+      "sats": 2233,
+      "msats": 2233000,
+      "msats_fee": 87961,
+      "btc": 0.00002233,
+      "sats_hive": 237.6251,
+      "sats_hbd": 920.6709,
+      "conv_from": "msats",
+      "value": 2233000,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-28T10:30:16.199Z"
+      },
+      "in_limits": true
+    },
+    "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "value": {
+      "$numberLong": "2233"
+    },
+    "creation_date": {
+      "$date": "2025-05-28T10:30:58.000Z"
+    },
+    "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+    "value_sat": {
+      "$numberLong": "2233"
+    },
+    "value_msat": {
+      "$numberLong": "2233000"
+    },
+    "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+    "status": "SUCCEEDED",
+    "creation_time_ns": {
+      "$date": "2025-05-28T10:30:58.724Z"
+    },
+    "payment_index": {
+      "$numberLong": "74474"
+    },
+    "htlcs": [
+      {
+        "attempt_id": {
+          "$numberLong": "90085"
+        },
+        "status": "SUCCEEDED",
+        "attempt_time_ns": {
+          "$date": "2025-05-28T10:30:58.786Z"
+        },
+        "resolve_time_ns": {
+          "$date": "2025-05-28T10:31:02.997Z"
+        },
+        "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+        "route": {
+          "total_time_lock": 898808,
+          "total_amt": {
+            "$numberLong": "2233"
+          },
+          "hops": [
+            {
+              "chan_id": "800082725764071425",
+              "chan_capacity": {
+                "$numberLong": "2333033"
+              },
+              "amt_to_forward": {
+                "$numberLong": "2233"
+              },
+              "expiry": 898808,
+              "amt_to_forward_msat": {
+                "$numberLong": "2233000"
+              },
+              "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+              "tlv_payload": true,
+              "custom_records": {
+                "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+                "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+              }
+            }
+          ],
+          "total_amt_msat": {
+            "$numberLong": "2233000"
+          }
+        }
+      }
+    ],
+    "custom_records": {
+      "34349334": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+      "1818181818": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real"
+    },
+    "destination": "Unknown",
+    "route_str": "Unknown",
+    "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "fee_ppm": 0
+  },
+  "op_type": "payment"
+},
+{
+  "_id": {
+    "$oid": "684150a1ccac0ad7bf3a3603"
+  },
+  "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d_outgoing",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:58.724Z"
+  },
+  "description": "Outgoing Lightning Payment 9.397 HIVE 2,233 sats to Unknown",
+  "debit_amount": 9.39759,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 14,
+    "hbd": 3.613399,
+    "usd": 3.613399,
+    "sats": 3327,
+    "msats": 3326751,
+    "msats_fee": 106554,
+    "btc": 0.00003326751,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "hive",
+    "value": 14,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 2233000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": 9.39716,
+    "hbd": 2.425405,
+    "usd": 2.425405,
+    "sats": 2233,
+    "msats": 2233000,
+    "msats_fee": 87961,
+    "btc": 0.00002233,
+    "sats_hive": 237.6251,
+    "sats_hbd": 920.6709,
+    "conv_from": "msats",
+    "value": 2233000,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-28T10:30:16.199Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Treasury Lightning",
+    "account_type": "Asset",
+    "sub": "umbrel"
+  },
+  "op": {
+    "conv": {
+      "hive": 9.39716,
+      "hbd": 2.425405,
+      "usd": 2.425405,
+      "sats": 2233,
+      "msats": 2233000,
+      "msats_fee": 87961,
+      "btc": 0.00002233,
+      "sats_hive": 237.6251,
+      "sats_hbd": 920.6709,
+      "conv_from": "msats",
+      "value": 2233000,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-28T10:30:16.199Z"
+      },
+      "in_limits": true
+    },
+    "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "value": {
+      "$numberLong": "2233"
+    },
+    "creation_date": {
+      "$date": "2025-05-28T10:30:58.000Z"
+    },
+    "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+    "value_sat": {
+      "$numberLong": "2233"
+    },
+    "value_msat": {
+      "$numberLong": "2233000"
+    },
+    "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+    "status": "SUCCEEDED",
+    "creation_time_ns": {
+      "$date": "2025-05-28T10:30:58.724Z"
+    },
+    "payment_index": {
+      "$numberLong": "74474"
+    },
+    "htlcs": [
+      {
+        "attempt_id": {
+          "$numberLong": "90085"
+        },
+        "status": "SUCCEEDED",
+        "attempt_time_ns": {
+          "$date": "2025-05-28T10:30:58.786Z"
+        },
+        "resolve_time_ns": {
+          "$date": "2025-05-28T10:31:02.997Z"
+        },
+        "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+        "route": {
+          "total_time_lock": 898808,
+          "total_amt": {
+            "$numberLong": "2233"
+          },
+          "hops": [
+            {
+              "chan_id": "800082725764071425",
+              "chan_capacity": {
+                "$numberLong": "2333033"
+              },
+              "amt_to_forward": {
+                "$numberLong": "2233"
+              },
+              "expiry": 898808,
+              "amt_to_forward_msat": {
+                "$numberLong": "2233000"
+              },
+              "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+              "tlv_payload": true,
+              "custom_records": {
+                "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+                "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+              }
+            }
+          ],
+          "total_amt_msat": {
+            "$numberLong": "2233000"
+          }
+        }
+      }
+    ],
+    "custom_records": {
+      "34349334": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+      "1818181818": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real"
+    },
+    "destination": "Unknown",
+    "route_str": "Unknown",
+    "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "fee_ppm": 0
+  },
+  "op_type": "payment"
+},
+{
+  "_id": {
+    "$oid": "6841814fb995e68f4723ada7"
+  },
+  "group_id": "96512348_ffb2d99c698b0b12714fd8c878dbbf78054f7c48_1_real",
+  "timestamp": {
+    "$date": "2025-06-05T09:59:15.000Z"
+  },
+  "description": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+  "debit_amount": 4.154,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 4.154,
+    "hbd": 0.984082,
+    "usd": 0.984082,
+    "sats": 939,
+    "msats": 938547,
+    "msats_fee": 65955,
+    "btc": 0.00000938547,
+    "sats_hive": 225.9382,
+    "sats_hbd": 953.728,
+    "conv_from": "hive",
+    "value": 4.154,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-06-05T10:05:14.478Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 4.154,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 4.154,
+    "hbd": 0.984082,
+    "usd": 0.984082,
+    "sats": 939,
+    "msats": 938547,
+    "msats_fee": 65955,
+    "btc": 0.00000938547,
+    "sats_hive": 225.9382,
+    "sats_hbd": 953.728,
+    "conv_from": "hive",
+    "value": 4.154,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-06-05T10:05:14.478Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp"
+  },
+  "op": {
+    "conv": {
+      "hive": 4.154,
+      "hbd": 0.984082,
+      "usd": 0.984082,
+      "sats": 939,
+      "msats": 938547,
+      "msats_fee": 65955,
+      "btc": 0.00000938547,
+      "sats_hive": 225.9382,
+      "sats_hbd": 953.728,
+      "conv_from": "hive",
+      "value": 4.154,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-06-05T10:05:14.478Z"
+      },
+      "in_limits": true
+    },
+    "realm": "real",
+    "trx_id": "ffb2d99c698b0b12714fd8c878dbbf78054f7c48",
+    "op_in_trx": 1,
+    "type": "transfer",
+    "block_num": 96512348,
+    "trx_num": 3,
+    "timestamp": {
+      "$date": "2025-06-05T09:59:15.000Z"
+    },
+    "from": "devser.v4vapp",
+    "to": "v4vapp-test",
+    "amount": {
+      "amount": "4154",
+      "nai": "@@000000021",
+      "precision": 3
+    },
+    "memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+    "d_memo": "Lightning 2,233 sats has been paid, returning change (hash: 3e5e24bb3c ) | § 96282823_05ed7 | Thank you for using v4v.app",
+    "group_id": "96512348_ffb2d99c698b0b12714fd8c878dbbf78054f7c48_1_real",
+    "link": "https://hivehub.dev/tx/ffb2d99c698b0b12714fd8c878dbbf78054f7c48"
+  },
+  "op_type": "transfer"
+},
+{
+  "_id": {
+    "$oid": "6841814eb995e68f4723ad92"
+  },
+  "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d_fee",
+  "timestamp": {
+    "$date": "2025-05-28T10:30:58.724Z"
+  },
+  "description": "Fee for Lightning Payment 2,233 sats",
+  "debit_amount": 0.45162,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 0.45162,
+    "hbd": 0.113356,
+    "usd": 0.113356,
+    "sats": 106,
+    "msats": 105705,
+    "msats_fee": 0,
+    "btc": 0.00000105705,
+    "sats_hive": 234.0576,
+    "sats_hbd": 932.5006,
+    "conv_from": "msats",
+    "value": 105705,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-25T09:13:36.655Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": 105705,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": 0.45162,
+    "hbd": 0.113356,
+    "usd": 0.113356,
+    "sats": 106,
+    "msats": 105705,
+    "msats_fee": 0,
+    "btc": 0.00000105705,
+    "sats_hive": 234.0576,
+    "sats_hbd": 932.5006,
+    "conv_from": "msats",
+    "value": 105705,
+    "source": "HiveRatesDB",
+    "fetch_date": {
+      "$date": "2025-05-25T09:13:36.655Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Customer Liability Hive",
+    "account_type": "Liability",
+    "sub": "v4vapp-test"
+  },
+  "credit": {
+    "name": "Fee Income Lightning",
+    "account_type": "Revenue",
+    "sub": "example"
+  },
+  "op": {
+    "conv": {
+      "hive": 9.54039,
+      "hbd": 2.394637,
+      "usd": 2.394637,
+      "sats": 2233,
+      "msats": 2233000,
+      "msats_fee": 87961,
+      "btc": 0.00002233,
+      "sats_hive": 234.0576,
+      "sats_hbd": 932.5006,
+      "conv_from": "msats",
+      "value": 2233000,
+      "source": "HiveRatesDB",
+      "fetch_date": {
+        "$date": "2025-05-25T09:13:36.655Z"
+      },
+      "in_limits": true
+    },
+    "payment_hash": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "value": {
+      "$numberLong": "2233"
+    },
+    "creation_date": {
+      "$date": "2025-05-28T10:30:58.000Z"
+    },
+    "payment_preimage": "6790e8630805b8726ba4c108b3bbbb32113606ace87ada7c558d07d9cb781ff8",
+    "value_sat": {
+      "$numberLong": "2233"
+    },
+    "value_msat": {
+      "$numberLong": "2233000"
+    },
+    "payment_request": "lnbc22330n1p5rdetwpp58e0zfweu6hrh56hl8xgu2lkugul3csuplcxpgglpdtpqp2xlmywsdy5wc68vctswqhxgetkyp7zq5rp095kueeqv9hzq6twwehkjcm9ypn8ymmdyp3xzcmtv4hxggrkxgs8vdrk946ngcfexys8cgpr2dq4g5eqxgerxveq0sszx56p23fjqg6rf3z5zn3qydmrganpwpcqcqzzsxqzxgsp58ltnle0weukjkl4p2nzfgwwtf9kqgym866zh4g8390vce2fkxkks9qxpqysgqu465ve6q354rl5ngqtfv9jy8glkudwzrt58e4572ad39w5u8gnjkc52zr63n4vq8t23z3g3yyrfjl9s4er9zmq0evuaqnlwtvrttencpg8v6xy",
+    "status": "SUCCEEDED",
+    "creation_time_ns": {
+      "$date": "2025-05-28T10:30:58.724Z"
+    },
+    "payment_index": {
+      "$numberLong": "74474"
+    },
+    "htlcs": [
+      {
+        "attempt_id": {
+          "$numberLong": "90085"
+        },
+        "status": "SUCCEEDED",
+        "attempt_time_ns": {
+          "$date": "2025-05-28T10:30:58.786Z"
+        },
+        "resolve_time_ns": {
+          "$date": "2025-05-28T10:31:02.997Z"
+        },
+        "preimage": "Z5DoYwgFuHJrpMEIs7u7MhE2Bqzoetp8VY0H2ct4H/g=",
+        "route": {
+          "total_time_lock": 898808,
+          "total_amt": {
+            "$numberLong": "2233"
+          },
+          "hops": [
+            {
+              "chan_id": "800082725764071425",
+              "chan_capacity": {
+                "$numberLong": "2333033"
+              },
+              "amt_to_forward": {
+                "$numberLong": "2233"
+              },
+              "expiry": 898808,
+              "amt_to_forward_msat": {
+                "$numberLong": "2233000"
+              },
+              "pub_key": "0266ad2656c7a19a219d37e82b280046660f4d7f3ae0c00b64a1629de4ea567668",
+              "tlv_payload": true,
+              "custom_records": {
+                "34349334": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw=",
+                "1818181818": "OTYyODI4MjNfMDVlZDcwNzc2M2RlMjczOGUwOWQyNTlkZTJlNTY2ZjdmZDNmY2MwZl8xX3JlYWw="
+              }
+            }
+          ],
+          "total_amt_msat": {
+            "$numberLong": "2233000"
+          }
+        }
+      }
+    ],
+    "custom_records": {
+      "34349334": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real",
+      "1818181818": "96282823_05ed707763de2738e09d259de2e566f7fd3fcc0f_1_real"
+    },
+    "destination": "Unknown",
+    "route_str": "Unknown",
+    "group_id": "3e5e24bb3cd5c77a6aff3991c57edc473f1c4381fe0c1423e16ac200a8dfd91d",
+    "fee_ppm": 0
+  },
+  "op_type": "payment"
+}]

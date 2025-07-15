@@ -2,7 +2,7 @@ import asyncio
 import json
 import random
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -121,7 +121,7 @@ class NotificationBot:
 
     def _clean_message_history(self):
         """Remove messages older than 60 seconds from the history and update logged patterns."""
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         sixty_seconds_ago = now - timedelta(seconds=60)
         # Collect patterns of messages that will remain
         remaining_patterns = set()
@@ -158,7 +158,7 @@ class NotificationBot:
             return False
         return True
 
-    async def send_message(self, text: str, retries: int = 3, **kwargs: Any):
+    async def send_message(self, text: str, retries: int = 3, **kwargs: Any) -> None:
         """Send text messages, with pattern-based filtering and rate limiting."""
         if not self.bot or not self.config.chat_id:
             raise NotificationNotSetupError(
@@ -175,7 +175,7 @@ class NotificationBot:
         # Add the message to history before attempting to send
         self._message_history.append(
             {
-                "timestamp": datetime.now(),
+                "timestamp": datetime.now(tz=timezone.utc),
                 "pattern": text[-20:] if len(text) >= 20 else text,
             }
         )
@@ -251,14 +251,14 @@ class NotificationBot:
                 logger.exception(
                     f"Error sending [ {text} ]: {e}",
                     extra={
+                        "notification": False,
                         "error": e,
                         "notification_text": text,
-                        "notification": False,
                         "text_original": text_original,
                         "sanitized_v2": text_v2,
                     },
                 )
-                logger.info("Problem in Notification bot")
+                logger.info(f"Problem in Notification bot {e}")
                 return
         return
 

@@ -1,0 +1,434 @@
+"""
+These tests test the filtering of tracked operations and the ledger population
+and the generation of balance sheets.
+
+The test data comes from a MongoDB dump of the v4vapp-dev.hive_ops collection.
+
+"""
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Generator
+from unittest.mock import patch
+
+import pandas as pd
+import pytest
+from bson import json_util
+
+from tests.get_last_quote import last_quote
+from v4vapp_backend_v2.accounting.account_balances import (
+    get_account_balance_printout,
+    get_ledger_dataframe,
+    list_all_accounts,
+)
+from v4vapp_backend_v2.accounting.balance_sheet import (
+    balance_sheet_all_currencies_printout,
+    balance_sheet_printout,
+    generate_balance_sheet_pandas_from_accounts,
+)
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
+from v4vapp_backend_v2.actions.process_tracked_events import (
+    TrackedAny,
+    process_tracked_event,
+)
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
+from v4vapp_backend_v2.hive_models.op_base import OpBase
+
+mongodb_export_path_hive_ops = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
+mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
+
+
+async def drop_collection_and_user(conn_name: str, db_name: str, db_user: str) -> None:
+    # Drop the collection and user
+    async with MongoDBClient(conn_name, db_name, db_user) as test_client:
+        if test_client.db is None:
+            raise ValueError(f"Database {db_name} does not exist.")
+        # Check if the collection exists by listing collection names
+        collection_names = await test_client.db.list_collection_names()
+        assert isinstance(collection_names, list)
+        ans = await test_client.drop_user()
+        assert ans.get("ok") == 1
+    await drop_database(conn_name=conn_name, db_name=db_name)
+
+
+async def drop_database(conn_name: str, db_name: str) -> None:
+    async with MongoDBClient(conn_name) as admin_client:
+        await admin_client.drop_database(db_name)
+
+
+@pytest.fixture(autouse=True)
+def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    # Mock asyncio.create_task
+    yield
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
+
+
+@pytest.fixture(autouse=True)
+def do_not_run_extra_processing(request):
+    """
+    A pytest fixture that conditionally disables extra processing during tests.
+
+    If the test is marked with 'run_extra_processing', this fixture yields immediately and does not apply any mocking.
+    Otherwise, it patches 'asyncio.create_task' to prevent background tasks from being scheduled during the test.
+
+    Args:
+        request: The pytest request object, used to inspect test markers.
+
+    Yields:
+        None. The fixture is used for its side effects (patching or not patching 'asyncio.create_task').
+    """
+    if request.node.get_closest_marker("run_extra_processing"):
+        yield  # Do nothing, skip the fixture
+        return
+    # ...original fixture code...
+    with patch("asyncio.create_task") as mock_create_task:
+        mock_create_task.return_value = None
+        yield
+
+
+def load_tracked_ops_from_mongodb_dump(file_path: str) -> Generator[TrackedAny, None, None]:
+    """
+    Load tracked operations from a MongoDB collection.
+
+    :param file_path: Path to the JSONL file.
+    :return: List of tracked operations.
+    """
+
+    with open(file_path, "r") as f:
+        raw_data = f.read()
+        json_data = json_util.loads(raw_data)
+    for tracked_op in json_data:
+        try:
+            op = tracked_any_filter(tracked_op)
+            yield op
+        except ValueError as e:
+            print(f"Ignoring operation: {e}")
+            continue
+
+
+def load_invoices_from_mongodb_dump(file_path: str) -> Generator[OpAny, None, None]:
+    """
+    Load invoices from a MongoDB collection.
+
+    :param file_path: Path to the JSONL file.
+    :return: List of invoices.
+    """
+
+    with open(file_path, "r") as f:
+        raw_data = f.read()
+        json_data = json_util.loads(raw_data)
+    for invoice in json_data:
+        op = op_any_or_base(invoice)
+        yield op
+
+
+"""
+In order to prevent further processing of the tracked operations,
+we mock the asyncio.create_task function.
+
+This allows us to test the processing of tracked operations without
+actually running the asynchronous tasks that would normally be created.
+
+"""
+
+
+@pytest.mark.asyncio
+async def test_fill_ledger_database_from_mongodb_dump() -> pd.DataFrame:
+    """
+    Test loading hive events from a MongoDB dump file.
+    """
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    TrackedBaseModel.last_quote = last_quote()
+    AllQuotes.db_client = TrackedBaseModel.db_client
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+    await fill_rates_db()
+    count = 0
+    processed_count = 0
+    # with patch("asyncio.create_task") as mock_create_task:
+    #     # Mock the behavior of create_task
+    #     mock_create_task.return_value = None
+    for op in load_tracked_ops_from_mongodb_dump(file_path):
+        count += 1
+        try:
+            quote = await TrackedBaseModel.nearest_quote(op.timestamp)
+            TrackedBaseModel.last_quote = quote or last_quote()
+            ledger_entries = await process_tracked_event(op)
+            if ledger_entries is not None:
+                processed_count += len(ledger_entries)
+                # print(f"Inserted ledger entry {count}: {ledger_entry.group_id}")
+        except LedgerEntryException as e:
+            print(f"Error processing tracked operation: {e}")
+            continue
+
+    df = await get_ledger_dataframe()
+    assert len(df) == processed_count
+    print(f"Total events processed: {count}")
+    print(f"Total ledger entries created: {processed_count}")
+    print(f"Total ledger entries in database: {len(df)}")
+    return df
+
+
+def test_print_block_numbers_of_events() -> None:
+    """
+    Print block numbers of events from a JSONL file.
+
+    :param file_path: Path to the JSONL file.
+    """
+    file_path = "tests/data/hive_models/mongodb/v4vapp-dev.hive_ops.json"
+    block_numbers = []
+    for op in load_tracked_ops_from_mongodb_dump(file_path):
+        if not isinstance(op, OpBase):
+            continue
+        block_numbers.append(op.block_num)
+    print("[")
+    for block_number in block_numbers:
+        print(f"'{block_number}',")
+    print("]")
+
+
+@pytest.mark.asyncio
+async def test_balance_sheet_steps_hive_ops():
+    """
+    Test balance sheet in steps one by one
+    This also steps through the process of fetching each Hive Event and processing it.
+    It generates a balance sheet in pandas DataFrame format and prints it.
+    It also prints the formatted balance sheet as of the current date.
+    """
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+    AllQuotes.db_client = TrackedBaseModel.db_client
+    await fill_rates_db()
+    count = 0
+    balance_sheet_print = ""
+    all_currencies = ""
+    with patch("asyncio.create_task") as mock_create_task:
+        # Mock the behavior of create_task
+        mock_create_task.return_value = None
+        for op in load_tracked_ops_from_mongodb_dump(mongodb_export_path_hive_ops):
+            hive_event = op.model_dump()
+            count += 1
+            try:
+                op_tracked = tracked_any_filter(hive_event)
+            except ValueError as e:
+                print(f"Ignoring operation: {e}")
+                continue
+            print(f"\n\n\nEvent {count=} {op_tracked.log_str}")
+            try:
+                ledger_entries = await process_tracked_event(op_tracked)
+            except LedgerEntryException as e:
+                print(f"Expected error processing tracked operation: {e}")
+                continue
+            for ledger_entry in ledger_entries:
+                print(ledger_entry.print_journal_entry())
+            df = await get_ledger_dataframe()
+            balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+                df, as_of_date=datetime.now(tz=timezone.utc)
+            )
+            all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+            balance_sheet_print = balance_sheet_printout(
+                balance_sheet_pandas, as_of_date=datetime.now(tz=timezone.utc)
+            )
+            print(balance_sheet_print)
+            print(all_currencies)
+            if not balance_sheet_pandas["is_balanced"]:
+                print(f"***********The balance sheet is not balanced. {count}************")
+                print(all_currencies)
+                print(balance_sheet_print)
+                assert False
+        print(balance_sheet_print)
+        print(all_currencies)
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_process_tracked_and_balance_sheet():
+    """
+    Test the process of generating a tracked balance sheet and its printouts.
+    This test performs the following steps:
+    1. Populates the ledger database with data from a MongoDB dump.
+    2. Generates a balance sheet in pandas DataFrame format.
+    3. Prints the formatted balance sheet as of the current date.
+    4. Prints the balance sheet for all currencies.
+    5. Cleans up by dropping the test database and user.
+    Steps:
+    - Calls `test_fill_ledger_database_from_mongodb_dump` to populate the database.
+    - Uses `generate_balance_sheet_pandas` to create the balance sheet.
+    - Formats the balance sheet using `balance_sheet_printout` and prints it.
+    - Prints all currencies using `balance_sheet_all_currencies_printout`.
+    - Cleans up resources using `drop_collection_and_user`.
+    Note:
+    Ensure that the necessary test database and user are set up before running this test.
+    """
+    # Must update quotes before running this test
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    as_of_date = datetime.now(tz=timezone.utc)
+    df = await test_fill_ledger_database_from_mongodb_dump()
+    balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+        df=df, as_of_date=as_of_date
+    )
+
+    all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+    print(all_currencies)
+    fbs = balance_sheet_printout(balance_sheet=balance_sheet_pandas, as_of_date=as_of_date)
+    print(fbs)
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.mark.asyncio
+async def test_account_balances():
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+    TrackedBaseModel.last_quote = last_quote()
+    await test_fill_ledger_database_from_mongodb_dump()
+    all_accounts = await list_all_accounts()
+    for account in all_accounts:
+        account_balances = await get_account_balance_printout(
+            account=account, line_items=True, as_of_date=datetime.now(tz=timezone.utc)
+        )
+        print(account_balances)
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+# MARK: Lightning
+
+test_lightning_invoices_r_hash = ["uIst3MZFrpJ3CYH3jwXFrQpyBFyjDrJUyLSmUEusSjU="]
+
+mongodb_export_path_invoices = "tests/data/hive_models/mongodb/v4vapp-dev.invoices.json"
+mongodb_export_path_rates = "tests/data/hive_models/mongodb/v4vapp-dev.rates.json"
+
+
+async def fill_rates_db():
+    """
+    Fill the rates database with quotes.
+    This function is a placeholder for filling the rates database.
+    It should be implemented to fetch and store quotes in the database.
+    """
+    # Placeholder for filling the rates database
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    with open(mongodb_export_path_rates, "r") as f:
+        raw_data = f.read()
+        json_data = json_util.loads(raw_data)
+    async with TrackedBaseModel.db_client as db_client:
+        await db_client.insert_many("rates", json_data)
+
+
+# @pytest.mark.skip("Work in progress")
+@pytest.mark.asyncio
+async def test_process_hive_ops_invoices():
+    """
+    Test the process of generating a tracked balance sheet and its printouts.
+    This test performs the following steps:
+    1. Populates the ledger database with data from a MongoDB dump.
+    2. Generates a balance sheet in pandas DataFrame format.
+    3. Prints the formatted balance sheet as of the current date.
+    4. Prints the balance sheet for all currencies.
+    5. Cleans up by dropping the test database and user.
+    Steps:
+    - Calls `test_fill_ledger_database_from_mongodb_dump` to populate the database.
+    - Uses `generate_balance_sheet_pandas` to create the balance sheet.
+    - Formats the balance sheet using `balance_sheet_printout` and prints it.
+    - Prints all currencies using `balance_sheet_all_currencies_printout`.
+    - Cleans up resources using `drop_collection_and_user`.
+    Note:
+    Ensure that the necessary test database and user are set up before running this test.
+    """
+    # Must update quotes before running this test
+    hive = get_hive_client()
+    _ = V4VConfig(server_accname="v4vapp", hive=hive)
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    AllQuotes.db_client = TrackedBaseModel.db_client
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+    await fill_rates_db()
+    as_of_date = datetime.now(tz=timezone.utc)
+    df = await test_fill_ledger_database_from_mongodb_dump()
+    balance_sheet_pandas = await generate_balance_sheet_pandas_from_accounts(
+        df=df, as_of_date=as_of_date
+    )
+
+    for op_tracked in load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices):
+        print(op_tracked.log_str)
+        try:
+            ledger_entries = await process_tracked_event(op_tracked)
+            for ledger_entry in ledger_entries:
+                print(ledger_entry)
+                print(ledger_entry.draw_t_diagram())
+        except LedgerEntryException as e:
+            print(f"Expected error processing tracked operation: {e}")
+            continue
+
+    all_currencies = balance_sheet_all_currencies_printout(balance_sheet_pandas)
+    print(all_currencies)
+    fbs = balance_sheet_printout(balance_sheet=balance_sheet_pandas, as_of_date=as_of_date)
+    print(fbs)
+
+    all_accounts = await list_all_accounts()
+    for account in all_accounts:
+        account_balances = await get_account_balance_printout(
+            account=account, line_items=True, as_of_date=datetime.now(tz=timezone.utc)
+        )
+        print(account_balances)
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+
+@pytest.fixture
+def no_extra_processing(monkeypatch):
+    # This fixture does nothing, effectively disables the autouse fixture for this test
+    pass
+
+
+@pytest.mark.run_extra_processing
+@pytest.mark.asyncio
+async def test_process_one_lightning_invoice_funding_umbrel():
+    """
+    Test processing a single Hive to Lightning operation.
+    This test processes a single Hive to Lightning operation and verifies the
+    resulting ledger entry.
+    """
+    hive = get_hive_client()
+    _ = V4VConfig(server_accname="v4vapp", hive=hive)
+    TrackedBaseModel.last_quote = last_quote()
+    TrackedBaseModel.db_client = MongoDBClient("conn_1", "test_db", "test_user")
+    AllQuotes.db_client = TrackedBaseModel.db_client
+    LedgerEntry.db_client = TrackedBaseModel.db_client
+    await fill_rates_db()
+    await drop_collection_and_user("conn_1", "test_db", "test_user")
+
+    # Load a single Hive to Lightning operation
+    op_tracked = next(load_tracked_ops_from_mongodb_dump(mongodb_export_path_invoices))
+    print(op_tracked.log_str)
+
+    try:
+        ledger_entries = await process_tracked_event(op_tracked)
+        for ledger_entry in ledger_entries:
+            print(ledger_entry)
+            print(ledger_entry.draw_t_diagram())
+    except LedgerEntryException as e:
+        print(f"Expected error processing tracked operation: {e}")
+        return
+
+    await drop_collection_and_user("conn_1", "test_db", "test_user")

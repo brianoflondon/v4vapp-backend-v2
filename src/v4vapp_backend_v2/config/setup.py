@@ -15,6 +15,9 @@ from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 import colorlog
 from packaging import version
 from pydantic import BaseModel, model_validator
+from pymongo import AsyncMongoClient, MongoClient
+from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.database import Database
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
 
@@ -26,6 +29,8 @@ BASE_LOGGING_CONFIG_PATH = Path(BASE_CONFIG_PATH, "logging/")
 DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
+
+DB_RATES_COLLECTION = "rates"
 
 """
 These classes need to match the structure of the config.yaml file
@@ -46,7 +51,6 @@ class LoggingConfig(BaseConfig):
     default_log_level: str = "DEBUG"
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
-    log_filename: Path = Path("v4vapp-backend-v2.log.jsonl")
     log_notification_silent: List[str] = []
     default_notification_bot_name: str = ""
 
@@ -64,6 +68,9 @@ class LndConnectionConfig(BaseConfig):
 class LndConfig(BaseConfig):
     default: str = ""
     connections: Dict[str, LndConnectionConfig] = {}
+    lightning_fee_limit_ppm: int = 5000
+    lightning_fee_estimate_ppm: int = 1000
+    lightning_fee_base_msats: int = 50000
 
 
 class TailscaleConfig(BaseConfig):
@@ -97,19 +104,18 @@ class TimeseriesConfig(BaseConfig):
 
 
 class IndexConfig(BaseConfig):
-    index_key: _IndexKeyHint | None = None
+    index_key: _IndexKeyHint
     unique: Optional[bool] = None
 
 
 class CollectionConfig(BaseConfig):
     indexes: Dict[str, IndexConfig] | None = None
-    timeseries: TimeseriesConfig | None = None
 
-    @model_validator(mode="after")
-    def validate_timeseries_and_indexes(self):
-        if self.timeseries and self.indexes:
-            raise ValueError("Indexes cannot be defined for a time-series collection.")
-        return self
+    # @model_validator(mode="after")
+    # def validate_timeseries_and_indexes(self):
+    #     if self.timeseries and self.indexes:
+    #         raise ValueError("Indexes cannot be defined for a time-series collection.")
+    #     return self
 
 
 class DatabaseUserConfig(BaseConfig):
@@ -119,7 +125,8 @@ class DatabaseUserConfig(BaseConfig):
 
 class DatabaseDetailsConfig(BaseConfig):
     db_users: Dict[str, DatabaseUserConfig]
-    collections: Optional[Dict[str, CollectionConfig | TimeseriesConfig | None]] = None
+    collections: Dict[str, CollectionConfig] = {}
+    timeseries: Dict[str, TimeseriesConfig] = {}
 
 
 class DatabaseConnectionConfig(BaseConfig):
@@ -159,6 +166,7 @@ class HiveRoles(StrEnum):
     treasury = "treasury"
     funding = "funding"
     exchange = "exchange"
+    customer = "customer"
 
 
 class HiveAccountConfig(BaseConfig):
@@ -173,7 +181,7 @@ class HiveAccountConfig(BaseConfig):
     """
 
     name: str = ""
-    role: HiveRoles = HiveRoles.server
+    role: HiveRoles = HiveRoles.customer
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
@@ -204,6 +212,24 @@ class HiveConfig(BaseConfig):
             acc.name = name
 
     @property
+    def valid_hive_config(self) -> bool:
+        """
+        Check if the Hive configuration is valid and complete.
+
+        Returns:
+            bool: True if the configuration is valid, False otherwise.
+        """
+        if not self.server_account or not self.server_account.name:
+            return False
+        if not self.treasury_account or not self.treasury_account.name:
+            return False
+        if not self.funding_account or not self.funding_account.name:
+            return False
+        if not self.exchange_account or not self.exchange_account.name:
+            return False
+        return True
+
+    @property
     def memo_keys(self) -> List[str]:
         """
         Retrieve the memo keys of all Hive accounts.
@@ -222,6 +248,21 @@ class HiveConfig(BaseConfig):
             List[str]: A list containing the names of all Hive accounts.
         """
         return list(self.hive_accs.keys())
+
+    def get_hive_role_account(self, hive_role: HiveRoles) -> HiveAccountConfig | None:
+        """
+        Retrieve the first Hive account with the specified role.
+
+        Args:
+            hive_role (HiveRoles): The role of the Hive account to retrieve.
+
+        Returns:
+            HiveAccountConfig: The first Hive account with the specified role, or None if not found.
+        """
+        for acc in self.hive_accs.values():
+            if acc.role == hive_role:
+                return acc
+        return None
 
     @property
     def server_accounts(self) -> List[HiveAccountConfig]:
@@ -323,6 +364,41 @@ class HiveConfig(BaseConfig):
         """
         return [acc.name for acc in self.treasury_accounts]
 
+    @property
+    def all_account_names(self) -> List[str]:
+        """
+        Retrieve the names of all accounts.
+
+        Returns:
+            List[str]: A list containing the names of all accounts.
+        """
+        if (
+            self.server_account
+            and self.treasury_account
+            and self.funding_account
+            and self.exchange_account
+        ):
+            return [
+                self.server_account.name,
+                self.treasury_account.name,
+                self.funding_account.name,
+                self.exchange_account.name,
+            ]
+        return []
+
+
+class DevelopmentConfig(BaseModel):
+    """
+    DevelopmentConfig is a configuration class for development mode settings.
+
+    Attributes:
+        enabled (bool): Indicates whether development mode is enabled. Default is False.
+        env_var (str): The name of the environment variable that will be set to True when running in development mode.
+    """
+
+    enabled: bool = False
+    env_var: str = "V4VAPP_DEV_MODE"
+
 
 class Config(BaseModel):
     """
@@ -355,6 +431,7 @@ class Config(BaseModel):
 
     version: str = ""
     logging: LoggingConfig
+    development: DevelopmentConfig = DevelopmentConfig()
 
     lnd_config: LndConfig = LndConfig()
     dbs_config: DbsConfig = DbsConfig()
@@ -371,40 +448,62 @@ class Config(BaseModel):
     min_config_version: ClassVar[str] = "0.2.0"
 
     @model_validator(mode="after")
-    def check_all_defaults(cls, v: "Config") -> "Config":
-        # Check that the default connection is in the list of connections
-        # if it is given.
+    def check_all_defaults(self) -> "Config":
+        """
+        Validates the configuration after the model is initialized.
+        """
         logger.info("Validating the Config file and defaults....")
-        config_version = version.parse(v.version)
-        min_version = version.parse(cls.min_config_version)
+
+        # Check config version
+        config_version = version.parse(self.version)
+        min_version = version.parse(self.min_config_version)
         if config_version < min_version:
             raise ValueError(
-                f"Config version {v.version} is less than the minimum required version {cls.min_config_version}"
+                f"Config version {self.version} is less than the minimum required version {self.min_config_version}"
             )
 
-        if v.lnd_config.default and v.lnd_config.default not in v.lnd_config.connections.keys():
+        # Check default LND connection
+        if self.lnd_config.default and self.lnd_config.default not in self.lnd_config.connections:
             raise ValueError(
-                f"Default lnd connection: {v.lnd_config.default} not found in lnd_connections"
+                f"Default lnd connection: {self.lnd_config.default} not found in lnd_connections"
             )
 
+        # Check default database connection
         if (
-            v.dbs_config.default_connection
-            and v.dbs_config.default_connection not in v.dbs_config.connections.keys()
+            self.dbs_config.default_connection
+            and self.dbs_config.default_connection not in self.dbs_config.connections
         ):
             raise ValueError(
-                f"Default database connection: {v.dbs_config.default_connection} not found in database"
-            )
-        if v.dbs_config.default_name and v.dbs_config.default_name not in v.dbs_config.dbs.keys():
-            raise ValueError(
-                f"Default database name: {v.dbs_config.default_name} not found in dbs"
+                f"Default database connection: {self.dbs_config.default_connection} not found in database"
             )
 
-        # check if two notification bots have the same token
-        tokens = [bot.token for bot in v.notification_bots.values()]
+        # Check default database name
+        if (
+            self.dbs_config.default_name
+            and self.dbs_config.default_name not in self.dbs_config.dbs
+        ):
+            raise ValueError(
+                f"Default database name: {self.dbs_config.default_name} not found in dbs"
+            )
+
+        # Check for duplicate notification bot tokens
+        tokens = [bot.token for bot in self.notification_bots.values()]
         if len(tokens) != len(set(tokens)):
             raise ValueError("Two notification bots have the same token")
 
-        return v
+        return self
+
+    @property
+    def valid_hive_config(self) -> bool:
+        """
+        Check if the Hive configuration is valid.
+
+        Returns:
+            bool: True if the configuration is valid, False otherwise.
+        """
+        if not self.hive:
+            return False
+        return self.hive.valid_hive_config
 
     @property
     def lnd_connections_names(self) -> str:
@@ -470,6 +569,7 @@ class LoggerFunction(Protocol):
     def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
 
 
+# MARK: InternalConfig class
 class InternalConfig:
     """
     Singleton class to manage internal configuration and logging setup.
@@ -501,6 +601,11 @@ class InternalConfig:
     base_logging_config_path: Path = BASE_LOGGING_CONFIG_PATH
     notification_loop: ClassVar[asyncio.AbstractEventLoop | None] = None
     notification_lock: ClassVar[bool] = False
+    db_client: ClassVar[AsyncMongoClient] = AsyncMongoClient()
+    db: ClassVar[AsyncDatabase] = AsyncDatabase(client=db_client, name="default_db")
+    db_client_sync: ClassVar[MongoClient] = MongoClient()
+    db_uri: ClassVar[str] = "mongodb://localhost:27017"
+    db_sync: ClassVar[Database] = Database(client=db_client_sync, name="default_db")
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -508,16 +613,21 @@ class InternalConfig:
         return cls._instance
 
     def __init__(
-        self, bot_name: str = "", config_filename: str = DEFAULT_CONFIG_FILENAME, *args, **kwargs
+        self,
+        bot_name: str = "",
+        config_filename: str = DEFAULT_CONFIG_FILENAME,
+        log_filename: str = "app.log.jsonl",
+        *args,
+        **kwargs,
     ):
         if not hasattr(self, "_initialized"):
-            logger.info(f"Config filename: {config_filename}")
+            self._initialized = True  # Must set this to avoid re-initialization during setup
             super().__init__()
+            logger.info(f"Config filename: {config_filename}")
             InternalConfig.notification_loop = None  # Initialize notification_loop
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
-            self.setup_logging()
-            self._initialized = True
+            self.setup_logging(log_filename)
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -534,28 +644,28 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = safe_load(f_in)
             self.config_filename = config_filename
-            print(f"Config file found: {config_file}")
+            logger.info(f"Config file found: {config_file}")
         except FileNotFoundError as ex:
-            print(f"Config file not found: {ex}")
+            logger.error(f"Config file not found: {ex}")
             raise ex
 
         try:
             self.config = Config.model_validate(config)
         except ValueError as ex:
-            print("Invalid configuration:")
-            print(ex)
+            logger.error("Invalid configuration:")
+            logger.error(ex)
             # exit the program with an error but no stack trace
             raise StartupFailure(ex)
 
-    def setup_logging(self):
+    def setup_logging(self, log_filename: str = "app.log") -> None:
         try:
             config_file = Path(BASE_LOGGING_CONFIG_PATH, self.config.logging.log_config_file)
             with open(config_file) as f_in:
                 config = json.load(f_in)
                 try:
-                    if self.config.logging.log_folder and self.config.logging.log_filename:
+                    if self.config.logging.log_folder and log_filename:
                         config["handlers"]["file_json"]["filename"] = str(
-                            Path(self.config.logging.log_folder, self.config.logging.log_filename)
+                            Path(self.config.logging.log_folder, log_filename)
                         )
                 except KeyError as ex:
                     print(f"KeyError in logging config no logfile set: {ex}")
@@ -566,7 +676,7 @@ class InternalConfig:
 
         # Ensure log folder exists
         log_folder = self.config.logging.log_folder
-        log_folder.mkdir(exist_ok=True)
+        log_folder.mkdir(parents=True, exist_ok=True)
 
         # Apply the logging configuration from the JSON file
         logging.config.dictConfig(config)
@@ -578,19 +688,39 @@ class InternalConfig:
             if logger_object:
                 logger_object.setLevel(level)
 
-        # Start the queue handler listener if it exists
+        # Start the queue handler listener if it exists and has a listener attribute
         queue_handler = logging.getHandlerByName("queue_handler")
         if queue_handler is not None:
+            logger.info(
+                "Queue handler found; ensure QueueListener is started elsewhere if needed."
+            )
             queue_handler.listener.start()
+            atexit.register(queue_handler.listener.stop)
+
             try:
-                self.notification_loop = asyncio.get_running_loop()
+                InternalConfig.notification_loop = asyncio.get_running_loop()
                 logger.info("Found running loop for setup logging")
             except RuntimeError:  # No event loop in the current thread
-                self.notification_loop = asyncio.new_event_loop()
+                InternalConfig.notification_loop = asyncio.new_event_loop()
                 logger.info(
                     "Started new event loop for notification logging",
-                    extra={"loop": self.notification_loop.__dict__},
+                    extra={"loop": InternalConfig.notification_loop.__dict__},
                 )
+
+            # # Get the handlers from the queue handler's configuration
+            # handlers = []
+            # for handler_name in config["handlers"]["queue_handler"]["handlers"]:
+            #     handler = logging.getHandlerByName(handler_name)
+            #     if handler:
+            #         handlers.append(handler)
+
+            # # Create and start the queue listener
+            # from logging.handlers import QueueListener
+            # self.queue_listener = QueueListener(
+            #     queue_handler.queue, *handlers, respect_handler_level=True
+            # )
+            # self.queue_listener.start()
+            # logger.info("QueueListener started successfully")
 
         # Set up the simple format string
         try:
@@ -680,6 +810,15 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        self.close_db_clients_sync()
+        try:
+            loop = asyncio.get_running_loop()
+            if loop is not self.notification_loop:
+                loop.create_task(self.close_db_clients_async())
+        except RuntimeError:
+            # If there is no running loop, we can safely close the db client
+            pass
+
         self.shutdown_logging()
         logger.info("InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
@@ -696,7 +835,6 @@ class InternalConfig:
                     for task in asyncio.all_tasks(loop=self.notification_loop)
                     if task is not current_task
                 ]
-
                 # Wait for all pending tasks to complete
                 if pending_tasks:
                     logger.info(f"Waiting for {len(pending_tasks)} pending tasks to complete")
@@ -726,6 +864,23 @@ class InternalConfig:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+
+    def close_db_clients_sync(self) -> None:
+        """
+        Manually close both synchronous and asynchronous database clients if they exist.
+        """
+        if hasattr(InternalConfig, "db_client_sync") and InternalConfig.db_client_sync:
+            InternalConfig.db_client_sync.close()
+            logger.info("Closed synchronous database client.")
+
+    async def close_db_clients_async(self) -> None:
+        """
+        Asynchronously close the database client if it exists.
+        This method is intended to be used in an asynchronous context.
+        """
+        if hasattr(InternalConfig, "db_client") and InternalConfig.db_client:
+            await InternalConfig.db_client.close()
+            logger.info("Closed asynchronous database client.")
 
 
 """

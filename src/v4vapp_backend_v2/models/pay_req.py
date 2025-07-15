@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
@@ -20,7 +20,7 @@ class Feature(BaseModel):
 # Model for HopHint (nested within RouteHint)
 class HopHint(BaseModel):
     node_id: str
-    chan_id: BSONInt64
+    chan_id: str
     fee_base_msat: int
     fee_proportional_millionths: int
     cltv_expiry_delta: int
@@ -66,7 +66,7 @@ class BlindedPaymentPath(BaseModel):
 
 
 # Main PayReq model
-class PayReq(TrackedBaseModel):
+class PayReq(BaseModel):
     """
     Pydantic model representing a decoded Lightning Network payment request (lnrpc.PayReq).
 
@@ -98,8 +98,8 @@ class PayReq(TrackedBaseModel):
 
     destination: str = ""
     payment_hash: str = ""
-    value: BSONInt64 | None = Field(None, alias="num_satoshis")
-    value_msat: BSONInt64 | None = Field(None, alias="num_msat")
+    value: BSONInt64 = Field(BSONInt64(0), alias="num_satoshis")
+    value_msat: BSONInt64 = Field(BSONInt64(0), alias="num_msat")
     timestamp: datetime | None = None
     expiry: int | None = None
     expiry_date: datetime | None = Field(
@@ -114,9 +114,23 @@ class PayReq(TrackedBaseModel):
     features: Dict[str, Feature] | None = None
     blinded_paths: List[BlindedPaymentPath] | None = None
 
+    # Added fields in additionto normal LND fields
     conv: CryptoConv = Field(
         default_factory=CryptoConv,
         description="Conversion data for the payment request",
+    )
+    pay_req_str: str = Field(
+        default="",
+        description="Original payment request string",
+    )
+    dest_alias: str = Field(
+        default="",
+        description="Alias of the destination node, set outside the class",
+    )
+
+    send_everything: bool = Field(
+        default=False,
+        description="Indicates if the payment request has a fixed amount",
     )
 
     model_config = ConfigDict(
@@ -125,7 +139,7 @@ class PayReq(TrackedBaseModel):
         extra="allow",  # Allow extra fields to handle potential mismatches
     )
 
-    def __init__(self, lnrpc_payreq: lnrpc.PayReq = None, **data: Any) -> None:
+    def __init__(self, lnrpc_payreq: lnrpc.PayReq | None = None, **data: Any) -> None:
         if lnrpc_payreq and isinstance(lnrpc_payreq, lnrpc.PayReq):
             data_dict = MessageToDict(lnrpc_payreq, preserving_proto_field_name=True)
             invoice_dict = convert_datetime_fields(data_dict)
@@ -171,6 +185,11 @@ class PayReq(TrackedBaseModel):
 
         try:
             super().__init__(**invoice_dict)
+            if self.value == 0 and self.value_msat > 0:
+                self.value = BSONInt64(self.value_msat // 1000)
+            elif self.value_msat == 0 and self.value > 0:
+                self.value_msat = BSONInt64(self.value * 1000)
+
         except ValidationError as e:
             logger.error(f"Validation error in PayReq: {e}", extra={"invoice_dict": invoice_dict})
             raise
@@ -202,10 +221,85 @@ class PayReq(TrackedBaseModel):
         """
         return {"payment_hash": self.payment_hash}
 
+    @property
+    def is_zero_value(self) -> bool:
+        """
+        Checks if the payment request is a zero-value request.
 
-def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq) -> PayReq:
+        Returns:
+            bool: True if the payment request is zero-value, False otherwise.
+        """
+        return self.value == 0 and self.value_msat == 0
+
+    @property
+    def is_expired(self) -> bool:
+        """
+        Checks if the payment request has expired.
+
+        Returns:
+            bool: True if the payment request is expired, False otherwise.
+        """
+        return self.expiry_date is not None and datetime.now(
+            tz=timezone.utc
+        ) > self.expiry_date + timedelta(seconds=0)
+
+    @property
+    def amount_msat(self) -> int:
+        """
+        Returns the amount in millisatoshis.
+
+        Returns:
+            int: The amount in millisatoshis.
+        """
+        return self.value_msat if self.value_msat > 0 else self.value * 1000
+
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the payment request.
+
+        Returns:
+            str: The string representation of the payment request.
+        """
+        return f"PayReq(destination={self.dest_alias or self.destination}, payment_hash={self.payment_hash}, value={self.value}, value_msat={self.value_msat}, expiry_date={self.expiry_date}, memo={self.memo})"
+
+    @property
+    def name(self) -> str:
+        return "pay_req"
+
+    @property
+    def log_extra(self) -> dict:
+        """
+        Returns a dictionary containing additional information for logging.
+
+        Returns:
+            dict: A dictionary with additional information for logging.
+        """
+        return {
+            self.name: self.model_dump(exclude_none=True, exclude_unset=True, by_alias=True),
+            "log_str": self.log_str,
+        }
+
+    @property
+    def fee_estimate(self) -> int:
+        """
+        Returns the estimated fee for the payment request.
+
+        Returns:
+            int: The estimated fee in millisatoshis.
+        """
+        # This is a placeholder implementation. Actual fee estimation logic should be implemented.
+        lnd_config = InternalConfig().config.lnd_config
+        return int(
+            lnd_config.lightning_fee_base_msats
+            + (self.value_msat * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
+        )
+
+
+def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq, pay_req_str: str) -> PayReq:
     """
     Converts a protobuf PayReq object to a Pydantic PayReq model.
+    Also passes along the original pay_req_str for later use.
 
     Args:
         pay_req (lnrpc.PayReq): The protobuf PayReq object to be converted.
@@ -218,7 +312,15 @@ def protobuf_pay_req_to_pydantic(pay_req: lnrpc.PayReq) -> PayReq:
     pay_req_dict = convert_datetime_fields(pay_req_dict)
     try:
         pay_req_model = PayReq.model_validate(pay_req_dict)
+        pay_req_model.pay_req_str = pay_req_str
         return pay_req_model
     except Exception as e:
-        print(e)
-        return PayReq()
+        logger.error(
+            f"Error converting PayReq to Pydantic model: {e}",
+            extra={
+                "notification": False,
+                "pay_req_dict": pay_req_dict,
+                "pay_req_str": pay_req_str,
+            },
+        )
+        raise e

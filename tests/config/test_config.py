@@ -36,7 +36,30 @@ def test_valid_config_file_and_model_validate():
         assert False
 
 
-def test_internal_config():
+def test_valid_hive_config():
+    config_file = Path("tests/data/config", "config.yaml")
+    with open(config_file) as f_in:
+        raw_config = safe_load(f_in)
+    assert raw_config is not None
+
+    try:
+        config = Config.model_validate(raw_config)
+        assert config.valid_hive_config
+    except Exception as e:
+        print(e)
+        assert False
+
+    hive_config = config.hive
+    assert hive_config is not None
+    assert hive_config.server_account is not None
+    assert hive_config.hive_accs is not None
+
+
+def test_internal_config(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
+
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)

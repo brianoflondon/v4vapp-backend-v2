@@ -6,39 +6,22 @@ from typing import Annotated, Any, Mapping, Sequence
 
 import typer
 from pydantic import BaseModel, Field
+from pymongo.errors import OperationFailure
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.tracked_all import process_tracked, tracked_any
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
-from v4vapp_backend_v2.database.db import MongoDBClient
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 ICON = "🏆"
 app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
-
-
-def get_mongodb_client() -> MongoDBClient:
-    """
-    Returns a MongoDB client instance.
-
-    This function creates a MongoDB client instance using the default connection
-    and database name from the configuration.
-
-    Returns:
-        MongoDBClient: The MongoDB client instance.
-    """
-    dbs_config = InternalConfig().config.dbs_config
-    return MongoDBClient(
-        db_conn=dbs_config.default_connection,
-        db_name=dbs_config.default_name,
-        db_user=dbs_config.default_user,
-    )
 
 
 class ResumeToken(BaseModel):
@@ -112,6 +95,19 @@ class ResumeToken(BaseModel):
             logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
             raise e
 
+    def delete_token(self):
+        """
+        Delete the resume token from Redis.
+        """
+        if not self.redis_client:
+            self.redis_client = V4VAsyncRedis()
+        try:
+            self.redis_client.sync_redis.delete(self.redis_key)
+            logger.info(f"Resume token deleted for collection '{self.collection}'")
+        except Exception as e:
+            logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
+            raise e
+
     @property
     def token(self) -> Mapping[str, Any] | None:
         """
@@ -163,7 +159,7 @@ def change_to_locked(change: Mapping[str, Any]) -> bool:
     return False
 
 
-async def process_op(change: Mapping[str, Any], collection: str):
+async def process_op(change: Mapping[str, Any], collection: str) -> None:
     """
     Creates a ledger entry based on the document and collection name.
 
@@ -181,24 +177,27 @@ async def process_op(change: Mapping[str, Any], collection: str):
             f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
         )
         return
-    op = tracked_any(full_document)
+    try:
+        op = tracked_any_filter(full_document)
+    except ValueError as e:
+        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
+        return
     logger.info(f"Processing {op.group_id_query}")
-    ledger_entry = await process_tracked(op)
-    if not ledger_entry:
-        logger.warning(
-            f"{ICON} No ledger entry created for {op.group_id_query}",
-            extra={"notification": False},
-        )
+    try:
+        ledger_entries = await process_tracked_event(op)
+        for entry in ledger_entries:
+            logger.info(
+                f"{ICON} Processed ledger entry for {entry.op.log_str}",
+            )
+    except ValueError as e:
+        logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
         return
-    print(ledger_entry)
-    balance_sheet = await generate_balance_sheet_pandas()
-    if not balance_sheet["is_balanced"]:
-        logger.warning(
-            f"{ICON} The balance sheet is not balanced for {op.group_id_query}",
-            extra={"notification": False},
-        )
+    except NotImplementedError:
+        logger.info(f"{ICON} Operation not implemented for {op.group_id}")
         return
-    logger.info(f"Unlocking {op.group_id_query}")
+    except LedgerEntryException as e:
+        logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
+        return
 
 
 async def subscribe_stream(
@@ -218,29 +217,38 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-    client = get_mongodb_client()
-    TrackedBaseModel.db_client = get_mongodb_client()
 
-    collection = await client.get_collection(collection_name)
+    collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
         resume_token = resume.token
-        async with collection.watch(
+        async with await collection.watch(
             pipeline=pipeline,
             full_document="updateLookup",
             resume_after=resume_token,
         ) as stream:
             async for change in stream:
-                if not change_to_locked(change):
+                full_document = change.get("fullDocument") or {}
+                group_id = full_document.get("group_id", None) or ""
+                if change_to_locked(change):
+                    # If the change is a lock, we want to resume the stream
+                    # and not process the operation.
+                    logger.info(
+                        f"{ICON}🔒 Change detected in {collection_name} {group_id}",
+                        extra={"notification": False, "change": change},
+                    )
+                else:
+                    # Process the change if it is not a lock/unlock
+                    logger.info(
+                        f"{ICON}✳️ Change detected in {collection_name} {group_id}",
+                        extra={"notification": False, "change": change},
+                    )
                     asyncio.create_task(process_op(change=change, collection=collection_name))
                 resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
                     break
-                logger.info(
-                    f"{ICON} Change detected in {collection_name}",
-                    extra={"notification": False, "change": change},
-                )
+                continue
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
@@ -250,6 +258,22 @@ async def subscribe_stream(
             extra={"notification": True},
         )
         return
+
+    except OperationFailure as e:
+        logger.error(
+            f"{ICON} Operation failure in stream subscription: {e}",
+            extra={"error": e, "notification": False},
+        )
+        if "resume" in str(e):
+            logger.warning(
+                f"{ICON} Resume token error in stream subscription: {e}",
+                extra={"error": e, "notification": False},
+            )
+            resume.delete_token()
+            asyncio.create_task(
+                subscribe_stream(collection_name=collection_name, pipeline=pipeline)
+            )
+            return
 
     except Exception as e:
         logger.error(f"{ICON} Error in stream subscription: {e}", extra={"error": e})
@@ -281,6 +305,9 @@ async def main_async_start():
         f"🔗 Database Monitor connection: {CONFIG.dbs_config.default_connection} "
         f"🔗 Database Monitor name: {CONFIG.dbs_config.default_name} "
     )
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
@@ -349,7 +376,7 @@ def main(
     Returns:
         None
     """
-    _ = InternalConfig(config_filename=config_filename)
+    _ = InternalConfig(config_filename=config_filename, log_filename="db_monitor.log.jsonl")
     logger.info(
         f"{ICON} ✅ Database Monitor App. Started. Version: {__version__}",
         extra={"notification": True},

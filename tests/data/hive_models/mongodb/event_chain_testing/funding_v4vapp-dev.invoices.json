@@ -1,0 +1,90 @@
+[{
+  "_id": {
+    "$oid": "682f482c8257e3a4298a59cf"
+  },
+  "r_hash": "uIst3MZFrpJ3CYH3jwXFrQpyBFyjDrJUyLSmUEusSjU=",
+  "add_index": {
+    "$numberLong": "14761"
+  },
+  "amt_paid": {
+    "$numberLong": "100000000"
+  },
+  "amt_paid_msat": {
+    "$numberLong": "100000000"
+  },
+  "amt_paid_sat": {
+    "$numberLong": "100000"
+  },
+  "cltv_expiry": 40,
+  "creation_date": {
+    "$date": "2025-05-20T10:30:18.000Z"
+  },
+  "expiry": 86400,
+  "expiry_date": {
+    "$date": "2025-05-21T10:30:18.000Z"
+  },
+  "features": {
+    "8": {
+      "name": "tlv-onion",
+      "is_required": true,
+      "is_known": true
+    },
+    "14": {
+      "name": "payment-addr",
+      "is_required": true,
+      "is_known": true
+    },
+    "17": {
+      "name": "multi-path-payments",
+      "is_known": true
+    },
+    "25": {
+      "name": "route-blinding",
+      "is_known": true
+    }
+  },
+  "htlcs": [
+    {
+      "chan_id": {
+        "$numberLong": "800082725764071425"
+      },
+      "htlc_index": {
+        "$numberLong": "14538"
+      },
+      "amt_msat": {
+        "$numberLong": "100000000"
+      },
+      "accept_height": 897533,
+      "accept_time": {
+        "$date": "2025-05-20T10:33:37.000Z"
+      },
+      "resolve_time": {
+        "$date": "2025-05-20T10:33:37.000Z"
+      },
+      "expiry_height": 897576,
+      "state": "SETTLED",
+      "mpp_total_amt_msat": {
+        "$numberLong": "100000000"
+      }
+    }
+  ],
+  "locked": false,
+  "memo": "Funding Umbrel  DEBIT \"Treasury Lightning\" CREDIT \"Owner Loan Payable (funding)\"",
+  "payment_addr": "pcGXO8l/FEMtLrYqBxxenSviU1kdB+1zFSGY8VK2d4s=",
+  "payment_request": "lnbc1m1p5zckd6pp5hz9jmhxxgkhfyacfs8mc7pw94598ypzu5v8ty4xgkjn9qjavfg6sdyqge6kuerfdenjq4tdvfex2mpqypzy2sjf2sszy4rjv4shxatj0ysyc6t8dp6xu6twvu3zqs6jg4zyj4pqyf8hwmn9wgsycmmpdcs9qctev93xcefq9pn82mnyd9hxw2fzcqzpgxqyz5vqsp55hqeww7f0u2yxtfwkc4qw8z7n547y56er5r76uc4yxv0z54kw79s9qxpqysgq3lycj8q85lvnat3s3z6496d5kdq5j09lxc72wdlrdw683xfrzftrpnt8csqj2dnec7e3fntesg8z8p8v7lwcep464xuvjh0z0gjslugq9m4vpn",
+  "r_preimage": "IZSSN7nouskTYexdD9DdEsDglm0tCdAa3+eozPR5GCY=",
+  "settle_date": {
+    "$date": "2025-05-20T10:33:37.000Z"
+  },
+  "settle_index": {
+    "$numberLong": "8667"
+  },
+  "settled": true,
+  "state": "SETTLED",
+  "value": {
+    "$numberLong": "100000"
+  },
+  "value_msat": {
+    "$numberLong": "100000000"
+  }
+}]
