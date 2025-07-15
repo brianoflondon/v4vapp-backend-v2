@@ -19,7 +19,7 @@ from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer
+from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer, send_transfer_bulk
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 
@@ -137,7 +137,6 @@ async def main():
     # pprint(trx)
     # await asyncio.sleep(5)  # Wait for the transaction to be processed
 
-
     hive_config = InternalConfig().config.hive
     hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
@@ -154,17 +153,22 @@ async def main():
         )
         transfer_list.append(hive_transfer)
 
-    await send_transfer(
-        from_account=customer,
-        to_account=server,
+    await send_transfer_bulk(
         hive_client=hive_client,
-        amount=Amount("0.001 HIVE"),
-        memo=f"Payment for invoice {invoice.payment_request}",
         transfer_list=transfer_list,
     )
 
-    for transfer in transfer_list:
-        trx = await send_hive_customer_to_server(amount=transfer.amount, memo=transfer.memo)
+    # await send_transfer(
+    #     from_account=customer,
+    #     to_account=server,
+    #     hive_client=hive_client,
+    #     amount=Amount("0.001 HIVE"),
+    #     memo=f"Payment for invoice {invoice.payment_request}",
+    #     transfer_list=transfer_list,
+    # )
+
+    # for transfer in transfer_list:
+    #     trx = await send_hive_customer_to_server(amount=transfer.amount, memo=transfer.memo)
 
     # invoice = await get_lightning_invoice(3000, "Test Invoice with Keepsats")
     # trx = await send_hive_customer_to_server(

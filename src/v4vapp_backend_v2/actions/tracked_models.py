@@ -110,13 +110,14 @@ class TrackedBaseModel(BaseModel):
         """
         # stack = inspect.stack()
         # print(stack[1].function, stack[1].filename, stack[1].lineno)
+        start = timer()
         logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
         if await self.locked:
             logger.warning(
                 f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
                 extra={"notification": False},
             )
-            unlocked = await self.wait_for_lock(timeout=10)
+            unlocked = await self.wait_for_lock(timeout=60)
             if not unlocked:
                 logger.warning(
                     f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
@@ -125,6 +126,10 @@ class TrackedBaseModel(BaseModel):
                 await self.unlock_op()
                 raise TimeoutError("Timeout waiting for lock to be released.")
         await self.lock_op()
+        logger.info(
+            f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
+            extra={"notification": False},
+        )
         return self
 
     async def __aexit__(

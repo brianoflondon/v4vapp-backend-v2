@@ -506,6 +506,98 @@ class SendHiveTransfer(BaseModel):
     memo: str = ""
 
 
+async def send_transfer_bulk(
+    transfer_list: List[SendHiveTransfer],
+    hive_client: Hive | None = None,
+    keys: List[str] = [],
+    nobroadcast: bool = False,
+    is_private: bool = False,
+) -> Dict[str, str]:
+    """
+    Send multiple Hive token transfers in bulk.
+
+    Args:
+        transfer_list (List[SendHiveTransfer]): List of transfer details, each containing sender, receiver, amount, and memo.
+        hive_client (Hive | None, optional): An instance of Hive client. If not provided, one will be created using the provided keys.
+        keys (List[str], optional): List of private keys to use for signing transactions if hive_client is not provided.
+        nobroadcast (bool, optional): If True, transactions will not be broadcasted to the network. Defaults to False.
+        is_private (bool, optional): If True, indicates the operation should be private. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The result of the broadcasted transaction, or an empty dictionary if not broadcasted.
+
+    Raises:
+        ValueError: If neither hive_client nor keys are provided, or if nobroadcast is True while hive_client is provided.
+        HiveNotEnoughHiveInAccount: If the sender does not have sufficient funds.
+        HiveTryingToSendZeroOrNegativeAmount: If attempting to send zero or negative amount, or duplicate transaction detected.
+        HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
+    """
+    if not hive_client and not keys:
+        raise ValueError("No hive_client or keys provided")
+    if not hive_client:
+        hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
+    if hive_client and nobroadcast:
+        raise ValueError("nobroadcast is not supported if hive_client")
+    transfer = transfer_list[0]
+    try:
+        tx = TransactionBuilder(blockchain_instance=hive_client)
+        for transfer in transfer_list:
+            transfer_nectar = {
+                "from": transfer.from_account,
+                "to": transfer.to_account,
+                "amount": transfer.amount,
+                "memo": transfer.memo,
+            }
+            tx.appendOps(Transfer(transfer_nectar))
+            tx.appendSigner(transfer.from_account, "active")
+        signed_tx = tx.sign()
+        broadcast_tx = tx.broadcast()
+        return broadcast_tx or {}
+    except UnhandledRPCError as ex:
+        # Handle insufficient funds
+        for arg in ex.args:
+            if "does not have sufficient funds" in arg:
+                raise HiveNotEnoughHiveInAccount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Not enough to pay {transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+            if "Cannot transfer a negative amount" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Can't send negative or zero {transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+            if "Duplicate transaction check failed" in arg:
+                raise HiveTryingToSendZeroOrNegativeAmount(
+                    f"{transfer.from_account} Failure during send | "
+                    f"Looks like we tried to send transaction twice | "
+                    f"{transfer.memo} | "
+                    f"{transfer.amount}  | "
+                    f"to: {transfer.to_account} | Hive error: {ex}"
+                )
+        else:
+            trx = {"UnhandledRPCError": f"{ex}"}
+            logger.error(
+                f"UnhandledRPCError during send_transfer: {ex}",
+                extra={
+                    "notification": False,
+                    "transfer_list": transfer_list,
+                },
+            )
+            raise HiveSomeOtherRPCException(f"{ex}")
+    except Exception as ex:
+        logger.error(
+            f"UnhandledRPCError during send_transfer: {ex}",
+            extra={
+                "notification": False,
+                "to_account": to_account,
+                "from_account": from_account,
+            },
+        )
+        raise HiveSomeOtherRPCException(f"{ex}")
+
+
 async def send_transfer(
     to_account: str,
     amount: Amount,
@@ -515,7 +607,6 @@ async def send_transfer(
     keys: List[str] = [],
     nobroadcast: bool = False,
     is_private: bool = False,
-    transfer_list: List[SendHiveTransfer] | None = None,
 ) -> Dict[str, str]:
     """
     Asynchronously sends a transfer operation to the Hive blockchain.
@@ -541,43 +632,29 @@ async def send_transfer(
     if is_private:
         memo = f"#{memo}"
     try:
-        if not transfer_list:
-            trx = account.transfer(
-                to=to_account,
-                amount=amount.amount,
-                asset=amount.asset,
-                account=from_account,
-                memo=memo,
-            )
-            check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
-            logger.info(
-                f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
-                f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
-                f"Memo: {memo} {trx.get('trx_id', '')}",
-                extra={
-                    "notification": True,
-                    "to_account": to_account,
-                    "from_account": from_account,
-                    "amount": amount.amount_decimal,
-                    "symbol": amount.symbol,
-                    "memo": memo,
-                },
-            )
-            return trx
-        else:
-            tx = TransactionBuilder(blockchain_instance=hive_client)
-            for transfer in transfer_list:
-                transfer_nectar = {
-                    "from": transfer.from_account,
-                    "to": transfer.to_account,
-                    "amount": transfer.amount,
-                    "memo": transfer.memo,
-                }
-                tx.appendOps(Transfer(transfer_nectar))
-                tx.appendSigner(transfer.from_account, "active")
-            signed_tx = tx.sign()
-            broadcast_tx = tx.broadcast()
-            return broadcast_tx or {}
+        trx = account.transfer(
+            to=to_account,
+            amount=amount.amount,
+            asset=amount.asset,
+            account=from_account,
+            memo=memo,
+        )
+        check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
+        logger.info(
+            f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
+            f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
+            f"Memo: {memo} {trx.get('trx_id', '')}",
+            extra={
+                "notification": True,
+                "to_account": to_account,
+                "from_account": from_account,
+                "amount": amount.amount_decimal,
+                "symbol": amount.symbol,
+                "memo": memo,
+            },
+        )
+        return trx
+
     except UnhandledRPCError as ex:
         # Handle insufficient funds
         for arg in ex.args:
