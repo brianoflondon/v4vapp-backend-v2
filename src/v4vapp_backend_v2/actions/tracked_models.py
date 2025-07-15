@@ -5,13 +5,12 @@ from timeit import default_timer as timer
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.results import UpdateResult
 
-from v4vapp_backend_v2.config.setup import (DB_RATES_COLLECTION,
-                                            InternalConfig, logger)
+from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import (AllQuotes, HiveRatesDB,
-                                                     QuoteResponse)
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
@@ -375,11 +374,14 @@ class TrackedBaseModel(BaseModel):
         Returns:
             UpdateResult | None: The result of the update operation, or None if no database client is available.
         """
+        update = {
+            "$set": self.model_dump(
+                exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+            )
+        }
         return await InternalConfig.db[self.collection_name].update_one(
             filter=self.group_id_query,
-            update=self.model_dump(
-                exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
-            ),
+            update=update,
             upsert=True,
         )
 

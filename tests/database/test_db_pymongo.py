@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, MongoClient
 
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -36,6 +36,14 @@ async def drop_database(conn_name: str, db_name: str, db_user: str) -> None:
     )
     async with test_client:
         await test_client.drop_database(db_name)
+
+
+def drop_database_sync(conn_name: str, db_name: str, db_user: str) -> None:
+    # Drop the collection and user
+    db_conn = DBConn(db_conn=conn_name, db_name=db_name, db_user=db_user)
+    test_client: MongoClient[Dict[str, Any]] = MongoClient(db_conn.admin_uri, tz_aware=True)
+    with test_client:
+        test_client.drop_database(db_name)
 
 
 def test_database_connection_init() -> None:
@@ -135,3 +143,29 @@ async def test_internal_config_database():
     print(collection_names)
 
     await drop_database(conn_name="conn_1", db_name="test_db", db_user="test_user")
+
+
+def test_insert_timeseries_sync() -> None:
+    db_conn = DBConn(db_conn="conn_1", db_name="test_db", db_user="test_user")
+    db_conn.setup_database_sync()
+
+    client = db_conn.client_sync()
+    with client:
+        collection = client[db_conn.db_name]["rates"]
+        collection.insert_one(timeseries_data)
+
+    # Test with a direct access to a collection
+    collection2 = db_conn.db_sync()["rates"]
+    result = collection2.find_one({"timestamp": datetime(2023, 10, 1, 0, 0, tzinfo=timezone.utc)})
+    assert result is not None
+    assert result["hive_usd"] == 0.2359
+    collection2.database.client.close()
+
+    # Use a client from inside the collection
+    collection3 = db_conn.db_sync()["rates"]
+    with collection3.database.client:
+        result2 = collection3.find_one({})
+        assert result2 is not None
+        assert result2["hbd_usd"] == 1
+
+    drop_database_sync(conn_name="conn_1", db_name="test_db", db_user="test_user")

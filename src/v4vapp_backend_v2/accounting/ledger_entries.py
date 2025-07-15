@@ -65,7 +65,6 @@ async def get_ledger_entries(
 
 async def get_ledger_dataframe(
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
-    collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
 ) -> pd.DataFrame:
     """
@@ -101,18 +100,6 @@ async def get_ledger_dataframe(
     data = []
     for entry in ledger_entries:
         if entry.debit and entry.credit:
-            # debit_modifier = -1 if entry.debit.contra else 1
-            # credit_modifier = -1 if entry.credit.contra else 1
-            # debit_modifier = 1
-            # credit_modifier = 1
-
-            # debit_amount = debit_modifier * entry.debit_amount
-            # debit_unit = entry.debit_unit.value if entry.debit_unit else None
-            # debit_conv = debit_modifier * entry.debit_conv
-            # credit_amount = credit_modifier * entry.credit_amount
-            # credit_unit = entry.credit_unit.value if entry.credit_unit else None
-            # credit_conv = credit_modifier * entry.credit_conv
-
             data.append(
                 {
                     "timestamp": entry.timestamp,

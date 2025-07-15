@@ -278,15 +278,14 @@ async def process_lightning_payment(
         NotImplementedError: If the payment memo does not match implemented cases.
     """
     # The Payment will already have been locked by the outer payment processing function.
-    assert TrackedBaseModel.db_client, "Database client must be set before processing payments."
     if not payment.conv or payment.conv.is_unset():
         await payment.update_conv()
     v4vapp_group_id = ""
     if payment.succeeded and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
-        existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection_name(), query={"group_id": v4vapp_group_id}
+        existing_ledger_entry = await LedgerEntry.collection().find_one(
+            filter={"group_id": v4vapp_group_id}
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
@@ -311,8 +310,8 @@ async def process_lightning_payment(
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
-        existing_ledger_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection_name(), query={"group_id": v4vapp_group_id}
+        existing_ledger_entry = await LedgerEntry.collection().find_one(
+            filter={"group_id": v4vapp_group_id}
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
@@ -369,22 +368,19 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     # Check if a ledger entry with the same group_id already exists
-    if TrackedBaseModel.db_client:
-        existing_entry = await TrackedBaseModel.db_client.find_one(
-            collection_name=LedgerEntry.collection_name(), query={"group_id": op.group_id}
-        )
-        if existing_entry:
-            logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
-            try:
-                ledger_entry = LedgerEntry.model_validate(existing_entry)
-            except Exception as e:
-                message = f"Error validating existing ledger entry: {e}"
-                logger.error(message)
-                raise LedgerEntryCreationException(message) from e
+    existing_entry = await LedgerEntry.collection().find_one(filter={"group_id": op.group_id})
+    if existing_entry:
+        logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
+        try:
+            ledger_entry = LedgerEntry.model_validate(existing_entry)
+        except Exception as e:
+            message = f"Error validating existing ledger entry: {e}"
+            logger.error(message)
+            raise LedgerEntryCreationException(message) from e
 
-            raise LedgerEntryDuplicateException(
-                f"Ledger entry already exists: {ledger_entry.group_id}"
-            )
+        raise LedgerEntryDuplicateException(
+            f"Ledger entry already exists: {ledger_entry.group_id}"
+        )
 
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts

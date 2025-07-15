@@ -9,14 +9,11 @@ from pymongo.asynchronous.collection import AsyncCollection
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.helpers.crypto_conversion import (CryptoConv,
-                                                         CryptoConversion)
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
-from v4vapp_backend_v2.models.custom_records import (DecodedCustomRecord,
-                                                     decode_all_custom_records)
-from v4vapp_backend_v2.models.pydantic_helpers import (BSONInt64,
-                                                       convert_datetime_fields)
+from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
+from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
 
 
 class PaymentStatus(StrEnum):
@@ -307,7 +304,7 @@ class Payment(TrackedBaseModel):
         Returns:
             AsyncCollection: The collection object for this model.
         """
-        return InternalConfig.db[cls.collection_name]
+        return InternalConfig.db["payments"]
 
     @property
     def group_id_query(self) -> Dict[str, str]:
@@ -449,4 +446,3 @@ class ListPaymentsResponse(BaseModel):
             super().__init__(**data)
             if not self.payments:
                 self.payments = []
-

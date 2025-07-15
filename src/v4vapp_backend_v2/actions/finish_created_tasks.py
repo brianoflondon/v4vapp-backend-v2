@@ -28,6 +28,6 @@ def handle_tasks(tasks: List[asyncio.Task]) -> None:
                     f"Task {task.get_name()} completed successfully", extra={"notification": False}
                 )
         except Exception as e:
-            logger.error(
+            logger.exception(
                 f"Task {task.get_name()} failed with exception: {e}", extra={"notification": False}
             )

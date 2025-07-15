@@ -5,6 +5,7 @@ from typing import Any, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel

@@ -219,9 +219,8 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-    client = InternalConfig.db_client
 
-    collection = client.db[collection_name]
+    collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
         resume_token = resume.token

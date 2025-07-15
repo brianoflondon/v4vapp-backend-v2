@@ -97,8 +97,6 @@ async def db_store_op(
     Args:
         op (OpAny): The Hive event to process. Can be a
             Transfer or CustomJson operation.
-        db_client (MongoDBClient | None): The MongoDB client instance to use for
-            database operations. If None, a new client will be created.
         db_collection (str | None): The name of the MongoDB collection to use for
             storing the transaction. If None, the default collection will be used.
         *args (Any): Additional positional arguments.
@@ -115,12 +113,6 @@ async def db_store_op(
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
 
     try:
-        # db_ans = await OpBase.db_client.update_one_buffer(
-        #     db_collection,
-        #     query=op.group_id_query,
-        #     update=op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
-        #     upsert=True,
-        # )
         collection = OpBase.collection()
         db_ans = await collection.update_one(
             filter=op.group_id_query,

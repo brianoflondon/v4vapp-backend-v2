@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from urllib.parse import quote_plus
 
-from pymongo import AsyncMongoClient, timeout
+from pymongo import AsyncMongoClient, MongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.database import Database
+from pymongo.errors import ConnectionFailure
 from pymongo.errors import CollectionInvalid, OperationFailure
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
@@ -180,7 +182,28 @@ class DBConn:
         except Exception as e:
             raise ConnectionError(f"Failed to connect to the database: {e}") from e
 
-    # MARK: Database setup methods
+    # MARK: Database setup methods Async
+    def client_sync(self) -> MongoClient[Dict[str, Any]]:  # pragma: no cover
+        """
+        Returns an instance of MongoClient with the constructed URI.
+
+        This method creates a MongoDB client using the URI built from the
+        database connection, name, and user.
+
+        Returns:
+            MongoClient: An instance of MongoClient connected to the database.
+        """
+        return MongoClient(self.uri, tz_aware=True)
+
+    def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover
+        """
+        Returns the database instance for the specified database name.
+        This method retrieves the database instance using the constructed URI.
+        Returns:
+            Database[Dict[str, Any]]: The database instance for the specified database name.
+        """
+        return self.client_sync()[self.db_name]
+
     async def setup_database(self) -> None:
         """
         Set up the database connection and perform initial setup tasks.
@@ -188,6 +211,7 @@ class DBConn:
         This method establishes a connection to the database, sets up the user,
         and prepares the collections and indexes as defined in the configuration.
         """
+        InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
             admin_client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
@@ -354,23 +378,199 @@ class DBConn:
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
+
+    # MARK: Database setup methods Sync
+
+    def test_connection_sync(self, timeout_seconds: float = 10, admin: bool = False) -> None:
+        """
+        Test the database connection by pinging the database.
+
+        This method attempts to connect to the database and execute a ping command
+        to verify that the connection is successful.
+
+        Parameters:
+            timeout_seconds (float): The timeout in seconds for the connection attempt.
+            admin (bool): If True, use the admin URI for the connection.
+
+        Raises:
+            ConnectionError: If the connection to the database fails.
+        """
+        uri = self.admin_uri if admin else self.uri
+        client: MongoClient[Dict[str, Any]] = MongoClient(uri, tz_aware=True)
+        try:
+            with timeout(timeout_seconds):
+                with client:
+                    db = client[self.db_name]
+                    ans = db.command("ping")
+                    assert ans.get("ok", None)
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to the database: {e}") from e
+
+    # MARK: Database setup methods
+    def setup_database_sync(self) -> None:
+        """
+        Set up the database connection and perform initial setup tasks.
+
+        This method establishes a connection to the database, sets up the user,
+        and prepares the collections and indexes as defined in the configuration.
+        """
+        InternalConfig.db_uri = self.uri
+        if not self._setup:
+            self._setup = True
+            admin_client: MongoClient[Dict[str, Any]] = MongoClient(
+                self.admin_uri, tz_aware=True
+            )
+            with admin_client:
+                self.setup_user_sync(admin_client=admin_client)
+                self.setup_collections_indexes_sync(admin_client=admin_client)
+                self._create_timeseries_sync(admin_client=admin_client)
+            logger.info(
+                f"{DATABASE_ICON} {logger.name} "
+                f"Database {self.db_name} is set up with user {self.db_user}"
+            )
+            if InternalConfig.db_client_sync:
+                InternalConfig.db_client_sync.close()
+            InternalConfig.db_client_sync = MongoClient(self.uri, tz_aware=True)
+            InternalConfig.db_sync = InternalConfig.db_client_sync[self.db_name]
+            logger.info(
+                f"{DATABASE_ICON} Database {self.db_name} client is set up for InternalConfig"
+            )
+        logger.info(f"{DATABASE_ICON} {logger.name} Database {self.db_name} is already set up.")
+
+    def setup_user_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
+        """
+        Set up the user.
+
+        This method is intended to be called after the connection URI has been
+        established. It can be used to perform any necessary setup tasks.
+        """
+        create_user = {}
+        try:
+            admin_db = admin_client[self.db_name]
+            admin_db["startup_collection"].insert_one(
+                {"startup": "complete", "timestamp": datetime.now(tz=timezone.utc)}
+            )
+            users_info = admin_client[self.db_name].command("usersInfo")
+            users = [user["user"] for user in users_info.get("users", [])]
+            if self.db_user not in users:
+                create_user = {
+                    "createUser": self.db_user,
+                    "pwd": self.db_password,
+                    "roles": [{"role": role, "db": self.db_name} for role in self.db_roles],
+                    "comment": "Created by MongoDBClient",
+                }
+                ans = admin_db.command(create_user)
+                logger.info(
+                    f"{DATABASE_ICON} {logger.name} "
+                    f"Created user {self.db_user} with "
+                    f"roles {self.db_roles} in {self.db_name}",
+                    extra={
+                        "user": self.db_user,
+                        "roles": self.db_roles,
+                        "db_name": self.db_name,
+                        "ans": ans,
+                    },
+                )
+        except OperationFailure as e:
+            # If the user already exists, ignore the error
+            if e.code not in [11000, 51003]:
+                create_user = {} if not create_user else create_user
+                logger.error(
+                    f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
+                    extra={"error": str(e), "create_user": create_user},
+                )
+                raise e
+            pass
+        except Exception as e:
+            create_user = {} if not create_user else create_user
+            logger.error(
+                f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
+                extra={"error": e, "create_user": create_user},
+            )
+            pass
+
+    def setup_collections_indexes_sync(
+        self, admin_client: MongoClient[Dict[str, Any]]
+    ) -> None:
+        """
+        Set up the collections in the database.
+
+        This method is intended to be called after the user has been set up.
+        It can be used to create any necessary collections and indexes.
+        """
+        """
+        Checks and creates indexes for the collections in the database.
+
+        This method iterates through the collections defined in the database
+        configuration and creates the specified indexes if they do not already exist.
+
+        Raises:
+            ConnectionFailure: If the MongoDB client is not connected.
+        """
+        dbs = InternalConfig().config.dbs_config.dbs
+        db = admin_client[self.db_name]
+        if (
+            dbs is None
+            or dbs[self.db_name].collections is None
+            or not dbs[self.db_name].collections
+            or not dbs[self.db_name].collections.items()
+        ):
+            return
+        for collection_name, config in dbs[self.db_name].collections.items():
+            list_indexes = list(db[collection_name].list_indexes())
+            if config and isinstance(config, CollectionConfig) and config.indexes:
+                for index_name, index_value in config.indexes.items():
+                    if not self._check_index_exists(list_indexes, index_name):
+                        try:
+                            db[collection_name].create_index(
+                                index_value.index_key,
+                                unique=index_value.unique,
+                                name=index_name,
+                            )
+                            logger.info(
+                                f"{DATABASE_ICON} {logger.name} "
+                                f"Created index {index_name} in {collection_name}"
+                            )
+                        except Exception as ex:
+                            logger.error(ex)
+
+    def _create_timeseries_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
+        """
+        Creates a time series collection in the database.
+
+        This method checks if the database client is connected and if the
+        specified collection exists. If it does not exist, it creates a
+        time series collection with the specified configuration.
+
+        Raises:
+            ConnectionFailure: If the MongoDB client is not connected.
+            OperationFailure: If there is an error creating the collection.
+        """
+        dbs = InternalConfig().config.dbs_config.dbs
+        db = admin_client[self.db_name]
+        if (
+            dbs is None
+            or dbs[self.db_name].timeseries is None
+            or not dbs[self.db_name].timeseries
+            or not dbs[self.db_name].timeseries.items()
+        ):
+            return
+
+        for timeseries_name, config in dbs[self.db_name].timeseries.items():
+            try:
+                db.create_collection(
+                    timeseries_name,
+                    timeseries=config.model_dump(exclude_unset=True, exclude_none=True),
+                )
+                logger.info(
+                    f"{DATABASE_ICON} {logger.name} Created time series collection {timeseries_name}"
+                )
+            except CollectionInvalid:
+                logger.debug(
+                    f"{DATABASE_ICON} {logger.name} "
+                    f"Collection {timeseries_name} already exists. "
+                    f"Skipping creation."
+                )
+            except Exception as ex:
+                message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})

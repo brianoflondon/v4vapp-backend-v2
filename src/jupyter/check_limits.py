@@ -10,9 +10,8 @@ from v4vapp_backend_v2.accounting.account_balances import (
     get_keepsats_balance,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
@@ -22,6 +21,9 @@ async def main():
     Main function to run the checks and print results.
     """
     # Example usage of get_account_lightning_conv
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
     cust_id = "v4vapp-test"
     age = timedelta(hours=60)
     ans = await get_account_lightning_conv(cust_id=cust_id, age=age)
@@ -75,8 +77,6 @@ if __name__ == "__main__":
 
     CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
-    db_client = get_mongodb_client_defaults()
 
-    TrackedBaseModel.db_client = db_client
 
     asyncio.run(main())

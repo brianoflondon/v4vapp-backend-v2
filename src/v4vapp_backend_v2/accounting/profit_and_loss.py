@@ -9,7 +9,6 @@ from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 async def generate_profit_and_loss_report(
     df: pd.DataFrame = pd.DataFrame(),
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
-    collection_name: str = "",
 ) -> dict:
     """
     Generates a Profit and Loss report summarizing Revenue and Expense accounts, using msats as the base unit.
@@ -29,7 +28,6 @@ async def generate_profit_and_loss_report(
     if df.empty:
         df = await get_ledger_dataframe(
             as_of_date=as_of_date,
-            collection_name=collection_name,
         )
 
     if df.empty:

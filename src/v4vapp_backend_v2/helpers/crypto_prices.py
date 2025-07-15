@@ -9,6 +9,7 @@ from typing import Annotated, Any, ClassVar, Dict, List
 import httpx
 from binance.spot import Spot  # type: ignore
 from pydantic import BaseModel, Field, computed_field
+from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
@@ -463,9 +464,7 @@ class AllQuotes(BaseModel):
                 sats_hbd=self.quote.sats_hbd_p,
                 hive_hbd=self.quote.hive_hbd,
             )
-            db_ans = await InternalConfig.db[DB_RATES_COLLECTION].insert_one(
-                document=record.model_dump()
-            )
+            db_ans = await AllQuotes.collection().insert_one(document=record.model_dump())
             logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
             AllQuotes.db_store_timestamp = self.fetch_date
         except Exception as e:
@@ -473,6 +472,26 @@ class AllQuotes(BaseModel):
                 f"{ICON} Failed to insert rates into database: {e}",
                 extra={"notification": False},
             )
+
+    @property
+    def collection_name(self) -> str:
+        """
+        Get the collection name for storing quotes in the database.
+
+        Returns:
+            str: The name of the collection where quotes are stored.
+        """
+        return DB_RATES_COLLECTION
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """
+        Get the collection for storing quotes in the database.
+
+        Returns:
+            AsyncCollection: The collection where quotes are stored.
+        """
+        return InternalConfig.db[DB_RATES_COLLECTION]
 
     @property
     def quote(self) -> QuoteResponse:

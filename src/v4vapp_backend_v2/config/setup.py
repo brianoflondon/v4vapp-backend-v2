@@ -15,8 +15,9 @@ from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 import colorlog
 from packaging import version
 from pydantic import BaseModel, model_validator
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, MongoClient
 from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.database import Database
 from pymongo.operations import _IndexKeyHint
 from yaml import safe_load
 
@@ -602,6 +603,9 @@ class InternalConfig:
     notification_lock: ClassVar[bool] = False
     db_client: ClassVar[AsyncMongoClient] = AsyncMongoClient()
     db: ClassVar[AsyncDatabase] = AsyncDatabase(client=db_client, name="default_db")
+    db_client_sync: ClassVar[MongoClient] = MongoClient()
+    db_uri: ClassVar[str] = "mongodb://localhost:27017"
+    db_sync: ClassVar[Database] = Database(client=db_client_sync, name="default_db")
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:

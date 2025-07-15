@@ -8,6 +8,7 @@ from typing import Dict
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
+from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
@@ -27,6 +28,22 @@ async def generate_balance_sheet_pandas_from_accounts(
     df: pd.DataFrame = pd.DataFrame(),
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
 ) -> Dict:
+    """
+    Generates a balance sheet as of a specified date using account data and ledger entries.
+    This function retrieves all relevant accounts and profit & loss information, then constructs
+    a balance sheet dictionary containing Assets, Liabilities, and Equity, including calculated
+    totals and retained earnings. It checks if the balance sheet is balanced and includes a
+    tolerance value.
+    Args:
+        df (pd.DataFrame, optional): Ledger dataframe. If empty, it will be fetched for the given date.
+        as_of_date (datetime, optional): The date for which to generate the balance sheet. Defaults to current UTC time plus one hour.
+    Returns:
+        Dict: A dictionary representing the balance sheet, including categories, totals, net income,
+              balance status, and tolerance.
+    """
+    if df.empty:
+        df = await get_ledger_dataframe(as_of_date=as_of_date)
+
     async with TaskGroup() as tg:
         all_accounts_task = tg.create_task(get_all_accounts(as_of_date=as_of_date))
         profit_and_loss_task = tg.create_task(

@@ -22,9 +22,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
     list_all_accounts_pipeline,
 )
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
@@ -362,8 +360,8 @@ async def list_all_accounts() -> List[LedgerAccount]:
         List[Account]: A list of unique Account objects sorted by account type, name, and sub-account.
     """
     pipeline = list_all_accounts_pipeline()
-    collection = await TrackedBaseModel.db_client.get_collection("ledger")
-    cursor = collection.aggregate(pipeline=pipeline)
+
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     accounts = []
     async for doc in cursor:
         account = LedgerAccount.model_validate(doc)
@@ -445,9 +443,7 @@ async def ledger_pipeline_result(
         LedgerConvSummary: The result of the aggregation as a LedgerConvSummary.
     """
     # Get a brand new MongoDB client with defaults
-    db_client = get_mongodb_client_defaults()
-    collection = await db_client.get_collection("ledger")
-    cursor = collection.aggregate(pipeline=pipeline)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     ans = LedgerConvSummary(
         cust_id=cust_id,
         as_of_date=as_of_date,
