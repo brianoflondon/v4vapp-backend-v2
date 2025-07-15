@@ -810,6 +810,15 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        self.close_db_clients_sync()
+        try:
+            loop = asyncio.get_running_loop()
+            if loop is not self.notification_loop:
+                loop.create_task(self.close_db_clients_async())
+        except RuntimeError:
+            # If there is no running loop, we can safely close the db client
+            pass
+
         self.shutdown_logging()
         logger.info("InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
@@ -826,7 +835,6 @@ class InternalConfig:
                     for task in asyncio.all_tasks(loop=self.notification_loop)
                     if task is not current_task
                 ]
-
                 # Wait for all pending tasks to complete
                 if pending_tasks:
                     logger.info(f"Waiting for {len(pending_tasks)} pending tasks to complete")
@@ -856,6 +864,23 @@ class InternalConfig:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
                 logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+
+    def close_db_clients_sync(self) -> None:
+        """
+        Manually close both synchronous and asynchronous database clients if they exist.
+        """
+        if hasattr(InternalConfig, "db_client_sync") and InternalConfig.db_client_sync:
+            InternalConfig.db_client_sync.close()
+            logger.info("Closed synchronous database client.")
+
+    async def close_db_clients_async(self) -> None:
+        """
+        Asynchronously close the database client if it exists.
+        This method is intended to be used in an asynchronous context.
+        """
+        if hasattr(InternalConfig, "db_client") and InternalConfig.db_client:
+            await InternalConfig.db_client.close()
+            logger.info("Closed asynchronous database client.")
 
 
 """
