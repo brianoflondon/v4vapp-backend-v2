@@ -4,7 +4,7 @@ from typing import List
 from pydantic import Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
@@ -22,11 +22,6 @@ class CustomJson(OpBase):
     required_posting_auths: List[str]
 
     # Extra Fields
-    #TODO #128 Remove the conv from the CustomJson class because it is redundant and imported via OpBase Tracked
-    conv: CryptoConv | None = Field(
-        default=None,
-        description="If the custom_json relates to an amount, store a conversion object.",
-    )
 
     def __init__(self, **data):
         """
@@ -75,7 +70,9 @@ class CustomJson(OpBase):
                     and hasattr(self.json_data, "sats")
                 ):
                     self.conv = CryptoConversion(
-                        value=self.json_data.sats, conv_from=Currency.SATS, quote=TrackedBaseModel.last_quote
+                        value=self.json_data.sats,
+                        conv_from=Currency.SATS,
+                        quote=TrackedBaseModel.last_quote,
                     ).conversion
 
     @property
