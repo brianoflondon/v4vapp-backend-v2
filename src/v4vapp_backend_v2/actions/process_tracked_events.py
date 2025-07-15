@@ -1,7 +1,5 @@
 import asyncio
-from typing import Any, List, Union
-
-from pydantic import ValidationError
+from typing import List, Union
 
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
@@ -23,12 +21,7 @@ from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
     keepsats_to_lightning_payment_success,
 )
-from v4vapp_backend_v2.actions.tracked_any import (
-    DiscriminatedTracked,
-    TrackedAny,
-    TrackedTransfer,
-    load_tracked_object,
-)
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -37,77 +30,10 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
-from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
-from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
+from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
-
-# TrackedAny = Union[OpAny, Invoice, Payment]
-# TODO: #111 implement discriminator in models to pick the right one
-
-
-def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
-    """
-    Validates and filters a tracked object, ensuring it is of type OpAny, Invoice, or Payment.
-
-    Removes the '_id' field from the input dictionary if present, then attempts to validate
-    the object using the DiscriminatedTracked model. If validation is successful, returns
-    the validated object as a TrackedAny type. Raises a ValueError if validation fails.
-
-    Args:
-        tracked (dict[str, Any]): The tracked object to validate and filter.
-
-    Returns:
-        TrackedAny: The validated tracked object of type OpAny, Invoice, or Payment.
-
-    Raises:
-        ValueError: If the object cannot be validated as one of the expected types.
-
-    """
-    if "_id" in tracked:
-        del tracked["_id"]  # Remove _id field if present
-
-    try:
-        value = {"value": tracked}
-        answer = DiscriminatedTracked.model_validate(value)
-        return answer.value
-    except ValidationError as e:
-        raise ValueError(f"Failed to validate tracked object: {e}") from e
-    except ValueError as e:
-        logger.warning(
-            f"Parsing as OpAny, Invoice, or Payment. {e}",
-            extra={"notification": False, "tracked": tracked},
-        )
-        raise ValueError(
-            f"Invalid tracked object type: Expected OpAny, Invoice, or Payment. {e}"
-        ) from e
-
-
-def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
-    """
-    Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
-
-    Removes the '_id' field from the input dictionary if present, then attempts to validate
-    the object using the TrackedTransfer model. If validation is successful, returns
-    the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
-
-    Args:
-        tracked (dict[str, Any]): The tracked object to validate and filter.
-
-    Returns:
-        TrackedTransfer: The validated tracked object of type TrackedTransfer.
-
-    Raises:
-        ValueError: If the object cannot be validated as a TrackedTransfer.
-    """
-    tracked_any = tracked_any_filter(tracked)
-    if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
-        return tracked_any
-    raise ValueError(
-        f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
-    )
 
 
 async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:

@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
@@ -108,15 +109,15 @@ class TrackedBaseModel(BaseModel):
         Returns:
             TrackedBaseModel: The current instance with the lock acquired.
         """
-        # stack = inspect.stack()
-        # print(stack[1].function, stack[1].filename, stack[1].lineno)
         start = timer()
+        stack = inspect.stack()
         logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
         if await self.locked:
             logger.warning(
                 f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
                 extra={"notification": False},
             )
+            print(stack[1].function, stack[1].filename, stack[1].lineno)
             unlocked = await self.wait_for_lock(timeout=60)
             if not unlocked:
                 logger.warning(
@@ -124,6 +125,7 @@ class TrackedBaseModel(BaseModel):
                     extra={"notification": False},
                 )
                 await self.unlock_op()
+                print(stack[1].function, stack[1].filename, stack[1].lineno)
                 raise TimeoutError("Timeout waiting for lock to be released.")
         await self.lock_op()
         logger.info(

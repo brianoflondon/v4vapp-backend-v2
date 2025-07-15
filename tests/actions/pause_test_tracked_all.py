@@ -30,7 +30,6 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryEx
 from v4vapp_backend_v2.actions.process_tracked_events import (
     TrackedAny,
     process_tracked_event,
-    tracked_any_filter,
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.database.db import MongoDBClient

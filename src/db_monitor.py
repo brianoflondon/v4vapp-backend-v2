@@ -11,10 +11,8 @@ from pymongo.errors import OperationFailure
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.process_tracked_events import (
-    process_tracked_event,
-    tracked_any_filter,
-)
+from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db_pymongo import DBConn
