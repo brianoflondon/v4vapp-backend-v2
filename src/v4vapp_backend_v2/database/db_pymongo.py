@@ -5,7 +5,6 @@ from urllib.parse import quote_plus
 from pymongo import AsyncMongoClient, MongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
-from pymongo.errors import ConnectionFailure
 from pymongo.errors import CollectionInvalid, OperationFailure
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
@@ -417,9 +416,7 @@ class DBConn:
         InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
-            admin_client: MongoClient[Dict[str, Any]] = MongoClient(
-                self.admin_uri, tz_aware=True
-            )
+            admin_client: MongoClient[Dict[str, Any]] = MongoClient(self.admin_uri, tz_aware=True)
             with admin_client:
                 self.setup_user_sync(admin_client=admin_client)
                 self.setup_collections_indexes_sync(admin_client=admin_client)
@@ -489,9 +486,7 @@ class DBConn:
             )
             pass
 
-    def setup_collections_indexes_sync(
-        self, admin_client: MongoClient[Dict[str, Any]]
-    ) -> None:
+    def setup_collections_indexes_sync(self, admin_client: MongoClient[Dict[str, Any]]) -> None:
         """
         Set up the collections in the database.
 

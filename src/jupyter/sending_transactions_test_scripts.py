@@ -14,9 +14,8 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 )
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.actions.hive_to_lightning import get_verified_hive_client
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
-from v4vapp_backend_v2.database.db import get_mongodb_client_defaults
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer, send_transfer_bulk
@@ -49,15 +48,14 @@ async def clear_database():
     """
     Clears the MongoDB database by dropping all collections.
     """
-    db_client = get_mongodb_client_defaults()
-    trx = await send_server_to_customer()
+    db_conn = DBConn()
+    await db_conn.setup_database()
 
     await asyncio.sleep(10)  # Wait for database operations to complete
 
-    async with db_client as client:
-        db = client.get_db()
-        await db["hive_ops"].delete_many({})
-        await db["ledger"].delete_many({})
+    db = db_conn.db()
+    await db["hive_ops"].delete_many({})
+    await db["ledger"].delete_many({})
 
 
 async def get_lightning_invoice(
@@ -129,8 +127,6 @@ async def main():
     # # Pay invoice with Hive transfer
     # trx = await send_hive_customer_to_server(send_sats=5000, memo=f"{invoice.payment_request}")
     # pprint(trx)
-    db_client = get_mongodb_client_defaults()
-    TrackedBaseModel.db_client = db_client
 
     # # Deposit Hive as Keepsats
     # trx = await send_hive_customer_to_server(amount=Amount("25 HBD"), memo="Deposit #sats")
