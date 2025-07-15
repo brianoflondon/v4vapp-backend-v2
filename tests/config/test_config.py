@@ -55,7 +55,11 @@ def test_valid_hive_config():
     assert hive_config.hive_accs is not None
 
 
-def test_internal_config():
+def test_internal_config(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
+    )  # Resetting InternalConfig instance
+
     config_file = Path("tests/data/config", "config.yaml")
     with open(config_file) as f_in:
         raw_config = safe_load(f_in)

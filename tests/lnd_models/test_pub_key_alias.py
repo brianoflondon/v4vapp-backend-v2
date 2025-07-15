@@ -7,6 +7,7 @@ from mongomock_motor import AsyncMongoMockClient
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.pub_key_alias import (
     get_all_pub_key_aliases,
     update_payment_route_with_alias,
@@ -68,22 +69,18 @@ async def test_get_all_pub_key_aliases(mocker):
         "tests/data/lnd_lists/lnd_monitor_v2_voltage_pub_keys.json"
     )
 
-    # Set up the mock collection
-    col_pub_keys = AsyncMongoMockClient()["test_db"]["pub_keys"]
+    # Set up the mock database
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+    col_pub_keys = mock_db["pub_keys"]
     for item in mongodb_pub_keys:
         await col_pub_keys.insert_one(item)
 
-    # Create a mock db_client
-    db_client = AsyncMock()
+    # Patch InternalConfig.db to return the mock_db
+    mocker.patch.object(InternalConfig, "db", mock_db)
 
-    # Mock the find method to return the cursor from col_pub_keys
-    async def mock_find(collection_name, query):
-        return col_pub_keys.find(query)  # Returns a cursor-like object
-
-    db_client.find = mocker.patch.object(db_client, "find", side_effect=mock_find)
-
-    # Call the function with the mocked db_client
-    pub_key_alias_cache = await get_all_pub_key_aliases(db_client)
+    # Call the function
+    pub_key_alias_cache = await get_all_pub_key_aliases()
 
     # Assertions
     assert len(pub_key_alias_cache) == len(mongodb_pub_keys)
@@ -108,46 +105,50 @@ async def async_iterable(sync_iterable):
 async def test_update_payment_route_with_alias_fill_cache():
     # Mock dependencies
     TrackedBaseModel.last_quote = last_quote()
-    db_client = AsyncMock()
     lnd_client = AsyncMock()
     mock_aliases = await pub_key_aliases()
 
     lnrpc_list_payments = read_list_payments_raw("tests/data/lnd_lists/list_payments_raw.bin")
     list_payment_response = ListPaymentsResponse(lnrpc_list_payments)
-    first_call = True
-    for payment in list_payment_response.payments:
-        # Mock get_all_pub_key_aliases return value
-        with patch(
-            "v4vapp_backend_v2.helpers.pub_key_alias.get_all_pub_key_aliases",
-            new_callable=AsyncMock,
-        ) as mock_get_all:
-            mock_get_all.return_value = mock_aliases
 
-            # Patch get_node_info to return None
+    # Set up the mock database
+    mock_client = AsyncMongoMockClient()
+    mock_db = mock_client["test_db"]
+
+    with patch.object(InternalConfig, "db", mock_db):
+        first_call = True
+        for payment in list_payment_response.payments:
+            # Mock get_all_pub_key_aliases return value
             with patch(
-                "v4vapp_backend_v2.helpers.pub_key_alias.get_node_info",
+                "v4vapp_backend_v2.helpers.pub_key_alias.get_all_pub_key_aliases",
                 new_callable=AsyncMock,
-            ) as mock_get_node_info:
-                mock_get_node_info.return_value = lnrpc.NodeInfo()
+            ) as mock_get_all:
+                mock_get_all.return_value = mock_aliases
 
-                # Call the function with fill_cache=True
-                await update_payment_route_with_alias(
-                    db_client=db_client,
-                    lnd_client=lnd_client,
-                    payment=payment,
-                    fill_cache=True,
-                    force_update=False,
-                    col_pub_keys="pub_keys",
-                )
+                # Patch get_node_info to return None
+                with patch(
+                    "v4vapp_backend_v2.helpers.pub_key_alias.get_node_info",
+                    new_callable=AsyncMock,
+                ) as mock_get_node_info:
+                    mock_get_node_info.return_value = lnrpc.NodeInfo()
 
-                # Assertions
-                if payment.destination_pub_keys and payment.route:
-                    assert len(payment.route) > 0
-                    assert payment.destination
-                    route_str = payment.route_str
-                    # assert route_str
-                    assert payment.destination
+                    # Call the function with fill_cache=True
+                    await update_payment_route_with_alias(
+                        lnd_client=lnd_client,
+                        payment=payment,
+                        fill_cache=True,
+                        force_update=False,
+                        col_pub_keys="pub_keys",
+                    )
 
-                    if first_call:
-                        mock_get_all.assert_called_once_with(db_client, "pub_keys")
-                        first_call = False
+                    # Assertions
+                    if payment.destination_pub_keys and payment.route:
+                        assert len(payment.route) > 0
+                        assert payment.destination
+                        route_str = payment.route_str
+                        # assert route_str
+                        assert payment.destination
+
+                        if first_call:
+                            mock_get_all.assert_called_once_with("pub_keys")
+                            first_call = False
