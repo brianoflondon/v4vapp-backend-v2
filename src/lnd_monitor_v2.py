@@ -15,8 +15,7 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.database.db import DATABASE_ICON
-from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.database.db_pymongo import DBConn, DATABASE_ICON
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
