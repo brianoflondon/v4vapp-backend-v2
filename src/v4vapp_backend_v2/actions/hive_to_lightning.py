@@ -301,6 +301,8 @@ async def process_hive_to_lightning(
                             lnd_client=lnd_client,
                             chat_message=chat_message,
                             group_id=hive_transfer.group_id_p,
+                            cust_id=hive_transfer.cust_id,
+                            paywithsats=hive_transfer.paywithsats,
                             amount_msat=hive_transfer.conv.msats - hive_transfer.conv.msats_fee,
                             fee_limit_ppm=lnd_config.lightning_fee_limit_ppm,
                         )
