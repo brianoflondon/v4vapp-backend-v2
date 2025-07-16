@@ -60,7 +60,7 @@ def test_op_transfer_watch_list():
             assert transfer.amount.amount == hive_event["amount"]["amount"]
             assert transfer.from_account not in Transfer.watch_users
             assert transfer.to_account not in Transfer.watch_users
-            print(transfer.to_account)
+            assert transfer.cust_id
 
 
 def test_model_validate_transfer_enhanced():
