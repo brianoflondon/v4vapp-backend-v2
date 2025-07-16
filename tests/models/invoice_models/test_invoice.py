@@ -15,6 +15,6 @@ def test_invoice_model_validate():
             if '"fullDocument"' in line:
                 full_document = json.loads(line)["change"]["fullDocument"]
                 invoice = Invoice.model_validate(full_document)
-                print(invoice.hive_accname)
+                print(invoice.cust_id)
                 if invoice.custom_records:
                     print(invoice.custom_records.podcast)
