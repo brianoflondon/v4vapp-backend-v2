@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Union
 
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
@@ -9,7 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.cust_id_class import CustID
+from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     complete_hive_to_lightning,
     process_hive_to_lightning,
@@ -56,41 +57,47 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     cust_id = getattr(tracked_op, "cust_id", None)
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}")
     try:
-        if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
-            ledger_entry = await process_hive_op(op=tracked_op)
-            ledger_entries = [ledger_entry]
-        elif isinstance(tracked_op, Invoice) and tracked_op.settled:
-            ledger_entries = await process_lightning_op(op=tracked_op)
-        elif isinstance(tracked_op, Payment):
-            ledger_entries = await process_lightning_op(op=tracked_op)
-        else:
-            raise ValueError("Invalid tracked object")
+        async with CustID(cust_id).locked(timeout=None, blocking_timeout=None):
+            if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
+                ledger_entry = await process_hive_op(op=tracked_op)
+                ledger_entries = [ledger_entry]
+            elif isinstance(tracked_op, Invoice) and tracked_op.settled:
+                ledger_entries = await process_lightning_op(op=tracked_op)
+            elif isinstance(tracked_op, Payment):
+                ledger_entries = await process_lightning_op(op=tracked_op)
+            else:
+                raise ValueError("Invalid tracked object")
 
-        if not ledger_entries:
-            raise LedgerEntryCreationException("Ledger entry cannot be created.")
-        for ledger_entry in ledger_entries:
-            try:
-                # DEBUG section
-                logger.info("\n" + str(ledger_entry))
-                balance_sheet = await generate_balance_sheet_pandas_from_accounts()
-                if not balance_sheet["is_balanced"]:
-                    logger.warning(
-                        f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
-                        extra={"notification": False},
+            if not ledger_entries:
+                raise LedgerEntryCreationException("Ledger entry cannot be created.")
+            for ledger_entry in ledger_entries:
+                try:
+                    # DEBUG section
+                    logger.info("\n" + str(ledger_entry))
+                    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
+                    if not balance_sheet["is_balanced"]:
+                        logger.warning(
+                            f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
+                            extra={"notification": False},
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Error saving ledger entry: {e}",
+                        extra={**ledger_entry.log_extra, "notification": False},
                     )
-            except Exception as e:
-                logger.error(
-                    f"Error saving ledger entry: {e}",
-                    extra={**ledger_entry.log_extra, "notification": False},
-                )
 
-        return ledger_entries
+            return ledger_entries
     except LedgerEntryDuplicateException as e:
         raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
 
     except LedgerEntryException as e:
         logger.exception(f"Error processing tracked operation: {e}")
         raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
+
+    except CustIDLockException as e:
+        logger.error(f"Error acquiring lock for {cust_id}: {e}")
+        await asyncio.sleep(10)
+        raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
     finally:
         logger.info(
@@ -218,15 +225,14 @@ async def process_lightning_payment(
                 if getattr(initiating_op, "paywithsats", None):
                     cust_id = CustID(initiating_op.from_account)
                     logger.info(f"LOCKING {cust_id} {__name__}")
-                    async with cust_id.locked(timeout=None, blocking_timeout=None):
-                        ledger_entries_list = await keepsats_to_lightning_payment_success(
-                            payment=payment,
-                            old_ledger_entry=old_ledger_entry,
-                            nobroadcast=nobroadcast,
-                        )
-                        if ledger_entries_list:
-                            # We can now safely release the hold on the Keepsats
-                            await release_keepsats(hive_transfer=initiating_op)
+                    ledger_entries_list = await keepsats_to_lightning_payment_success(
+                        payment=payment,
+                        old_ledger_entry=old_ledger_entry,
+                        nobroadcast=nobroadcast,
+                    )
+                    if ledger_entries_list:
+                        # We can now safely release the hold on the Keepsats
+                        await release_keepsats(hive_transfer=initiating_op)
                     logger.info(f"UNLOCKING {cust_id} {__name__}")
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(

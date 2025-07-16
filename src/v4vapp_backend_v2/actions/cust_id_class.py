@@ -117,10 +117,8 @@ class CustID(str):
         """
         lock_key = f"cust_id_lock:{self}:{group_id}"
         redis_instance = V4VAsyncRedis()
-
+        redis = redis_instance.redis
         try:
-            redis = redis_instance.redis
-
             lock = RedisLock(
                 redis,
                 name=lock_key,
@@ -132,6 +130,7 @@ class CustID(str):
 
             acquired = await lock.acquire()
             if not acquired:
+                await redis.aclose()
                 raise CustIDLockException(
                     f"Failed to acquire lock for {self} with group {group_id}"
                 )
@@ -139,11 +138,15 @@ class CustID(str):
             # Store the lock in class-level storage
             CustID._locks[lock_key] = lock
             logger.info(f"Lock acquired for {self} with group {group_id}")
+            await redis.aclose()
             return True
 
         except Exception as e:
             logger.error(f"Error acquiring lock for {self} with group {group_id}: {e}")
             raise CustIDLockException(f"Error acquiring lock: {e}")
+        finally:
+            # Ensure we always close the Redis connection
+            await redis.aclose()
 
     @staticmethod
     async def release_lock(cust_id: str, group_id: str) -> bool:

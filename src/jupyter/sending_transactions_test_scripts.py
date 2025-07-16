@@ -122,13 +122,13 @@ async def main():
     # pprint(trx)
 
     # Deposit Hive as Keepsats
-    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit some #sats")
+    # trx = await send_hive_customer_to_server(amount=Amount("100 HIVE"), memo="Deposit some #sats")
     # pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit and more #sats")
     # pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
     # pprint(trx)
-    # await asyncio.sleep(60)  # Wait for the transaction to be processed
+    # await asyncio.sleep(10)  # Wait for the transaction to be processed
 
     hive_config = InternalConfig().config.hive
     hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
@@ -136,7 +136,7 @@ async def main():
 
     # pay with keepsats
     transfer_list = []
-    for sats in [1000, 1500, 1000, 1000]:
+    for sats in [1000, 1500, 1234, 2100, 5000, 10000, 1010, 1018]:
         invoice = await get_lightning_invoice(sats, f"Test {sats}")
         hive_transfer = SendHiveTransfer(
             from_account=customer,

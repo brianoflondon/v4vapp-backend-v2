@@ -11,6 +11,7 @@ from pymongo.errors import OperationFailure
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
+from v4vapp_backend_v2.actions.cust_id_class import CustIDLockException
 from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -183,21 +184,26 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
         return
     logger.info(f"Processing {op.group_id_query}")
-    try:
-        ledger_entries = await process_tracked_event(op)
-        for entry in ledger_entries:
-            logger.info(
-                f"{ICON} Processed ledger entry for {entry.op.log_str}",
-            )
-    except ValueError as e:
-        logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
-        return
-    except NotImplementedError:
-        logger.info(f"{ICON} Operation not implemented for {op.group_id}")
-        return
-    except LedgerEntryException as e:
-        logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
-        return
+    while True:
+        try:
+            ledger_entries = await process_tracked_event(op)
+            for entry in ledger_entries:
+                logger.info(
+                    f"{ICON} Processed ledger entry for {entry.op.log_str}",
+                )
+            return
+        except ValueError as e:
+            logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
+            return
+        except NotImplementedError:
+            logger.info(f"{ICON} Operation not implemented for {op.group_id}")
+            return
+        except LedgerEntryException as e:
+            logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
+            return
+        except CustIDLockException as e:
+            logger.error(f"{ICON} CustID lock error: {e}", extra={"error": e})
+            await asyncio.sleep(1)
 
 
 async def subscribe_stream(
