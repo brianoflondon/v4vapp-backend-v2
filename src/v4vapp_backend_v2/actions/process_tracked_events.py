@@ -1,4 +1,3 @@
-import asyncio
 from typing import List, Union
 
 from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
@@ -11,7 +10,6 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     complete_hive_to_lightning,
     process_hive_to_lightning,
@@ -55,6 +53,8 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+    cust_id = getattr(tracked_op, "cust_id", None)
+    logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}")
     try:
         if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
             ledger_entry = await process_hive_op(op=tracked_op)
@@ -91,6 +91,11 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     except LedgerEntryException as e:
         logger.exception(f"Error processing tracked operation: {e}")
         raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
+
+    finally:
+        logger.info(
+            f"Finished Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}"
+        )
 
 
 async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
@@ -152,7 +157,7 @@ async def process_lightning_invoice(
     node_name = InternalConfig().config.lnd_config.default
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
-    ledger_entry.cust_id = invoice.hive_accname if invoice.hive_accname is not None else node_name
+    ledger_entry.cust_id = invoice.cust_id if invoice.cust_id is not None else node_name
     ledger_entry.description = invoice.memo
     ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
     ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
@@ -257,17 +262,18 @@ async def process_lightning_payment(
                     return_hive_message = (
                         f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
                     )
-                    task = asyncio.create_task(
-                        return_hive_transfer(
+                    try:
+                        await return_hive_transfer(
                             hive_transfer=hive_transfer,
                             reason=return_hive_message,
                             nobroadcast=nobroadcast,
                         )
-                    )
-                    task.add_done_callback(lambda t: handle_tasks([t]))
-                    task.set_name(
-                        f"Return Hive after failure in Hive to Lightning transfer for {hive_transfer.group_id_p}"
-                    )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error processing return_hive_transfer: {e}",
+                            extra={"notification": False, **hive_transfer.log_extra},
+                        )
+                        raise e
                     return []
                 else:
                     logger.warning(
@@ -464,13 +470,14 @@ async def process_transfer_op(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
-
     await ledger_entry.save()
+
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
-        task = asyncio.create_task(follow_on_task)
-        task.add_done_callback(lambda t: handle_tasks([t]))
-        task.set_name(f"Process hive to lightning {hive_transfer.group_id_p}")
+        try:
+            await follow_on_task
+        except Exception as e:
+            logger.exception(f"Follow-on task failed: {e}", extra={"notification": False})
 
     return ledger_entry
 

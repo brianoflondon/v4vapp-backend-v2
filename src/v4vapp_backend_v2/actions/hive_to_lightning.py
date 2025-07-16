@@ -11,7 +11,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.keepsats_ledger_entries import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
@@ -350,18 +349,23 @@ async def process_hive_to_lightning(
                     finally:
                         if hive_transfer.paywithsats and release_hold:
                             await release_keepsats(hive_transfer=hive_transfer)
+
                         if return_hive_message:
-                            return_task = asyncio.create_task(
-                                return_hive_transfer(
+                            try:
+                                await return_hive_transfer(
                                     hive_transfer=hive_transfer,
                                     reason=return_hive_message,
                                     nobroadcast=nobroadcast,
                                 )
-                            )
-                            return_task.add_done_callback(lambda t: handle_tasks([t]))
-                            return_task.set_name(
-                                f"Return Hive to Lightning transfer for {hive_transfer.group_id_p}"
-                            )
+                            except Exception as e:
+                                logger.exception(
+                                    f"Error returning Hive transfer: {e}",
+                                    extra={
+                                        "notification": False,
+                                        "reason": return_hive_message,
+                                        **hive_transfer.log_extra,
+                                    },
+                                )
 
                 else:
                     # Any transfer that ends up here will be recorded as a liability in the

@@ -1,4 +1,3 @@
-import asyncio
 from datetime import timedelta
 
 from nectar.amount import Amount
@@ -288,13 +287,12 @@ async def hive_to_lightning_payment_success(
         reply_message=message,
     )
 
-    asyncio.create_task(
-        lightning_payment_sent(
-            payment=payment,
-            hive_transfer=hive_transfer,
-            nobroadcast=nobroadcast,
-        )
+    await lightning_payment_sent(
+        payment=payment,
+        hive_transfer=hive_transfer,
+        nobroadcast=nobroadcast,
     )
+
     return ledger_entries_list
 
 
@@ -453,11 +451,9 @@ async def keepsats_to_lightning_payment_success(
         reply_message=message,
     )
 
-    asyncio.create_task(
-        lightning_payment_sent(
-            payment=payment,
-            hive_transfer=hive_transfer,
-            nobroadcast=nobroadcast,
-        )
+    await lightning_payment_sent(
+        payment=payment,
+        hive_transfer=hive_transfer,
+        nobroadcast=nobroadcast,
     )
     return ledger_entries_list
