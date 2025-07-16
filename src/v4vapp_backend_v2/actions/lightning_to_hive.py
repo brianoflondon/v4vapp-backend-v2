@@ -1,3 +1,4 @@
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.models.invoice_models import Invoice
 
 
@@ -11,4 +12,7 @@ async def process_lightning_to_hive(invoice: Invoice, nobroadcast: bool = False)
     # Here you would implement the logic to process the Lightning invoice
     # and convert it to a Hive transfer.
     # This is a placeholder for the actual implementation.
-    pass
+    logger.info(
+        f"Processing Lightning to Hive transfer for invoice: {invoice.id}, nobroadcast: {nobroadcast}"
+    )
+    raise NotImplementedError("Processing Lightning to Hive transfer is not implemented yet.")
