@@ -13,8 +13,8 @@ Helper classes for accounting summaries, including account balances and lightnin
 
 @dataclass
 class UnitSummary:
-    final_balance: float
-    converted: ConvertedSummary
+    final_balance: float = 0.0
+    converted: ConvertedSummary = field(default_factory=ConvertedSummary)
 
 
 @dataclass

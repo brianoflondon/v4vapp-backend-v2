@@ -6,6 +6,7 @@ from typing import Any, Dict, Self, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult, UpdateResult
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
@@ -498,6 +499,10 @@ class LedgerEntry(BaseModel):
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
             return ans
+        except DuplicateKeyError as e:
+            logger.error(f"Duplicate ledger entry detected: {e}")
+            raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
+
         except Exception as e:
             logger.error(f"Error saving ledger entry to database: {e}")
             raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e

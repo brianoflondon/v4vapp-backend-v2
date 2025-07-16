@@ -123,6 +123,7 @@ async def hive_to_lightning_payment_success(
         credit_amount=conversion_credit_amount.amount,
         credit_conv=conversion_credit_debit_conv,
     )
+    await conversion_ledger_entry.save()
     ledger_entries_list.append(conversion_ledger_entry)
 
     # MARK: 3 Contra Reconciliation Entry
@@ -151,6 +152,7 @@ async def hive_to_lightning_payment_success(
         credit_amount=conversion_credit_amount.amount,
         credit_conv=conversion_credit_debit_conv,  # No conversion needed
     )
+    await contra_h_conversion_ledger_entry.save()
     ledger_entries_list.append(contra_h_conversion_ledger_entry)
 
     # MARK: 4 Fee Income
@@ -185,6 +187,7 @@ async def hive_to_lightning_payment_success(
         credit_amount=hive_transfer.fee_conv.msats,
         credit_conv=fee_credit_conv,
     )
+    await fee_ledger_entry_hive.save()
     ledger_entries_list.append(fee_ledger_entry_hive)
 
     # MARK: 5 Fulfill Main Payment Obligation
@@ -215,6 +218,7 @@ async def hive_to_lightning_payment_success(
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
     )
+    await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
     # MARK: 6 Send Lightning Payment
@@ -239,6 +243,7 @@ async def hive_to_lightning_payment_success(
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
     )
+    await external_payment_ledger_entry.save()
     ledger_entries_list.append(external_payment_ledger_entry)
 
     # MARK: 7: Lightning Network Fee
@@ -272,6 +277,7 @@ async def hive_to_lightning_payment_success(
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
         )
+        await fee_ledger_entry_sats.save()
         ledger_entries_list.append(fee_ledger_entry_sats)
 
     hive_transfer.add_reply(
@@ -351,6 +357,7 @@ async def keepsats_to_lightning_payment_success(
         credit_amount=payment.value_msat,
         credit_conv=payment.conv,
     )
+    await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
     # MARK: 2b Send Lightning Payment
@@ -375,6 +382,7 @@ async def keepsats_to_lightning_payment_success(
         credit_amount=payment.value_msat,
         credit_conv=payment.conv,
     )
+    await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
     # MARK: 3: Lightning Network Fee Charge Entry
@@ -406,6 +414,7 @@ async def keepsats_to_lightning_payment_success(
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
         )
+        await external_payment_ledger_entry.save()
         ledger_entries_list.append(external_payment_ledger_entry)
 
         ledger_type = LedgerType.FEE_EXPENSE
@@ -431,6 +440,7 @@ async def keepsats_to_lightning_payment_success(
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
         )
+        await fee_ledger_entry_sats.save()
         ledger_entries_list.append(fee_ledger_entry_sats)
 
     hive_transfer.change_amount = hive_transfer.amount

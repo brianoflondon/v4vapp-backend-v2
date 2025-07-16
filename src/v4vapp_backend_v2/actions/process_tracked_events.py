@@ -10,12 +10,14 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
     LedgerType,
 )
+from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
 from v4vapp_backend_v2.actions.hive_to_lightning import (
     complete_hive_to_lightning,
     process_hive_to_lightning,
     return_hive_transfer,
 )
+from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
@@ -54,43 +56,35 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryException: If there is an error processing the tracked operation.
     """
     try:
-        # This is the outer lock
-        async with tracked_op:
-            if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
-                ledger_entry = await process_hive_op(op=tracked_op)
-                ledger_entries = [ledger_entry]
-            elif isinstance(tracked_op, Invoice) and tracked_op.settled:
-                ledger_entries = await process_lightning_op(op=tracked_op)
-            elif isinstance(tracked_op, Payment):
-                ledger_entries = await process_lightning_op(op=tracked_op)
-            else:
-                raise ValueError("Invalid tracked object")
+        if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
+            ledger_entry = await process_hive_op(op=tracked_op)
+            ledger_entries = [ledger_entry]
+        elif isinstance(tracked_op, Invoice) and tracked_op.settled:
+            ledger_entries = await process_lightning_op(op=tracked_op)
+        elif isinstance(tracked_op, Payment):
+            ledger_entries = await process_lightning_op(op=tracked_op)
+        else:
+            raise ValueError("Invalid tracked object")
 
-            if not ledger_entries:
-                raise LedgerEntryCreationException("Ledger entry cannot be created.")
-            for ledger_entry in ledger_entries:
-                try:
-                    ans = await ledger_entry.save()
-                    logger.info(
-                        f"Ledger entry saved: {ans}",
-                        extra={**ledger_entry.log_extra, "notification": False},
+        if not ledger_entries:
+            raise LedgerEntryCreationException("Ledger entry cannot be created.")
+        for ledger_entry in ledger_entries:
+            try:
+                # DEBUG section
+                logger.info("\n" + str(ledger_entry))
+                balance_sheet = await generate_balance_sheet_pandas_from_accounts()
+                if not balance_sheet["is_balanced"]:
+                    logger.warning(
+                        f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
+                        extra={"notification": False},
                     )
+            except Exception as e:
+                logger.error(
+                    f"Error saving ledger entry: {e}",
+                    extra={**ledger_entry.log_extra, "notification": False},
+                )
 
-                    # DEBUG section
-                    logger.info("\n" + str(ledger_entry))
-                    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
-                    if not balance_sheet["is_balanced"]:
-                        logger.warning(
-                            f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
-                            extra={"notification": False},
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Error saving ledger entry: {e}",
-                        extra={**ledger_entry.log_extra, "notification": False},
-                    )
-
-            return ledger_entries
+        return ledger_entries
     except LedgerEntryDuplicateException as e:
         raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
 
@@ -119,7 +113,7 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     if isinstance(op, Invoice):
         ledger_entries = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
     elif isinstance(op, Payment):
-        ledger_entries = await process_lightning_payment(payment=op, ledger_entry=ledger_entry)
+        ledger_entries = await process_lightning_payment(payment=op)
 
     return ledger_entries
 
@@ -181,7 +175,7 @@ async def process_lightning_invoice(
 
 
 async def process_lightning_payment(
-    payment: Payment, ledger_entry: LedgerEntry, nobroadcast: bool = False
+    payment: Payment, nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
     Processes a Lightning Network payment and updates the corresponding ledger entry.
@@ -195,10 +189,9 @@ async def process_lightning_payment(
 
     Args:
         payment (Payment): The Lightning payment object containing payment details.
-        ledger_entry (LedgerEntry): The ledger entry to be updated based on the payment.
 
     Returns:
-        LedgerEntry: The updated ledger entry reflecting the processed payment.
+        List[LedgerEntry]: The list of ledger entries reflecting the processed payment.
 
     Raises:
         NotImplementedError: If the payment memo does not match implemented cases.
@@ -218,9 +211,18 @@ async def process_lightning_payment(
             initiating_op = old_ledger_entry.op
             if isinstance(initiating_op, TransferBase):
                 if getattr(initiating_op, "paywithsats", None):
-                    ledger_entries_list = await keepsats_to_lightning_payment_success(
-                        payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
-                    )
+                    cust_id = CustID(initiating_op.from_account)
+                    logger.info(f"LOCKING {cust_id} {__name__}")
+                    async with cust_id.locked(timeout=None, blocking_timeout=None):
+                        ledger_entries_list = await keepsats_to_lightning_payment_success(
+                            payment=payment,
+                            old_ledger_entry=old_ledger_entry,
+                            nobroadcast=nobroadcast,
+                        )
+                        if ledger_entries_list:
+                            # We can now safely release the hold on the Keepsats
+                            await release_keepsats(hive_transfer=initiating_op)
+                    logger.info(f"UNLOCKING {cust_id} {__name__}")
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(
                         payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
@@ -231,7 +233,9 @@ async def process_lightning_payment(
                     f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
                 )
 
-        raise NotImplementedError(f"Not implemented yet {v4vapp_group_id} {keysend_message}")
+        message = f"Not implemented yet {v4vapp_group_id} {keysend_message}"
+        logger.error(message)
+        raise NotImplementedError(message)
 
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
@@ -245,31 +249,32 @@ async def process_lightning_payment(
             hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.op)
             # MARK: Hive to Lightning Payment Failed
             if isinstance(hive_transfer, TransferBase):
-                async with hive_transfer:
-                    # If a payment fails we need to update the hive_transfer if
-                    if not hive_transfer.replies:
-                        # MARK: Record Failed payment and make a refund
-                        # No Journal entry necessary because the Hive Refund will automatically create one
-                        failure_reason = from_snake_case(payment.failure_reason.lower())
-                        return_hive_message = f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
-                        task = asyncio.create_task(
-                            return_hive_transfer(
-                                hive_transfer=hive_transfer,
-                                reason=return_hive_message,
-                                nobroadcast=nobroadcast,
-                            )
+                # If a payment fails we need to update the hive_transfer if
+                if not hive_transfer.replies:
+                    # MARK: Record Failed payment and make a refund
+                    # No Journal entry necessary because the Hive Refund will automatically create one
+                    failure_reason = from_snake_case(payment.failure_reason.lower())
+                    return_hive_message = (
+                        f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
+                    )
+                    task = asyncio.create_task(
+                        return_hive_transfer(
+                            hive_transfer=hive_transfer,
+                            reason=return_hive_message,
+                            nobroadcast=nobroadcast,
                         )
-                        task.add_done_callback(lambda t: handle_tasks([t]))
-                        task.set_name(
-                            f"Return Hive after failure in Hive to Lightning transfer for {hive_transfer.group_id_p}"
-                        )
-                        return []
-                    else:
-                        logger.warning(
-                            f"Hive transfer already has replies, skipping update. {hive_transfer.short_id}",
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-                        return []
+                    )
+                    task.add_done_callback(lambda t: handle_tasks([t]))
+                    task.set_name(
+                        f"Return Hive after failure in Hive to Lightning transfer for {hive_transfer.group_id_p}"
+                    )
+                    return []
+                else:
+                    logger.warning(
+                        f"Hive transfer already has replies, skipping update. {hive_transfer.short_id}",
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+                    return []
 
     if not v4vapp_group_id:
         raise LedgerEntryCreationException(
@@ -467,6 +472,8 @@ async def process_transfer_op(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
+
+    await ledger_entry.save()
 
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background

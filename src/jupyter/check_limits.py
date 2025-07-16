@@ -45,12 +45,7 @@ async def main():
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
 
-    print("-------------- Keepsats balance ----------------")
-    keepsats_balance = await get_keepsats_balance(cust_id=cust_id, line_items=False)
-    print("Keepsats Balance Summary:")
-    pprint(keepsats_balance)
-    for ledger_entry in keepsats_balance.ledger_entries:
-        print(ledger_entry)
+
 
     amount_msats = 3_000_000
 
@@ -65,10 +60,9 @@ async def main():
     pprint(account_details)
 
     print("-------------- Keepsats balance ----------------")
+    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=cust_id, line_items=False)
     print("Keepsats Balance Summary:")
-    pprint(keepsats_balance)
-    print(keepsats_balance.net_balance.sats)
-
+    pprint(net_sats)
 
 if __name__ == "__main__":
     target_dir = "/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/"
@@ -76,7 +70,5 @@ if __name__ == "__main__":
     print("Current working directory:", os.getcwd())
 
     CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
-
-
 
     asyncio.run(main())

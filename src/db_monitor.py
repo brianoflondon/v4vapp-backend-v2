@@ -243,7 +243,9 @@ async def subscribe_stream(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
-                    asyncio.create_task(process_op(change=change, collection=collection_name))
+                    # Change to await instead of create new task, Resume token only
+                    # updated after processing each item.
+                    await process_op(change=change, collection=collection_name)
                 resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():
                     logger.info(f"{ICON} Shutdown signal received. Exiting stream...")

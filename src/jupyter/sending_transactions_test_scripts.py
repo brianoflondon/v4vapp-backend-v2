@@ -109,14 +109,7 @@ async def send_hive_customer_to_server(
 
 
 async def graceful_shutdown():
-    current_task = asyncio.current_task()
-    tasks = [task for task in asyncio.all_tasks() if task is not current_task]
-    for task in tasks:
-        task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
-    logger.info("👋 Goodbye! from Hive Monitor", extra={"notification": True})
-    logger.info("Clearing notifications")
-    await asyncio.sleep(5)
+    await asyncio.sleep(3)
 
 
 async def main():
@@ -128,10 +121,14 @@ async def main():
     # trx = await send_hive_customer_to_server(send_sats=5000, memo=f"{invoice.payment_request}")
     # pprint(trx)
 
-    # # Deposit Hive as Keepsats
-    # trx = await send_hive_customer_to_server(amount=Amount("25 HBD"), memo="Deposit #sats")
+    # Deposit Hive as Keepsats
+    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit some #sats")
     # pprint(trx)
-    # await asyncio.sleep(5)  # Wait for the transaction to be processed
+    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit and more #sats")
+    # pprint(trx)
+    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
+    # pprint(trx)
+    # await asyncio.sleep(60)  # Wait for the transaction to be processed
 
     hive_config = InternalConfig().config.hive
     hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
@@ -139,13 +136,13 @@ async def main():
 
     # pay with keepsats
     transfer_list = []
-    for sats in [3000, 4000, 5000]:
-        invoice = await get_lightning_invoice(sats, f"Test Invoice with Keepsats {sats}")
+    for sats in [1000, 1500, 1000, 1000]:
+        invoice = await get_lightning_invoice(sats, f"Test {sats}")
         hive_transfer = SendHiveTransfer(
             from_account=customer,
             to_account=server,
             amount="0.001 HIVE",
-            memo=f"{invoice.payment_request} #paywithsats",
+            memo=f"{invoice.payment_request} #paywithsats {sats} sats",
         )
         transfer_list.append(hive_transfer)
 
@@ -171,6 +168,8 @@ async def main():
     #     amount=Amount("0.001 HIVE"), memo=f"{invoice.payment_request} #paywithsats"
     # )
 
+    db_conn = DBConn()
+    await db_conn.setup_database()
     ledger_df = await get_ledger_dataframe()
     balance_sheet_dict = await generate_balance_sheet_pandas_from_accounts(df=ledger_df)
     balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet_dict)

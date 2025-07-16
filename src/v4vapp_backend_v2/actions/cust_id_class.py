@@ -8,11 +8,11 @@ from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import LockNotOwnedError
 
 from v4vapp_backend_v2.config.setup import (
-    logger,
-)  # Assuming this is needed if not already imported
+    logger,  # Assuming this is needed if not already imported
+)
 from v4vapp_backend_v2.database.async_redis import (
-    V4VAsyncRedis,
-)  # Assuming the import path; adjust if necessary
+    V4VAsyncRedis,  # Assuming the import path; adjust if necessary
+)
 
 
 class CustIDLockException(Exception):
@@ -48,7 +48,11 @@ class CustID(str):
             async with cust.locked():
                 # Critical section code here
         """
-        async with V4VAsyncRedis() as redis:
+        redis_instance = V4VAsyncRedis()
+        try:
+            # Manually enter: ping to ensure connection
+            redis = redis_instance.redis  # Access the async Redis client
+
             lock = RedisLock(
                 redis,
                 name=f"cust_id_lock:{self}",
@@ -67,9 +71,11 @@ class CustID(str):
                     await lock.release()
                 except LockNotOwnedError:
                     logger.info(f"Lock for {self} was not owned, cannot release.")
-
                 except Exception as e:
                     logger.error(f"Error releasing lock for {self}: {e}")
+        except Exception as e:
+            logger.error(f"Error acquiring lock for {self}: {e}")
+            raise CustIDLockException(f"Error acquiring lock for {self}: {e}")
 
 
 # Annotated type with validator to cast to CustID

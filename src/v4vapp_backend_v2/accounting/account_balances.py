@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Tuple
 
 import pandas as pd
-
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
@@ -571,7 +571,7 @@ async def get_keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     line_items: bool = False,
-) -> LedgerConvSummary:
+) -> Tuple[AccountBalanceSummary, float]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -589,35 +589,9 @@ async def get_keepsats_balance(
         name="Customer Liability",
         sub=cust_id,
     )
-    pipeline = filter_sum_credit_debit_pipeline(
-        account=account,
-        cust_id=cust_id,
-        as_of_date=as_of_date,
-        ledger_types=[
-            LedgerType.DEPOSIT_KEEPSATS,
-            LedgerType.WITHDRAW_KEEPSATS,
-            LedgerType.CONV_KEEPSATS_TO_HIVE,
-            LedgerType.HOLD_KEEPSATS,
-        ],
-        line_items=line_items,
-    )
-    ans = await ledger_pipeline_result(
-        cust_id=cust_id,
-        account=account,
-        pipeline=pipeline,
-    )
-    if line_items:
-        ledger_entries = []
-        for item in ans.ledger_entries:
-            ledger_entry = LedgerEntry.model_validate(item)
-            ledger_entries.append(ledger_entry)
-        ans.ledger_entries = ledger_entries
 
-    deposit_balance = ans.by_ledger_type.get(LedgerType.DEPOSIT_KEEPSATS.value, ConvertedSummary())
-    withdraw_balance = ans.by_ledger_type.get(
-        LedgerType.WITHDRAW_KEEPSATS.value, ConvertedSummary()
+    printout_str, summary = await get_account_balance_printout(
+        account=account, as_of_date=as_of_date, line_items=line_items
     )
-    net_balance = deposit_balance - withdraw_balance
-    ans.net_balance = net_balance
-
-    return ans
+    net_sats = summary.unit_summaries.get(Currency.MSATS, UnitSummary()).final_balance / 1000
+    return summary, net_sats
