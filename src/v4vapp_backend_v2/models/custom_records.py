@@ -300,6 +300,16 @@ class DecodedCustomRecord(BaseModel):
         description="Decoded group ID from the 1818181818 field, if available",
         alias="1818181818",
     )
+    cust_id: str | None = Field(
+        None,
+        description="Decoded customer ID from the 1818181819 field, if available",
+        alias="1818181819",
+    )
+    paywithsats: bool = Field(
+        False,
+        description="Indicates if the payment is made with sats, decoded from the 1818181820 field",
+        alias="1818181820",
+    )
     hive_accname: str | None = Field(
         None,
         description="Decoded Hive account name from the 818818 field, if available",

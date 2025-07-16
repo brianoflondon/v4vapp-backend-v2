@@ -226,6 +226,8 @@ async def send_lightning_to_pay_req(
     pay_req: PayReq,
     lnd_client: LNDClient,
     group_id: str = "",
+    cust_id: str = "",
+    paywithsats: bool = False,
     chat_message: str = "",
     amount_msat: int = 0,
     fee_limit_ppm: int = 0,
@@ -261,11 +263,15 @@ async def send_lightning_to_pay_req(
 
     zero_value_pay_req, payment_amount_msat = test_zero_value_pay_req(pay_req, amount_msat)
 
+    pay_with_sats: str = str(paywithsats)
+
     dest_custom_records = {
         # 5482373484: b64_hex_transform(pre_image), # Used in keysend
         # 818818: b64_transform(hive_accname),   Used in V4Vapp podcasting
         34349334: chat_message.encode(),  # Used in V4Vapp
         1818181818: group_id.encode(),  # Used in V4Vapp
+        1818181819: cust_id.encode(),  # Used in V4Vapp
+        1818181820: pay_with_sats.encode(),  # Used in V4Vapp
     }
     pay_req.dest_alias = pay_req.dest_alias or await get_node_alias_from_pub_key(
         pay_req.destination, lnd_client
