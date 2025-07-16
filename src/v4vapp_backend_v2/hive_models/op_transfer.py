@@ -64,12 +64,8 @@ class TransferBase(OpBase):
     memo: str = Field("", description="Memo associated with the transfer")
     d_memo: str = Field("", description="Decoded memo string")
 
-    model_config = ConfigDict(populate_by_name=True)
     # Defined as a CLASS VARIABLE outside the
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-    )
+    model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **hive_event: Any) -> None:
         super().__init__(**hive_event)
