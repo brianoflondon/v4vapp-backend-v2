@@ -62,7 +62,7 @@ class CustomJson(OpBase):
         #         if isinstance(value, int) and value > 2**53:
         #             self.json_data[key] = str(value)
         # TODO: Another place to use historical rates when we have them
-        if not self.conv:
+        if self.conv.sats_hbd == 0:
             if getattr(self.json_data, "sats", None) is not None:
                 if (
                     TrackedBaseModel.last_quote
@@ -70,7 +70,7 @@ class CustomJson(OpBase):
                     and hasattr(self.json_data, "sats")
                 ):
                     self.conv = CryptoConversion(
-                        value=self.json_data.sats,
+                        value=getattr(self.json_data, "sats", 0),
                         conv_from=Currency.SATS,
                         quote=TrackedBaseModel.last_quote,
                     ).conversion
