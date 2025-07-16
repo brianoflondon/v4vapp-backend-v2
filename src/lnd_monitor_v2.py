@@ -15,7 +15,7 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.database.db_pymongo import DBConn, DATABASE_ICON
+from v4vapp_backend_v2.database.db_pymongo import DATABASE_ICON, DBConn
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
@@ -525,9 +525,24 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
 
+        except LNDSubscriptionError as e:
+            await lnd_client.check_connection(
+                original_error=e.original_error
+                if hasattr(e, "original_error") and isinstance(e.original_error, AioRpcError)
+                else None,
+                call_name="SubscribeHtlcEvents",
+            )
+            pass
+        except LNDConnectionError as e:
+            # Raised after the max number of retries is reached.
+            logger.error("🔴 Connection error in channel_events_loop", exc_info=e, stack_info=True)
+            raise e
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
+            logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+            return
         except Exception as e:
             logger.exception(e)
-            await asyncio.sleep(5)  # Wait before retrying
+            pass
 
 
 async def fill_channel_names(
