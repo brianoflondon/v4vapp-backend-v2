@@ -371,13 +371,13 @@ async def process_transfer_op(
     ledger_entry.credit_unit = ledger_entry.debit_unit = hive_transfer.unit
     ledger_entry.credit_amount = ledger_entry.debit_amount = hive_transfer.amount_decimal
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
+    ledger_entry.cust_id = hive_transfer.cust_id
 
     # MARK: Server to Treasury
     if (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = treasury_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.description = f"Server to Treasury transfer: {base_description}"
@@ -387,7 +387,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == server_account
     ):
-        ledger_entry.cust_id = treasury_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Server transfer: {base_description}"
@@ -397,7 +396,6 @@ async def process_transfer_op(
         hive_transfer.from_account == funding_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = funding_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=funding_account
@@ -408,7 +406,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == funding_account
     ):
-        ledger_entry.cust_id = funding_account
         ledger_entry.debit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=treasury_account
         )
@@ -420,7 +417,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
     ):
-        ledger_entry.cust_id = exchange_account
         ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
@@ -430,7 +426,6 @@ async def process_transfer_op(
         hive_transfer.from_account == exchange_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = exchange_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
@@ -441,13 +436,11 @@ async def process_transfer_op(
         and hive_transfer.to_account in expense_accounts
     ):
         # TODO: #110 Implement the system for expense accounts
-        ledger_entry.cust_id = hive_transfer.to_account
         raise NotImplementedError("External expense accounts not implemented yet")
     # MARK: Server to customer account withdrawal
     elif hive_transfer.from_account == server_account:
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
-        ledger_entry.cust_id = customer
         ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
@@ -459,7 +452,6 @@ async def process_transfer_op(
     elif hive_transfer.to_account == server_account:
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
-        ledger_entry.cust_id = customer
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
@@ -474,7 +466,6 @@ async def process_transfer_op(
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
 
     await ledger_entry.save()
-
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
         task = asyncio.create_task(follow_on_task)

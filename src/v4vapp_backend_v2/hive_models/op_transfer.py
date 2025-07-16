@@ -4,6 +4,7 @@ from typing import Any, override
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
+from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -64,6 +65,7 @@ class TransferBase(OpBase):
     memo: str = Field("", description="Memo associated with the transfer")
     d_memo: str = Field("", description="Decoded memo string")
 
+    cust_id: CustIDType = Field("", description="Customer ID determined from to/from fields")
     # Defined as a CLASS VARIABLE outside the
     model_config = ConfigDict(populate_by_name=True)
 
@@ -71,6 +73,7 @@ class TransferBase(OpBase):
         super().__init__(**hive_event)
         hive_inst: Hive = hive_event.get("hive_inst", OpBase.hive_inst)
         self.post_process(hive_inst=hive_inst)
+        self.cust_id = self.get_cust_id()
         if not self.amount:
             raise ValueError("Amount is required for transfer operations")
 
@@ -281,6 +284,70 @@ class TransferBase(OpBase):
         max_payment_amount = amount_sent - lnd_config.lightning_fee_base_msats
         fee_estimate = int(max_payment_amount * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
         return max_payment_amount - fee_estimate
+
+    def get_cust_id(self):
+        """
+        Returns the customer ID (`cust_id`) for a transfer based on
+        involved accounts and predefined logic.
+
+        Uses account names from internal config to identify roles
+        (server, treasury, funding, exchange, expense).
+        Depending on transfer direction/type, returns either
+        `from_account` or `to_account` as `cust_id`.
+
+        Returns:
+            str: The account name to use as `cust_id`, always either
+            `self.from_account` or `self.to_account` in handled cases.
+            If no known pattern matches, returns
+            "{to_account}:{from_account}".
+        """
+        hive_config = InternalConfig().config.hive
+        server_account, treasury_account, funding_account, exchange_account = (
+            hive_config.all_account_names
+        )
+        expense_accounts = ["privex"]  # Hardcoded as in the original code
+
+        from_acc = self.from_account
+        to_acc = self.to_account
+
+        # Server to Treasury: cust_id = to_account (treasury)
+        if from_acc == server_account and to_acc == treasury_account:
+            return to_acc
+
+        # Treasury to Server: cust_id = from_account (treasury)
+        elif from_acc == treasury_account and to_acc == server_account:
+            return from_acc
+
+        # Funding to Treasury: cust_id = from_account (funding)
+        elif from_acc == funding_account and to_acc == treasury_account:
+            return from_acc
+
+        # Treasury to Funding: cust_id = to_account (funding)
+        elif from_acc == treasury_account and to_acc == funding_account:
+            return to_acc
+
+        # Treasury to Exchange: cust_id = to_account (exchange)
+        elif from_acc == treasury_account and to_acc == exchange_account:
+            return to_acc
+
+        # Exchange to Treasury: cust_id = from_account (exchange)
+        elif from_acc == exchange_account and to_acc == treasury_account:
+            return from_acc
+
+        # Server to expense: cust_id = to_account (expense)
+        elif from_acc == server_account and to_acc in expense_accounts:
+            return to_acc
+
+        # Server to customer (withdrawal): cust_id = to_account (customer)
+        elif from_acc == server_account:
+            return to_acc
+
+        # Customer to server (deposit): cust_id = from_account (customer)
+        elif to_acc == server_account:
+            return from_acc
+
+        else:
+            return f"{to_acc}:{from_acc}"
 
 
 class Transfer(TransferBase):
