@@ -58,7 +58,7 @@ def get_tracked_any_type(value: Any) -> str:
     if isinstance(value, Payment):
         return value.op_type or "payment"
     if not isinstance(value, dict) and isinstance(
-        value, (OpAllTransfers, FillOrder, LimitOrderCreate)
+        value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
     ):
         if hasattr(value, "op_type"):
             return value.op_type

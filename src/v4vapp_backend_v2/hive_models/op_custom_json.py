@@ -66,25 +66,26 @@ class CustomJson(OpBase):
 
         # Only if the from is the required auth account OR the server can we send sats around
         # The customer is the from account.
-        if self.required_auths[0]:
-            if (
-                self.json_data.from_account == self.required_auths[0]
-                or self.required_auths[0] in InternalConfig().config.hive.server_account_names
-            ):
-                self.cust_id = self.json_data.from_account
-
-        if self.conv.sats_hbd == 0:
-            if getattr(self.json_data, "sats", None) is not None:
+        if self.is_watched:
+            if self.required_auths and self.required_auths[0]:
                 if (
-                    TrackedBaseModel.last_quote
-                    and not TrackedBaseModel.last_quote.hive_hbd == 0
-                    and hasattr(self.json_data, "sats")
+                    self.json_data.from_account == self.required_auths[0]
+                    or self.required_auths[0] in InternalConfig().config.hive.server_account_names
                 ):
-                    self.conv = CryptoConversion(
-                        value=getattr(self.json_data, "sats", 0),
-                        conv_from=Currency.SATS,
-                        quote=TrackedBaseModel.last_quote,
-                    ).conversion
+                    self.cust_id = self.json_data.from_account
+
+            if self.conv.sats_hbd == 0:
+                if getattr(self.json_data, "sats", None) is not None:
+                    if (
+                        TrackedBaseModel.last_quote
+                        and not TrackedBaseModel.last_quote.hive_hbd == 0
+                        and hasattr(self.json_data, "sats")
+                    ):
+                        self.conv = CryptoConversion(
+                            value=getattr(self.json_data, "sats", 0),
+                            conv_from=Currency.SATS,
+                            quote=TrackedBaseModel.last_quote,
+                        ).conversion
 
     @property
     def is_watched(self) -> bool:
@@ -94,6 +95,11 @@ class CustomJson(OpBase):
         Returns:
             bool: True if the transfer is to a watched user, False otherwise.
         """
+        if (
+            self.required_auths
+            and self.required_auths[0] in InternalConfig().config.hive.server_account_names
+        ):
+            return True
         if OpBase.watch_users:
             if custom_json_test_id(self.cj_id):
                 # Check if the transfer is to a watched user
