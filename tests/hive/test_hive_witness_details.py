@@ -171,10 +171,9 @@ async def test_get_hive_witness_details_mock_error(mocker):
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
 
     # Mock the Redis context manager
-    mock_redis = mocker.patch("v4vapp_backend_v2.database.async_redis.V4VAsyncRedis")
-    mock_redis_instance = mock_redis.return_value
-    mock_redis_instance.__aenter__.return_value = mock_redis_instance
-    mock_redis_instance.__aexit__.return_value = None
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
 
     # Configure the mock to return a response with an error
     mock_httpx_get.return_value.status_code = 404
