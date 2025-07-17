@@ -371,6 +371,26 @@ class LedgerEntry(BaseModel):
         return {self.name(): self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)}
 
     @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the LedgerEntry for logging purposes.
+
+        This method is used to provide a concise and informative string that can be used in logs,
+        which includes the group_id, ledger_type, timestamp, and description.
+
+        Returns:
+            str: A formatted string representation of the LedgerEntry.
+        """
+        formatted_time = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        formatted_amount = f"{self.credit_amount:.3f} {self.credit_unit}" if self.credit_unit != Currency.MSATS else f"{self.credit_amount//1000:.0f} sats"
+        return (
+            f"{formatted_time} | "
+            f"{self.ledger_type_str:<35} | {formatted_amount:>20} | "
+            f"{self.credit} | {self.debit} | "
+            f"{self.description}"
+        )
+
+    @property
     def group_id_query(self) -> dict[str, Any]:
         """
         Returns a Mongodb Query for this record.

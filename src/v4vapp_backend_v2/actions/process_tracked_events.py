@@ -54,10 +54,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
-    cust_id = getattr(tracked_op, "cust_id", None)
+    cust_id = getattr(tracked_op, "cust_id", "unknown_cust_id")
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}")
     try:
-        async with CustID(cust_id).locked(timeout=None, blocking_timeout=None):
+        async with CustID(cust_id).locked(
+            timeout=None, blocking_timeout=None, group_id="processing"
+        ):
             if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
                 ledger_entry = await process_hive_op(op=tracked_op)
                 ledger_entries = [ledger_entry]
@@ -100,6 +102,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
     finally:
+        if cust_id:
+            # Ensure the lock is released even if an error occurs
+            logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
+            await CustID.release_lock(cust_id, "processing")
         logger.info(
             f"Finished Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}"
         )

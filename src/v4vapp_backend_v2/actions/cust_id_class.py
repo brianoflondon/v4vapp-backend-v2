@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator
 from redis.asyncio.lock import Lock as RedisLock
-from redis.exceptions import LockNotOwnedError
+from redis.exceptions import LockError, LockNotOwnedError
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -185,7 +185,21 @@ class CustID(str):
                 f"Lock for {cust_id} with group {group_id} was not owned by this process"
             )
             return False
+        except LockError as e:
+            if "Cannot release an unlocked lock" in str(e):
+                logger.debug(
+                    f"Silently ignoring un-owned lock release for {cust_id} with group {group_id}"
+                )
+                return True
+            else:
+                logger.error(
+                    f"Some other error releasing lock for {cust_id} with group {group_id}: {e}",
+                    extra={"notification": False, "cust_id": cust_id, "group_id": group_id},
+                )
+            return False
+
         except Exception as e:
+            logger.exception(e)
             logger.error(f"Error releasing lock for {cust_id} with group {group_id}: {e}")
             return False
 

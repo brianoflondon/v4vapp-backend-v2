@@ -177,9 +177,14 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     while True:
         try:
             ledger_entries = await process_tracked_event(op)
+            logger.info(
+                f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
+                extra={"op": op},
+            )
             for entry in ledger_entries:
                 logger.info(
-                    f"{ICON} Processed ledger entry for {entry.op.log_str}",
+                    f"{ICON} Ledger Entry created: {entry.log_str}",
+                    extra={**entry.log_extra},
                 )
             return
         except ValueError as e:
