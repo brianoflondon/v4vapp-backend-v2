@@ -626,74 +626,124 @@ async def send_transfer(
     )
     if is_private:
         memo = f"#{memo}"
-    try:
-        trx = account.transfer(
-            to=to_account,
-            amount=amount.amount,
-            asset=amount.asset,
-            account=from_account,
-            memo=memo,
-        )
-        check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
-        logger.info(
-            f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
-            f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
-            f"Memo: {memo} {trx.get('trx_id', '')}",
-            extra={
-                "notification": True,
-                "to_account": to_account,
-                "from_account": from_account,
-                "amount": amount.amount_decimal,
-                "symbol": amount.symbol,
-                "memo": memo,
-            },
-        )
-        return trx
 
-    except UnhandledRPCError as ex:
-        # Handle insufficient funds
-        for arg in ex.args:
-            if "does not have sufficient funds" in arg:
-                raise HiveNotEnoughHiveInAccount(
-                    f"{from_account} Failure during send | "
-                    f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-            if "Cannot transfer a negative amount" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{from_account} Failure during send | "
-                    f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-            if "Duplicate transaction check failed" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{from_account} Failure during send | "
-                    f"Looks like we tried to send transaction twice | "
-                    f"{memo} | "
-                    f"{amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-        else:
-            trx = {"UnhandledRPCError": f"{ex}"}
+    retries = 0
+    while retries < 3:
+        try:
+            trx = account.transfer(
+                to=to_account,
+                amount=amount.amount,
+                asset=amount.asset,
+                account=from_account,
+                memo=memo,
+            )
+            check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
+            logger.info(
+                f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
+                f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
+                f"Memo: {memo} {trx.get('trx_id', '')}",
+                extra={
+                    "notification": True,
+                    "to_account": to_account,
+                    "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
+                },
+            )
+            return trx
+
+        except UnhandledRPCError as ex:
+            # Handle insufficient funds
+            for arg in ex.args:
+                if "does not have sufficient funds" in arg:
+                    raise HiveNotEnoughHiveInAccount(
+                        f"{from_account} Failure during send | "
+                        f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "Cannot transfer a negative amount" in arg:
+                    raise HiveTryingToSendZeroOrNegativeAmount(
+                        f"{from_account} Failure during send | "
+                        f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "Duplicate transaction check failed" in arg:
+                    raise HiveTryingToSendZeroOrNegativeAmount(
+                        f"{from_account} Failure during send | "
+                        f"Looks like we tried to send transaction twice | "
+                        f"{memo} | "
+                        f"{amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "transaction expiration exception" in arg:
+                    logger.warning(
+                        f"Transaction expired: {arg}",
+                        extra={
+                            "notification": False,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    retries += 1
+                    logger.warning(
+                        f"Retrying send_transfer {retries}/3 for {from_account} -> {to_account}",
+                        extra={
+                            "notification": True,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    if retries >= 3:
+                        logger.error(
+                            f"Transaction expired after 3 retries: {ex}",
+                            extra={
+                                "notification": True,
+                                "to_account": to_account,
+                                "from_account": from_account,
+                                "amount": amount.amount_decimal,
+                                "symbol": amount.symbol,
+                                "memo": memo,
+                            },
+                        )
+                        raise HiveSomeOtherRPCException(
+                            f"Transaction expired after 3 retries: {ex}"
+                        )
+                    continue
+                else:
+                    trx = {"UnhandledRPCError": f"{ex}"}
+                    logger.error(
+                        f"UnhandledRPCError during send_transfer: {ex}",
+                        extra={
+                            "notification": True,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    raise HiveSomeOtherRPCException(f"{ex}")
+        except Exception as ex:
             logger.error(
                 f"UnhandledRPCError during send_transfer: {ex}",
                 extra={
-                    "notification": False,
+                    "notification": True,
                     "to_account": to_account,
                     "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
                 },
             )
             raise HiveSomeOtherRPCException(f"{ex}")
-    except Exception as ex:
-        logger.error(
-            f"UnhandledRPCError during send_transfer: {ex}",
-            extra={
-                "notification": False,
-                "to_account": to_account,
-                "from_account": from_account,
-            },
-        )
-        raise HiveSomeOtherRPCException(f"{ex}")
+    return {}
 
 
 if __name__ == "__main__":
