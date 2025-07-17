@@ -76,6 +76,7 @@ class KeepsatsTransfer(BaseModel):
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
 CUSTOM_JSON_IDS = {
+    "v4vapp_dev_transfer": KeepsatsTransfer,
     "v4vapp_transfer": KeepsatsTransfer,
     "vsc.transfer": VSCTransfer,
     "vsc.withdraw": VSCTransfer,

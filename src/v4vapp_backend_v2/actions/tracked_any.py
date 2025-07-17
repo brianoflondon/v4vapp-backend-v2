@@ -3,8 +3,9 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -36,6 +37,7 @@ def get_tracked_any_type(value: Any) -> str:
             "limit_order_create",
             "recurrent_transfer",
             "fill_recurrent_transfer",
+            "custom_json",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -71,7 +73,8 @@ TrackedAny = Annotated[
     | Annotated[FillOrder, Tag("fill_order")]
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
     | Annotated[Invoice, Tag("invoice")]
-    | Annotated[Payment, Tag("payment")],
+    | Annotated[Payment, Tag("payment")]
+    | Annotated[CustomJson, Tag("custom_json")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -191,5 +194,3 @@ def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
     raise ValueError(
         f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
     )
-
-
