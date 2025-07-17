@@ -7,12 +7,7 @@ from pydantic import AfterValidator
 from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import LockNotOwnedError
 
-from v4vapp_backend_v2.config.setup import (
-    logger,  # Assuming this is needed if not already imported
-)
-from v4vapp_backend_v2.database.async_redis import (
-    V4VAsyncRedis,  # Assuming the import path; adjust if necessary
-)
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 class CustIDLockException(Exception):
@@ -55,7 +50,7 @@ class CustID(str):
                 # Always release the lock when done
                 await CustID.release_lock("user123", "payment_123")
         """
-        redis_instance = V4VAsyncRedis()
+        redis_instance = InternalConfig.redis_async
         lock_key = f"cust_id_lock:{self}:{group_id}"
         attempts = 0
 
@@ -116,11 +111,10 @@ class CustID(str):
             CustIDLockException: If lock acquisition fails
         """
         lock_key = f"cust_id_lock:{self}:{group_id}"
-        redis_instance = V4VAsyncRedis()
-        redis = redis_instance.redis
+        redis_instance = InternalConfig.redis_async
         try:
             lock = RedisLock(
-                redis,
+                redis_instance,
                 name=lock_key,
                 timeout=timeout,
                 sleep=sleep,
@@ -130,7 +124,6 @@ class CustID(str):
 
             acquired = await lock.acquire()
             if not acquired:
-                await redis.aclose()
                 raise CustIDLockException(
                     f"Failed to acquire lock for {self} with group {group_id}"
                 )
@@ -138,7 +131,6 @@ class CustID(str):
             # Store the lock in class-level storage
             CustID._locks[lock_key] = lock
             logger.info(f"Lock acquired for {self} with group {group_id}")
-            await redis.aclose()
             return True
 
         except Exception as e:
@@ -146,7 +138,7 @@ class CustID(str):
             raise CustIDLockException(f"Error acquiring lock: {e}")
         finally:
             # Ensure we always close the Redis connection
-            await redis.aclose()
+            pass
 
     @staticmethod
     async def release_lock(cust_id: str, group_id: str) -> bool:
@@ -168,11 +160,10 @@ class CustID(str):
 
         # If not in registry or lock is not a RedisLock, create a new RedisLock object to release it
         if not isinstance(lock, RedisLock):
-            redis_instance = V4VAsyncRedis()
+            redis_instance = InternalConfig.redis_async
             try:
-                redis = redis_instance.redis
                 lock = RedisLock(
-                    redis,
+                    redis_instance,
                     name=lock_key,
                     timeout=None,  # Doesn't matter for release
                 )
@@ -211,11 +202,10 @@ class CustID(str):
             bool: True if lock exists
         """
         lock_key = f"cust_id_lock:{cust_id}:{group_id}"
-        redis_instance = V4VAsyncRedis()
+        redis_instance = InternalConfig.redis_async
 
         try:
-            redis = redis_instance.redis
-            exists = await redis.exists(lock_key)
+            exists = await redis_instance.exists(lock_key)
             return bool(exists)
         except Exception as e:
             logger.error(f"Error checking lock existence for {cust_id} with group {group_id}: {e}")
@@ -230,8 +220,24 @@ class CustID(str):
         blocking_timeout: int | None = None,
     ):
         """
-        Context manager for locking (backward compatibility).
-        For cross-process locking, use acquire_lock and release_lock instead.
+        Asynchronous context manager for acquiring and releasing a lock.
+
+        This method provides backward compatibility for locking mechanisms. It acquires a lock for the specified
+        group and ensures the lock is released upon exiting the context. For cross-process locking, prefer using
+        `acquire_lock` and `release_lock` directly.
+
+        Args:
+            group_id (str): Identifier for the lock group. Defaults to "default".
+            timeout (int | None): Maximum time in seconds to wait for acquiring the lock. If None, wait indefinitely.
+            sleep (float): Interval in seconds between lock acquisition attempts. Defaults to 0.5.
+            blocking_timeout (int | None): Maximum time in seconds to block while waiting for the lock. If None, block indefinitely.
+
+        Yields:
+            None
+
+        Raises:
+            Any exceptions raised by `acquire_lock` or `release_lock`.
+
         """
         acquired = False
         try:
@@ -266,25 +272,3 @@ async def process_customer(customer_id: CustID, comment: str = ""):
         logger.info(f"Processing finished for {customer_id}")
     except CustIDLockException as e:
         logger.error(f"Could not acquire lock for {customer_id}: {e}")
-
-
-# Run the example
-async def main():
-    cust = CustID("customer123")
-    cust2 = CustID("customer123")  # Same customer to test lock
-    tasks = [
-        process_customer(cust, "First processing"),
-        process_customer(CustID("customer456"), "Only processing"),
-        process_customer(cust2, "Second processing"),  # Same customer to test lock
-        process_customer(CustID("customer789"), "Another customer processing"),
-        process_customer(CustID("customer123"), "Third processing"),
-    ]
-    try:
-        await asyncio.gather(*tasks)
-    except Exception as e:
-        logger.error(f"Error occurred while processing customers: {e}")
-
-
-# To execute the async code
-if __name__ == "__main__":
-    asyncio.run(main())

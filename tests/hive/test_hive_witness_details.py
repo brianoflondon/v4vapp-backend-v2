@@ -69,10 +69,9 @@ async def test_get_hive_witness_details(mocker):
 
     # Mock the Redis context manager
 
-    mock_redis = mocker.patch("v4vapp_backend_v2.hive.witness_details.V4VAsyncRedis")
-    mock_redis_instance = mock_redis.return_value
-    mock_redis_instance.__aenter__.return_value = mock_redis_instance
-    mock_redis_instance.__aexit__.return_value = None
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
 
     # Sample response data
     sample_response = {
@@ -104,9 +103,9 @@ async def test_get_hive_witness_details(mocker):
 
     # Mock Redis get and set methods
 
-    mock_redis_instance.get = AsyncMock(return_value=json.dumps(sample_response))
-    mock_redis_instance.setex = AsyncMock(return_value=None)
-    mock_redis_instance.ttl = AsyncMock(return_value=None)
+    mock_redis_instance.get = Mock(return_value=json.dumps(sample_response))
+    mock_redis_instance.setex = Mock(return_value=None)
+    mock_redis_instance.ttl = Mock(return_value=None)
 
     # Call the function
     witness_details = await get_hive_witness_details("brianoflondon")
@@ -135,10 +134,9 @@ async def test_get_hive_witness_details_mock_empty(mocker):
     mock_httpx_get = mocker.patch("httpx.AsyncClient.get", new_callable=AsyncMock)
 
     # Mock the Redis context manager
-    mock_redis = mocker.patch("v4vapp_backend_v2.hive.witness_details.V4VAsyncRedis")
-    mock_redis_instance = mock_redis.return_value
-    mock_redis_instance.__aenter__.return_value = mock_redis_instance
-    mock_redis_instance.__aexit__.return_value = None
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
 
     # Sample response data
     sample_response = None
@@ -148,9 +146,9 @@ async def test_get_hive_witness_details_mock_empty(mocker):
     mock_httpx_get.return_value.json = Mock(return_value=sample_response)
 
     # Mock Redis get
-    mock_redis_instance.get = AsyncMock(return_value=json.dumps(sample_response))
-    mock_redis_instance.set = AsyncMock(return_value=None)
-    mock_redis_instance.ping = AsyncMock(return_value=True)
+    mock_redis_instance.get = Mock(return_value=json.dumps(sample_response))
+    mock_redis_instance.set = Mock(return_value=None)
+    mock_redis_instance.ping = Mock(return_value=True)
 
     # Call the function
     witness_details = await get_hive_witness_details()

@@ -972,6 +972,7 @@ async def main_async_start(connection_name: str) -> None:
                 check_for_shutdown(),
             ]
             await asyncio.gather(*tasks)
+            InternalConfig().shutdown()
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("👋 Received signal to stop. Exiting...")

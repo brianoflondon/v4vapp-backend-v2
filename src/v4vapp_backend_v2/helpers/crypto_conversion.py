@@ -327,7 +327,7 @@ class CryptoConversion(BaseModel):
             self.quote = quote
             self._compute_conversions()
 
-    async def get_quote(self, use_cache: bool = True):
+    async def get_quote(self, use_cache: bool = True, store_db: bool = True) -> None:
         """
         Asynchronously retrieves the latest cryptocurrency quotes and updates the instance with the fetched data.
         Args:
@@ -339,7 +339,7 @@ class CryptoConversion(BaseModel):
         """
 
         all_quotes = AllQuotes()
-        await all_quotes.get_all_quotes(use_cache=use_cache)
+        await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date

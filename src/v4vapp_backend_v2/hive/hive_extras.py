@@ -18,8 +18,7 @@ from nectarapi.exceptions import UnhandledRPCError
 from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 
 DEFAULT_GOOD_NODES = [
@@ -139,10 +138,9 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
         # shuffle good nodes
         good_nodes: List[str] = []
         try:
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                good_nodes_json = redis_sync_client.get("good_nodes")
+            good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
             if good_nodes_json and isinstance(good_nodes_json, str):
-                ttl = redis_sync_client.ttl("good_nodes")
+                ttl = InternalConfig.redis_decoded.ttl("good_nodes")
                 if isinstance(ttl, int) and ttl < 3000:
                     good_nodes = get_good_nodes()
                 else:
@@ -212,15 +210,13 @@ def get_good_nodes() -> List[str]:
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         try:
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
         except Exception as e:
             logger.warning(
                 f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
             )
     except Exception as e:
-        with V4VAsyncRedis().sync_redis as redis_sync_client:
-            good_nodes_json = redis_sync_client.get("good_nodes")
+        good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
         if good_nodes_json and isinstance(good_nodes_json, str):
             good_nodes = json.loads(good_nodes_json)
         if good_nodes:
@@ -228,8 +224,7 @@ def get_good_nodes() -> List[str]:
         else:
             logger.warning(f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e})
             good_nodes = DEFAULT_GOOD_NODES
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
 
     return good_nodes
 

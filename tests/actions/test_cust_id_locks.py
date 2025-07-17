@@ -27,7 +27,7 @@ async def process_customer(customer_id: CustID, comment: str = "") -> bool:
     try:
         print(f"Starting processing for customer {customer_id} {comment}")
 
-        async with customer_id.locked(timeout=None, blocking_timeout=None, group_id="processing"):
+        async with customer_id.locked(timeout=None, blocking_timeout=None, group_id="test_group"):
             # This is the critical section where the lock is held
             print(f"Lock acquired for {customer_id}. Performing exclusive operations... {comment}")
             # Simulate some work that requires exclusive access
@@ -44,6 +44,15 @@ async def process_customer(customer_id: CustID, comment: str = "") -> bool:
 
 @pytest.mark.asyncio
 async def test_cust_id_lock():
+    customers = [
+        CustID("customer123"),
+        CustID("customer456"),
+        CustID("customer789"),
+    ]
+    for customer in customers:
+        print(f"Unlocking lock for {customer}")
+        await customer.release_lock(cust_id=customer, group_id="test_group")
+
     cust = CustID("customer123")
     cust2 = CustID("customer123")  # Same customer to test lock
     tasks = [

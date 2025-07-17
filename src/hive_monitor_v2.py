@@ -16,7 +16,6 @@ from pymongo.results import BulkWriteResult, UpdateResult
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
@@ -579,13 +578,6 @@ async def main_async_start(
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
     logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
-    async with V4VAsyncRedis(decode_responses=False) as redis_client:
-        try:
-            await redis_client.ping()
-        except Exception as e:
-            logger.error(f"{icon} Redis connection test failed", extra={})
-            raise e
-        logger.info(f"{icon} Redis connection established")
 
     try:
         tasks = [
@@ -611,6 +603,7 @@ async def main_async_start(
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{icon} Clearing notifications")
         await asyncio.sleep(2)
+        InternalConfig().shutdown()  # Ensure proper cleanup after tests
 
 
 @app.command()

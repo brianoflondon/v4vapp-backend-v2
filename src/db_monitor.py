@@ -15,7 +15,6 @@ from v4vapp_backend_v2.actions.cust_id_class import CustIDLockException
 from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 ICON = "🏆"
@@ -32,7 +31,6 @@ class ResumeToken(BaseModel):
     Attributes:
         data (Mapping[str, Any] | None): The resume token data for MongoDB change streams.
         timestamp (datetime): The timestamp when the token was created.
-        redis_client (V4VAsyncRedis | None): The Redis client instance for storing the resume token.
 
     Methods:
         __init__(collection: str, **data: Any):
@@ -52,9 +50,6 @@ class ResumeToken(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp when the token were created"
     )
     collection: str = Field("", description="Collection name for the change stream")
-    redis_client: V4VAsyncRedis | None = Field(
-        None, description="Redis client instance for storing the resume token"
-    )
     redis_key: str = Field("", description="Redis key for storing the resume token")
 
     model_config = {"arbitrary_types_allowed": True}
@@ -65,7 +60,6 @@ class ResumeToken(BaseModel):
 
         Args:
             collection (str): The name of the collection for the change stream.
-            redis_client (V4VAsyncRedis, optional): The Redis client instance. Defaults to None.
             **data: Keyword arguments to initialize the ResumeToken instance.
         """
         super().__init__(**data)
@@ -86,12 +80,10 @@ class ResumeToken(BaseModel):
         self.data = token_data
         self.timestamp = datetime.now(tz=timezone.utc)
         serialized_token = repr(self.data)
-
-        if not self.redis_client:
-            self.redis_client = V4VAsyncRedis()
+        redis_client = InternalConfig.redis
         try:
             # Use the sync_redis client to store the token in Redis
-            self.redis_client.sync_redis.set(self.redis_key, serialized_token)
+            redis_client.set(self.redis_key, serialized_token)
         except Exception as e:
             logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
             raise e
@@ -100,10 +92,9 @@ class ResumeToken(BaseModel):
         """
         Delete the resume token from Redis.
         """
-        if not self.redis_client:
-            self.redis_client = V4VAsyncRedis()
+        redis_client = InternalConfig.redis
         try:
-            self.redis_client.sync_redis.delete(self.redis_key)
+            redis_client.delete(self.redis_key)
             logger.info(f"Resume token deleted for collection '{self.collection}'")
         except Exception as e:
             logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
@@ -118,9 +109,8 @@ class ResumeToken(BaseModel):
             Mapping[str, Any] | None: The resume token data or None if not found.
         """
         try:
-            if not self.redis_client:
-                self.redis_client = V4VAsyncRedis()
-            serialized_token: str = self.redis_client.sync_redis.get(self.redis_key)  # type: ignore
+            redis_client = InternalConfig.redis
+            serialized_token: str = redis_client.get(self.redis_key)  # type: ignore
             if serialized_token:
                 self.data = eval(serialized_token)  # Deserialize the token # type: ignore
                 logger.info(

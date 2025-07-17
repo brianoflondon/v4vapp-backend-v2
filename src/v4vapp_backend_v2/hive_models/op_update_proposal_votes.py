@@ -4,8 +4,7 @@ from typing import List
 
 from pydantic import Field
 
-from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.voting_power import VoterDetails, VotingPower
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -47,13 +46,12 @@ class UpdateProposalVotes(OpBase):
         for prop_id in self.proposal_ids:
             cache_key = f"voter_details_{self.voter}_{prop_id}"
             try:
-                with V4VAsyncRedis().sync_redis as redis_client:
-                    cached_data = redis_client.get(cache_key)
-                    if cached_data:
-                        self.prop_voter_details[str(prop_id)] = VoterDetails.model_validate(
-                            json.loads(cached_data)
-                        )
-                        continue
+                cached_data = InternalConfig.redis_decoded.get(cache_key)
+                if cached_data:
+                    self.prop_voter_details[str(prop_id)] = VoterDetails.model_validate(
+                        json.loads(cached_data)
+                    )
+                    continue
             except Exception as e:
                 logger.info(f"Error getting cache for {cache_key}: {e}")
             voter_power = VotingPower(self.voter, proposal=prop_id)
@@ -61,17 +59,16 @@ class UpdateProposalVotes(OpBase):
                 asdict(voter_power)
             )
             try:
-                with V4VAsyncRedis().sync_redis as redis_client:
-                    cache_value = self.prop_voter_details[str(prop_id)].model_dump_json()
-                    redis_client.setex(
-                        cache_key,
-                        time=300,
-                        value=cache_value,
-                    )
+                cache_value = self.prop_voter_details[str(prop_id)].model_dump_json()
+                InternalConfig.redis_decoded.setex(
+                    cache_key,
+                    time=300,
+                    value=cache_value,
+                )
             except Exception as e:
                 logger.info(f"Error setting cache for {cache_key}: {e}")
 
-    def _log_common(self, mardown: bool = False) -> str:
+    def _log_common(self, markdown: bool = False) -> str:
         """
         Generates a common log string for the operation.
 
@@ -101,7 +98,7 @@ class UpdateProposalVotes(OpBase):
         else:
             vote_value = "unknown"
 
-        voter = f"{self.voter.markdown_link}" if mardown else f"{self.voter:<20}"
+        voter = f"{self.voter.markdown_link}" if markdown else f"{self.voter:<20}"
         return f"👁️ {voter} {vote_value} {voted_for:<8} {prop_id_sections}"
 
     @property
