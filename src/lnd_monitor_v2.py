@@ -1025,7 +1025,7 @@ async def pause_for_database_sync() -> bool:
     ):
         invoice_time_delta = datetime.now(tz=timezone.utc) - recent_invoice.creation_date
         payment_time_delta = datetime.now(tz=timezone.utc) - recent_payment.creation_date
-        if invoice_time_delta > timedelta(hours=2) or payment_time_delta > timedelta(hours=2):
+        if invoice_time_delta > timedelta(days=1) and payment_time_delta > timedelta(days=1):
             logger.info(
                 f"Database sync needed Invoice: {recent_invoice.creation_date} {invoice_time_delta}"
             )
