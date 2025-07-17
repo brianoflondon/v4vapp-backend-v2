@@ -1,5 +1,8 @@
+import asyncio
+
 from redis import Redis as SyncRedis
-from redis.asyncio import Redis, from_url
+from redis.asyncio import ConnectionPool, Redis, from_url
+from redis.connection import ConnectionPool as SyncConnectionPool  # Add this import
 from redis.exceptions import ConnectionError
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -7,7 +10,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 class V4VAsyncRedis:
     """
-    Asynchronous Redis client for V4V application.
+    Asynchronous Redis client for V4V application with connection pooling.
 
     Attributes:
         host (str): Redis server hostname.
@@ -18,28 +21,52 @@ class V4VAsyncRedis:
         redis (Redis): Redis client instance.
         sync_redis (SyncRedis): Synchronous Redis client instance.
         no_config (bool): Flag to indicate whether to use the config file.
-
-    Methods:
-        __init__(**kwargs):
-            Initializes the Redis client with provided or default configuration.
-
-        __aenter__() -> Redis:
-            Asynchronous context manager entry. Pings the Redis server to
-            ensure connection.
-
-        __aexit__(exc_type, exc, tb):
-            Asynchronous context manager exit. Closes the Redis connection.
-
-        __enter__() -> SyncRedis:
-            Synchronous context manager entry. Pings the Redis server to
-            ensure connection.
-
-        __exit__(exc_type, exc, tb):
-            Synchronous context manager exit. Closes the Redis connection.
-
-        __del__():
-            Destructor. Closes the Redis connection if it exists.
     """
+
+    # Replace the single pool variables with dictionaries
+    # Class-level connection pools
+    _async_pools = {}  # {decode_responses: pool}
+    _sync_pools = {}  # {decode_responses: pool}
+
+    @classmethod
+    def get_async_pool(cls, decode_responses=True, force_new=False):
+        """Get or create a shared async connection pool with specific decode setting."""
+        pool_key = f"decode_{decode_responses}"
+
+        if pool_key not in cls._async_pools or force_new:
+            config = InternalConfig().config.redis
+            cls._async_pools[pool_key] = ConnectionPool(
+                host=config.host,
+                port=config.port,
+                db=config.db,
+                decode_responses=decode_responses,  # Use the parameter value
+                **config.kwargs,
+            )
+            logger.debug(
+                f"Created new async Redis connection pool: {config.host}:{config.port} (decode={decode_responses})"
+            )
+
+        return cls._async_pools[pool_key]
+
+    @classmethod
+    def get_sync_pool(cls, decode_responses=True, force_new=False):
+        """Get or create a shared sync connection pool with specific decode setting."""
+        pool_key = f"decode_{decode_responses}"
+
+        if pool_key not in cls._sync_pools or force_new:
+            config = InternalConfig().config.redis
+            cls._sync_pools[pool_key] = SyncConnectionPool(
+                host=config.host,
+                port=config.port,
+                db=config.db,
+                decode_responses=decode_responses,  # Use the parameter value
+                **config.kwargs,
+            )
+            logger.debug(
+                f"Created new sync Redis connection pool: {config.host}:{config.port} (decode={decode_responses})"
+            )
+
+        return cls._sync_pools[pool_key]
 
     host: str = "localhost"
     port: int = 6379
@@ -49,67 +76,99 @@ class V4VAsyncRedis:
     redis: Redis
     sync_redis: SyncRedis
     no_config: bool = False  # If True will not use the config file
+    using_pool: bool = False
 
     def __init__(self, **kwargs):
-        self.config = InternalConfig().config.redis
-        no_config = kwargs.get("no_config", False)
-        kwargs.pop("no_config", None)
-        if not no_config and "host" not in kwargs and "port" not in kwargs:
+        """
+        Initialize Redis client with connection pooling by default.
+
+        Args:
+            use_pool (bool): Whether to use connection pooling (default: True)
+            no_config (bool): Whether to ignore config file settings (default: False)
+            connection_str (str, optional): Redis connection string
+            Other Redis connection parameters can be passed directly
+        """
+        try:
+            # Verify we have a running event loop
+            asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning("No running event loop when initializing Redis client")
+            # Continue anyway, but async operations will fail later
+
+        self.no_config = kwargs.pop("no_config", False)
+        use_pool = kwargs.pop("use_pool", True)
+
+        # If using config and pooling (default behavior)
+        if not self.no_config and use_pool:
+            self.config = InternalConfig().config.redis
             self.host = self.config.host
             self.port = self.config.port
             self.db = self.config.db
-            self.kwargs = self.config.kwargs
             self.decode_responses = kwargs.get("decode_responses", True)
-            self.redis = Redis(
-                host=self.host,
-                port=self.port,
-                db=self.db,
-                decode_responses=self.decode_responses,
-                **self.kwargs,
-            )
-            self.sync_redis = SyncRedis(
-                host=self.host,
-                port=self.port,
-                db=self.db,
-                decode_responses=self.decode_responses,
-                **self.kwargs,
-            )
-        else:
-            if connection_str := kwargs.get("connection_str"):
-                self.redis = from_url(connection_str, **kwargs)
 
+            # Use shared connection pool with matching decode_responses setting
+            pool = self.get_async_pool(decode_responses=self.decode_responses)
+            self.redis = Redis(connection_pool=pool, decode_responses=self.decode_responses)
+            sync_pool = self.get_sync_pool(decode_responses=self.decode_responses)
+            self.sync_redis = SyncRedis(connection_pool=sync_pool, decode_responses=self.decode_responses)
+            self.using_pool = True
+
+        # Otherwise create individual connections based on parameters
+        else:
+            self.config = InternalConfig().config.redis if not self.no_config else None
+
+            if connection_str := kwargs.get("connection_str"):
+                kwargs.pop("connection_str", None)
+                self.redis = from_url(connection_str, **kwargs)
+                # For sync client, convert the connection string
+                sync_conn_str = connection_str.replace("redis://", "")
+                self.sync_redis = SyncRedis.from_url(f"redis://{sync_conn_str}", **kwargs)
             else:
                 if "host" in kwargs and "port" in kwargs:
-                    if "db" not in kwargs:
-                        kwargs["db"] = 0
-                    self.redis = Redis(**kwargs)
-                    self.sync_redis = SyncRedis(**kwargs)
-                else:
-                    self.redis = Redis(
-                        host=self.host,
-                        port=self.port,
-                        db=self.db,
-                        decode_responses=self.decode_responses,
-                        **kwargs,
-                    )
-                    self.sync_redis = SyncRedis(
-                        host=self.host,
-                        port=self.port,
-                        db=self.db,
-                        decode_responses=self.decode_responses,
-                        **kwargs,
-                    )
-            self.host = self.redis.connection_pool.connection_kwargs["host"]
-            self.port = self.redis.connection_pool.connection_kwargs["port"]
-            self.db = self.redis.connection_pool.connection_kwargs["db"]
+                    self.host = kwargs.pop("host")
+                    self.port = kwargs.pop("port")
+                    self.db = kwargs.pop("db", 0)
+                    self.decode_responses = kwargs.pop("decode_responses", True)
+                elif not self.no_config:
+                    self.host = self.config.host
+                    self.port = self.config.port
+                    self.db = self.config.db
+                    self.decode_responses = kwargs.pop("decode_responses", True)
+                    kwargs.update(self.config.kwargs)
+
+                self.redis = Redis(
+                    host=self.host,
+                    port=self.port,
+                    db=self.db,
+                    decode_responses=self.decode_responses,
+                    **kwargs,
+                )
+                self.sync_redis = SyncRedis(
+                    host=self.host,
+                    port=self.port,
+                    db=self.db,
+                    decode_responses=self.decode_responses,
+                    **kwargs,
+                )
+                self.using_pool = False
+
+            # Extract connection details for logging
+            if hasattr(self.redis, "connection_pool") and hasattr(
+                self.redis.connection_pool, "connection_kwargs"
+            ):
+                self.host = self.redis.connection_pool.connection_kwargs.get("host", self.host)
+                self.port = self.redis.connection_pool.connection_kwargs.get("port", self.port)
+                self.db = self.redis.connection_pool.connection_kwargs.get("db", self.db)
+
             self.kwargs = kwargs
 
         logger.debug(
-            f"Redis connection established {self.host}:{self.port} - "
-            f"DB: {self.db} - Decode: {self.decode_responses}"
+            f"Redis {'pooled' if self.using_pool else 'direct'} connection established "
+            f"{self.host}:{self.port} - DB: {self.db}"
         )
 
     async def flush(self):
+        """Flush the current Redis database."""
         try:
             async with self.redis as redis:
                 await redis.flushdb()
@@ -118,71 +177,57 @@ class V4VAsyncRedis:
             logger.error(f"Redis Error flushing database: {e}")
 
     async def __aenter__(self) -> Redis:
+        """Async context manager entry that returns the Redis client."""
         try:
             _ = await self.redis.ping()
             return self.redis
         except ConnectionError as e:
             logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
-            logger.warning(e)
-            raise e
+            raise
         except Exception as e:
             logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
-            logger.warning(e)
-            raise e
+            raise
 
     async def __aexit__(self, exc_type, exc, tb):
-        await self.redis.aclose()
+        """Async context manager exit that closes connection only if not using pool."""
+        if not self.using_pool:
+            try:
+                await self.redis.aclose()
+            except RuntimeError:
+                # Ignore "event loop is closed" errors
+                pass
+            except Exception as e:
+                logger.warning(f"Error closing Redis connection: {e}")
 
     def __enter__(self) -> SyncRedis:
+        """Sync context manager entry that returns the sync Redis client."""
         try:
             _ = self.sync_redis.ping()
             return self.sync_redis
         except ConnectionError as e:
             logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
-            logger.warning(e)
-            raise e
+            raise
         except Exception as e:
             logger.warning(f"Redis ConnectionError {self.host}:{self.port} - {e}")
-            logger.warning(e)
-            raise e
+            raise
 
     def __exit__(self, exc_type, exc, tb):
-        if self.sync_redis:
+        """Sync context manager exit that closes connection only if not using pool."""
+        if not self.using_pool and self.sync_redis:
             self.sync_redis.close()
 
     def __del__(self):
-        logger.debug(f"Redis connection closed {self.host}:{self.port}")
-
-
-# # Async caching decorator using V4VAsyncRedis
-# # Not really working needs more testing
-# def cache_with_redis_async(func):
-#     @wraps(func)
-#     async def wrapper(*args, **kwargs):
-#         # Initialize the async Redis client
-#         async with V4VAsyncRedis(decode_responses=False) as redis_client:
-
-#             # Create a unique key based on function name and arguments
-#             key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
-
-#             # Check if result is in cache
-#             cached_result = await redis_client.get(key)
-#             if cached_result is not None and (
-#                 use_cache := kwargs.get("use_cache", True)
-#             ):
-#                 logger.info(f"Cache hit {key}")
-#                 # Since decode_responses=True, cached_result is a string;
-#                 # we need to deserialize
-#                 return pickle.loads(cached_result)  # Encode back to bytes for pickle
-
-#             # If not cached or use_cache is false, compute and store
-#             try:
-#                 result = await func(*args, **kwargs)  # Await the async function
-#             except Exception as e:
-#                 raise e
-
-#             # Store as bytes, since decode_responses=True expects strings
-#             await redis_client.setex(key, 60, pickle.dumps(result))  # 1-hour TTL
-#             return result
-
-#     return wrapper
+        """Destructor that properly logs and cleans up resources."""
+        try:
+            if hasattr(self, "redis") and hasattr(self, "using_pool") and not self.using_pool:
+                # For non-pooled connections, use sync close since we're in a non-async context
+                if hasattr(self, "sync_redis") and hasattr(self.sync_redis, "close"):
+                    try:
+                        self.sync_redis.close()
+                    except Exception:
+                        pass  # Ignore errors during cleanup
+            if hasattr(self, "host") and hasattr(self, "port"):
+                logger.debug(f"Redis client disposed {self.host}:{self.port}")
+        except Exception:
+            # Ignore errors during cleanup
+            pass
