@@ -10,18 +10,17 @@ from nectar.amount import Amount
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
-    generate_balance_sheet_pandas_from_accounts,
-)
+    generate_balance_sheet_pandas_from_accounts)
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.actions.hive_to_lightning import (
-    get_verified_hive_client,
-    get_verified_hive_client_for_accounts,
-)
+    get_verified_hive_client, get_verified_hive_client_for_accounts)
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer, send_transfer_bulk
+from v4vapp_backend_v2.hive.hive_extras import (SendHiveTransfer,
+                                                send_transfer,
+                                                send_transfer_bulk)
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 
@@ -142,27 +141,32 @@ async def main():
     # Deposit Hive as Keepsats
     trx = await send_hive_customer_to_server(amount=Amount("26 HIVE"), memo="Deposit some #sats")
     pprint(trx)
-    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit and more #sats")
-    # pprint(trx)
+    trx = await send_hive_customer_to_server(
+        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp.qrc"
+    )
+    pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
     # pprint(trx)
     # await asyncio.sleep(10)  # Wait for the transaction to be processed
 
     hive_config = InternalConfig().config.hive
-    hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
+
+    customers = ["v4vapp-test", "v4vapp.qrc"]
+    hive_client = await get_verified_hive_client_for_accounts(customers)
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
     # pay with keepsats
     transfer_list = []
     for sats in [1000, 1000, 1000, 1000, 1000, 1000, 1000]:  # , 1500, 1234, 2100, 5000]:
-        invoice = await get_lightning_invoice(sats, f"Test {sats}")
-        hive_transfer = SendHiveTransfer(
-            from_account=customer,
-            to_account=server,
-            amount="0.001 HIVE",
-            memo=f"{invoice.payment_request} #paywithsats {sats} sats",
-        )
-        transfer_list.append(hive_transfer)
+        for customer in customers:
+            invoice = await get_lightning_invoice(sats, f"Test {sats}")
+            hive_transfer = SendHiveTransfer(
+                from_account=customer,
+                to_account=server,
+                amount="0.001 HIVE",
+                memo=f"{invoice.payment_request} #paywithsats {sats} sats",
+            )
+            transfer_list.append(hive_transfer)
 
     await send_transfer_bulk(
         hive_client=hive_client,
