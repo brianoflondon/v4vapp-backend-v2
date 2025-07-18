@@ -67,7 +67,12 @@ class CustomJson(OpBase):
         # Only if the from is the required auth account OR the server can we send sats around
         # The customer is the from account.
         try:
-            if self.is_watched and self.json_data and hasattr(self.json_data, "from_account"):
+            if (
+                self.is_watched
+                and self.json_data
+                and hasattr(self.json_data, "from_account")
+                and hasattr(self.json_data, "to_account")
+            ):
                 if self.required_auths and self.required_auths[0]:
                     if (
                         self.json_data.from_account == self.required_auths[0]
