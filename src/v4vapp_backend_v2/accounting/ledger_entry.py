@@ -9,7 +9,7 @@ from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult, UpdateResult
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LedgerAccountAny
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -229,8 +229,18 @@ class LedgerEntry(BaseModel):
     credit_conv: CryptoConv = Field(
         default_factory=CryptoConv, description="Conversion details for the credit transaction"
     )
-    debit: LedgerAccountAny | None = Field(None, description="Account to be debited")
-    credit: LedgerAccountAny | None = Field(None, description="Account to be credited")
+    debit: LedgerAccountAny = Field(
+        AssetAccount(
+            name="Unset",
+        ),
+        description="Account to be debited",
+    )
+    credit: LedgerAccountAny = Field(
+        AssetAccount(
+            name="Unset",
+        ),
+        description="Account to be credited",
+    )
     op: TrackedAny | None = Field(None, description="Associated operation")
     op_type: str = Field(
         default="ledger_entry",
@@ -265,14 +275,33 @@ class LedgerEntry(BaseModel):
                 abs_tol=CryptoConv.UNIT_TOLERANCE[self.credit_unit.value],
             ):
                 return self
-            raise ValueError(
+            logger.warning(
                 f"Debit and Credit amounts do not match "
                 f"{credit_amount_in_debit_unit} != {self.debit_amount} "
-                f"and {debit_amount_in_credit_unit} != {self.credit_amount}"
+                f"and {debit_amount_in_credit_unit} != {self.credit_amount}",
+                extra={"notification": False, **self.log_extra},
             )
-        raise ValueError(
-            f"Debit and Credit conversions do not match: {self.credit_conv} vs {self.debit_conv}"
+        logger.warning(
+            "Debit and credit conv values out of tolerance",
+            extra={"notification": False, **self.log_extra},
         )
+        return self
+
+    @computed_field
+    def debit_amount_signed(self) -> int | float:
+        """
+        Returns the debit amount as a signed value.
+        This is used to ensure that the debit amount is always negative in accounting terms.
+        """
+        return self.debit.debit_amount_signed(self.debit_amount)
+
+    @computed_field
+    def credit_amount_signed(self) -> int | float:
+        """
+        Returns the credit amount as a signed value.
+        This is used to ensure that the credit amount is always positive in accounting terms.
+        """
+        return self.credit.credit_amount_signed(self.credit_amount)
 
     @property
     def ledger_type_str(self) -> str:
@@ -382,7 +411,11 @@ class LedgerEntry(BaseModel):
             str: A formatted string representation of the LedgerEntry.
         """
         formatted_time = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        formatted_amount = f"{self.credit_amount:.3f} {self.credit_unit}" if self.credit_unit != Currency.MSATS else f"{self.credit_amount//1000:.0f} sats"
+        formatted_amount = (
+            f"{self.credit_amount:.3f} {self.credit_unit}"
+            if self.credit_unit != Currency.MSATS
+            else f"{self.credit_amount // 1000:.0f} sats"
+        )
         return (
             f"{formatted_time} | "
             f"{self.ledger_type_str:<35} | {formatted_amount:>20} | "
