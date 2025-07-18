@@ -1,10 +1,12 @@
 import asyncio
 from pathlib import Path
 from random import random
+from timeit import default_timer as timeit
 
 import pytest
 
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 @pytest.fixture(autouse=True)
@@ -17,28 +19,36 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    i_c = InternalConfig()
     yield
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
     )  # Resetting InternalConfig instance
 
 
+TEST_BASE_TIME = 0.5
+TEST_RAND_TIME = 1
+
+
 async def process_customer(customer_id: CustID, comment: str = "") -> bool:
     try:
-        print(f"Starting processing for customer {customer_id} {comment}")
-
-        async with customer_id.locked(timeout=None, blocking_timeout=10, group_id="test_group"):
+        logger.info(f"Starting processing for customer {customer_id} {comment}")
+        start = timeit()
+        async with customer_id.locked(timeout=None, blocking_timeout=None):
             # This is the critical section where the lock is held
-            print(f"Lock acquired for {customer_id}. Performing exclusive operations... {comment}")
+            sleep_time = TEST_BASE_TIME + random() * TEST_RAND_TIME
+            logger.info(
+                f"Lock acquired for {customer_id}. {sleep_time:.1f}s Performing exclusive operations... {comment}"
+            )
             # Simulate some work that requires exclusive access
-            await asyncio.sleep(random() * 0.1)  # Replace with actual async operations
-            print(f"{comment} for {customer_id}")
-            print(f"Operations completed for {customer_id}. Releasing lock... {comment}")
+            await asyncio.sleep(sleep_time)
+            logger.info(f"{comment} for {customer_id}")
+            logger.info(f"Operations completed for {customer_id}. Releasing lock... {comment}")
 
-        print(f"Processing finished for {customer_id}")
+        logger.info(f"Processing finished for {customer_id} after {timeit() - start:.1f}s")
         return True
     except CustIDLockException as e:
-        print(f"Could not acquire lock for {customer_id}: {e}")
+        logger.info(f"Could not acquire lock for {customer_id}: {e}")
         return False
 
 
@@ -50,8 +60,8 @@ async def test_cust_id_lock():
         CustID("customer789"),
     ]
     for customer in customers:
-        print(f"Unlocking lock for {customer}")
-        await customer.release_lock(cust_id=customer, group_id="test_group")
+        logger.info(f"Unlocking lock for {customer}")
+        await CustID.release_lock(cust_id=str(customer))
 
     cust = CustID("customer123")
     cust2 = CustID("customer123")  # Same customer to test lock
@@ -64,7 +74,7 @@ async def test_cust_id_lock():
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    print(results)
+    logger.info(results)
     assert all(isinstance(result, bool) for result in results), (
         "All tasks should return a boolean result"
     )

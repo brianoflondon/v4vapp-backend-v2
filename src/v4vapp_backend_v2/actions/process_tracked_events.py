@@ -2,35 +2,37 @@ import asyncio
 from timeit import default_timer as timer
 from typing import List, Union
 
-from v4vapp_backend_v2.accounting.balance_sheet import \
-    generate_balance_sheet_pandas_from_accounts
-from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    AssetAccount, LiabilityAccount)
+from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
-    LedgerEntry, LedgerEntryCreationException, LedgerEntryDuplicateException,
-    LedgerEntryException, LedgerType)
+    LedgerEntry,
+    LedgerEntryCreationException,
+    LedgerEntryDuplicateException,
+    LedgerEntryException,
+    LedgerType,
+)
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
-    complete_hive_to_lightning, process_hive_to_lightning,
-    return_hive_transfer)
+    complete_hive_to_lightning,
+    process_hive_to_lightning,
+    return_hive_transfer,
+)
 from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
-from v4vapp_backend_v2.actions.lightning_to_hive import \
-    process_lightning_to_hive
+from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.actions.payment_success import (
-    hive_to_lightning_payment_success, keepsats_to_lightning_payment_success)
-from v4vapp_backend_v2.actions.tracked_any import (TrackedAny, TrackedTransfer,
-                                                   load_tracked_object)
+    hive_to_lightning_payment_success,
+    keepsats_to_lightning_payment_success,
+)
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (from_snake_case,
-                                                             lightning_memo)
+from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
-from v4vapp_backend_v2.hive_models.op_limit_order_create import \
-    LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
@@ -59,7 +61,8 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     start = timer()
     try:
         async with CustID(cust_id).locked(
-            timeout=None, blocking_timeout=60, group_id="processing"
+            timeout=None,
+            blocking_timeout=60,
         ):
             if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
                 ledger_entry = await process_hive_op(op=tracked_op)
