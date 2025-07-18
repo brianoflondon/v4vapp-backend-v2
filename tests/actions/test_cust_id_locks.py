@@ -27,7 +27,7 @@ async def process_customer(customer_id: CustID, comment: str = "") -> bool:
     try:
         print(f"Starting processing for customer {customer_id} {comment}")
 
-        async with customer_id.locked(timeout=None, blocking_timeout=None, group_id="test_group"):
+        async with customer_id.locked(timeout=None, blocking_timeout=10, group_id="test_group"):
             # This is the critical section where the lock is held
             print(f"Lock acquired for {customer_id}. Performing exclusive operations... {comment}")
             # Simulate some work that requires exclusive access

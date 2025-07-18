@@ -1,4 +1,5 @@
 import asyncio
+from timeit import default_timer as timer
 from typing import List, Union
 
 from v4vapp_backend_v2.accounting.balance_sheet import \
@@ -53,10 +54,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryException: If there is an error processing the tracked operation.
     """
     cust_id = getattr(tracked_op, "cust_id", "unknown_cust_id")
+    cust_id = "unknown_cust_id" if not cust_id else cust_id
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.group_id}")
+    start = timer()
     try:
         async with CustID(cust_id).locked(
-            timeout=None, blocking_timeout=None, group_id="processing"
+            timeout=None, blocking_timeout=60, group_id="processing"
         ):
             if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
                 ledger_entry = await process_hive_op(op=tracked_op)
@@ -100,6 +103,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
     finally:
+        logger.info(f"Processing time: {timer() - start:,.2f} seconds")
         if cust_id:
             # Ensure the lock is released even if an error occurs
             logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
@@ -227,8 +231,6 @@ async def process_lightning_payment(
             initiating_op = old_ledger_entry.op
             if isinstance(initiating_op, TransferBase):
                 if getattr(initiating_op, "paywithsats", None):
-                    cust_id = CustID(initiating_op.from_account)
-                    logger.info(f"LOCKING {cust_id} {__name__}")
                     ledger_entries_list = await keepsats_to_lightning_payment_success(
                         payment=payment,
                         old_ledger_entry=old_ledger_entry,
@@ -237,7 +239,6 @@ async def process_lightning_payment(
                     if ledger_entries_list:
                         # We can now safely release the hold on the Keepsats
                         await release_keepsats(hive_transfer=initiating_op)
-                    logger.info(f"UNLOCKING {cust_id} {__name__}")
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(
                         payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
