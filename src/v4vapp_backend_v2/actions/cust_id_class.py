@@ -184,9 +184,6 @@ class CustID(str):
         try:
             acquired = await self.acquire_lock(timeout=timeout, blocking_timeout=blocking_timeout)
             yield
-        except Exception as e:
-            logger.error(f"Error in locked context for {self}: {e}")
-            raise CustIDLockException(f"Failed to acquire lock for {self}") from e
         finally:
             if acquired:
                 await CustID.release_lock(self)
