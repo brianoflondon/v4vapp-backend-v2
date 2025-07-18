@@ -46,7 +46,7 @@ class CryptoConv(BaseModel):
         "hive": 0.003,
         "hbd": 0.002,
         "usd": 0.002,
-        "sats": 0.5,
+        "sats": 1.5,
         "msats": 500,
         "btc": 5e-9,
         "msats_fee": 2000,  # the fee is so tiny I don't want failures for this
