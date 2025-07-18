@@ -295,7 +295,7 @@ async def send_lightning_to_pay_req(
         )
     # Must prevent 0 fee limit which is an unlimited fee.
     fee_limit_msat = max(fee_limit_msat, 1000)
-    logger.info(f"Fee limit: {fee_limit_msat} msat")
+    logger.info(f"Fee limit: {fee_limit_msat/1000:.0f} sats")
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
     request_params = request_params | {

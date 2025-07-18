@@ -13,6 +13,6 @@ async def process_lightning_to_hive(invoice: Invoice, nobroadcast: bool = False)
     # and convert it to a Hive transfer.
     # This is a placeholder for the actual implementation.
     logger.info(
-        f"Processing Lightning to Hive transfer for invoice: {invoice.id}, nobroadcast: {nobroadcast}"
+        f"Processing Lightning to Hive transfer for invoice: {invoice.r_hash} {invoice.memo}"
     )
     raise NotImplementedError("Processing Lightning to Hive transfer is not implemented yet.")

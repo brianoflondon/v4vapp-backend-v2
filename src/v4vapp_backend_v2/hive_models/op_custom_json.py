@@ -5,7 +5,7 @@ from pydantic import Field
 
 from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_paywithsats
@@ -66,26 +66,33 @@ class CustomJson(OpBase):
 
         # Only if the from is the required auth account OR the server can we send sats around
         # The customer is the from account.
-        if self.is_watched:
-            if self.required_auths and self.required_auths[0]:
-                if (
-                    self.json_data.from_account == self.required_auths[0]
-                    or self.required_auths[0] in InternalConfig().config.hive.server_account_names
-                ):
-                    self.cust_id = self.json_data.from_account
-
-            if self.conv.sats_hbd == 0:
-                if getattr(self.json_data, "sats", None) is not None:
+        try:
+            if self.is_watched and self.json_data and hasattr(self.json_data, "from_account"):
+                if self.required_auths and self.required_auths[0]:
                     if (
-                        TrackedBaseModel.last_quote
-                        and not TrackedBaseModel.last_quote.hive_hbd == 0
-                        and hasattr(self.json_data, "sats")
+                        self.json_data.from_account == self.required_auths[0]
+                        or self.required_auths[0]
+                        in InternalConfig().config.hive.server_account_names
                     ):
-                        self.conv = CryptoConversion(
-                            value=getattr(self.json_data, "sats", 0),
-                            conv_from=Currency.SATS,
-                            quote=TrackedBaseModel.last_quote,
-                        ).conversion
+                        self.cust_id = self.json_data.from_account
+
+                if self.conv.sats_hbd == 0:
+                    if getattr(self.json_data, "sats", None) is not None:
+                        if (
+                            TrackedBaseModel.last_quote
+                            and not TrackedBaseModel.last_quote.hive_hbd == 0
+                            and hasattr(self.json_data, "sats")
+                        ):
+                            self.conv = CryptoConversion(
+                                value=getattr(self.json_data, "sats", 0),
+                                conv_from=Currency.SATS,
+                                quote=TrackedBaseModel.last_quote,
+                            ).conversion
+        except Exception as e:
+            logger.error(
+                f"Error initializing CustomJson: {e}",
+                extra={"notification": False, **self.log_extra},
+            )
 
     @property
     def is_watched(self) -> bool:
