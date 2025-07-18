@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Tuple
 
 import pandas as pd
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
@@ -12,6 +12,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     UnitSummary,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    ECONOMIC_BENEFIT_DEBIT_INCREASE,
     AssetAccount,
     LedgerAccount,
     LiabilityAccount,
@@ -23,6 +24,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     list_all_accounts_pipeline,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
@@ -126,10 +128,11 @@ async def get_account_balance(
     credit_df["credit_unit"] = credit_df["credit_unit"]
 
     # Determine signed amounts based on account type
-    if account.account_type == "Asset":
+    if account.account_type in ECONOMIC_BENEFIT_DEBIT_INCREASE:
+        # Asset, Expense, Dividends
         debit_df["signed_amount"] = debit_df["debit_amount"]
         credit_df["signed_amount"] = -credit_df["credit_amount"]
-    else:  # Liability, Equity, Revenue, Expense
+    else:  # Liability, Equity, Revenue ECONOMIC_BENEFIT_CREDIT_INCREASE
         debit_df["signed_amount"] = -debit_df["debit_amount"]
         credit_df["signed_amount"] = credit_df["credit_amount"]
 
@@ -594,4 +597,5 @@ async def get_keepsats_balance(
         account=account, as_of_date=as_of_date, line_items=line_items
     )
     net_sats = summary.unit_summaries.get(Currency.MSATS, UnitSummary()).final_balance / 1000
+    return summary, net_sats
     return summary, net_sats
