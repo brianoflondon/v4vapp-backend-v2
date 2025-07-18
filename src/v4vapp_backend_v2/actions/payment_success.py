@@ -296,6 +296,9 @@ async def hive_to_lightning_payment_success(
     return ledger_entries_list
 
 
+# MARK: Keepsats Payment Success
+
+
 async def keepsats_to_lightning_payment_success(
     payment: Payment, old_ledger_entry: LedgerEntry, nobroadcast: bool = False
 ) -> list[LedgerEntry]:
@@ -334,6 +337,7 @@ async def keepsats_to_lightning_payment_success(
     ledger_entries_list = []
 
     # MARK: 2z Fulfill Main Payment Obligation
+    # THIS DOESN'T INCLUDE THE LIGHTNIG FEE
     ledger_type = LedgerType.WITHDRAW_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
@@ -392,6 +396,8 @@ async def keepsats_to_lightning_payment_success(
             quote=quote,
         ).conversion
 
+        # The fee is taken directly from the customer's liability account and passed into the
+        # Treasury Lightning account as a fee charge. From there it is then sent to expenses 
         ledger_type = LedgerType.FEE_CHARGE
         external_payment_ledger_entry = LedgerEntry(
             cust_id=cust_id,
@@ -407,7 +413,7 @@ async def keepsats_to_lightning_payment_success(
             debit_unit=Currency.MSATS,
             debit_amount=payment.fee_msat,
             debit_conv=lightning_fee_conv,
-            credit=RevenueAccount(name="Fee Income Keepsats", sub=node_name),
+            credit=AssetAccount(name="Treasury Lightning", sub=node_name),
             credit_unit=Currency.MSATS,
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
