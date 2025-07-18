@@ -13,7 +13,10 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_pandas_from_accounts,
 )
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.actions.hive_to_lightning import get_verified_hive_client
+from v4vapp_backend_v2.actions.hive_to_lightning import (
+    get_verified_hive_client,
+    get_verified_hive_client_for_accounts,
+)
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -77,7 +80,10 @@ async def get_lightning_invoice(
 
 
 async def send_hive_customer_to_server(
-    send_sats: int = 0, amount: Amount = Amount("0 HIVE"), memo: str = ""
+    send_sats: int = 0,
+    amount: Amount = Amount("0 HIVE"),
+    memo: str = "",
+    customer: str = "v4vapp-test",
 ) -> dict[str, Any]:
     if send_sats > 0:
         send_conv = CryptoConversion(
@@ -86,8 +92,8 @@ async def send_hive_customer_to_server(
         )
         await send_conv.get_quote()
         conv = send_conv.conversion
-        amount_to_send_msats = conv.msats + conv.msats_fee + 200_0000
-        amount_to_send_msats = conv.msats + conv.msats_fee + 200_0000  # Adding a buffer for fees
+        amount_to_send_msats = conv.msats + conv.msats_fee + 200_000
+        amount_to_send_msats = conv.msats + conv.msats_fee + 200_000  # Adding a buffer for fees
         amount_to_send_hive = (amount_to_send_msats // 1000) / conv.sats_hive
         hive_amount = Amount(f"{amount_to_send_hive:.3f} HIVE")
 
@@ -95,7 +101,7 @@ async def send_hive_customer_to_server(
         hive_amount = amount
 
     hive_config = InternalConfig().config.hive
-    hive_client, customer = await get_verified_hive_client(hive_role=HiveRoles.customer)
+    hive_client = await get_verified_hive_client_for_accounts([customer])
     server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
 
     trx = await send_transfer(
@@ -113,17 +119,29 @@ async def graceful_shutdown():
 
 
 async def main():
+    db_conn = DBConn()
+    await db_conn.setup_database()
     # await clear_database()
 
-    # invoice = await get_lightning_invoice(5000, "Test Invoice")
-    # pprint(invoice)
-    # # Pay invoice with Hive transfer
-    # trx = await send_hive_customer_to_server(send_sats=5000, memo=f"{invoice.payment_request}")
-    # pprint(trx)
+    # Pay invoice with Hive transfer
+    invoice = await get_lightning_invoice(5010, "Test Invoice")
+    pprint(invoice)
+    trx = await send_hive_customer_to_server(
+        send_sats=5010, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+    )
+    pprint(trx)
 
-    # # Deposit Hive as Keepsats
-    # trx = await send_hive_customer_to_server(amount=Amount("50 HIVE"), memo="Deposit some #sats")
-    # pprint(trx)
+    # Pay invoice with Hive transfer
+    invoice = await get_lightning_invoice(5030, "Test Invoice for v4vapp.qrc")
+    pprint(invoice)
+    trx = await send_hive_customer_to_server(
+        send_sats=5030, memo=f"{invoice.payment_request}", customer="v4vapp.qrc"
+    )
+    pprint(trx)
+
+    # Deposit Hive as Keepsats
+    trx = await send_hive_customer_to_server(amount=Amount("26 HIVE"), memo="Deposit some #sats")
+    pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit and more #sats")
     # pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
@@ -136,7 +154,7 @@ async def main():
 
     # pay with keepsats
     transfer_list = []
-    for sats in [1000, 1500, 1234, 2100, 5000]:
+    for sats in [1000, 1000, 1000, 1000, 1000, 1000, 1000]:  # , 1500, 1234, 2100, 5000]:
         invoice = await get_lightning_invoice(sats, f"Test {sats}")
         hive_transfer = SendHiveTransfer(
             from_account=customer,
@@ -168,8 +186,6 @@ async def main():
     #     amount=Amount("0.001 HIVE"), memo=f"{invoice.payment_request} #paywithsats"
     # )
 
-    db_conn = DBConn()
-    await db_conn.setup_database()
     ledger_df = await get_ledger_dataframe()
     balance_sheet_dict = await generate_balance_sheet_pandas_from_accounts(df=ledger_df)
     balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet_dict)
@@ -184,6 +200,9 @@ if __name__ == "__main__":
     os.chdir(target_dir)
     print("Current working directory:", os.getcwd())
 
+    CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
+
+    asyncio.run(main())
     CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
     asyncio.run(main())
