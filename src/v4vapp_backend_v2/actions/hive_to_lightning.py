@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 from nectar.amount import Amount
 from nectar.hive import Hive
@@ -835,6 +835,41 @@ async def get_verified_hive_client(
         nobroadcast=nobroadcast,
     )
     return hive_client, hive_account.name
+
+
+async def get_verified_hive_client_for_accounts(
+    accounts: List[str],
+    nobroadcast: bool = False,
+) -> Hive:
+    """
+    Asynchronously obtains a verified Hive client instance for a list of accounts using server account credentials from the internal configuration.
+
+    Args:
+        accounts (List[str]): A list of Hive account names to verify.
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+
+    Returns:
+        Hive: An initialized Hive client instance.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
+    hive_config = InternalConfig().config.hive
+    hive_accounts = []
+    keys = []
+    for account in accounts:
+        if hive_config.hive_accs.get(account):
+            hive_account = hive_config.hive_accs[account]
+            hive_accounts.append(hive_account)
+            all_keys = hive_account.keys
+            if all_keys:
+                keys.extend(all_keys)
+
+    hive_client = get_hive_client(
+        keys=keys,
+        nobroadcast=nobroadcast,
+    )
+    return hive_client
 
 
 async def complete_hive_to_lightning(
