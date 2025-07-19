@@ -78,3 +78,5 @@ async def test_cust_id_lock():
     assert all(isinstance(result, bool) for result in results), (
         "All tasks should return a boolean result"
     )
+    await CustID.clear_all_locks()
+    logger.info("All locks cleared after test completion.")
