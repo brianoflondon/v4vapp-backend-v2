@@ -7,15 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Define Account Types as a StrEnum for validation
 class AccountType(StrEnum):
+    DIVIDEND = "Dividend"
+    EXPENSE = "Expense"
     ASSET = "Asset"
     LIABILITY = "Liability"
     EQUITY = "Equity"
     REVENUE = "Revenue"
-    EXPENSE = "Expense"
 
 
-ECONOMIC_BENEFIT_DEBIT_INCREASE = [AccountType.ASSET, AccountType.EXPENSE, AccountType.EQUITY]
-ECONOMIC_BENEFIT_CREDIT_INCREASE = [AccountType.LIABILITY, AccountType.EQUITY, AccountType.REVENUE]
+NORMAL_DEBIT_ACCOUNTS = [
+    AccountType.DIVIDEND,
+    AccountType.EXPENSE,
+    AccountType.ASSET,
+]
+NORMAL_CREDIT_ACCOUNTS = [AccountType.LIABILITY, AccountType.EQUITY, AccountType.REVENUE]
 
 
 # MARK: Base class for all accounts
@@ -80,50 +85,6 @@ class LedgerAccount(BaseModel):
                 return subclass(name=name.strip(), sub=sub.strip(), contra=contra)
         # Fallback to base class if no subclass matches
         return cls(name=name.strip(), account_type=account_type, sub=sub.strip(), contra=contra)
-
-    def debit_amount_signed(self, amount: int | float) -> Union[int, float]:
-        """
-        Returns the signed amount for a debit transaction based on the account's type and contra status.
-
-        If the account is a contra account, the amount is negated. For account types where debits increase the balance
-        (e.g., Asset, Expense, Dividend), the (possibly negated) amount is returned as-is. For other account types
-        (e.g., Liability, Equity, Revenue), the amount is further negated to reflect the correct sign for a debit.
-
-        Args:
-            amount (int | float): The transaction amount to be signed.
-
-        Returns:
-            int | float: The signed amount appropriate for a debit entry in this account.
-        """
-        if self.contra:
-            amount = -amount
-        if self.account_type in ECONOMIC_BENEFIT_DEBIT_INCREASE:
-            # Asset, Expense, Dividend
-            return amount
-        else:
-            # For Liability, Equity, Revenue
-            return -amount
-
-    def credit_amount_signed(self, amount: int | float) -> Union[int, float]:
-        """
-        Returns the signed value of a credit amount based on the account's type and contra status.
-        If the account is a contra account, the amount is negated. For account types where economic benefit increases on the debit side
-        (e.g., Asset, Expense, Dividend), the credit amount is returned as a negative value. For other account types (e.g., Liability, Equity, Revenue),
-        the credit amount is returned as a positive value.
-        Args:
-            amount (int | float): The credit amount to be signed.
-        Returns:
-            int | float: The signed credit amount according to account type and contra status.
-        """
-
-        if self.contra:
-            amount = -amount
-        if self.account_type in ECONOMIC_BENEFIT_DEBIT_INCREASE:
-            # Asset, Expense, Dividend
-            return -amount
-        else:
-            # For Liability, Equity, Revenue
-            return amount
 
 
 # MARK: Asset Accounts
