@@ -304,6 +304,33 @@ class LedgerEntry(BaseModel):
         return self.credit.credit_amount_signed(self.credit_amount)
 
     @property
+    def debit_sign(self) -> int:
+        """
+        Returns the sign of the debit amount.
+        This is used to determine if the debit amount is positive or negative.
+        """
+        return -1 if self.debit_amount_signed < 0 else 1  # type: ignore[return-value] Computed field problem
+
+    @property
+    def credit_sign(self) -> int:
+        """
+        Returns the sign of the credit amount.
+        This is used to determine if the credit amount is positive or negative.
+        """
+        return -1 if self.credit_amount_signed < 0 else 1  # type: ignore[return-value] Computed field problem
+
+    @computed_field
+    def conv_signed(self) -> Dict[str, CryptoConv]:
+        """
+        Returns the conversion details as a signed CryptoConv object.
+        This is used to ensure that the conversion amounts are correctly signed for accounting.
+        """
+        return {
+            "debit": self.debit_conv * self.debit_sign,
+            "credit": self.credit_conv * self.credit_sign,
+        }
+
+    @property
     def ledger_type_str(self) -> str:
         """Returns the string representation of the ledger type.
 

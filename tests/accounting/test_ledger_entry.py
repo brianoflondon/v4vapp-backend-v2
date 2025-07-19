@@ -53,6 +53,7 @@ async def test_ledger_entry_constructor():
         debit=AssetAccount(
             name="Treasury Lightning",
             sub=node_name,  # This is the SERVER Lightning
+            contra=False,
         ),
         debit_unit=Currency.MSATS,
         debit_amount=conversion_debit_amount,
@@ -60,6 +61,7 @@ async def test_ledger_entry_constructor():
         credit=AssetAccount(
             name="Customer Deposits Hive",
             sub=node_name,  # This is the Server
+            contra=False,
         ),
         credit_unit=Currency.HIVE,
         credit_amount=conversion_credit_debit_conv.hive,
@@ -74,3 +76,5 @@ async def test_ledger_entry_constructor():
     assert ledger_entry.is_completed
     assert float(ledger_entry.debit_amount_signed) == conversion_debit_amount
     assert float(ledger_entry.credit_amount_signed) == -conversion_credit_debit_conv.hive
+
+    print(ledger_entry.conv_signed)
