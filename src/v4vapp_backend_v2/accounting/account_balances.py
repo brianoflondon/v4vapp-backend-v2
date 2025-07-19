@@ -12,7 +12,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     UnitSummary,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    ECONOMIC_BENEFIT_DEBIT_INCREASE,
+    NORMAL_DEBIT_ACCOUNTS,
     AssetAccount,
     LedgerAccount,
     LiabilityAccount,
@@ -128,7 +128,7 @@ async def get_account_balance(
     credit_df["credit_unit"] = credit_df["credit_unit"]
 
     # Determine signed amounts based on account type
-    if account.account_type in ECONOMIC_BENEFIT_DEBIT_INCREASE:
+    if account.account_type in NORMAL_DEBIT_ACCOUNTS:
         # Asset, Expense, Dividends
         debit_df["signed_amount"] = debit_df["debit_amount"]
         credit_df["signed_amount"] = -credit_df["credit_amount"]
