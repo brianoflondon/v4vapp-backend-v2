@@ -13,6 +13,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     calculate_hive_return_change,
     lightning_payment_sent,
 )
+from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -48,7 +49,7 @@ async def hive_to_lightning_payment_success(
     # MARK: Hive to Lightning Payment Success
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
     timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
-    hive_transfer = old_ledger_entry.op
+    hive_transfer = await load_tracked_object(old_ledger_entry.group_id)
     if not isinstance(hive_transfer, TransferBase):
         raise NotImplementedError(
             f"Unhandled operation type: {type(hive_transfer)} for hive_to_lightning_payment_success {payment.group_id_p}"
@@ -78,10 +79,6 @@ async def hive_to_lightning_payment_success(
         "Change amount should not be None after calculating change."
     )
 
-    # Also need to update the ledger_entry for the original hive_transfer
-    old_ledger_entry.op = hive_transfer
-    await old_ledger_entry.update_op()
-
     node_name = InternalConfig().config.lnd_config.default
     ledger_entries_list = []
 
@@ -102,6 +99,7 @@ async def hive_to_lightning_payment_success(
     ledger_type = LedgerType.CONV_HIVE_TO_LIGHTNING
     conversion_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -129,6 +127,7 @@ async def hive_to_lightning_payment_success(
     ledger_type = LedgerType.CONTRA_HIVE_TO_LIGHTNING
     contra_h_conversion_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -166,6 +165,7 @@ async def hive_to_lightning_payment_success(
 
     fee_ledger_entry_hive = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -199,6 +199,7 @@ async def hive_to_lightning_payment_success(
     ).conversion
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -224,6 +225,7 @@ async def hive_to_lightning_payment_success(
     ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
     external_payment_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -256,6 +258,7 @@ async def hive_to_lightning_payment_success(
         ledger_type = LedgerType.FEE_EXPENSE
         fee_ledger_entry_sats = LedgerEntry(
             cust_id=cust_id,
+            short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
@@ -319,7 +322,7 @@ async def keepsats_to_lightning_payment_success(
     # MARK: Keepsats Payment Success
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
     timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
-    hive_transfer = old_ledger_entry.op
+    hive_transfer = await load_tracked_object(old_ledger_entry.group_id)
     if not isinstance(hive_transfer, TransferBase):
         raise NotImplementedError(
             f"Unhandled operation type: {type(hive_transfer)} for hive_to_lightning_payment_success {payment.group_id_p}"
@@ -337,10 +340,11 @@ async def keepsats_to_lightning_payment_success(
     ledger_entries_list = []
 
     # MARK: 2z Fulfill Main Payment Obligation
-    # THIS DOESN'T INCLUDE THE LIGHTNIG FEE
+    # THIS DOESN'T INCLUDE THE LIGHTING FEE
     ledger_type = LedgerType.WITHDRAW_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -366,6 +370,7 @@ async def keepsats_to_lightning_payment_success(
     ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -397,10 +402,11 @@ async def keepsats_to_lightning_payment_success(
         ).conversion
 
         # The fee is taken directly from the customer's liability account and passed into the
-        # Treasury Lightning account as a fee charge. From there it is then sent to expenses 
+        # Treasury Lightning account as a fee charge. From there it is then sent to expenses
         ledger_type = LedgerType.FEE_CHARGE
         external_payment_ledger_entry = LedgerEntry(
             cust_id=cust_id,
+            short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
@@ -424,6 +430,7 @@ async def keepsats_to_lightning_payment_success(
         ledger_type = LedgerType.FEE_EXPENSE
         fee_ledger_entry_sats = LedgerEntry(
             cust_id=cust_id,
+            short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),

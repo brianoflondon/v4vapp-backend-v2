@@ -14,6 +14,14 @@ from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
+"""
+This set of functions discriminates between the various types of tracked object which are
+either Hive operations or LND Invoices or Payments.
+
+Tracked operations for Hive need to be changed
+
+"""
+
 
 def get_tracked_any_type(value: Any) -> str:
     """
@@ -102,13 +110,15 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
         TrackedAny | None: The loaded tracked object if found, otherwise None.
 
     """
+    db = InternalConfig.db
+
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
         if "_" in short_id:
             # This is a for a hive_ops object
             collection_name = "hive_ops"
             query = TrackedBaseModel.short_id_query(short_id=short_id)
-            result = await InternalConfig.db[collection_name].find_one(filter=query)
+            result = await db[collection_name].find_one(filter=query)
             if result:
                 value = {"value": result}
                 answer = DiscriminatedTracked.model_validate(value)
@@ -117,14 +127,14 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
             collections = [Invoice.collection_name, Payment.collection_name]
             for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
-                result = await InternalConfig.db[collection_name].find_one(filter=query)
+                result = await db[collection_name].find_one(filter=query)
                 if result:
                     value = {"value": result}
                     answer = DiscriminatedTracked.model_validate(value)
                     return answer.value
 
-    if collection_name := getattr(tracked_obj, "collection_name", None):
-        result = await InternalConfig.db[collection_name].find_one(
+    elif collection_name := getattr(tracked_obj, "collection_name", None):
+        result = await db[collection_name].find_one(
             filter=tracked_obj.group_id_query,
         )
         if result:

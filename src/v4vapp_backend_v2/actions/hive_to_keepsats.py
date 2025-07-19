@@ -96,6 +96,8 @@ async def hive_to_keepsats_deposit(
     ledger_type = LedgerType.CONV_HIVE_TO_KEEPSATS
     conversion_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
@@ -124,6 +126,8 @@ async def hive_to_keepsats_deposit(
 
     contra_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         ledger_type=LedgerType.CONTRA_HIVE_TO_KEEPSATS,
         group_id=f"{hive_transfer.group_id}-{LedgerType.CONTRA_HIVE_TO_KEEPSATS.value}",
         timestamp=next(timestamp),
@@ -151,6 +155,8 @@ async def hive_to_keepsats_deposit(
     ).conversion
     fee_debit_amount_float = getattr(fee_debit_conv, hive_transfer.unit.lower())
     fee_ledger_entry = LedgerEntry(
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
@@ -177,6 +183,8 @@ async def hive_to_keepsats_deposit(
     # MARK: 5 Convert to Keepsats in customer account into the Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
     outgoing_ledger_entry = LedgerEntry(
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",

@@ -135,11 +135,12 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
         timestamp=op.timestamp,
-        op=op,
     )
     if isinstance(op, Invoice):
+        ledger_entry.op_type = "invoice"
         ledger_entries = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
     elif isinstance(op, Payment):
+        ledger_entry.op_type = "payment"
         ledger_entries = await process_lightning_payment(payment=op)
 
     return ledger_entries
@@ -235,7 +236,7 @@ async def process_lightning_payment(
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
-            initiating_op = old_ledger_entry.op
+            initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
             if isinstance(initiating_op, TransferBase):
                 if getattr(initiating_op, "paywithsats", None):
                     ledger_entries_list = await keepsats_to_lightning_payment_success(
@@ -268,8 +269,7 @@ async def process_lightning_payment(
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
-            print(old_ledger_entry)
-            hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.op)
+            hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
             # MARK: Hive to Lightning Payment Failed
             if isinstance(hive_transfer, TransferBase):
                 # If a payment fails we need to update the hive_transfer if
@@ -342,8 +342,10 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
 
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
+        short_id=op.short_id,
         timestamp=op.timestamp,
-        op=op,
+        op_type=op.op_type,
+
     )
     # MARK: Transfers or Recurrent Transfers
     if isinstance(op, BlockMarker):
@@ -354,7 +356,9 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
             ledger_entry = await process_transfer_op(hive_transfer=op, ledger_entry=ledger_entry)
 
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
-            ledger_entry = await process_create_fill_order_op(op=op, ledger_entry=ledger_entry)
+            ledger_entry = await process_create_fill_order_op(
+                limit_fill_order=op, ledger_entry=ledger_entry
+            )
 
         elif isinstance(op, CustomJson):
             # CustomJson operations are not yet implemented
@@ -505,7 +509,7 @@ async def process_transfer_op(
 
 
 async def process_create_fill_order_op(
-    op: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
+    limit_fill_order: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
 ) -> LedgerEntry:
     """
     Processes the create or fill order operation and creates a ledger entry if applicable.
@@ -517,57 +521,63 @@ async def process_create_fill_order_op(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-    if isinstance(op, LimitOrderCreate):
-        logger.info(f"Limit order create: {op.orderid}")
-        if not op.conv or op.conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.conv = CryptoConv(
-                conv_from=op.amount_to_sell.unit,  # HIVE
-                value=op.amount_to_sell.amount_decimal,  # 25.052 HIVE
-                converted_value=op.min_to_receive.amount_decimal,  # 6.738 HBD
+    if isinstance(limit_fill_order, LimitOrderCreate):
+        logger.info(f"Limit order create: {limit_fill_order.orderid}")
+        if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.conv = CryptoConv(
+                conv_from=limit_fill_order.amount_to_sell.unit,  # HIVE
+                value=limit_fill_order.amount_to_sell.amount_decimal,  # 25.052 HIVE
+                converted_value=limit_fill_order.min_to_receive.amount_decimal,  # 6.738 HBD
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        ledger_entry.op = op
-        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
-        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
-        ledger_entry.description = op.ledger_str
+        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
+        ledger_entry.credit = AssetAccount(
+            name="Customer Deposits Hive", sub=limit_fill_order.owner
+        )
+        ledger_entry.description = limit_fill_order.ledger_str
         ledger_entry.ledger_type = LedgerType.LIMIT_ORDER_CREATE
-        ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
-        ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
-        ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
-    elif isinstance(op, FillOrder):
-        logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
-        if not op.debit_conv or op.debit_conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.debit_conv = CryptoConv(
-                conv_from=op.open_pays.unit,  # HIVE
-                value=op.open_pays.amount_decimal,  # 25.052 HIVE
-                converted_value=op.current_pays.amount_decimal,  # 6.738 HBD
+        ledger_entry.debit_unit = ledger_entry.credit_unit = limit_fill_order.amount_to_sell.unit
+        ledger_entry.debit_amount = ledger_entry.credit_amount = (
+            limit_fill_order.amount_to_sell.amount_decimal
+        )
+        ledger_entry.debit_conv = ledger_entry.credit_conv = limit_fill_order.conv
+    elif isinstance(limit_fill_order, FillOrder):
+        logger.info(
+            f"Fill order operation: {limit_fill_order.open_orderid} {limit_fill_order.current_owner}"
+        )
+        if not limit_fill_order.debit_conv or limit_fill_order.debit_conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.debit_conv = CryptoConv(
+                conv_from=limit_fill_order.open_pays.unit,  # HIVE
+                value=limit_fill_order.open_pays.amount_decimal,  # 25.052 HIVE
+                converted_value=limit_fill_order.current_pays.amount_decimal,  # 6.738 HBD
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        if not op.credit_conv or op.credit_conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.credit_conv = CryptoConv(
-                conv_from=op.current_pays.unit,  # HBD
-                value=op.current_pays.amount_decimal,  # 6.738 HBD
-                converted_value=op.open_pays.amount_decimal,  # 25.052 HIVE
+        if not limit_fill_order.credit_conv or limit_fill_order.credit_conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.credit_conv = CryptoConv(
+                conv_from=limit_fill_order.current_pays.unit,  # HBD
+                value=limit_fill_order.current_pays.amount_decimal,  # 6.738 HBD
+                converted_value=limit_fill_order.open_pays.amount_decimal,  # 25.052 HIVE
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        ledger_entry.op = op
-        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
-        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
-        ledger_entry.description = op.ledger_str
+        ledger_entry.debit = AssetAccount(
+            name="Customer Deposits Hive", sub=limit_fill_order.current_owner
+        )
+        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.current_owner)
+        ledger_entry.description = limit_fill_order.ledger_str
         ledger_entry.ledger_type = LedgerType.FILL_ORDER
-        ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
-        ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
-        ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE
-        ledger_entry.credit_amount = op.current_pays.amount_decimal  # 6.738 HBD
-        ledger_entry.debit_conv = op.debit_conv  # Conversion for HIVE
-        ledger_entry.credit_conv = op.credit_conv  # Conversion for HBD
+        ledger_entry.debit_unit = limit_fill_order.open_pays.unit  # HIVE (received)
+        ledger_entry.credit_unit = limit_fill_order.current_pays.unit  # HBD (given)
+        ledger_entry.debit_amount = limit_fill_order.open_pays.amount_decimal  # 25.052 HIVE
+        ledger_entry.credit_amount = limit_fill_order.current_pays.amount_decimal  # 6.738 HBD
+        ledger_entry.debit_conv = limit_fill_order.debit_conv  # Conversion for HIVE
+        ledger_entry.credit_conv = limit_fill_order.credit_conv  # Conversion for HBD
     else:
-        logger.error(f"Unsupported operation type: {type(op)}")
+        logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
     return ledger_entry

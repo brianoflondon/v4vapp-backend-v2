@@ -8,7 +8,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_keepsats_balance,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import update_ledger_entry_op
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
@@ -521,13 +520,13 @@ async def lightning_payment_sent(
     )
     logger.info(
         f"Change transaction created for operation {hive_transfer.group_id_p}: {change_amount}",
-        extra={"notification": True, **hive_transfer.log_extra, **payment.log_extra},
+        extra={"notification": True, "trx": trx, **hive_transfer.log_extra, **payment.log_extra},
     )
 
-    if trx:
-        original_ledger_entry, ans = await update_ledger_entry_op(
-            group_id=hive_transfer.group_id_p, op=hive_transfer
-        )
+    # if trx:
+    #     original_ledger_entry, ans = await update_ledger_entry_op(
+    #         group_id=hive_transfer.group_id_p, op=hive_transfer
+    #     )
 
 
 async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: Payment) -> Amount:
