@@ -54,7 +54,7 @@ async def generate_balance_sheet_pandas_from_accounts(
 
     net_income = profit_and_loss["Net Income"]
 
-    balance_sheet = {
+    balance_sheet: Dict = {
         "Assets": defaultdict(dict),
         "Liabilities": defaultdict(dict),
         "Equity": defaultdict(dict),
