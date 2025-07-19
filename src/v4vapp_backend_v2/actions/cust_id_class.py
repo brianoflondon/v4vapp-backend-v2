@@ -12,6 +12,8 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 LOCK_REPORTING_TIME = 5
 
 
+ICON = "🔒"  # Icon to represent the lock in logs and messages
+
 class CustIDLockException(Exception):
     """Custom exception for CustID lock acquisition failures."""
 
@@ -71,14 +73,14 @@ class CustID(str):
                     )
                     if acquired:
                         # Store the lock and return success
-                        logger.info(f"Lock acquired for customer {self}")
+                        logger.info(f"{ICON} Lock acquired for customer {self}")
                         return True
                 except asyncio.TimeoutError:
                     # Log that we're still waiting
                     current_time = time.time()
                     if current_time - last_log_time >= LOCK_REPORTING_TIME:
                         logger.warning(
-                            f"Still waiting for lock on customer {self} after {int(current_time - start_time)} seconds...",
+                            f"{ICON} Still waiting for lock on customer {self} after {int(current_time - start_time)} seconds...",
                             extra={"notification": False},
                         )
                         last_log_time = current_time
@@ -95,11 +97,11 @@ class CustID(str):
                     # Continue trying
                     continue
                 except Exception as e:
-                    raise CustIDLockException(f"Error acquiring lock for {self}: {e}")
+                    raise CustIDLockException(f"{ICON} Error acquiring lock for {self}: {e}")
 
         except Exception as e:
-            logger.error(f"Error setting up lock for {self}: {e}")
-            raise CustIDLockException(f"Error setting up lock: {e}")
+            logger.error(f"{ICON} Error setting up lock for {self}: {e}")
+            raise CustIDLockException(f"{ICON} Error setting up lock: {e}")
 
     @staticmethod
     async def release_lock(cust_id: str) -> bool:
@@ -122,26 +124,26 @@ class CustID(str):
                 timeout=None,  # Doesn't matter for release
             )
         except Exception as e:
-            logger.error(f"Error creating lock for release {cust_id}: {e}")
+            logger.error(f"{ICON} Error creating lock for release {cust_id}: {e}")
             return False
 
         try:
             await lock.release()
-            logger.info(f"Lock released for {cust_id}")
+            logger.info(f"{ICON} Lock released for {cust_id}")
             return True
         except LockNotOwnedError:
-            logger.warning(f"Lock for {cust_id} was not owned by this process")
+            logger.warning(f"{ICON} Lock for {cust_id} was not owned by this process")
             return False
         except LockError as e:
             if "Cannot release an unlocked lock" in str(e):
                 await redis_instance.delete(f"cust_id_lock:{cust_id}")
-                logger.info(f"Release already expired lock for {cust_id}")
+                logger.info(f"{ICON} Release already expired lock for {cust_id}")
                 return True
             else:
-                logger.error(f"Lock error for {cust_id}: {e}")
+                logger.error(f"{ICON} Lock error for {cust_id}: {e}")
             return False
         except Exception as e:
-            logger.error(f"Error releasing lock for {cust_id}: {e}")
+            logger.error(f"{ICON} Error releasing lock for {cust_id}: {e}")
             return False
 
     @staticmethod
@@ -162,8 +164,26 @@ class CustID(str):
             exists = await redis_instance.exists(lock_key)
             return bool(exists)
         except Exception as e:
-            logger.error(f"Error checking lock existence for {cust_id}: {e}")
+            logger.error(f"{ICON} Error checking lock existence for {cust_id}: {e}")
             return False
+
+    @staticmethod
+    async def clear_all_locks() -> None:
+        """
+        Clear all locks in Redis.
+
+        This method is intended for testing purposes to ensure no locks are left hanging.
+        """
+        redis_instance = InternalConfig.redis_async
+        try:
+            keys = await redis_instance.keys("cust_id_lock:*")
+            if keys:
+                await redis_instance.delete(*keys)
+                logger.info(f"{ICON} All customer ID locks cleared.")
+            else:
+                logger.info(f"{ICON} No customer ID locks found to clear.")
+        except Exception as e:
+            logger.error(f"{ICON} Error clearing all locks: {e}")
 
     @asynccontextmanager
     async def locked(self, timeout: int | None = None, blocking_timeout: int | None = 60):

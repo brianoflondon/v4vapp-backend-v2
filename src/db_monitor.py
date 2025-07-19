@@ -11,7 +11,7 @@ from pymongo.errors import OperationFailure
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.cust_id_class import CustIDLockException
+from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -308,6 +308,7 @@ async def main_async_start():
     )
     db_conn = DBConn()
     await db_conn.setup_database()
+    await CustID.clear_all_locks()  # Clear any existing locks before starting
 
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
