@@ -106,9 +106,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
     finally:
+        process_time = timer() - start
+        tracked_op.process_time = process_time
+        await tracked_op.save()
         logger.info(f"{'=' * 50}")
         logger.info(
-            f"{timer() - start:>7,.2f} s {cust_id} processing tracked operation: {tracked_op.log_str}"
+            f"{process_time:>7,.2f} s {cust_id} processing tracked operation: {tracked_op.log_str}"
         )
         logger.info(f"{'=' * 50}")
         if cust_id:
@@ -345,7 +348,6 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
         short_id=op.short_id,
         timestamp=op.timestamp,
         op_type=op.op_type,
-
     )
     # MARK: Transfers or Recurrent Transfers
     if isinstance(op, BlockMarker):

@@ -39,6 +39,7 @@ class ReplyModel(BaseModel):
     )
     reply_error: str | None = Field(None, description="Error in the reply, if any", exclude=False)
 
+
     def __init__(self, **data):
         """
         Initialize the ReplyModel with the provided data.
@@ -76,7 +77,7 @@ class TrackedBaseModel(BaseModel):
         CryptoConv(),
         description="Conversion object for any returned change associated with this transaction if any",
     )
-
+    process_time: float = Field(0, description="Time in (s) it took to process this transaction")
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **data):
