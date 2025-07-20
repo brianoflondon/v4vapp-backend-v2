@@ -13,7 +13,6 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
-    complete_hive_to_lightning,
     process_hive_to_lightning,
     return_hive_transfer,
 )
@@ -479,8 +478,7 @@ async def process_transfer_op(
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        if hive_transfer.extract_reply_short_id:
-            follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
+        #TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
 
     # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:

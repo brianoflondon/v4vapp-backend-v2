@@ -126,7 +126,7 @@ class ResumeToken(BaseModel):
             raise e
 
 
-def change_to_locked(change: Mapping[str, Any]) -> bool:
+def ignore_changes(change: Mapping[str, Any]) -> bool:
     """
     Determines if the "locked" field is present in the updated or removed fields
     of a database change event.
@@ -149,6 +149,12 @@ def change_to_locked(change: Mapping[str, Any]) -> bool:
         return True
     if "process_time" in updated_fields or "process_time" in removed_fields:
         # If process_time is present ignore the change
+        return True
+    if (
+        "change_conv" in updated_fields
+        or "fee_conv" in updated_fields
+        or "replies" in updated_fields
+    ):
         return True
     return False
 
@@ -234,7 +240,7 @@ async def subscribe_stream(
             async for change in stream:
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
-                if change_to_locked(change):
+                if ignore_changes(change):
                     # If the change is a lock, we want to resume the stream
                     # and not process the operation.
                     logger.info(

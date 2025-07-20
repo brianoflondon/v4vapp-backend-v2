@@ -289,6 +289,7 @@ async def hive_to_lightning_payment_success(
         reply_error=None,
         reply_message=message,
     )
+    await hive_transfer.save()
 
     await lightning_payment_sent(
         payment=payment,
@@ -463,6 +464,7 @@ async def keepsats_to_lightning_payment_success(
         reply_error=None,
         reply_message=message,
     )
+    await hive_transfer.save()
 
     await lightning_payment_sent(
         payment=payment,

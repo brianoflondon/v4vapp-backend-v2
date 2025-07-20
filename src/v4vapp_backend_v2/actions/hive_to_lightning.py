@@ -871,20 +871,3 @@ async def get_verified_hive_client_for_accounts(
     return hive_client
 
 
-async def complete_hive_to_lightning(
-    hive_transfer: TrackedTransfer, nobroadcast: bool = False
-) -> None:
-    """
-    Complete the Hive to Lightning transfer process by processing the change transfer operation.
-
-    Args:
-        hive_transfer (TrackedTransfer): The tracked transfer object representing the Hive to Lightning operation.
-        nobroadcast (bool, optional): If True, prevents broadcasting the transaction. Defaults to False.
-
-    Returns:
-        None
-    """
-    await asyncio.sleep(5)
-    logger.info(
-        f"Processing {__name__}: {hive_transfer.log_str}",
-    )

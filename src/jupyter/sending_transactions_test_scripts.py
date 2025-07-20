@@ -122,32 +122,32 @@ async def main():
     await db_conn.setup_database()
     # await clear_database()
 
-    # Pay invoice with Hive transfer
-    invoice = await get_lightning_invoice(5010, "Test Invoice")
-    pprint(invoice)
-    trx = await send_hive_customer_to_server(
-        send_sats=5010, memo=f"{invoice.payment_request}", customer="v4vapp-test"
-    )
-    pprint(trx)
-
-    # Pay invoice with Hive transfer
-    invoice = await get_lightning_invoice(5030, "Test Invoice for v4vapp.qrc")
-    pprint(invoice)
-    trx = await send_hive_customer_to_server(
-        send_sats=5030, memo=f"{invoice.payment_request}", customer="v4vapp.qrc"
-    )
-    pprint(trx)
-
-    # Deposit Hive as Keepsats
-    trx = await send_hive_customer_to_server(amount=Amount("26 HIVE"), memo="Deposit some #sats")
-    pprint(trx)
-    trx = await send_hive_customer_to_server(
-        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp.qrc"
-    )
-    pprint(trx)
-    # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
+    # # Pay invoice with Hive transfer
+    # invoice = await get_lightning_invoice(5010, "Test Invoice")
+    # pprint(invoice)
+    # trx = await send_hive_customer_to_server(
+    #     send_sats=5010, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+    # )
     # pprint(trx)
-    await asyncio.sleep(30)  # Wait for the transaction to be processed
+
+    # # Pay invoice with Hive transfer
+    # invoice = await get_lightning_invoice(5030, "Test Invoice for v4vapp.qrc")
+    # pprint(invoice)
+    # trx = await send_hive_customer_to_server(
+    #     send_sats=5030, memo=f"{invoice.payment_request}", customer="v4vapp.qrc"
+    # )
+    # pprint(trx)
+
+    # # Deposit Hive as Keepsats
+    # trx = await send_hive_customer_to_server(amount=Amount("100 HIVE"), memo="Deposit some #sats")
+    # pprint(trx)
+    # trx = await send_hive_customer_to_server(
+    #     amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp.qrc"
+    # )
+    # pprint(trx)
+    # # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
+    # # pprint(trx)
+    # await asyncio.sleep(30)  # Wait for the transaction to be processed
 
     hive_config = InternalConfig().config.hive
 
@@ -157,7 +157,25 @@ async def main():
 
     # pay with keepsats
     transfer_list = []
-    for sats in [1000, 1000, 1000, 1000, 1000, 1000, 1000]:  # , 1500, 1234, 2100, 5000]:
+    for sats in [500, 501, 502, 503, 504, 505, 506]:  # , 1500, 1234, 2100, 5000]:
+        for customer in customers:
+            invoice = await get_lightning_invoice(sats, f"Test {sats}")
+            hive_transfer = SendHiveTransfer(
+                from_account=customer,
+                to_account=server,
+                amount="0.001 HIVE",
+                memo=f"{invoice.payment_request} #paywithsats {sats} sats",
+            )
+            transfer_list.append(hive_transfer)
+
+    await send_transfer_bulk(
+        hive_client=hive_client,
+        transfer_list=transfer_list,
+    )
+
+    # pay with keepsats
+    transfer_list = []
+    for sats in [507, 508, 509, 510, 511, 512, 513]:  # , 1500, 1234, 2100, 5000]:
         for customer in customers:
             invoice = await get_lightning_invoice(sats, f"Test {sats}")
             hive_transfer = SendHiveTransfer(
