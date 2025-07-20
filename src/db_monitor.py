@@ -147,6 +147,9 @@ def change_to_locked(change: Mapping[str, Any]) -> bool:
     # Check if "locked" is in either updatedFields or removedFields
     if "locked" in updated_fields or "locked" in removed_fields:
         return True
+    if "process_time" in updated_fields or "process_time" in removed_fields:
+        # If process_time is present ignore the change
+        return True
     return False
 
 
