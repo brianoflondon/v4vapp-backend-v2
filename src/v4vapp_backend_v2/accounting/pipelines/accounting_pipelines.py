@@ -267,117 +267,138 @@ def profit_loss_pipeline(
                         "in": {
                             "k": "$$name",
                             "v": {
-                                "Total": {
-                                    "hbd": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$revenue_details",
-                                                        "as": "r",
-                                                        "cond": {
-                                                            "$eq": ["$$r._id.name", "$$name"]
+                                "$mergeObjects": [
+                                    {
+                                        "Total": {
+                                            "hbd": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
                                                         },
+                                                        "as": "f",
+                                                        "in": "$$f.hbd",
                                                     }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.hbd",
-                                            }
-                                        }
-                                    },
-                                    "hive": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$revenue_details",
-                                                        "as": "r",
-                                                        "cond": {
-                                                            "$eq": ["$$r._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.hive",
-                                            }
-                                        }
-                                    },
-                                    "msats": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$revenue_details",
-                                                        "as": "r",
-                                                        "cond": {
-                                                            "$eq": ["$$r._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.msats",
-                                            }
-                                        }
-                                    },
-                                    "sats": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$revenue_details",
-                                                        "as": "r",
-                                                        "cond": {
-                                                            "$eq": ["$$r._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.sats",
-                                            }
-                                        }
-                                    },
-                                    "usd": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$revenue_details",
-                                                        "as": "r",
-                                                        "cond": {
-                                                            "$eq": ["$$r._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.usd",
-                                            }
-                                        }
-                                    },
-                                },
-                                "subs": {
-                                    "$arrayToObject": {
-                                        "$map": {
-                                            "input": {
-                                                "$filter": {
-                                                    "input": "$revenue_details",
-                                                    "as": "r",
-                                                    "cond": {"$eq": ["$$r._id.name", "$$name"]},
                                                 }
                                             },
-                                            "as": "item",
-                                            "in": {
-                                                "k": "$$item._id.sub",
-                                                "v": {
-                                                    "hbd": "$$item.hbd",
-                                                    "hive": "$$item.hive",
-                                                    "msats": "$$item.msats",
-                                                    "sats": "$$item.sats",
-                                                    "usd": "$$item.usd",
-                                                },
+                                            "hive": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.hive",
+                                                    }
+                                                }
+                                            },
+                                            "msats": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.msats",
+                                                    }
+                                                }
+                                            },
+                                            "sats": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.sats",
+                                                    }
+                                                }
+                                            },
+                                            "usd": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$revenue_details",
+                                                                "as": "r",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$r._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.usd",
+                                                    }
+                                                }
                                             },
                                         }
-                                    }
-                                },
+                                    },
+                                    {
+                                        "$arrayToObject": {
+                                            "$map": {
+                                                "input": {
+                                                    "$filter": {
+                                                        "input": "$revenue_details",
+                                                        "as": "r",
+                                                        "cond": {
+                                                            "$eq": ["$$r._id.name", "$$name"]
+                                                        },
+                                                    }
+                                                },
+                                                "as": "item",
+                                                "in": {
+                                                    "k": "$$item._id.sub",
+                                                    "v": {
+                                                        "hbd": "$$item.hbd",
+                                                        "hive": "$$item.hive",
+                                                        "msats": "$$item.msats",
+                                                        "sats": "$$item.sats",
+                                                        "usd": "$$item.usd",
+                                                    },
+                                                },
+                                            }
+                                        }
+                                    },
+                                ]
                             },
                         },
                     }
@@ -399,414 +420,438 @@ def profit_loss_pipeline(
                         "in": {
                             "k": "$$name",
                             "v": {
-                                "Total": {
-                                    "hbd": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$expense_details",
-                                                        "as": "e",
-                                                        "cond": {
-                                                            "$eq": ["$$e._id.name", "$$name"]
+                                "$mergeObjects": [
+                                    {
+                                        "Total": {
+                                            "hbd": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
                                                         },
+                                                        "as": "f",
+                                                        "in": "$$f.hbd",
                                                     }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.hbd",
-                                            }
-                                        }
-                                    },
-                                    "hive": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$expense_details",
-                                                        "as": "e",
-                                                        "cond": {
-                                                            "$eq": ["$$e._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.hive",
-                                            }
-                                        }
-                                    },
-                                    "msats": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$expense_details",
-                                                        "as": "e",
-                                                        "cond": {
-                                                            "$eq": ["$$e._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.msats",
-                                            }
-                                        }
-                                    },
-                                    "sats": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$expense_details",
-                                                        "as": "e",
-                                                        "cond": {
-                                                            "$eq": ["$$e._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.sats",
-                                            }
-                                        }
-                                    },
-                                    "usd": {
-                                        "$sum": {
-                                            "$map": {
-                                                "input": {
-                                                    "$filter": {
-                                                        "input": "$expense_details",
-                                                        "as": "e",
-                                                        "cond": {
-                                                            "$eq": ["$$e._id.name", "$$name"]
-                                                        },
-                                                    }
-                                                },
-                                                "as": "f",
-                                                "in": "$$f.usd",
-                                            }
-                                        }
-                                    },
-                                },
-                                "subs": {
-                                    "$arrayToObject": {
-                                        "$map": {
-                                            "input": {
-                                                "$filter": {
-                                                    "input": "$expense_details",
-                                                    "as": "e",
-                                                    "cond": {"$eq": ["$$e._id.name", "$$name"]},
                                                 }
                                             },
-                                            "as": "item",
-                                            "in": {
-                                                "k": "$$item._id.sub",
-                                                "v": {
-                                                    "hbd": "$$item.hbd",
-                                                    "hive": "$$item.hive",
-                                                    "msats": "$$item.msats",
-                                                    "sats": "$$item.sats",
-                                                    "usd": "$$item.usd",
-                                                },
+                                            "hive": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.hive",
+                                                    }
+                                                }
+                                            },
+                                            "msats": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.msats",
+                                                    }
+                                                }
+                                            },
+                                            "sats": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.sats",
+                                                    }
+                                                }
+                                            },
+                                            "usd": {
+                                                "$sum": {
+                                                    "$map": {
+                                                        "input": {
+                                                            "$filter": {
+                                                                "input": "$expense_details",
+                                                                "as": "e",
+                                                                "cond": {
+                                                                    "$eq": [
+                                                                        "$$e._id.name",
+                                                                        "$$name",
+                                                                    ]
+                                                                },
+                                                            }
+                                                        },
+                                                        "as": "f",
+                                                        "in": "$$f.usd",
+                                                    }
+                                                }
                                             },
                                         }
-                                    }
-                                },
+                                    },
+                                    {
+                                        "$arrayToObject": {
+                                            "$map": {
+                                                "input": {
+                                                    "$filter": {
+                                                        "input": "$expense_details",
+                                                        "as": "e",
+                                                        "cond": {
+                                                            "$eq": ["$$e._id.name", "$$name"]
+                                                        },
+                                                    }
+                                                },
+                                                "as": "item",
+                                                "in": {
+                                                    "k": "$$item._id.sub",
+                                                    "v": {
+                                                        "hbd": "$$item.hbd",
+                                                        "hive": "$$item.hive",
+                                                        "msats": "$$item.msats",
+                                                        "sats": "$$item.sats",
+                                                        "usd": "$$item.usd",
+                                                    },
+                                                },
+                                            }
+                                        }
+                                    },
+                                ]
                             },
                         },
                     }
                 },
                 "Net Income": {
-                    "Total": {
-                        "hbd": {
-                            "$subtract": [
-                                {"$sum": "$revenue_details.hbd"},
-                                {"$sum": "$expense_details.hbd"},
-                            ]
-                        },
-                        "hive": {
-                            "$subtract": [
-                                {"$sum": "$revenue_details.hive"},
-                                {"$sum": "$expense_details.hive"},
-                            ]
-                        },
-                        "msats": {
-                            "$subtract": [
-                                {"$sum": "$revenue_details.msats"},
-                                {"$sum": "$expense_details.msats"},
-                            ]
-                        },
-                        "sats": {
-                            "$subtract": [
-                                {"$sum": "$revenue_details.sats"},
-                                {"$sum": "$expense_details.sats"},
-                            ]
-                        },
-                        "usd": {
-                            "$subtract": [
-                                {"$sum": "$revenue_details.usd"},
-                                {"$sum": "$expense_details.usd"},
-                            ]
-                        },
-                    },
-                    "subs": {
-                        "$arrayToObject": {
-                            "$map": {
-                                "input": {
-                                    "$setUnion": [
-                                        {
-                                            "$map": {
-                                                "input": "$revenue_details",
-                                                "as": "r",
-                                                "in": "$$r._id.sub",
-                                            }
-                                        },
-                                        {
-                                            "$map": {
-                                                "input": "$expense_details",
-                                                "as": "e",
-                                                "in": "$$e._id.sub",
-                                            }
-                                        },
+                    "$mergeObjects": [
+                        {
+                            "Total": {
+                                "hbd": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.hbd"},
+                                        {"$sum": "$expense_details.hbd"},
                                     ]
                                 },
-                                "as": "sub",
-                                "in": {
-                                    "k": "$$sub",
-                                    "v": {
-                                        "hbd": {
-                                            "$subtract": [
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$revenue_details",
-                                                                    "as": "r",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$r._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.hbd",
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$expense_details",
-                                                                    "as": "e",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$e._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.hbd",
-                                                        }
-                                                    }
-                                                },
-                                            ]
-                                        },
-                                        "hive": {
-                                            "$subtract": [
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$revenue_details",
-                                                                    "as": "r",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$r._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.hive",
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$expense_details",
-                                                                    "as": "e",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$e._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.hive",
-                                                        }
-                                                    }
-                                                },
-                                            ]
-                                        },
-                                        "msats": {
-                                            "$subtract": [
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$revenue_details",
-                                                                    "as": "r",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$r._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.msats",
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$expense_details",
-                                                                    "as": "e",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$e._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.msats",
-                                                        }
-                                                    }
-                                                },
-                                            ]
-                                        },
-                                        "sats": {
-                                            "$subtract": [
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$revenue_details",
-                                                                    "as": "r",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$r._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.sats",
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$expense_details",
-                                                                    "as": "e",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$e._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.sats",
-                                                        }
-                                                    }
-                                                },
-                                            ]
-                                        },
-                                        "usd": {
-                                            "$subtract": [
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$revenue_details",
-                                                                    "as": "r",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$r._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.usd",
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$filter": {
-                                                                    "input": "$expense_details",
-                                                                    "as": "e",
-                                                                    "cond": {
-                                                                        "$eq": [
-                                                                            "$$e._id.sub",
-                                                                            "$$sub",
-                                                                        ]
-                                                                    },
-                                                                }
-                                                            },
-                                                            "as": "f",
-                                                            "in": "$$f.usd",
-                                                        }
-                                                    }
-                                                },
-                                            ]
-                                        },
-                                    },
+                                "hive": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.hive"},
+                                        {"$sum": "$expense_details.hive"},
+                                    ]
+                                },
+                                "msats": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.msats"},
+                                        {"$sum": "$expense_details.msats"},
+                                    ]
+                                },
+                                "sats": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.sats"},
+                                        {"$sum": "$expense_details.sats"},
+                                    ]
+                                },
+                                "usd": {
+                                    "$subtract": [
+                                        {"$sum": "$revenue_details.usd"},
+                                        {"$sum": "$expense_details.usd"},
+                                    ]
                                 },
                             }
-                        }
-                    },
+                        },
+                        {
+                            "$arrayToObject": {
+                                "$map": {
+                                    "input": {
+                                        "$setUnion": [
+                                            {
+                                                "$map": {
+                                                    "input": "$revenue_details",
+                                                    "as": "r",
+                                                    "in": "$$r._id.sub",
+                                                }
+                                            },
+                                            {
+                                                "$map": {
+                                                    "input": "$expense_details",
+                                                    "as": "e",
+                                                    "in": "$$e._id.sub",
+                                                }
+                                            },
+                                        ]
+                                    },
+                                    "as": "sub",
+                                    "in": {
+                                        "k": "$$sub",
+                                        "v": {
+                                            "hbd": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.hbd",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.hbd",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                            "hive": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.hive",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.hive",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                            "msats": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.msats",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.msats",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                            "sats": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.sats",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.sats",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                            "usd": {
+                                                "$subtract": [
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$revenue_details",
+                                                                        "as": "r",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$r._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.usd",
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$filter": {
+                                                                        "input": "$expense_details",
+                                                                        "as": "e",
+                                                                        "cond": {
+                                                                            "$eq": [
+                                                                                "$$e._id.sub",
+                                                                                "$$sub",
+                                                                            ]
+                                                                        },
+                                                                    }
+                                                                },
+                                                                "as": "f",
+                                                                "in": "$$f.usd",
+                                                            }
+                                                        }
+                                                    },
+                                                ]
+                                            },
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    ]
                 },
             }
         },
         {
             "$project": {
                 "Expenses": {"$arrayToObject": "$Expenses"},
-                "Net Income": {"Total": "$Net Income.Total"},
+                "Net Income": "$Net Income",
                 "Revenue": {"$arrayToObject": "$Revenue"},
             }
         },
     ]
-
     return pipeline

@@ -180,16 +180,17 @@ async def generate_balance_sheet_mongodb(
     bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
 
-    balance_sheet = await bs_cursor.to_list()
-    profit_loss = await pl_cursor.to_list()
+    balance_sheet_list = await bs_cursor.to_list()
+    profit_loss_list = await pl_cursor.to_list()
 
-    if "Equity" not in balance_sheet[0]:
-        balance_sheet[0]["Equity"] = {}
+    balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
+    profit_loss = profit_loss_list[0] if profit_loss_list else {}
 
-    net_income = profit_loss[0]["Net Income"] if profit_loss else {}
+    if "Equity" not in balance_sheet:
+        balance_sheet["Equity"] = {}
+
+    net_income = profit_loss["Net Income"] if profit_loss else {}
     for sub, values in net_income.items():
-        if sub == "Total":
-            continue
         if "Retained Earnings" not in balance_sheet["Equity"]:
             balance_sheet["Equity"]["Retained Earnings"] = {}
         balance_sheet["Equity"]["Retained Earnings"][sub] = {
@@ -200,7 +201,39 @@ async def generate_balance_sheet_mongodb(
             "msats": values["msats"],
         }
 
-    return {"balance_sheet": balance_sheet, "profit_loss": profit_loss}
+    # Compute section totals
+    currencies = ["hbd", "hive", "msats", "sats", "usd"]
+    for section in ["Assets", "Liabilities", "Equity"]:
+        if section in balance_sheet:
+            section_total = {cur: 0.0 for cur in currencies}
+            for account in balance_sheet[section]:
+                if account != "Total" and "Total" in balance_sheet[section][account]:
+                    for cur in currencies:
+                        section_total[cur] += balance_sheet[section][account]["Total"].get(
+                            cur, 0.0
+                        )
+            balance_sheet[section]["Total"] = section_total
+
+    # Calculate grand total (Assets vs Liabilities + Equity)
+    assets_total = balance_sheet["Assets"]["Total"]
+    liabilities_total = balance_sheet["Liabilities"]["Total"]
+    equity_total = balance_sheet["Equity"]["Total"]
+
+    balance_sheet["Total Liabilities and Equity"] = {
+        "usd": liabilities_total["usd"] + equity_total["usd"],
+        "hive": liabilities_total["hive"] + equity_total["hive"],
+        "hbd": liabilities_total["hbd"] + equity_total["hbd"],
+        "sats": liabilities_total["sats"] + equity_total["sats"],
+        "msats": liabilities_total["msats"] + equity_total["msats"],
+    }
+
+    # Check if the balance sheet is balanced (Assets = Liabilities + Equity)
+    balance_sheet["is_balanced"] = bool(check_balance_sheet(balance_sheet=balance_sheet))
+    balance_sheet["tolerance"] = get_balance_tolerance(balance_sheet=balance_sheet)
+
+    balance_sheet["as_of_date"] = as_of_date
+
+    return balance_sheet
 
 
 def check_balance_sheet(balance_sheet: Dict) -> bool:
@@ -372,17 +405,18 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                 }
             total = sub_accounts["Total"]
             output.append(
-                f"{'Total ' + truncate_text(account_name, 35):<40} "
+                f"{'   Total ' + truncate_text(account_name, 35):<40} "
                 f"{'':<17} "
                 f"{total.get('sats', 0):>10,.0f} "
                 f"{total.get('hive', 0):>12,.3f} "
                 f"{total.get('hbd', 0):>12,.3f} "
                 f"{total.get('usd', 0):>12,.3f}"
             )
+            output.append(f"{'_' * max_width}")
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
         output.append(
-            f"{'Total ' + category:<40} "
+            f"{'   Total ' + category:<40} "
             f"{'':<17} "
             f"{total.get('sats', 0):>10,.0f} "
             f"{total.get('hive', 0):>12,.3f} "
