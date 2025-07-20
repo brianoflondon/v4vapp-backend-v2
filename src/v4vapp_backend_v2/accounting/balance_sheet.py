@@ -9,6 +9,11 @@ import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.pipelines.accounting_pipelines import (
+    balance_sheet_pipeline,
+    profit_loss_pipeline,
+)
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
@@ -154,6 +159,48 @@ async def generate_balance_sheet_pandas_from_accounts(
     balance_sheet["tolerance"] = get_balance_tolerance(balance_sheet=balance_sheet)
 
     return balance_sheet
+
+
+async def generate_balance_sheet_mongodb(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> Dict:
+    """
+    Generates a balance sheet from MongoDB data.
+
+    Args:
+        as_of_date (datetime): The date for which the balance sheet is generated.
+        age (timedelta | None): The age of the data to include in the balance sheet.
+
+    Returns:
+        Sequence[Mapping[str, Any]]: The generated balance sheet.
+    """
+    bs_pipeline = balance_sheet_pipeline(as_of_date=as_of_date, age=age)
+    pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
+
+    bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
+    pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
+
+    balance_sheet = await bs_cursor.to_list()
+    profit_loss = await pl_cursor.to_list()
+
+    if "Equity" not in balance_sheet[0]:
+        balance_sheet[0]["Equity"] = {}
+
+    net_income = profit_loss[0]["Net Income"] if profit_loss else {}
+    for sub, values in net_income.items():
+        if sub == "Total":
+            continue
+        if "Retained Earnings" not in balance_sheet["Equity"]:
+            balance_sheet["Equity"]["Retained Earnings"] = {}
+        balance_sheet["Equity"]["Retained Earnings"][sub] = {
+            "usd": values["usd"],
+            "hive": values["hive"],
+            "hbd": values["hbd"],
+            "sats": values["sats"],
+            "msats": values["msats"],
+        }
+
+    return {"balance_sheet": balance_sheet, "profit_loss": profit_loss}
 
 
 def check_balance_sheet(balance_sheet: Dict) -> bool:
