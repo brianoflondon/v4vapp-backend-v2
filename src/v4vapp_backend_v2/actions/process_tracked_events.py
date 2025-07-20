@@ -2,7 +2,7 @@ import asyncio
 from timeit import default_timer as timer
 from typing import List, Union
 
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
+from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
@@ -79,7 +79,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                 try:
                     # DEBUG section
                     logger.info("\n" + str(ledger_entry))
-                    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
+                    balance_sheet = await generate_balance_sheet_mongodb()
                     if not balance_sheet["is_balanced"]:
                         logger.warning(
                             f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
@@ -478,7 +478,7 @@ async def process_transfer_op(
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        #TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
+        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
 
     # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:
