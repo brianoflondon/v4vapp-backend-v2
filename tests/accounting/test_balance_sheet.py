@@ -6,6 +6,8 @@ import pytest
 from bson import json_util
 
 from v4vapp_backend_v2.accounting.balance_sheet import (
+    balance_sheet_all_currencies_printout,
+    balance_sheet_printout,
     check_balance_sheet_mongodb,
     generate_balance_sheet_mongodb,
 )
@@ -60,7 +62,12 @@ async def test_balance_sheet():
     balance_sheet_dict = await generate_balance_sheet_mongodb()
 
     pprint(balance_sheet_dict)
-    assert balance_sheet_dict["is_balanced"], "Balance sheet isn't balanced"
+    assert balance_sheet_dict["is_balanced"], "Balance sheet isn't balanced."
+    bs_printout = balance_sheet_printout(balance_sheet_dict)
+    print(bs_printout)
+
+    bs_printout_currencies = balance_sheet_all_currencies_printout(balance_sheet_dict)
+    print(bs_printout_currencies)
 
 
 async def test_check_balance_sheet_mongodb():
@@ -68,5 +75,3 @@ async def test_check_balance_sheet_mongodb():
 
     print(is_balanced, tolerance)
     assert is_balanced, "Balance sheet isn't balanced"
-
-
