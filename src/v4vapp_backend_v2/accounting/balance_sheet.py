@@ -247,6 +247,8 @@ async def generate_balance_sheet_mongodb(
         f"Balance sheet tolerance mismatch: {tolerance_msats_check} != {tolerance_msats}"
     )
 
+    balance_sheet["is_balanced"] = is_balanced
+    balance_sheet["tolerance"] = tolerance_msats
     balance_sheet["as_of_date"] = as_of_date
 
     return balance_sheet
@@ -312,9 +314,7 @@ def get_balance_tolerance(balance_sheet: Dict) -> float:
     return total_liabilities_and_equity - assets_total
 
 
-def balance_sheet_printout(
-    balance_sheet: Dict, as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1)
-) -> str:
+def balance_sheet_printout(balance_sheet: Dict) -> str:
     """
     Formats the balance sheet into a readable string representation, displaying only USD values.
     Includes sections for Assets, Liabilities, and Equity, along with their respective totals.
@@ -329,7 +329,7 @@ def balance_sheet_printout(
     """
     output = []
     max_width = 94
-    date_str = as_of_date.strftime("%Y-%m-%d")
+    date_str = balance_sheet["as_of_date"].strftime("%Y-%m-%d")
     header = f"Balance Sheet as of {date_str}"
     output.append(f"{truncate_text(header, max_width, centered=True)}")
     output.append("-" * max_width)

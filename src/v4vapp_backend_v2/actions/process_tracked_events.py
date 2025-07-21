@@ -110,13 +110,13 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         await tracked_op.save()
         logger.info(f"{'=' * 50}")
         logger.info(
-            f"{process_time:>7,.2f} s {cust_id} processing tracked operation: {tracked_op.log_str}"
+            f"{process_time:>7,.2f} s {cust_id} processing tracked operation\n{tracked_op.log_str}"
         )
         logger.info(f"{'=' * 50}")
-        if cust_id:
-            # Ensure the lock is released even if an error occurs
-            logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
-            await CustID.release_lock(cust_id)
+        # if cust_id:
+        #     # Ensure the lock is released even if an error occurs
+        #     logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
+        #     await CustID.release_lock(cust_id)
         logger.info(
             f"Finished Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}"
         )

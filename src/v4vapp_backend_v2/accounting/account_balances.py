@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 import pandas as pd
 
+from v4vapp_backend_v2.accounting.account_balance_pipelines import list_all_accounts_pipeline
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
@@ -21,7 +22,6 @@ from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
-    list_all_accounts_pipeline,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
