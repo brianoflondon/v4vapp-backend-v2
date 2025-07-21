@@ -1,0 +1,110 @@
+import json
+from pathlib import Path
+from pprint import pprint
+
+import pytest
+from bson import json_util
+
+from v4vapp_backend_v2.accounting.account_balance_pipelines import account_balance_details_pipeline
+from v4vapp_backend_v2.accounting.account_balances import (
+    get_account_balance,
+    get_account_balance_printout,
+    list_all_accounts,
+)
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.database.db_pymongo import DBConn
+
+
+@pytest.fixture(scope="module")
+def module_monkeypatch():
+    """MonkeyPatch fixture with module scope."""
+    from _pytest.monkeypatch import MonkeyPatch
+
+    monkey_patch = MonkeyPatch()
+    yield monkey_patch
+    monkey_patch.undo()  # Restore original values after module tests
+
+
+@pytest.fixture(autouse=True, scope="module")
+async def set_base_config_path_combined(module_monkeypatch):
+    test_config_path = Path("tests/data/config")
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    module_monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    i_c = InternalConfig()
+    print("InternalConfig initialized:", i_c)
+    db_conn = DBConn()
+    await db_conn.setup_database()
+    await load_ledger_events()
+    yield
+    await i_c.db["ledger"].drop()
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
+
+async def load_ledger_events():
+    # This function should load ledger events from a file or database.
+    await InternalConfig.db["ledger"].drop()
+    with open("tests/accounting/test_data/v4vapp-dev.ledger.json") as f:
+        raw_data = f.read()
+        json_data = json.loads(raw_data, object_hook=json_util.object_hook)
+
+    for ledger_entry_raw in json_data:
+        ledger_entry = LedgerEntry.model_validate(ledger_entry_raw)
+        await ledger_entry.save()
+
+
+async def test_list_all_accounts():
+    """
+    Test to list all accounts in the ledger.
+    """
+    accounts = await list_all_accounts()
+    assert isinstance(accounts, list)
+    assert len(accounts) > 0
+    pprint(accounts)
+
+
+async def test_get_account_balance():
+    """
+    Test to get the balance of a specific account.
+    """
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance_df = await get_account_balance(account)
+    assert balance_df is not None
+    assert not balance_df.empty
+    print(balance_df)
+
+
+async def test_get_account_balance_printout():
+    """
+    Test to get the balance of a specific account.
+    """
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance_printout, balance_data = await get_account_balance_printout(account, line_items=True)
+    print(balance_printout)
+    pprint(balance_data)
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance_printout, balance_data = await get_account_balance_printout(account)
+    print(balance_printout)
+    # pprint(balance_data)
+
+
+async def test_account_details_pipeline():
+    """
+    Test the account details pipeline.
+    """
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp.dev")
+    pipeline = account_balance_details_pipeline(account)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    for unit_result in results:
+        for unit, lines in unit_result.items():
+            print(f"Unit: {unit}")
+            for line in lines:
+                print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")
+                
