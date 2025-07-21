@@ -8,7 +8,6 @@ from tests.get_last_quote import last_quote
 from tests.load_data import load_hive_events
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.database.db import MongoDBClient
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -91,34 +90,35 @@ async def test_model_dump_mongodb(op_to_test):
     # collection_name = op_to_test["collection_name"]
     collection_name = "all_ops"
     op_type = op_to_test["op_type"]
-    async with MongoDBClient(
-        db_conn="conn_1", db_name="test_db", db_user="test_user"
-    ) as test_client:
-        test_client.db[collection_name].drop()
-        index_key = [["trx_id", 1], ["op_in_trx", 1], ["block_num", 1]]
-        test_client.db[collection_name].create_index(keys=index_key, name="timestamp", unique=True)
-        for hive_event in load_hive_events(op_type):
-            if hive_event["type"] == op_type.value:
-                model_class = op_to_test["model"]
-                model_instance = model_class.model_validate(hive_event)
-                if op_type == OpTypes.PRODUCER_REWARD:
-                    model_instance.delta = timedelta(seconds=33)
-                    model_instance.mean = timedelta(seconds=33)
-                insert_op = model_instance.model_dump(by_alias=True)
-                insert_ans = await test_client.insert_one(
-                    collection_name=collection_name,
-                    document=insert_op,
-                )
-                assert insert_ans is not None
-                find_one_ans = await test_client.find_one(
-                    collection_name=collection_name,
-                    query={"trx_id": model_instance.trx_id},
-                )
-                assert find_one_ans is not None
-                with pytest.raises(DuplicateKeyError) as exc_info:
-                    await test_client.insert_one(
-                        collection_name=collection_name, document=insert_op
-                    )
-                    print(exc_info)
+    db = InternalConfig.db
 
-        await test_client.drop_database("test_db")
+    await db[collection_name].drop()
+    index_key = [["trx_id", 1], ["op_in_trx", 1], ["block_num", 1]]
+    await db[collection_name].create_index(keys=index_key, name="timestamp", unique=True)
+    for hive_event in load_hive_events(op_type):
+        if hive_event["type"] == op_type.value:
+            model_class = op_to_test["model"]
+            model_instance = model_class.model_validate(hive_event)
+            if op_type == OpTypes.PRODUCER_REWARD:
+                model_instance.delta = timedelta(seconds=33)
+                model_instance.mean = timedelta(seconds=33)
+            insert_op = model_instance.model_dump(by_alias=True)
+            insert_ans = await db[collection_name].insert_one(
+                document=insert_op,
+            )
+            assert insert_ans is not None
+            find_one_ans = await db[collection_name].find_one(
+                query={"trx_id": model_instance.trx_id},
+            )
+            assert find_one_ans is not None
+            with pytest.raises(DuplicateKeyError) as exc_info:
+                await db[collection_name].insert_one(document=insert_op)
+                print(exc_info)
+
+    await InternalConfig.db_client.drop_database("test_db")
+
+    await InternalConfig.db_client.drop_database("test_db")
+
+    await InternalConfig.db_client.drop_database("test_db")
+
+    await InternalConfig.db_client.drop_database("test_db")
