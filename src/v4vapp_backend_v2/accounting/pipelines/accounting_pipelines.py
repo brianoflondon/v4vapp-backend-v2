@@ -855,3 +855,110 @@ def profit_loss_pipeline(
         },
     ]
     return pipeline
+
+
+def balance_sheet_check_pipeline(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> Sequence[Mapping[str, Any]]:
+    """
+    Check if the balance sheet is balanced.
+
+    Args:
+        balance_sheet (Dict[str, Dict[str, Dict[str, float]]]): The balance sheet to check.
+
+    Returns:
+        bool: True if the balance sheet is balanced, False otherwise.
+    """
+    if age:
+        start_date = as_of_date - age
+        date_range_query = {"$gte": start_date, "$lte": as_of_date}
+    else:
+        date_range_query = {"$lte": as_of_date}
+
+    check_balance_pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+        {
+            "$group": {
+                "_id": None,
+                "assets_msats": {
+                    "$sum": {
+                        "$add": [
+                            {
+                                "$cond": [
+                                    {"$eq": ["$debit.account_type", "Asset"]},
+                                    "$conv_signed.debit.msats",
+                                    0,
+                                ]
+                            },
+                            {
+                                "$cond": [
+                                    {"$eq": ["$credit.account_type", "Asset"]},
+                                    "$conv_signed.credit.msats",
+                                    0,
+                                ]
+                            },
+                        ]
+                    }
+                },
+                "liabilities_msats": {
+                    "$sum": {
+                        "$add": [
+                            {
+                                "$cond": [
+                                    {"$eq": ["$debit.account_type", "Liability"]},
+                                    "$conv_signed.debit.msats",
+                                    0,
+                                ]
+                            },
+                            {
+                                "$cond": [
+                                    {"$eq": ["$credit.account_type", "Liability"]},
+                                    "$conv_signed.credit.msats",
+                                    0,
+                                ]
+                            },
+                        ]
+                    }
+                },
+                "revenue_msats": {
+                    "$sum": {
+                        "$cond": [
+                            {"$eq": ["$credit.account_type", "Revenue"]},
+                            "$conv_signed.credit.msats",
+                            0,
+                        ]
+                    }
+                },
+                "expense_msats": {
+                    "$sum": {
+                        "$cond": [
+                            {"$eq": ["$debit.account_type", "Expense"]},
+                            "$conv_signed.debit.msats",
+                            0,
+                        ]
+                    }
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "assets_msats": 1,
+                "liabilities_msats": 1,
+                "equity_msats": {"$subtract": ["$revenue_msats", "$expense_msats"]},
+                "total_msats": {
+                    "$subtract": [
+                        "$assets_msats",
+                        {
+                            "$add": [
+                                "$liabilities_msats",
+                                {"$subtract": ["$revenue_msats", "$expense_msats"]},
+                            ]
+                        },
+                    ]
+                },
+            }
+        },
+    ]
+
+    return check_balance_pipeline

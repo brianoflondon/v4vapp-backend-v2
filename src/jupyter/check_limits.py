@@ -8,6 +8,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     get_account_lightning_conv,
     get_keepsats_balance,
 )
+from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
@@ -152,6 +153,9 @@ async def main():
     result = await cursor.to_list(length=None)
     pprint(result)
 
+
+    ans = await check_balance_sheet_mongodb()
+    print("Balance Sheet Check Result:", ans)
 
 if __name__ == "__main__":
     target_dir = "/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/"

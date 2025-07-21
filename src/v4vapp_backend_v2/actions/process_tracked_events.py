@@ -2,7 +2,7 @@ import asyncio
 from timeit import default_timer as timer
 from typing import List, Union
 
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_mongodb
+from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
@@ -79,8 +79,8 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                 try:
                     # DEBUG section
                     logger.info("\n" + str(ledger_entry))
-                    balance_sheet = await generate_balance_sheet_mongodb()
-                    if not balance_sheet["is_balanced"]:
+                    is_balanced, _ = await check_balance_sheet_mongodb()
+                    if not is_balanced:
                         logger.warning(
                             f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
                             extra={"notification": False},

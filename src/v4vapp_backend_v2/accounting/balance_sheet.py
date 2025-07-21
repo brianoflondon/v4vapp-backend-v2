@@ -3,7 +3,7 @@ from asyncio import TaskGroup
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict
+from typing import Dict, Tuple
 
 import pandas as pd
 
@@ -11,6 +11,7 @@ from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.accounting_pipelines import (
+    balance_sheet_check_pipeline,
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
@@ -26,6 +27,7 @@ class BalanceSheetDict:
     is_balanced: bool
     tolerance: float
     as_of_date: datetime
+    age: timedelta
 
 
 # MARK: Balance Sheet Generation
@@ -162,7 +164,7 @@ async def generate_balance_sheet_pandas_from_accounts(
 
 
 async def generate_balance_sheet_mongodb(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
 ) -> Dict:
     """
     Generates a balance sheet from MongoDB data.
@@ -180,8 +182,18 @@ async def generate_balance_sheet_mongodb(
     bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
 
-    balance_sheet_list = await bs_cursor.to_list()
-    profit_loss_list = await pl_cursor.to_list()
+    async with TaskGroup() as tg:
+        balance_sheet_task = tg.create_task(bs_cursor.to_list())
+        profit_loss_task = tg.create_task(pl_cursor.to_list())
+        balance_sheet_check_task = tg.create_task(
+            check_balance_sheet_mongodb(as_of_date=as_of_date, age=age)
+        )
+    # Wait for both tasks to complete
+    # This will block until both tasks are done
+
+    balance_sheet_list = await balance_sheet_task
+    profit_loss_list = await profit_loss_task
+    is_balanced, tolerance_msats = await balance_sheet_check_task
 
     balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
@@ -227,13 +239,46 @@ async def generate_balance_sheet_mongodb(
         "msats": liabilities_total["msats"] + equity_total["msats"],
     }
 
-    # Check if the balance sheet is balanced (Assets = Liabilities + Equity)
-    balance_sheet["is_balanced"] = bool(check_balance_sheet(balance_sheet=balance_sheet))
-    balance_sheet["tolerance"] = get_balance_tolerance(balance_sheet=balance_sheet)
+    tolerance_msats_check = assets_total["msats"] - (
+        liabilities_total["msats"] + equity_total["msats"]
+    )
+    assert tolerance_msats_check == tolerance_msats, (
+        f"Balance sheet tolerance mismatch: {tolerance_msats_check} != {tolerance_msats}"
+    )
 
     balance_sheet["as_of_date"] = as_of_date
 
     return balance_sheet
+
+
+async def check_balance_sheet_mongodb(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> Tuple[bool, float]:
+    """
+    Checks if the balance sheet is balanced using MongoDB data.
+
+    Args:
+        as_of_date (datetime): The date for which the balance sheet is checked.
+        age (timedelta | None): The age of the data to include in the balance sheet.
+
+    Returns:
+        bool: True if the balance sheet is balanced, False otherwise.
+    """
+    bs_check_pipeline = balance_sheet_check_pipeline(as_of_date=as_of_date, age=age)
+    bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
+    bs_check = await bs_check_cursor.to_list()
+
+    if not bs_check:
+        return False, 0.0
+
+    tolerance_msats = 10_000  # tolerance of 10 sats.
+    is_balanced = math.isclose(
+        bs_check[0]["assets_msats"],
+        bs_check[0]["liabilities_msats"] + bs_check[0]["equity_msats"],
+        rel_tol=0.01,
+        abs_tol=tolerance_msats,
+    )
+    return is_balanced, bs_check[0]["total_msats"]
 
 
 def check_balance_sheet(balance_sheet: Dict) -> bool:
@@ -243,6 +288,7 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
     Args:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
     """
+
     tolerance_msats = 10_000  # tolerance of 10 sats.
     is_balanced = math.isclose(
         balance_sheet["Assets"]["Total"]["msats"],

@@ -177,7 +177,6 @@ async def get_account_balance_printout(
         as_of_date=as_of_date,
     )
     if combined_df.empty:
-        logger.info(f"No transactions found for account {account.name} up to {as_of_date}.")
         return "No transactions found for this account up to today.", AccountBalanceSummary()
 
     # Group by unit (process debit_unit and credit_unit separately)
@@ -597,5 +596,4 @@ async def get_keepsats_balance(
         account=account, as_of_date=as_of_date, line_items=line_items
     )
     net_sats = summary.unit_summaries.get(Currency.MSATS, UnitSummary()).final_balance / 1000
-    return summary, net_sats
     return summary, net_sats
