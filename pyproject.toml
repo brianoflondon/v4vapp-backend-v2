@@ -91,7 +91,8 @@ filterwarnings = [
     "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz library
 ]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "module"
+asyncio_default_test_loop_scope = "module"
 
 [tool.mypy]
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
