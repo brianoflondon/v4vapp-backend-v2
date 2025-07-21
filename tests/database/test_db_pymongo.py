@@ -12,20 +12,32 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 os.environ["TESTING"] = "True"
 
 
-@pytest.fixture(autouse=True)
-def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture(scope="module")
+def module_monkeypatch():
+    """MonkeyPatch fixture with module scope."""
+    from _pytest.monkeypatch import MonkeyPatch
+
+    monkey_patch = MonkeyPatch()
+    yield monkey_patch
+    monkey_patch.undo()  # Restore original values after module tests
+
+
+@pytest.fixture(autouse=True, scope="module")
+async def set_base_config_path_combined(module_monkeypatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
-    monkeypatch.setattr(
+    module_monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    i_c = InternalConfig()
+    print("InternalConfig initialized:", i_c)
+    db_conn = DBConn()
+    await db_conn.setup_database()
     yield
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
-    )  # Resetting InternalConfig instance
+    module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
 
 
 async def drop_database(conn_name: str, db_name: str, db_user: str) -> None:
