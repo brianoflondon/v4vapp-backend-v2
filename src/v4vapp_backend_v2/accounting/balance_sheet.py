@@ -3,6 +3,7 @@ from asyncio import TaskGroup
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from timeit import default_timer as timeit
 from typing import Dict, Tuple
 
 import pandas as pd
@@ -10,12 +11,13 @@ import pandas as pd
 from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
-from v4vapp_backend_v2.accounting.pipelines.accounting_pipelines import (
+from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_check_pipeline,
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
@@ -30,7 +32,6 @@ class BalanceSheetDict:
     age: timedelta
 
 
-# MARK: Balance Sheet Generation
 async def generate_balance_sheet_pandas_from_accounts(
     df: pd.DataFrame = pd.DataFrame(),
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
@@ -182,18 +183,18 @@ async def generate_balance_sheet_mongodb(
     bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
 
+    start = timeit()
     async with TaskGroup() as tg:
         balance_sheet_task = tg.create_task(bs_cursor.to_list())
         profit_loss_task = tg.create_task(pl_cursor.to_list())
         balance_sheet_check_task = tg.create_task(
             check_balance_sheet_mongodb(as_of_date=as_of_date, age=age)
         )
-    # Wait for both tasks to complete
-    # This will block until both tasks are done
-
+    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
     balance_sheet_list = await balance_sheet_task
     profit_loss_list = await profit_loss_task
     is_balanced, tolerance_msats = await balance_sheet_check_task
+    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
 
     balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
