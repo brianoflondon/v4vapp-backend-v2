@@ -19,6 +19,8 @@ from pymongo import AsyncMongoClient, MongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
 from pymongo.operations import _IndexKeyHint
+from redis import Redis, RedisError
+from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
@@ -572,26 +574,53 @@ class LoggerFunction(Protocol):
 # MARK: InternalConfig class
 class InternalConfig:
     """
-    Singleton class to manage internal configuration and logging setup.
+    InternalConfig is a singleton class responsible for managing the application's internal configuration, logging, database, and Redis setup.
 
-    Attributes:
-        _instance (InternalConfig): Singleton instance of the class.
-        config (Config): Configuration object validated from the config file.
+        _instance (InternalConfig): The singleton instance of the class.
+        config (Config): The validated configuration object loaded from a YAML file.
+        config_filename (str): The name of the configuration file.
+        base_config_path (Path): The base path for configuration files.
+        base_logging_config_path (Path): The base path for logging configuration files.
+        notification_loop (asyncio.AbstractEventLoop | None): The event loop used for notifications.
+        notification_lock (bool): Lock indicating notification processing state.
+        db_client (AsyncMongoClient): Asynchronous MongoDB client.
+        db (AsyncDatabase): Asynchronous database instance.
+        db_client_sync (MongoClient): Synchronous MongoDB client.
+        db_uri (str): MongoDB connection URI.
+        db_sync (Database): Synchronous database instance.
+        redis_raw (Redis): Redis client with raw (bytes) responses.
+        redis_decoded (Redis): Redis client with decoded (string) responses.
 
-    Methods:
-        __new__(cls, *args, **kwargs):
-            Ensures only one instance of the class is created (Singleton pattern).
 
-        __init__(self):
-            Initializes the instance, sets up configuration and logging if not already
-            initialized.
+        __init__(self, bot_name: str = "", config_filename: str = DEFAULT_CONFIG_FILENAME, log_filename: str = "app.log.jsonl", *args, **kwargs):
+            Initializes the singleton instance, sets up configuration, logging, and Redis clients.
 
-        setup_config(self) -> None:
-            Loads and validates the configuration from a YAML file.
+        __exit__(self, exc_type, exc_value, traceback):
+            Handles cleanup on context exit by calling shutdown.
 
-        setup_logging(self):
-            Sets up logging configuration from a JSON file, initializes log handlers,
-            and sets log levels.
+        setup_config(self, config_filename: str = DEFAULT_CONFIG_FILENAME) -> None:
+
+        setup_redis(self) -> None:
+            Initializes Redis clients for both raw and decoded responses and tests connections.
+
+        setup_logging(self, log_filename: str = "app.log") -> None:
+            Configures logging using a JSON configuration file, sets up handlers, and applies log levels.
+
+        check_notifications(self):
+            Monitors the state of the notification loop and lock, printing their status at intervals.
+
+        shutdown_logging(self):
+            Closes and removes all handlers from the root logger.
+
+        shutdown(self):
+            Gracefully shuts down Redis clients, database clients, logging, and the notification event loop.
+
+        close_db_clients_sync(self) -> None:
+            Closes the synchronous database client.
+
+        close_db_clients_async(self) -> None:
+            Asynchronously closes the asynchronous database client.
+
     """
 
     _instance = None
@@ -606,6 +635,10 @@ class InternalConfig:
     db_client_sync: ClassVar[MongoClient] = MongoClient()
     db_uri: ClassVar[str] = "mongodb://localhost:27017"
     db_sync: ClassVar[Database] = Database(client=db_client_sync, name="default_db")
+
+    redis: ClassVar[Redis] = Redis()
+    redis_decoded: ClassVar[Redis] = Redis(decode_responses=True)
+    redis_async: ClassVar[AsyncRedis] = AsyncRedis()
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -628,7 +661,8 @@ class InternalConfig:
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
-            atexit.register(self.shutdown)
+            self.setup_redis()
+        atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()
@@ -656,6 +690,53 @@ class InternalConfig:
             logger.error(ex)
             # exit the program with an error but no stack trace
             raise StartupFailure(ex)
+
+    def setup_redis(self) -> None:
+        """
+        Initializes Redis clients for the application.
+
+        This method sets up three Redis client instances:
+        - `InternalConfig.redis`: A synchronous Redis client with binary responses (`decode_responses=False`).
+        - `InternalConfig.redis_decoded`: A synchronous Redis client with decoded string responses (`decode_responses=True`).
+        - `InternalConfig.redis_async`: An asynchronous Redis client with decoded string responses (`decode_responses=True`).
+
+        All clients are configured using parameters from `self.config.redis`, including host, port, db, and any additional keyword arguments.
+
+        The method attempts to ping all Redis clients to verify connectivity during startup.
+        If the connection fails, it logs the error and raises a `StartupFailure` exception.
+
+        Raises:
+            StartupFailure: If unable to connect to the Redis server.
+        """
+        try:
+            InternalConfig.redis = Redis(
+                host=self.config.redis.host,
+                port=self.config.redis.port,
+                db=self.config.redis.db,
+                decode_responses=False,
+                **self.config.redis.kwargs,
+            )
+            InternalConfig.redis_decoded = Redis(
+                host=self.config.redis.host,
+                port=self.config.redis.port,
+                db=self.config.redis.db,
+                decode_responses=True,
+                **self.config.redis.kwargs,
+            )
+            InternalConfig.redis_async = AsyncRedis(
+                host=self.config.redis.host,
+                port=self.config.redis.port,
+                db=self.config.redis.db,
+                decode_responses=True,
+                **self.config.redis.kwargs,
+            )
+            # Optional: Test connections during startup
+            InternalConfig.redis.ping()
+            InternalConfig.redis_decoded.ping()
+            logger.info("Redis clients initialized successfully")
+        except RedisError as ex:
+            logger.error(f"Failed to connect to Redis: {ex}")
+            raise StartupFailure(f"Redis connection failure: {ex}")
 
     def setup_logging(self, log_filename: str = "app.log") -> None:
         try:
@@ -694,9 +775,8 @@ class InternalConfig:
             logger.info(
                 "Queue handler found; ensure QueueListener is started elsewhere if needed."
             )
-            queue_handler.listener.start()
-            atexit.register(queue_handler.listener.stop)
-
+            queue_handler.listener.start()  # type: ignore[attr-defined]
+            atexit.register(queue_handler.listener.stop)  # type: ignore[attr-defined]
             try:
                 InternalConfig.notification_loop = asyncio.get_running_loop()
                 logger.info("Found running loop for setup logging")
@@ -810,11 +890,21 @@ class InternalConfig:
         Raises:
             RuntimeError: If the event loop is already closed or cannot shut down async generators.
         """
+        if hasattr(InternalConfig, "redis") and InternalConfig.redis is not None:
+            InternalConfig.redis.close()
+            logger.info("Closed raw Redis client.")
+        if hasattr(InternalConfig, "redis_decoded") and InternalConfig.redis_decoded is not None:
+            InternalConfig.redis_decoded.close()
+            logger.info("Closed decoded Redis client.")
+
         self.close_db_clients_sync()
         try:
             loop = asyncio.get_running_loop()
             if loop is not self.notification_loop:
                 loop.create_task(self.close_db_clients_async())
+                if hasattr(InternalConfig, "redis_async") and InternalConfig.redis_async is not None:
+                    loop.create_task(InternalConfig.redis_async.close())
+                    logger.info("Closed async Redis client.")
         except RuntimeError:
             # If there is no running loop, we can safely close the db client
             pass

@@ -39,7 +39,7 @@ post2 = {
 
 def test_custom_json_validate():
     OpBase.watch_users = ["v4vapp.dev"]
-    TrackedBaseModel.update_quote_sync()
+    TrackedBaseModel.update_quote_sync(store_db=False)
     for post in [post1, post2]:
         custom_json = CustomJson.model_validate(post)
         json_data = json.loads(post["json"])
@@ -68,7 +68,7 @@ def test_custom_json_not_valid():
     print(custom_json)
 
 
-# Baddly formed json in a v4vapp_transfer custom_json
+# Badly formed json in a v4vapp_transfer custom_json
 post4 = {
     "realm": "real",
     "trx_id": "3acf3683db021a4ac2e7d300d669908d436a4e58",

@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "0.3.2"
+version = "0.4.0"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -22,17 +22,17 @@ dependencies = [
     "typer==0.16.0",
     "aiofiles>=24.1.0,<25.0.0",
     "watchdog>=6.0.0,<7.0.0",
-    "asgiref>=3.8.1,<4.0.0",
+    "asgiref>=3.9.1,<4.0.0",
     "colorama>=0.4.6,<1.0.0",
     "redis>=5.2.1,<6.0.0",
     "binance-connector>=3.12.0,<4.0.0",
     "python-telegram-bot>=22.0,<23.0",
-    "hive-nectar>=0.0.3",
+    "hive-nectar>=0.0.10",
     "tenacity>=9.1.2",
     "packaging>=25.0",
     "bech32>=1.2.0",
     "pandas>=2.3.1",
-    "pymongo>=4.13.0",
+    "pymongo>=4.13.2",
 ]
 
 [dependency-groups]
@@ -59,6 +59,7 @@ dev = [
     "pandas-stubs>=2.2.3.250308",
     "pymongo>=4.13.0",
     "nbstripout>=0.8.1",
+    "types-redis>=4.6.0.20241004",
 ]
 
 
@@ -90,7 +91,8 @@ filterwarnings = [
     "ignore::DeprecationWarning:pytz\\..*",  # Suppress warnings from the pytz library
 ]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "module"
+asyncio_default_test_loop_scope = "module"
 
 [tool.mypy]
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern

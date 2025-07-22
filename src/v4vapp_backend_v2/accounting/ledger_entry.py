@@ -2,14 +2,19 @@ import textwrap
 from datetime import datetime, timezone
 from enum import StrEnum
 from math import isclose
-from typing import Any, Dict, Self, Tuple
+from typing import Any, Dict, Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.results import InsertOneResult, UpdateResult
+from pymongo.errors import DuplicateKeyError
+from pymongo.results import InsertOneResult
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccountAny
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny, get_tracked_any_type
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    NORMAL_CREDIT_ACCOUNTS,
+    NORMAL_DEBIT_ACCOUNTS,
+    AssetAccount,
+    LedgerAccountAny,
+)
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -47,55 +52,31 @@ class LedgerEntryNotFoundException(LedgerEntryException):
     pass
 
 
-async def get_ledger_entry(group_id: str) -> "LedgerEntry":
-    """
-    Retrieves a LedgerEntry from the database by its group_id.
+# async def get_ledger_entry(group_id: str) -> "LedgerEntry":
+#     """
+#     Retrieves a LedgerEntry from the database by its group_id.
 
-    Args:
-        group_id (str): The group ID of the ledger entry to retrieve.
+#     Args:
+#         group_id (str): The group ID of the ledger entry to retrieve.
 
-    Returns:
-        LedgerEntry: The retrieved ledger entry.
+#     Returns:
+#         LedgerEntry: The retrieved ledger entry.
 
-    Raises:
-        LedgerEntryConfigurationException: If the database client is not configured.
-    """
+#     Raises:
+#         LedgerEntryConfigurationException: If the database client is not configured.
+#     """
 
-    entry_data = await LedgerEntry.collection().find_one(
-        filter={"group_id": group_id},
-    )
-    if not entry_data:
-        raise LedgerEntryNotFoundException(f"LedgerEntry with group_id {group_id} not found.")
+#     entry_data = await LedgerEntry.collection().find_one(
+#         filter={"group_id": group_id},
+#     )
+#     if not entry_data:
+#         raise LedgerEntryNotFoundException(f"LedgerEntry with group_id {group_id} not found.")
 
-    ledger_entry = LedgerEntry.model_validate(
-        entry_data,
-        by_alias=True,
-    )
-    return ledger_entry
-
-
-async def update_ledger_entry_op(
-    group_id: str, op: TrackedAny
-) -> Tuple["LedgerEntry", UpdateResult]:
-    """
-    Updates the operation associated with a LedgerEntry in the database.
-
-    Args:
-        group_id (str): The group ID of the ledger entry to update.
-        op (TrackedAny): The operation to associate with the ledger entry.
-
-    Returns:
-        Tuple[LedgerEntry, UpdateResult]: A tuple containing the updated LedgerEntry
-            and the result of the database update operation.
-
-    Raises:
-        LedgerEntryConfigurationException: If the database client is not configured.
-    """
-
-    ledger_entry = await get_ledger_entry(group_id)
-    ledger_entry.op = op
-    ans = await ledger_entry.update_op()
-    return ledger_entry, ans
+#     ledger_entry = LedgerEntry.model_validate(
+#         entry_data,
+#         by_alias=True,
+#     )
+#     return ledger_entry
 
 
 class LedgerType(StrEnum):
@@ -204,6 +185,7 @@ class LedgerEntry(BaseModel):
     """
 
     group_id: str = Field("", description="Group ID for the ledger entry")
+    short_id: str = Field("", description="Short ID for the ledger entry")
     ledger_type: LedgerType = Field(
         default=LedgerType.UNSET, description="Transaction type of the ledger entry"
     )
@@ -228,9 +210,18 @@ class LedgerEntry(BaseModel):
     credit_conv: CryptoConv = Field(
         default_factory=CryptoConv, description="Conversion details for the credit transaction"
     )
-    debit: LedgerAccountAny | None = Field(None, description="Account to be debited")
-    credit: LedgerAccountAny | None = Field(None, description="Account to be credited")
-    op: TrackedAny | None = Field(None, description="Associated operation")
+    debit: LedgerAccountAny = Field(
+        AssetAccount(
+            name="Unset",
+        ),
+        description="Account to be debited",
+    )
+    credit: LedgerAccountAny = Field(
+        AssetAccount(
+            name="Unset",
+        ),
+        description="Account to be credited",
+    )
     op_type: str = Field(
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
@@ -240,8 +231,6 @@ class LedgerEntry(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        if self.op:
-            self.op_type = get_tracked_any_type(self.op)
 
     @model_validator(mode="after")
     def credit_debit_equality(self) -> Self:
@@ -264,14 +253,67 @@ class LedgerEntry(BaseModel):
                 abs_tol=CryptoConv.UNIT_TOLERANCE[self.credit_unit.value],
             ):
                 return self
-            raise ValueError(
+            logger.warning(
                 f"Debit and Credit amounts do not match "
                 f"{credit_amount_in_debit_unit} != {self.debit_amount} "
-                f"and {debit_amount_in_credit_unit} != {self.credit_amount}"
+                f"and {debit_amount_in_credit_unit} != {self.credit_amount}",
+                extra={"notification": False, **self.log_extra},
             )
-        raise ValueError(
-            f"Debit and Credit conversions do not match: {self.credit_conv} vs {self.debit_conv}"
+        logger.warning(
+            "Debit and credit conv values out of tolerance",
+            extra={"notification": False, **self.log_extra},
         )
+        return self
+
+    @computed_field
+    def debit_amount_signed(self) -> int | float:
+        """
+        Returns the debit amount as a signed value.
+        This is used to ensure that the debit amount is always positive in accounting terms.
+        """
+        return self.debit_amount * self.debit_sign
+
+    @computed_field
+    def credit_amount_signed(self) -> int | float:
+        """
+        Returns the credit amount as a signed value.
+        This is used to ensure that the credit amount is always positive in accounting terms.
+        """
+        return self.credit_amount * self.credit_sign
+
+    @property
+    def debit_sign(self) -> int:
+        """
+        Returns the sign of the debit amount.
+        This is used to determine if the debit amount is positive or negative.
+
+        """
+        if self.debit.account_type in NORMAL_DEBIT_ACCOUNTS:
+            return 1
+        else:
+            return -1
+
+    @property
+    def credit_sign(self) -> int:
+        """
+        Returns the sign of the credit amount.
+        This is used to determine if the credit amount is positive or negative.
+        """
+        if self.credit.account_type in NORMAL_CREDIT_ACCOUNTS:
+            return 1
+        else:
+            return -1
+
+    @computed_field
+    def conv_signed(self) -> Dict[str, CryptoConv]:
+        """
+        Returns the conversion details as a signed CryptoConv object.
+        This is used to ensure that the conversion amounts are correctly signed for accounting.
+        """
+        return {
+            "debit": self.debit_conv * self.debit_sign,
+            "credit": self.credit_conv * self.credit_sign,
+        }
 
     @property
     def ledger_type_str(self) -> str:
@@ -370,6 +412,30 @@ class LedgerEntry(BaseModel):
         return {self.name(): self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)}
 
     @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation of the LedgerEntry for logging purposes.
+
+        This method is used to provide a concise and informative string that can be used in logs,
+        which includes the group_id, ledger_type, timestamp, and description.
+
+        Returns:
+            str: A formatted string representation of the LedgerEntry.
+        """
+        formatted_time = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        formatted_amount = (
+            f"{self.credit_amount:.3f} {self.credit_unit}"
+            if self.credit_unit != Currency.MSATS
+            else f"{self.credit_amount // 1000:.0f} sats"
+        )
+        return (
+            f"{formatted_time} | "
+            f"{self.ledger_type_str:<35} | {formatted_amount:>20} | "
+            f"{self.credit} | {self.debit} | "
+            f"{self.description}"
+        )
+
+    @property
     def group_id_query(self) -> dict[str, Any]:
         """
         Returns a Mongodb Query for this record.
@@ -386,23 +452,6 @@ class LedgerEntry(BaseModel):
         ans = {
             "group_id": self.group_id,
         }
-        return ans
-
-    @computed_field
-    def short_id(self) -> str:
-        """
-        Returns a short identifier for the LedgerEntry, which is the group_id.
-
-        This method is used to provide a concise representation of the LedgerEntry
-        that can be used in logs or other contexts where a full representation is not needed.
-
-        Returns:
-            str: The group_id of the LedgerEntry.
-        """
-        if self.op and hasattr(self.op, "short_id"):
-            ans = f"{self.op.short_id}"
-        else:
-            ans = f"{self.group_id}"
         return ans
 
     # MARK: DB Database Methods
@@ -452,32 +501,6 @@ class LedgerEntry(BaseModel):
         if not self.is_completed:
             raise LedgerEntryCreationException("LedgerEntry is not completed.")
 
-    async def update_op(self) -> UpdateResult:
-        """
-        Asynchronously updates the ledger entry in the database. This should only be called after the LedgerEntry is completed.
-        This method updates the ledger entry in the database with the current state of the LedgerEntry object.
-        It raises an exception if the ledger entry is not completed or if the database client is not configured.
-
-        Raises:
-            LedgerEntryCreationException: If the ledger entry is not completed or if an error occurs during the update.
-            LedgerEntryConfigurationException: If the database client is not configured.
-
-        Returns:
-            UpdateResult: The result of the database update operation.
-        """
-        # TODO: Review whether we should even be updating old ledger entries
-        self.db_checks()
-        logger.info(f"Updating ledger entry {self.group_id} with op {self.op.group_id}")
-        try:
-            ans = await InternalConfig.db[LedgerEntry.collection_name()].update_one(
-                filter=self.group_id_query,
-                update={"$set": {"op": self.op.model_dump(by_alias=True)}},
-            )
-            return ans
-        except Exception as e:
-            logger.error(f"Error saving ledger entry to database: {e}")
-            raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
-
     async def save(self) -> InsertOneResult:
         """
         WARNING : THIS METHOD SHOULD ONLY BE USED ONCE! To update the LedgerEntry, use the `update_op` method instead.
@@ -498,6 +521,10 @@ class LedgerEntry(BaseModel):
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
             return ans
+        except DuplicateKeyError as e:
+            logger.error(f"Duplicate ledger entry detected: {e}")
+            raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
+
         except Exception as e:
             logger.error(f"Error saving ledger entry to database: {e}")
             raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e

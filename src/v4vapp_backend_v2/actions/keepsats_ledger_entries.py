@@ -28,6 +28,8 @@ async def hold_keepsats(
     ledger_type = LedgerType.HOLD_KEEPSATS
     withdraw_ledger_entry = LedgerEntry(
         cust_id=cust_id,
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
@@ -67,6 +69,8 @@ async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None
     group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
     release_ledger_entry = LedgerEntry(
         cust_id=existing_entry.cust_id,
+        short_id=hive_transfer.short_id,
+        op_type=hive_transfer.op_type,
         ledger_type=ledger_type,
         group_id=group_id,
         timestamp=datetime.now(tz=timezone.utc),

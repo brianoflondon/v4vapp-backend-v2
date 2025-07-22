@@ -27,7 +27,7 @@ def read_lnd_monitor_v2_voltage_pub_keys(file_path: str) -> dict:
 
 
 def test_route_in_payments():
-    TrackedBaseModel.update_quote_sync()
+    TrackedBaseModel.update_quote_sync(store_db=False)
     lnrpc_list_payments = read_list_payments_raw("tests/data/lnd_lists/list_payments_raw.bin")
     assert lnrpc_list_payments
     assert isinstance(lnrpc_list_payments, lnrpc.ListPaymentsResponse)

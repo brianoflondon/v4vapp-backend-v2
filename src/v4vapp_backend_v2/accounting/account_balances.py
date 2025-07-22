@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 import pandas as pd
 
+from v4vapp_backend_v2.accounting.account_balance_pipelines import list_all_accounts_pipeline
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalanceSummary,
     ConvertedSummary,
@@ -12,6 +13,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     UnitSummary,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    NORMAL_DEBIT_ACCOUNTS,
     AssetAccount,
     LedgerAccount,
     LiabilityAccount,
@@ -20,9 +22,9 @@ from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
-    list_all_accounts_pipeline,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
@@ -126,10 +128,11 @@ async def get_account_balance(
     credit_df["credit_unit"] = credit_df["credit_unit"]
 
     # Determine signed amounts based on account type
-    if account.account_type == "Asset":
+    if account.account_type in NORMAL_DEBIT_ACCOUNTS:
+        # Asset, Expense, Dividends
         debit_df["signed_amount"] = debit_df["debit_amount"]
         credit_df["signed_amount"] = -credit_df["credit_amount"]
-    else:  # Liability, Equity, Revenue, Expense
+    else:  # Liability, Equity, Revenue ECONOMIC_BENEFIT_CREDIT_INCREASE
         debit_df["signed_amount"] = -debit_df["debit_amount"]
         credit_df["signed_amount"] = credit_df["credit_amount"]
 
@@ -174,7 +177,6 @@ async def get_account_balance_printout(
         as_of_date=as_of_date,
     )
     if combined_df.empty:
-        logger.info(f"No transactions found for account {account.name} up to {as_of_date}.")
         return "No transactions found for this account up to today.", AccountBalanceSummary()
 
     # Group by unit (process debit_unit and credit_unit separately)
@@ -571,7 +573,7 @@ async def get_keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
     line_items: bool = False,
-) -> LedgerConvSummary:
+) -> Tuple[AccountBalanceSummary, float]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -589,35 +591,9 @@ async def get_keepsats_balance(
         name="Customer Liability",
         sub=cust_id,
     )
-    pipeline = filter_sum_credit_debit_pipeline(
-        account=account,
-        cust_id=cust_id,
-        as_of_date=as_of_date,
-        ledger_types=[
-            LedgerType.DEPOSIT_KEEPSATS,
-            LedgerType.WITHDRAW_KEEPSATS,
-            LedgerType.CONV_KEEPSATS_TO_HIVE,
-            LedgerType.HOLD_KEEPSATS,
-        ],
-        line_items=line_items,
-    )
-    ans = await ledger_pipeline_result(
-        cust_id=cust_id,
-        account=account,
-        pipeline=pipeline,
-    )
-    if line_items:
-        ledger_entries = []
-        for item in ans.ledger_entries:
-            ledger_entry = LedgerEntry.model_validate(item)
-            ledger_entries.append(ledger_entry)
-        ans.ledger_entries = ledger_entries
 
-    deposit_balance = ans.by_ledger_type.get(LedgerType.DEPOSIT_KEEPSATS.value, ConvertedSummary())
-    withdraw_balance = ans.by_ledger_type.get(
-        LedgerType.WITHDRAW_KEEPSATS.value, ConvertedSummary()
+    printout_str, summary = await get_account_balance_printout(
+        account=account, as_of_date=as_of_date, line_items=line_items
     )
-    net_balance = deposit_balance - withdraw_balance
-    ans.net_balance = net_balance
-
-    return ans
+    net_sats = summary.unit_summaries.get(Currency.MSATS, UnitSummary()).final_balance / 1000
+    return summary, net_sats

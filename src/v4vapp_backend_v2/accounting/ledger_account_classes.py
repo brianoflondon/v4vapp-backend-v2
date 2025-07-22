@@ -7,11 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Define Account Types as a StrEnum for validation
 class AccountType(StrEnum):
+    DIVIDEND = "Dividend"
+    EXPENSE = "Expense"
     ASSET = "Asset"
     LIABILITY = "Liability"
     EQUITY = "Equity"
     REVENUE = "Revenue"
-    EXPENSE = "Expense"
+
+
+NORMAL_DEBIT_ACCOUNTS = [
+    AccountType.DIVIDEND,
+    AccountType.EXPENSE,
+    AccountType.ASSET,
+]
+NORMAL_CREDIT_ACCOUNTS = [AccountType.LIABILITY, AccountType.EQUITY, AccountType.REVENUE]
 
 
 # MARK: Base class for all accounts
@@ -104,6 +113,7 @@ class AssetAccount(LedgerAccount):
         "Converted Keepsats Offset",
         "External Lightning Payments",
         "Keepsats Lightning Movements",
+        "Unset",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
         AccountType.ASSET, description="Type of account"

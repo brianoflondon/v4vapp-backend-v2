@@ -3,13 +3,21 @@ from asyncio import TaskGroup
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict
+from timeit import default_timer as timeit
+from typing import Dict, Tuple
 
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.account_balances import get_all_accounts
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
+    balance_sheet_check_pipeline,
+    balance_sheet_pipeline,
+    profit_loss_pipeline,
+)
 from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
@@ -21,9 +29,9 @@ class BalanceSheetDict:
     is_balanced: bool
     tolerance: float
     as_of_date: datetime
+    age: timedelta
 
 
-# MARK: Balance Sheet Generation
 async def generate_balance_sheet_pandas_from_accounts(
     df: pd.DataFrame = pd.DataFrame(),
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
@@ -54,7 +62,7 @@ async def generate_balance_sheet_pandas_from_accounts(
 
     net_income = profit_and_loss["Net Income"]
 
-    balance_sheet = {
+    balance_sheet: Dict = {
         "Assets": defaultdict(dict),
         "Liabilities": defaultdict(dict),
         "Equity": defaultdict(dict),
@@ -156,6 +164,126 @@ async def generate_balance_sheet_pandas_from_accounts(
     return balance_sheet
 
 
+async def generate_balance_sheet_mongodb(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
+) -> Dict:
+    """
+    Generates a balance sheet from MongoDB data.
+
+    Args:
+        as_of_date (datetime): The date for which the balance sheet is generated.
+        age (timedelta | None): The age of the data to include in the balance sheet.
+
+    Returns:
+        Sequence[Mapping[str, Any]]: The generated balance sheet.
+    """
+    bs_pipeline = balance_sheet_pipeline(as_of_date=as_of_date, age=age)
+    pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
+
+    bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
+    pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
+
+    start = timeit()
+    async with TaskGroup() as tg:
+        balance_sheet_task = tg.create_task(bs_cursor.to_list())
+        profit_loss_task = tg.create_task(pl_cursor.to_list())
+        balance_sheet_check_task = tg.create_task(
+            check_balance_sheet_mongodb(as_of_date=as_of_date, age=age)
+        )
+    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
+    balance_sheet_list = await balance_sheet_task
+    profit_loss_list = await profit_loss_task
+    is_balanced, tolerance_msats = await balance_sheet_check_task
+    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
+
+    balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
+    profit_loss = profit_loss_list[0] if profit_loss_list else {}
+
+    if "Equity" not in balance_sheet:
+        balance_sheet["Equity"] = {}
+
+    net_income = profit_loss["Net Income"] if profit_loss else {}
+    for sub, values in net_income.items():
+        if "Retained Earnings" not in balance_sheet["Equity"]:
+            balance_sheet["Equity"]["Retained Earnings"] = {}
+        balance_sheet["Equity"]["Retained Earnings"][sub] = {
+            "usd": values["usd"],
+            "hive": values["hive"],
+            "hbd": values["hbd"],
+            "sats": values["sats"],
+            "msats": values["msats"],
+        }
+
+    # Compute section totals
+    currencies = ["hbd", "hive", "msats", "sats", "usd"]
+    for section in ["Assets", "Liabilities", "Equity"]:
+        if section in balance_sheet:
+            section_total = {cur: 0.0 for cur in currencies}
+            for account in balance_sheet[section]:
+                if account != "Total" and "Total" in balance_sheet[section][account]:
+                    for cur in currencies:
+                        section_total[cur] += balance_sheet[section][account]["Total"].get(
+                            cur, 0.0
+                        )
+            balance_sheet[section]["Total"] = section_total
+
+    # Calculate grand total (Assets vs Liabilities + Equity)
+    assets_total = balance_sheet["Assets"]["Total"]
+    liabilities_total = balance_sheet["Liabilities"]["Total"]
+    equity_total = balance_sheet["Equity"]["Total"]
+
+    balance_sheet["Total Liabilities and Equity"] = {
+        "usd": liabilities_total["usd"] + equity_total["usd"],
+        "hive": liabilities_total["hive"] + equity_total["hive"],
+        "hbd": liabilities_total["hbd"] + equity_total["hbd"],
+        "sats": liabilities_total["sats"] + equity_total["sats"],
+        "msats": liabilities_total["msats"] + equity_total["msats"],
+    }
+
+    tolerance_msats_check = assets_total["msats"] - (
+        liabilities_total["msats"] + equity_total["msats"]
+    )
+    assert tolerance_msats_check == tolerance_msats, (
+        f"Balance sheet tolerance mismatch: {tolerance_msats_check} != {tolerance_msats}"
+    )
+
+    balance_sheet["is_balanced"] = is_balanced
+    balance_sheet["tolerance"] = tolerance_msats
+    balance_sheet["as_of_date"] = as_of_date
+
+    return balance_sheet
+
+
+async def check_balance_sheet_mongodb(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> Tuple[bool, float]:
+    """
+    Checks if the balance sheet is balanced using MongoDB data.
+
+    Args:
+        as_of_date (datetime): The date for which the balance sheet is checked.
+        age (timedelta | None): The age of the data to include in the balance sheet.
+
+    Returns:
+        bool: True if the balance sheet is balanced, False otherwise.
+    """
+    bs_check_pipeline = balance_sheet_check_pipeline(as_of_date=as_of_date, age=age)
+    bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
+    bs_check = await bs_check_cursor.to_list()
+
+    if not bs_check:
+        return False, 0.0
+
+    tolerance_msats = 10_000  # tolerance of 10 sats.
+    is_balanced = math.isclose(
+        bs_check[0]["assets_msats"],
+        bs_check[0]["liabilities_msats"] + bs_check[0]["equity_msats"],
+        rel_tol=0.01,
+        abs_tol=tolerance_msats,
+    )
+    return is_balanced, bs_check[0]["total_msats"]
+
+
 def check_balance_sheet(balance_sheet: Dict) -> bool:
     """
     Checks if the balance sheet is balanced.
@@ -163,6 +291,7 @@ def check_balance_sheet(balance_sheet: Dict) -> bool:
     Args:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
     """
+
     tolerance_msats = 10_000  # tolerance of 10 sats.
     is_balanced = math.isclose(
         balance_sheet["Assets"]["Total"]["msats"],
@@ -185,9 +314,7 @@ def get_balance_tolerance(balance_sheet: Dict) -> float:
     return total_liabilities_and_equity - assets_total
 
 
-def balance_sheet_printout(
-    balance_sheet: Dict, as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1)
-) -> str:
+def balance_sheet_printout(balance_sheet: Dict) -> str:
     """
     Formats the balance sheet into a readable string representation, displaying only USD values.
     Includes sections for Assets, Liabilities, and Equity, along with their respective totals.
@@ -202,7 +329,7 @@ def balance_sheet_printout(
     """
     output = []
     max_width = 94
-    date_str = as_of_date.strftime("%Y-%m-%d")
+    date_str = balance_sheet["as_of_date"].strftime("%Y-%m-%d")
     header = f"Balance Sheet as of {date_str}"
     output.append(f"{truncate_text(header, max_width, centered=True)}")
     output.append("-" * max_width)
@@ -325,17 +452,18 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                 }
             total = sub_accounts["Total"]
             output.append(
-                f"{'Total ' + truncate_text(account_name, 35):<40} "
+                f"{'   Total ' + truncate_text(account_name, 35):<40} "
                 f"{'':<17} "
                 f"{total.get('sats', 0):>10,.0f} "
                 f"{total.get('hive', 0):>12,.3f} "
                 f"{total.get('hbd', 0):>12,.3f} "
                 f"{total.get('usd', 0):>12,.3f}"
             )
+            output.append(f"{'_' * max_width}")
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
         output.append(
-            f"{'Total ' + category:<40} "
+            f"{'   Total ' + category:<40} "
             f"{'':<17} "
             f"{total.get('sats', 0):>10,.0f} "
             f"{total.get('hive', 0):>12,.3f} "

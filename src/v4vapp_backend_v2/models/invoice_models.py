@@ -8,12 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
-from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
@@ -217,8 +217,8 @@ class Invoice(TrackedBaseModel):
     is_lndtohive: bool = Field(
         default=False, description="True if the invoice is a LND to Hive invoice"
     )
-    hive_accname: AccNameType | None = Field(
-        default=None, description="Hive account name associated with the invoice"
+    cust_id: CustIDType | None = Field(
+        default=None, description="Customer ID associated with the invoice"
     )
     custom_records: DecodedCustomRecord | None = Field(
         default=None, description="Other custom records associated with the invoice"
@@ -249,7 +249,7 @@ class Invoice(TrackedBaseModel):
             if match:
                 self.is_lndtohive = True
 
-        self.fill_hive_accname()
+        self.fill_cust_id()
         self.fill_custom_records()
 
     @override
@@ -348,15 +348,15 @@ class Invoice(TrackedBaseModel):
             "log_str": self.log_str,
         }
 
-    def fill_hive_accname(self) -> None:
+    def fill_cust_id(self) -> None:
         """
-        Extracts and returns the Hive account name associated with the invoice, if available.
+        Extracts and returns the customer ID associated with the invoice, if available.
 
-        The method attempts to extract the Hive account name from the `memo` field or the
+        The method attempts to extract the customer ID from the `memo` field or the
         `custom_records` field of the first HTLC (Hashed Time-Locked Contract) in the invoice.
 
         Returns:
-            AccNameType | None: The extracted Hive account name as an `AccNameType` object if
+            AccNameType | None: The extracted customer ID as an `AccNameType` object if
             successfully decoded and valid, otherwise `None`.
 
         Notes:
@@ -380,8 +380,9 @@ class Invoice(TrackedBaseModel):
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
         if extracted_value:
-            hive_accname = AccName(extracted_value)
-            self.hive_accname = hive_accname
+            self.cust_id = CustID(extracted_value)
+            if self.cust_id.startswith("@"):
+                self.cust_id = self.cust_id[1:]
             self.is_lndtohive = True
 
     def fill_custom_records(self) -> None:

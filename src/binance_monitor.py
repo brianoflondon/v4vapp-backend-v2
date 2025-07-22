@@ -5,6 +5,7 @@ from timeit import default_timer as timer
 from typing import Annotated
 
 import typer
+from urllib3.exceptions import NameResolutionError
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -87,7 +88,7 @@ async def check_binance_balances():
                 saved_balances,
                 testnet,
             )
-            silent = True if new_balances.get("HIVE") > hive_target else False
+            silent = True if new_balances.get("HIVE", 0) > hive_target else False
             if new_balances != saved_balances:
                 send_message = True
             if send_message:
@@ -103,14 +104,30 @@ async def check_binance_balances():
                 )
             send_message = False  # Send message once unless the balance changes
             saved_balances = new_balances
+
+        except OSError as ex:
+            logger.error(
+                f"{ICON} Problem with Networking on Server. {ex}",
+                extra={"error_code": "network_error", "notification": False},
+            )
+            send_message = True
+
         except BinanceErrorBadConnection as ex:
             logger.warning(
                 f"{ICON} Problem with Binance API. {ex}", extra={"error_code": "binance_api_error"}
             )
             send_message = True  # This will allow the error to clear if things improve
 
+        except NameResolutionError as ex:
+            logger.error(
+                f"{ICON} Name resolution error: {ex}",
+                extra={"error_code": "network_error", "notification": False},
+            )
+            send_message = True
+
         except Exception as ex:
             logger.error(f"{ICON} Problem with Binance API. {ex} {ex.__class__}")
+            logger.exception(ex, extra={"error": ex, "notification": False})
             logger.exception(ex, extra={"error": ex, "notification": False})
 
         except asyncio.CancelledError as e:

@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -304,7 +303,9 @@ class AllQuotes(BaseModel):
         self.fetch_date = binance_quote.fetch_date
         return binance_quote
 
-    async def get_all_quotes(self, use_cache: bool = True, timeout: float = 60.0):
+    async def get_all_quotes(
+        self, use_cache: bool = True, timeout: float = 60.0, store_db: bool = True
+    ) -> None:
         start = timer()
         global_cache = await self.check_global_cache()
         if use_cache and global_cache:
@@ -362,10 +363,11 @@ class AllQuotes(BaseModel):
                 )
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
-        async with V4VAsyncRedis(decode_responses=False) as redis_client:
-            cache_data_pickle = pickle.dumps(self.global_quote_pack())
-            await redis_client.setex("all_quote_class_quote", time=60, value=cache_data_pickle)
-        await self.db_store_quote()
+        redis_client = InternalConfig.redis
+        cache_data_pickle = pickle.dumps(self.global_quote_pack())
+        redis_client.setex("all_quote_class_quote", time=60, value=cache_data_pickle)
+        if store_db:
+            await self.db_store_quote()
 
     async def check_global_cache(self) -> bool:
         """
@@ -374,14 +376,14 @@ class AllQuotes(BaseModel):
         Returns:
             bool: True if the global cache is valid, False otherwise.
         """
-        async with V4VAsyncRedis(decode_responses=False) as redis_client:
-            cache_data_pickle = await redis_client.get("all_quote_class_quote")
-            if cache_data_pickle:
-                cache_data = pickle.loads(cache_data_pickle)
-                self.fetch_date = cache_data["fetch_date"]
-                self.quotes = self.unpack_quotes(cache_data)
-                self.source = cache_data["source"]
-                return True
+        redis_client = InternalConfig.redis
+        cache_data_pickle = redis_client.get("all_quote_class_quote")
+        if cache_data_pickle:
+            cache_data = pickle.loads(cache_data_pickle)
+            self.fetch_date = cache_data["fetch_date"]
+            self.quotes = self.unpack_quotes(cache_data)
+            self.source = cache_data["source"]
+            return True
         return False
 
     def global_quote_pack(self) -> Dict[str, Any]:
@@ -625,10 +627,10 @@ class QuoteService(ABC):
     async def check_cache(self, use_cache: bool = True) -> QuoteResponse | None:
         if use_cache:
             key = f"{self.__class__.__name__}:get_quote"
-            async with V4VAsyncRedis(decode_responses=False) as redis_client:
-                cached_quote = await redis_client.get(key)
-                if cached_quote:
-                    return pickle.loads(cached_quote)
+            redis_client = InternalConfig.redis
+            cached_quote = redis_client.get(key)
+            if cached_quote:
+                return pickle.loads(cached_quote)
         return None
 
     async def set_cache(self, quote: QuoteResponse) -> None:
@@ -638,8 +640,8 @@ class QuoteService(ABC):
         else:
             cache_times = CACHE_TIMES
         expiry = cache_times[self.__class__.__name__]
-        async with V4VAsyncRedis(decode_responses=False) as redis_client:
-            await redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+        redis_client = InternalConfig.redis
+        redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
 
 
 class CoinGecko(QuoteService):

@@ -3,9 +3,12 @@ from typing import List
 
 from pydantic import Field
 
+from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_paywithsats
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
     custom_json_test_data,
@@ -21,12 +24,11 @@ class CustomJson(OpBase):
     required_auths: List[str]
     required_posting_auths: List[str]
 
-    # Extra Fields
-    #TODO #128 Remove the conv from the CustomJson class because it is redundant and imported via OpBase Tracked
-    conv: CryptoConv | None = Field(
-        default=None,
-        description="If the custom_json relates to an amount, store a conversion object.",
+    cust_id: CustIDType = Field(
+        default="", alias="Customer ID determined from the `required_auths` field"
     )
+
+    # Extra Fields
 
     def __init__(self, **data):
         """
@@ -61,22 +63,41 @@ class CustomJson(OpBase):
                     f"Invalid JSON data for operation ID {data['id']}: {data['json']} - {e}"
                 )
         super().__init__(**data)
-        # test if any key in a json_data is a big int necessary if ingesting podpings!
-        # if self.cj_id.startswith(("pp_")):
-        #     for key, value in self.json_data.items():  # Changed from self.json_data: to self.json_data.items():
-        #         if isinstance(value, int) and value > 2**53:
-        #             self.json_data[key] = str(value)
-        # TODO: Another place to use historical rates when we have them
-        if not self.conv:
-            if getattr(self.json_data, "sats", None) is not None:
-                if (
-                    TrackedBaseModel.last_quote
-                    and not TrackedBaseModel.last_quote.hive_hbd == 0
-                    and hasattr(self.json_data, "sats")
-                ):
-                    self.conv = CryptoConversion(
-                        value=self.json_data.sats, conv_from=Currency.SATS, quote=TrackedBaseModel.last_quote
-                    ).conversion
+
+        # Only if the from is the required auth account OR the server can we send sats around
+        # The customer is the from account.
+        try:
+            if (
+                self.is_watched
+                and self.json_data
+                and hasattr(self.json_data, "from_account")
+                and hasattr(self.json_data, "to_account")
+            ):
+                if self.required_auths and self.required_auths[0]:
+                    if (
+                        self.json_data.from_account == self.required_auths[0]
+                        or self.required_auths[0]
+                        in InternalConfig().config.hive.server_account_names
+                    ):
+                        self.cust_id = self.json_data.from_account
+
+                if self.conv.sats_hbd == 0:
+                    if getattr(self.json_data, "sats", None) is not None:
+                        if (
+                            TrackedBaseModel.last_quote
+                            and not TrackedBaseModel.last_quote.hive_hbd == 0
+                            and hasattr(self.json_data, "sats")
+                        ):
+                            self.conv = CryptoConversion(
+                                value=getattr(self.json_data, "sats", 0),
+                                conv_from=Currency.SATS,
+                                quote=TrackedBaseModel.last_quote,
+                            ).conversion
+        except Exception as e:
+            logger.error(
+                f"Error initializing CustomJson: {e}",
+                extra={"notification": False, **self.log_extra},
+            )
 
     @property
     def is_watched(self) -> bool:
@@ -86,6 +107,11 @@ class CustomJson(OpBase):
         Returns:
             bool: True if the transfer is to a watched user, False otherwise.
         """
+        if (
+            self.required_auths
+            and self.required_auths[0] in InternalConfig().config.hive.server_account_names
+        ):
+            return True
         if OpBase.watch_users:
             if custom_json_test_id(self.cj_id):
                 # Check if the transfer is to a watched user
@@ -95,6 +121,39 @@ class CustomJson(OpBase):
                 if self.json_data.from_account in OpBase.watch_users:
                     return True
         return False
+
+    @property
+    def paywithsats(self) -> bool:
+        """
+        Checks if the transfer memo indicates a paywithsats operation.
+
+        Returns:
+            bool: True if the memo indicates a paywithsats operation, False otherwise.
+        """
+        return detect_paywithsats(self.json_data.memo)
+
+    async def update_conv(self, quote: QuoteResponse | None = None) -> None:
+        """
+        Updates the conversion for the transaction.
+
+        If the subclass has a `conv` object, update it with the latest quote.
+        If a quote is provided, it sets the conversion to the provided quote.
+        If no quote is provided, it uses the last quote to set the conversion.
+
+        Args:
+            quote (QuoteResponse | None): The quote to update.
+                If None, uses the last quote.
+        """
+
+        if getattr(self.json_data, "sats", None) is not None:
+            if self.conv.sats_hbd == 0:
+                if not quote:
+                    quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+                self.conv = CryptoConversion(
+                    value=getattr(self.json_data, "sats", 0),
+                    conv_from=Currency.SATS,
+                    quote=quote,
+                ).conversion
 
     @property
     def log_str(self) -> str:

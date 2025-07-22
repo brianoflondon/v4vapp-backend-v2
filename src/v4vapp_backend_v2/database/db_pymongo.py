@@ -81,9 +81,16 @@ class DBConn:
         config = InternalConfig().config
         db_connection = config.dbs_config.connections[db_conn]
 
+        # Special case for github tests with no Admin auth
+
         auth_source = f"?authSource={db_name}"
         db_password = ""
-        if db_name == "admin" and db_connection.admin_dbs:
+
+        if db_connection.replica_set == "rsPytest":
+            db_password = ""
+            db_user = ""
+            auth_source = ""
+        elif db_name == "admin" and db_connection.admin_dbs:
             admin_db_password = db_connection.admin_dbs["admin"].db_users["admin"].password
             db_password = ":" + quote_plus(admin_db_password) + "@"
             db_user = quote_plus(db_user)
@@ -224,8 +231,8 @@ class DBConn:
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
             )
-            if InternalConfig.db_client:
-                await InternalConfig.db_client.close()
+            # if InternalConfig.db_client:
+            #     await InternalConfig.db_client.close()
             InternalConfig.db_client = AsyncMongoClient(self.uri, tz_aware=True)
             InternalConfig.db = InternalConfig.db_client[self.db_name]
             logger.info(
@@ -568,4 +575,9 @@ class DBConn:
                 )
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
                 logger.error(message, extra={"notification": False})

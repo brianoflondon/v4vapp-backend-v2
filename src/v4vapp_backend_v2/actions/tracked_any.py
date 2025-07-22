@@ -3,8 +3,9 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -12,6 +13,14 @@ from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfe
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
+
+"""
+This set of functions discriminates between the various types of tracked object which are
+either Hive operations or LND Invoices or Payments.
+
+Tracked operations for Hive need to be changed
+
+"""
 
 
 def get_tracked_any_type(value: Any) -> str:
@@ -36,6 +45,7 @@ def get_tracked_any_type(value: Any) -> str:
             "limit_order_create",
             "recurrent_transfer",
             "fill_recurrent_transfer",
+            "custom_json",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -56,7 +66,7 @@ def get_tracked_any_type(value: Any) -> str:
     if isinstance(value, Payment):
         return value.op_type or "payment"
     if not isinstance(value, dict) and isinstance(
-        value, (OpAllTransfers, FillOrder, LimitOrderCreate)
+        value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
     ):
         if hasattr(value, "op_type"):
             return value.op_type
@@ -71,7 +81,8 @@ TrackedAny = Annotated[
     | Annotated[FillOrder, Tag("fill_order")]
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
     | Annotated[Invoice, Tag("invoice")]
-    | Annotated[Payment, Tag("payment")],
+    | Annotated[Payment, Tag("payment")]
+    | Annotated[CustomJson, Tag("custom_json")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -99,13 +110,15 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
         TrackedAny | None: The loaded tracked object if found, otherwise None.
 
     """
+    db = InternalConfig.db
+
     if isinstance(tracked_obj, str):
         short_id = tracked_obj
         if "_" in short_id:
             # This is a for a hive_ops object
             collection_name = "hive_ops"
             query = TrackedBaseModel.short_id_query(short_id=short_id)
-            result = await InternalConfig.db[collection_name].find_one(filter=query)
+            result = await db[collection_name].find_one(filter=query)
             if result:
                 value = {"value": result}
                 answer = DiscriminatedTracked.model_validate(value)
@@ -114,14 +127,14 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
             collections = [Invoice.collection_name, Payment.collection_name]
             for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
-                result = await InternalConfig.db[collection_name].find_one(filter=query)
+                result = await db[collection_name].find_one(filter=query)
                 if result:
                     value = {"value": result}
                     answer = DiscriminatedTracked.model_validate(value)
                     return answer.value
 
-    if collection_name := getattr(tracked_obj, "collection_name", None):
-        result = await InternalConfig.db[collection_name].find_one(
+    elif collection_name := getattr(tracked_obj, "collection_name", None):
+        result = await db[collection_name].find_one(
             filter=tracked_obj.group_id_query,
         )
         if result:
@@ -191,5 +204,3 @@ def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
     raise ValueError(
         f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
     )
-
-

@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
@@ -7,6 +6,7 @@ from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
@@ -77,7 +77,7 @@ class TrackedBaseModel(BaseModel):
         CryptoConv(),
         description="Conversion object for any returned change associated with this transaction if any",
     )
-
+    process_time: float = Field(0, description="Time in (s) it took to process this transaction")
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
     def __init__(self, **data):
@@ -110,24 +110,24 @@ class TrackedBaseModel(BaseModel):
             TrackedBaseModel: The current instance with the lock acquired.
         """
         start = timer()
-        stack = inspect.stack()
-        logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
-        if await self.locked:
-            logger.warning(
-                f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
-                extra={"notification": False},
-            )
-            print(stack[1].function, stack[1].filename, stack[1].lineno)
-            unlocked = await self.wait_for_lock(timeout=60)
-            if not unlocked:
-                logger.warning(
-                    f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
-                    extra={"notification": False},
-                )
-                await self.unlock_op()
-                print(stack[1].function, stack[1].filename, stack[1].lineno)
-                raise TimeoutError("Timeout waiting for lock to be released.")
-        await self.lock_op()
+        # stack = inspect.stack()
+        # logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
+        # if await self.locked:
+        #     logger.warning(
+        #         f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
+        #         extra={"notification": False},
+        #     )
+        #     print(stack[1].function, stack[1].filename, stack[1].lineno)
+        #     unlocked = await self.wait_for_lock(timeout=60)
+        #     if not unlocked:
+        #         logger.warning(
+        #             f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
+        #             extra={"notification": False},
+        #         )
+        #         await self.unlock_op()
+        #         print(stack[1].function, stack[1].filename, stack[1].lineno)
+        #         raise TimeoutError("Timeout waiting for lock to be released.")
+        # await self.lock_op()
         logger.info(
             f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
             extra={"notification": False},
@@ -150,7 +150,7 @@ class TrackedBaseModel(BaseModel):
             None
         """
         logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
-        await self.unlock_op()
+        # await self.unlock_op()
 
     # MARK: Reply Management
 
@@ -407,7 +407,9 @@ class TrackedBaseModel(BaseModel):
     # MARK: Quote Management
 
     @classmethod
-    def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:
+    def update_quote_sync(
+        cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
+    ) -> None:
         """
         Synchronously updates the last quote for the class.
 
@@ -429,14 +431,16 @@ class TrackedBaseModel(BaseModel):
                     "update_quote_sync cannot be called in an async context. Use update_quote instead."
                 )
             else:
-                loop.run_until_complete(cls.update_quote())
+                loop.run_until_complete(cls.update_quote(use_cache=use_cache, store_db=store_db))
         except RuntimeError as e:
             # Handle cases where the event loop is already running
             # logger.error(f"Error in update_quote_sync: {e}")
             raise e
 
     @classmethod
-    async def update_quote(cls, quote: QuoteResponse | None = None) -> None:
+    async def update_quote(
+        cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
+    ) -> None:
         """
         Asynchronously updates the last quote for the class.
 
@@ -455,7 +459,7 @@ class TrackedBaseModel(BaseModel):
             cls.last_quote = quote
         else:
             all_quotes = AllQuotes()
-            await all_quotes.get_all_quotes()
+            await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
             cls.last_quote = all_quotes.quote
 
     async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
@@ -563,6 +567,14 @@ class TrackedBaseModel(BaseModel):
                     extra={"notification": False},
                 )
                 return cls.last_quote
+
+        except ServerSelectionTimeoutError as e:
+            logger.error(
+                f"Failed to connect to the database: {e}",
+                extra={"notification": False},
+            )
+            return cls.last_quote
+
         except Exception as e:
             logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
         return cls.last_quote

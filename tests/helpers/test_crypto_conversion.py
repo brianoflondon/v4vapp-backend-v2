@@ -88,12 +88,12 @@ async def test_crypto_conversion_parameterized(conv_from, value):
 @pytest.mark.asyncio
 async def test_fetch_date():
     conv = CryptoConversion(conv_from=Currency.HBD, value=1000.0)
-    await conv.get_quote(use_cache=False)
+    await conv.get_quote(use_cache=False, store_db=False)
     assert conv.quote is not None
     fetch_date = conv.quote.fetch_date
     assert fetch_date is not None
     await asyncio.sleep(1)
-    await conv.get_quote(use_cache=False)
+    await conv.get_quote(use_cache=False, store_db=False)
     fetch_date2 = conv.quote.fetch_date
     assert fetch_date2 is not None
     assert fetch_date2 > fetch_date

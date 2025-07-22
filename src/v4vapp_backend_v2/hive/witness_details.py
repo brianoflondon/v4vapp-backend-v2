@@ -4,8 +4,7 @@ from random import shuffle
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 API_ENDPOINTS = [
@@ -44,14 +43,13 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     Returns:
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
+    cache_key = f"witness_{hive_accname}"
     try:
-        cache_key = f"witness_{hive_accname}"
-        async with V4VAsyncRedis() as redis_client:
-            ttl = await redis_client.ttl(cache_key)
-            if ttl and ttl > 0 and (1800 - ttl) < 300:
-                cached_data = await redis_client.get(cache_key)
-                answer = json.loads(cached_data)
-                return WitnessDetails.model_validate(answer)
+        ttl = InternalConfig.redis_decoded.ttl(cache_key)
+        if ttl and ttl > 0 and (1800 - ttl) < 300:
+            cached_data = await InternalConfig.redis_decoded.get(cache_key)
+            answer = json.loads(cached_data)
+            return WitnessDetails.model_validate(answer)
     except Exception:
         pass
     # Attempt to fetch from API
@@ -68,10 +66,9 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                     answer = response.json()
                     # Cache the result in Redis
                     try:
-                        async with V4VAsyncRedis() as redis_client:
-                            await redis_client.setex(
-                                name=cache_key, value=json.dumps(answer), time=1800
-                            )
+                        InternalConfig.redis_decoded.setex(
+                            name=cache_key, value=json.dumps(answer), time=1800
+                        )
                     except Exception as redis_error:
                         logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
 
@@ -103,22 +100,19 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
 
     # Fallback to Redis cache
     try:
-        async with V4VAsyncRedis() as redis_client:
-            if not await redis_client.ping():
-                logger.error(
-                    "Redis is unavailable, cannot fetch cached data", extra={"notification": False}
-                )
-                return None
+        if not InternalConfig.redis_decoded.ping():
+            logger.error(
+                "Redis is unavailable, cannot fetch cached data", extra={"notification": False}
+            )
+            return None
 
-            cached_data = await redis_client.get(cache_key)
-            if cached_data:
-                answer = json.loads(cached_data)
-                logger.info(
-                    f"Successfully retrieved witness details from cache for {hive_accname}"
-                )
-                return WitnessDetails.model_validate(answer)
-            else:
-                logger.warning(f"No cached data found for {cache_key}")
+        cached_data = InternalConfig.redis_decoded.get(cache_key)
+        if cached_data:
+            answer = json.loads(cached_data)
+            logger.info(f"Successfully retrieved witness details from cache for {hive_accname}")
+            return WitnessDetails.model_validate(answer)
+        else:
+            logger.warning(f"No cached data found for {cache_key}")
     except ValueError as e:
         logger.warning(
             f"Failed to parse JSON response from {url}",

@@ -46,7 +46,7 @@ class CryptoConv(BaseModel):
         "hive": 0.003,
         "hbd": 0.002,
         "usd": 0.002,
-        "sats": 0.5,
+        "sats": 1.5,
         "msats": 500,
         "btc": 5e-9,
         "msats_fee": 2000,  # the fee is so tiny I don't want failures for this
@@ -327,7 +327,7 @@ class CryptoConversion(BaseModel):
             self.quote = quote
             self._compute_conversions()
 
-    async def get_quote(self, use_cache: bool = True):
+    async def get_quote(self, use_cache: bool = True, store_db: bool = True) -> None:
         """
         Asynchronously retrieves the latest cryptocurrency quotes and updates the instance with the fetched data.
         Args:
@@ -339,7 +339,7 @@ class CryptoConversion(BaseModel):
         """
 
         all_quotes = AllQuotes()
-        await all_quotes.get_all_quotes(use_cache=use_cache)
+        await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
         self.quote = all_quotes.quote
         self._compute_conversions()
         self.fetch_date = self.quote.fetch_date

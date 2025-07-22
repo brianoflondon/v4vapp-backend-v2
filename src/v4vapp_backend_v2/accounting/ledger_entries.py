@@ -129,6 +129,11 @@ async def get_ledger_dataframe(
                     "credit_account_type": entry.credit.account_type,
                     "credit_sub": entry.credit.sub,
                     "credit_contra": entry.credit.contra,
+                    "conv_signed": entry.conv_signed,
+                    "debit_amount_signed": entry.debit_amount_signed,
+                    "credit_amount_signed": entry.credit_amount_signed,
+                    "debit_sign": entry.debit_sign,
+                    "credit_sign": entry.credit_sign,
                 }
             )
 

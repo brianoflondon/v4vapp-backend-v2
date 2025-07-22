@@ -67,6 +67,7 @@ def test_internal_config(monkeypatch: pytest.MonkeyPatch):
         internal_config = InternalConfig()
     except StartupFailure as e:
         print(e)
+    internal_config = InternalConfig()
     assert internal_config is not None
     assert internal_config.config is not None
     int_config = internal_config.config
@@ -83,12 +84,14 @@ def test_internal_config(monkeypatch: pytest.MonkeyPatch):
     with pytest.raises(KeyError):
         int_config.lnd_config.connections["bad_example"]
 
+    internal_config.shutdown()
+
 
 def test_singleton_config():
     internal_config = InternalConfig()
     internal_config2 = InternalConfig()
     assert internal_config is internal_config2
-
+    internal_config.shutdown()
 
 def test_bad_internal_config(monkeypatch: pytest.MonkeyPatch):
     with pytest.raises(StartupFailure):

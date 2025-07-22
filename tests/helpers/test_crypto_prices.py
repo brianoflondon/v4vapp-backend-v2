@@ -2,13 +2,14 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from httpx import Request, Response
 from nectar.hive import Hive
 from nectar.market import Market
 
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_prices import (
     ALL_PRICES_COINGECKO,
     ALL_PRICES_COINMARKETCAP,
@@ -31,6 +32,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     yield
+    InternalConfig().shutdown()  # Ensure proper cleanup after tests
     # No need to restore the original value, monkeypatch will handle it
 
 
@@ -255,12 +257,11 @@ async def test_get_all_quotes(mocker, set_base_config_path):
         return_value=None,
     )
     # Do not use the redis cache at the object level.
-    mock_redis = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.V4VAsyncRedis")
-    mock_redis_instance = mock_redis.return_value
+    mock_redis_instance = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
     mock_redis_instance.__aenter__.return_value = mock_redis_instance
     mock_redis_instance.__aexit__.return_value = None
-    mock_redis_instance.setex = AsyncMock(return_value=None)
-    mock_redis_instance.get = AsyncMock(return_value=None)
+    mock_redis_instance.setex = MagicMock(return_value=None)
+    mock_redis_instance.get = MagicMock(return_value=None)
 
     # Apply the patch
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=mock_get))
@@ -269,7 +270,7 @@ async def test_get_all_quotes(mocker, set_base_config_path):
 
     # Test
     all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes()
+    await all_quotes.get_all_quotes(store_db=False)
 
     # Assertions
     assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
@@ -349,12 +350,9 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
     Parametrized to test each service failing independently.
     """
     # Do not use the redis cache at the object level.
-    mock_redis = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.V4VAsyncRedis")
-    mock_redis_instance = mock_redis.return_value
-    mock_redis_instance.__aenter__.return_value = mock_redis_instance
-    mock_redis_instance.__aexit__.return_value = None
-    mock_redis_instance.setex = AsyncMock(return_value=None)
-    mock_redis_instance.get = AsyncMock(return_value=None)
+    mock_redis_instance = mocker.patch("v4vapp_backend_v2.config.setup.InternalConfig.redis")
+    mock_redis_instance.setex = Mock(return_value=None)
+    mock_redis_instance.get = Mock(return_value=None)
 
     # Extracted the setup into this function to avoid code duplication
     coingecko_resp, coinmarketcap_resp, binance_resp, hive_resp = load_and_mock_responses(
@@ -363,7 +361,7 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
 
     # Execute the test
     all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes(use_cache=False)
+    await all_quotes.get_all_quotes(use_cache=False, store_db=False)
 
     # Test the authoritative quote fetch
     quote = all_quotes.quote

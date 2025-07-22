@@ -18,8 +18,7 @@ from nectarapi.exceptions import UnhandledRPCError
 from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.database.async_redis import V4VAsyncRedis
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 
 DEFAULT_GOOD_NODES = [
@@ -139,10 +138,9 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
         # shuffle good nodes
         good_nodes: List[str] = []
         try:
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                good_nodes_json = redis_sync_client.get("good_nodes")
+            good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
             if good_nodes_json and isinstance(good_nodes_json, str):
-                ttl = redis_sync_client.ttl("good_nodes")
+                ttl = InternalConfig.redis_decoded.ttl("good_nodes")
                 if isinstance(ttl, int) and ttl < 3000:
                     good_nodes = get_good_nodes()
                 else:
@@ -212,15 +210,13 @@ def get_good_nodes() -> List[str]:
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
         try:
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
         except Exception as e:
             logger.warning(
                 f"Failed to set good nodes in Redis: {e}", extra={"notification": False}
             )
     except Exception as e:
-        with V4VAsyncRedis().sync_redis as redis_sync_client:
-            good_nodes_json = redis_sync_client.get("good_nodes")
+        good_nodes_json = InternalConfig.redis_decoded.get("good_nodes")
         if good_nodes_json and isinstance(good_nodes_json, str):
             good_nodes = json.loads(good_nodes_json)
         if good_nodes:
@@ -228,8 +224,7 @@ def get_good_nodes() -> List[str]:
         else:
             logger.warning(f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e})
             good_nodes = DEFAULT_GOOD_NODES
-            with V4VAsyncRedis().sync_redis as redis_sync_client:
-                redis_sync_client.setex("good_nodes", 3600, json.dumps(good_nodes))
+            InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
 
     return good_nodes
 
@@ -631,74 +626,124 @@ async def send_transfer(
     )
     if is_private:
         memo = f"#{memo}"
-    try:
-        trx = account.transfer(
-            to=to_account,
-            amount=amount.amount,
-            asset=amount.asset,
-            account=from_account,
-            memo=memo,
-        )
-        check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
-        logger.info(
-            f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
-            f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
-            f"Memo: {memo} {trx.get('trx_id', '')}",
-            extra={
-                "notification": True,
-                "to_account": to_account,
-                "from_account": from_account,
-                "amount": amount.amount_decimal,
-                "symbol": amount.symbol,
-                "memo": memo,
-            },
-        )
-        return trx
 
-    except UnhandledRPCError as ex:
-        # Handle insufficient funds
-        for arg in ex.args:
-            if "does not have sufficient funds" in arg:
-                raise HiveNotEnoughHiveInAccount(
-                    f"{from_account} Failure during send | "
-                    f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-            if "Cannot transfer a negative amount" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{from_account} Failure during send | "
-                    f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-            if "Duplicate transaction check failed" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{from_account} Failure during send | "
-                    f"Looks like we tried to send transaction twice | "
-                    f"{memo} | "
-                    f"{amount.amount_decimal:.3f} {amount.symbol} | "
-                    f"to: {to_account} | Hive error: {ex}"
-                )
-        else:
-            trx = {"UnhandledRPCError": f"{ex}"}
+    retries = 0
+    while retries < 3:
+        try:
+            trx = account.transfer(
+                to=to_account,
+                amount=amount.amount,
+                asset=amount.asset,
+                account=from_account,
+                memo=memo,
+            )
+            check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
+            logger.info(
+                f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
+                f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
+                f"Memo: {memo} {trx.get('trx_id', '')}",
+                extra={
+                    "notification": True,
+                    "to_account": to_account,
+                    "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
+                },
+            )
+            return trx
+
+        except UnhandledRPCError as ex:
+            # Handle insufficient funds
+            for arg in ex.args:
+                if "does not have sufficient funds" in arg:
+                    raise HiveNotEnoughHiveInAccount(
+                        f"{from_account} Failure during send | "
+                        f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "Cannot transfer a negative amount" in arg:
+                    raise HiveTryingToSendZeroOrNegativeAmount(
+                        f"{from_account} Failure during send | "
+                        f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "Duplicate transaction check failed" in arg:
+                    raise HiveTryingToSendZeroOrNegativeAmount(
+                        f"{from_account} Failure during send | "
+                        f"Looks like we tried to send transaction twice | "
+                        f"{memo} | "
+                        f"{amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}"
+                    )
+                elif "transaction expiration exception" in arg:
+                    logger.warning(
+                        f"Transaction expired: {arg}",
+                        extra={
+                            "notification": False,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    retries += 1
+                    logger.warning(
+                        f"Retrying send_transfer {retries}/3 for {from_account} -> {to_account}",
+                        extra={
+                            "notification": True,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    if retries >= 3:
+                        logger.error(
+                            f"Transaction expired after 3 retries: {ex}",
+                            extra={
+                                "notification": True,
+                                "to_account": to_account,
+                                "from_account": from_account,
+                                "amount": amount.amount_decimal,
+                                "symbol": amount.symbol,
+                                "memo": memo,
+                            },
+                        )
+                        raise HiveSomeOtherRPCException(
+                            f"Transaction expired after 3 retries: {ex}"
+                        )
+                    continue
+                else:
+                    trx = {"UnhandledRPCError": f"{ex}"}
+                    logger.error(
+                        f"UnhandledRPCError during send_transfer: {ex}",
+                        extra={
+                            "notification": True,
+                            "to_account": to_account,
+                            "from_account": from_account,
+                            "amount": amount.amount_decimal,
+                            "symbol": amount.symbol,
+                            "memo": memo,
+                        },
+                    )
+                    raise HiveSomeOtherRPCException(f"{ex}")
+        except Exception as ex:
             logger.error(
                 f"UnhandledRPCError during send_transfer: {ex}",
                 extra={
-                    "notification": False,
+                    "notification": True,
                     "to_account": to_account,
                     "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
                 },
             )
             raise HiveSomeOtherRPCException(f"{ex}")
-    except Exception as ex:
-        logger.error(
-            f"UnhandledRPCError during send_transfer: {ex}",
-            extra={
-                "notification": False,
-                "to_account": to_account,
-                "from_account": from_account,
-            },
-        )
-        raise HiveSomeOtherRPCException(f"{ex}")
+    return {}
 
 
 if __name__ == "__main__":

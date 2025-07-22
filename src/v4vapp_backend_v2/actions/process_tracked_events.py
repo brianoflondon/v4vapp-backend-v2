@@ -1,7 +1,8 @@
 import asyncio
+from timeit import default_timer as timer
 from typing import List, Union
 
-from v4vapp_backend_v2.accounting.balance_sheet import generate_balance_sheet_pandas_from_accounts
+from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntry,
@@ -10,12 +11,12 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.finish_created_tasks import handle_tasks
+from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_to_lightning import (
-    complete_hive_to_lightning,
     process_hive_to_lightning,
     return_hive_transfer,
 )
+from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
@@ -53,10 +54,16 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+    cust_id = getattr(tracked_op, "cust_id", "unknown_cust_id")
+    cust_id = "unknown_cust_id" if not cust_id else cust_id
+    logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
+    start = timer()
     try:
-        # This is the outer lock
-        async with tracked_op:
-            if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder)):
+        async with CustID(cust_id).locked(
+            timeout=None,
+            blocking_timeout=None,
+        ):
+            if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
                 ledger_entry = await process_hive_op(op=tracked_op)
                 ledger_entries = [ledger_entry]
             elif isinstance(tracked_op, Invoice) and tracked_op.settled:
@@ -70,16 +77,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                 raise LedgerEntryCreationException("Ledger entry cannot be created.")
             for ledger_entry in ledger_entries:
                 try:
-                    ans = await ledger_entry.save()
-                    logger.info(
-                        f"Ledger entry saved: {ans}",
-                        extra={**ledger_entry.log_extra, "notification": False},
-                    )
-
                     # DEBUG section
                     logger.info("\n" + str(ledger_entry))
-                    balance_sheet = await generate_balance_sheet_pandas_from_accounts()
-                    if not balance_sheet["is_balanced"]:
+                    is_balanced, _ = await check_balance_sheet_mongodb()
+                    if not is_balanced:
                         logger.warning(
                             f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
                             extra={"notification": False},
@@ -98,6 +99,28 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         logger.exception(f"Error processing tracked operation: {e}")
         raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
 
+    except CustIDLockException as e:
+        logger.error(f"Error acquiring lock for {cust_id}: {e}")
+        await asyncio.sleep(10)
+        raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
+
+    finally:
+        process_time = timer() - start
+        tracked_op.process_time = process_time
+        await tracked_op.save()
+        logger.info(f"{'=' * 50}")
+        logger.info(
+            f"{process_time:>7,.2f} s {cust_id} processing tracked operation\n{tracked_op.log_str}"
+        )
+        logger.info(f"{'=' * 50}")
+        # if cust_id:
+        #     # Ensure the lock is released even if an error occurs
+        #     logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
+        #     await CustID.release_lock(cust_id)
+        logger.info(
+            f"Finished Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}"
+        )
+
 
 async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     """
@@ -114,12 +137,13 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
         timestamp=op.timestamp,
-        op=op,
     )
     if isinstance(op, Invoice):
+        ledger_entry.op_type = "invoice"
         ledger_entries = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
     elif isinstance(op, Payment):
-        ledger_entries = await process_lightning_payment(payment=op, ledger_entry=ledger_entry)
+        ledger_entry.op_type = "payment"
+        ledger_entries = await process_lightning_payment(payment=op)
 
     return ledger_entries
 
@@ -158,7 +182,7 @@ async def process_lightning_invoice(
     node_name = InternalConfig().config.lnd_config.default
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
-    ledger_entry.cust_id = invoice.hive_accname if invoice.hive_accname is not None else node_name
+    ledger_entry.cust_id = invoice.cust_id if invoice.cust_id is not None else node_name
     ledger_entry.description = invoice.memo
     ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
     ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
@@ -181,7 +205,7 @@ async def process_lightning_invoice(
 
 
 async def process_lightning_payment(
-    payment: Payment, ledger_entry: LedgerEntry, nobroadcast: bool = False
+    payment: Payment, nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
     Processes a Lightning Network payment and updates the corresponding ledger entry.
@@ -195,10 +219,9 @@ async def process_lightning_payment(
 
     Args:
         payment (Payment): The Lightning payment object containing payment details.
-        ledger_entry (LedgerEntry): The ledger entry to be updated based on the payment.
 
     Returns:
-        LedgerEntry: The updated ledger entry reflecting the processed payment.
+        List[LedgerEntry]: The list of ledger entries reflecting the processed payment.
 
     Raises:
         NotImplementedError: If the payment memo does not match implemented cases.
@@ -215,12 +238,17 @@ async def process_lightning_payment(
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
-            initiating_op = old_ledger_entry.op
+            initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
             if isinstance(initiating_op, TransferBase):
                 if getattr(initiating_op, "paywithsats", None):
                     ledger_entries_list = await keepsats_to_lightning_payment_success(
-                        payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
+                        payment=payment,
+                        old_ledger_entry=old_ledger_entry,
+                        nobroadcast=nobroadcast,
                     )
+                    if ledger_entries_list:
+                        # We can now safely release the hold on the Keepsats
+                        await release_keepsats(hive_transfer=initiating_op)
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(
                         payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
@@ -231,7 +259,9 @@ async def process_lightning_payment(
                     f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
                 )
 
-        raise NotImplementedError(f"Not implemented yet {v4vapp_group_id} {keysend_message}")
+        message = f"Not implemented yet {v4vapp_group_id} {keysend_message}"
+        logger.error(message)
+        raise NotImplementedError(message)
 
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
@@ -241,35 +271,36 @@ async def process_lightning_payment(
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
-            print(old_ledger_entry)
-            hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.op)
+            hive_transfer = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
             # MARK: Hive to Lightning Payment Failed
             if isinstance(hive_transfer, TransferBase):
-                async with hive_transfer:
-                    # If a payment fails we need to update the hive_transfer if
-                    if not hive_transfer.replies:
-                        # MARK: Record Failed payment and make a refund
-                        # No Journal entry necessary because the Hive Refund will automatically create one
-                        failure_reason = from_snake_case(payment.failure_reason.lower())
-                        return_hive_message = f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
-                        task = asyncio.create_task(
-                            return_hive_transfer(
-                                hive_transfer=hive_transfer,
-                                reason=return_hive_message,
-                                nobroadcast=nobroadcast,
-                            )
+                # If a payment fails we need to update the hive_transfer if
+                if not hive_transfer.replies:
+                    # MARK: Record Failed payment and make a refund
+                    # No Journal entry necessary because the Hive Refund will automatically create one
+                    failure_reason = from_snake_case(payment.failure_reason.lower())
+                    return_hive_message = (
+                        f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
+                    )
+                    try:
+                        await return_hive_transfer(
+                            hive_transfer=hive_transfer,
+                            reason=return_hive_message,
+                            nobroadcast=nobroadcast,
                         )
-                        task.add_done_callback(lambda t: handle_tasks([t]))
-                        task.set_name(
-                            f"Return Hive after failure in Hive to Lightning transfer for {hive_transfer.group_id_p}"
-                        )
-                        return []
-                    else:
-                        logger.warning(
-                            f"Hive transfer already has replies, skipping update. {hive_transfer.short_id}",
+                    except Exception as e:
+                        logger.exception(
+                            f"Error processing return_hive_transfer: {e}",
                             extra={"notification": False, **hive_transfer.log_extra},
                         )
-                        return []
+                        raise e
+                    return []
+                else:
+                    logger.warning(
+                        f"Hive transfer already has replies, skipping update. {hive_transfer.short_id}",
+                        extra={"notification": False, **hive_transfer.log_extra},
+                    )
+                    return []
 
     if not v4vapp_group_id:
         raise LedgerEntryCreationException(
@@ -313,8 +344,9 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
 
     ledger_entry = LedgerEntry(
         group_id=op.group_id,
+        short_id=op.short_id,
         timestamp=op.timestamp,
-        op=op,
+        op_type=op.op_type,
     )
     # MARK: Transfers or Recurrent Transfers
     if isinstance(op, BlockMarker):
@@ -325,7 +357,13 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
             ledger_entry = await process_transfer_op(hive_transfer=op, ledger_entry=ledger_entry)
 
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
-            ledger_entry = await process_create_fill_order_op(op=op, ledger_entry=ledger_entry)
+            ledger_entry = await process_create_fill_order_op(
+                limit_fill_order=op, ledger_entry=ledger_entry
+            )
+
+        elif isinstance(op, CustomJson):
+            # CustomJson operations are not yet implemented
+            raise NotImplementedError("CustomJson operations are not yet implemented.")
         return ledger_entry
 
     except LedgerEntryException as e:
@@ -366,13 +404,13 @@ async def process_transfer_op(
     ledger_entry.credit_unit = ledger_entry.debit_unit = hive_transfer.unit
     ledger_entry.credit_amount = ledger_entry.debit_amount = hive_transfer.amount_decimal
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
+    ledger_entry.cust_id = hive_transfer.cust_id
 
     # MARK: Server to Treasury
     if (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = treasury_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.description = f"Server to Treasury transfer: {base_description}"
@@ -382,7 +420,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == server_account
     ):
-        ledger_entry.cust_id = treasury_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Server transfer: {base_description}"
@@ -392,7 +429,6 @@ async def process_transfer_op(
         hive_transfer.from_account == funding_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = funding_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=funding_account
@@ -403,7 +439,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == funding_account
     ):
-        ledger_entry.cust_id = funding_account
         ledger_entry.debit = LiabilityAccount(
             name="Owner Loan Payable (funding)", sub=treasury_account
         )
@@ -415,7 +450,6 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
     ):
-        ledger_entry.cust_id = exchange_account
         ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
@@ -425,7 +459,6 @@ async def process_transfer_op(
         hive_transfer.from_account == exchange_account
         and hive_transfer.to_account == treasury_account
     ):
-        ledger_entry.cust_id = exchange_account
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
@@ -436,25 +469,21 @@ async def process_transfer_op(
         and hive_transfer.to_account in expense_accounts
     ):
         # TODO: #110 Implement the system for expense accounts
-        ledger_entry.cust_id = hive_transfer.to_account
         raise NotImplementedError("External expense accounts not implemented yet")
     # MARK: Server to customer account withdrawal
     elif hive_transfer.from_account == server_account:
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
-        ledger_entry.cust_id = customer
         ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        if hive_transfer.extract_reply_short_id:
-            follow_on_task = complete_hive_to_lightning(hive_transfer=hive_transfer)
+        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
 
     # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
-        ledger_entry.cust_id = customer
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
@@ -467,18 +496,20 @@ async def process_transfer_op(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
+    await ledger_entry.save()
 
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
-        task = asyncio.create_task(follow_on_task)
-        task.add_done_callback(lambda t: handle_tasks([t]))
-        task.set_name(f"Process hive to lightning {hive_transfer.group_id_p}")
+        try:
+            await follow_on_task
+        except Exception as e:
+            logger.exception(f"Follow-on task failed: {e}", extra={"notification": False})
 
     return ledger_entry
 
 
 async def process_create_fill_order_op(
-    op: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
+    limit_fill_order: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
 ) -> LedgerEntry:
     """
     Processes the create or fill order operation and creates a ledger entry if applicable.
@@ -490,57 +521,63 @@ async def process_create_fill_order_op(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-    if isinstance(op, LimitOrderCreate):
-        logger.info(f"Limit order create: {op.orderid}")
-        if not op.conv or op.conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.conv = CryptoConv(
-                conv_from=op.amount_to_sell.unit,  # HIVE
-                value=op.amount_to_sell.amount_decimal,  # 25.052 HIVE
-                converted_value=op.min_to_receive.amount_decimal,  # 6.738 HBD
+    if isinstance(limit_fill_order, LimitOrderCreate):
+        logger.info(f"Limit order create: {limit_fill_order.orderid}")
+        if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.conv = CryptoConv(
+                conv_from=limit_fill_order.amount_to_sell.unit,  # HIVE
+                value=limit_fill_order.amount_to_sell.amount_decimal,  # 25.052 HIVE
+                converted_value=limit_fill_order.min_to_receive.amount_decimal,  # 6.738 HBD
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        ledger_entry.op = op
-        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=op.owner)
-        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=op.owner)
-        ledger_entry.description = op.ledger_str
+        ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
+        ledger_entry.credit = AssetAccount(
+            name="Customer Deposits Hive", sub=limit_fill_order.owner
+        )
+        ledger_entry.description = limit_fill_order.ledger_str
         ledger_entry.ledger_type = LedgerType.LIMIT_ORDER_CREATE
-        ledger_entry.debit_unit = ledger_entry.credit_unit = op.amount_to_sell.unit
-        ledger_entry.debit_amount = ledger_entry.credit_amount = op.amount_to_sell.amount_decimal
-        ledger_entry.debit_conv = ledger_entry.credit_conv = op.conv
-    elif isinstance(op, FillOrder):
-        logger.info(f"Fill order operation: {op.open_orderid} {op.current_owner}")
-        if not op.debit_conv or op.debit_conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.debit_conv = CryptoConv(
-                conv_from=op.open_pays.unit,  # HIVE
-                value=op.open_pays.amount_decimal,  # 25.052 HIVE
-                converted_value=op.current_pays.amount_decimal,  # 6.738 HBD
+        ledger_entry.debit_unit = ledger_entry.credit_unit = limit_fill_order.amount_to_sell.unit
+        ledger_entry.debit_amount = ledger_entry.credit_amount = (
+            limit_fill_order.amount_to_sell.amount_decimal
+        )
+        ledger_entry.debit_conv = ledger_entry.credit_conv = limit_fill_order.conv
+    elif isinstance(limit_fill_order, FillOrder):
+        logger.info(
+            f"Fill order operation: {limit_fill_order.open_orderid} {limit_fill_order.current_owner}"
+        )
+        if not limit_fill_order.debit_conv or limit_fill_order.debit_conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.debit_conv = CryptoConv(
+                conv_from=limit_fill_order.open_pays.unit,  # HIVE
+                value=limit_fill_order.open_pays.amount_decimal,  # 25.052 HIVE
+                converted_value=limit_fill_order.current_pays.amount_decimal,  # 6.738 HBD
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        if not op.credit_conv or op.credit_conv.is_unset():
-            quote = await TrackedBaseModel.nearest_quote(timestamp=op.timestamp)
-            op.credit_conv = CryptoConv(
-                conv_from=op.current_pays.unit,  # HBD
-                value=op.current_pays.amount_decimal,  # 6.738 HBD
-                converted_value=op.open_pays.amount_decimal,  # 25.052 HIVE
+        if not limit_fill_order.credit_conv or limit_fill_order.credit_conv.is_unset():
+            quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
+            limit_fill_order.credit_conv = CryptoConv(
+                conv_from=limit_fill_order.current_pays.unit,  # HBD
+                value=limit_fill_order.current_pays.amount_decimal,  # 6.738 HBD
+                converted_value=limit_fill_order.open_pays.amount_decimal,  # 25.052 HIVE
                 quote=quote,
-                timestamp=op.timestamp,
+                timestamp=limit_fill_order.timestamp,
             )
-        ledger_entry.op = op
-        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=op.current_owner)
-        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=op.current_owner)
-        ledger_entry.description = op.ledger_str
+        ledger_entry.debit = AssetAccount(
+            name="Customer Deposits Hive", sub=limit_fill_order.current_owner
+        )
+        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.current_owner)
+        ledger_entry.description = limit_fill_order.ledger_str
         ledger_entry.ledger_type = LedgerType.FILL_ORDER
-        ledger_entry.debit_unit = op.open_pays.unit  # HIVE (received)
-        ledger_entry.credit_unit = op.current_pays.unit  # HBD (given)
-        ledger_entry.debit_amount = op.open_pays.amount_decimal  # 25.052 HIVE
-        ledger_entry.credit_amount = op.current_pays.amount_decimal  # 6.738 HBD
-        ledger_entry.debit_conv = op.debit_conv  # Conversion for HIVE
-        ledger_entry.credit_conv = op.credit_conv  # Conversion for HBD
+        ledger_entry.debit_unit = limit_fill_order.open_pays.unit  # HIVE (received)
+        ledger_entry.credit_unit = limit_fill_order.current_pays.unit  # HBD (given)
+        ledger_entry.debit_amount = limit_fill_order.open_pays.amount_decimal  # 25.052 HIVE
+        ledger_entry.credit_amount = limit_fill_order.current_pays.amount_decimal  # 6.738 HBD
+        ledger_entry.debit_conv = limit_fill_order.debit_conv  # Conversion for HIVE
+        ledger_entry.credit_conv = limit_fill_order.credit_conv  # Conversion for HBD
     else:
-        logger.error(f"Unsupported operation type: {type(op)}")
+        logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
     return ledger_entry

@@ -44,7 +44,7 @@ def test_strip_lightning():
 @pytest.mark.parametrize(
     "data, result",
     [
-        ("yelpingparade74@walletofsatoshi.com", "LightningAddress"),
+        ("brianoflondon@walletofsatoshi.com", "LightningAddress"),
         ("brianoflondon@coincorner.io", "LightningAddress"),
         ("v4vapp.dev@v4v.app", "LightningAddress"),
         ("adam@getalby.com", "LightningAddress"),

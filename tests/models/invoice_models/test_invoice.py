@@ -8,13 +8,13 @@ def test_invoice_model_validate():
     """
     Test the InvoiceModel.validate method.
     """
-    TrackedBaseModel.update_quote_sync()
+    TrackedBaseModel.update_quote_sync(store_db=False)
     with open("tests/data/lnd_to_pydantic_models/invoices.jsonl", "r") as f:
         for line in f:
             invoice = None
             if '"fullDocument"' in line:
                 full_document = json.loads(line)["change"]["fullDocument"]
                 invoice = Invoice.model_validate(full_document)
-                print(invoice.hive_accname)
+                print(invoice.cust_id)
                 if invoice.custom_records:
                     print(invoice.custom_records.podcast)

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
@@ -138,6 +139,11 @@ class Payment(TrackedBaseModel):
         default=None, description="Other custom records associated with the invoice"
     )
 
+    # Additional fields, not in the LND invoice (but calculated at ingestion time)
+    cust_id: CustIDType | None = Field(
+        default=None, description="Customer ID associated with the invoice"
+    )
+
     def __init__(self, lnrpc_payment: lnrpc.Payment | None = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
             data_dict = MessageToDict(lnrpc_payment, preserving_proto_field_name=True)
@@ -198,7 +204,7 @@ class Payment(TrackedBaseModel):
             for hop in self.htlcs[0].route.hops:
                 if custom_records := hop.custom_records:
                     self.custom_records = decode_all_custom_records(custom_records=custom_records)
-                    return
+                    self.cust_id = getattr(self.custom_records, "cust_id", "")
 
     # Methods from PaymentExtra
     @computed_field

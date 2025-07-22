@@ -71,6 +71,7 @@ async def main_async_start():
         logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
+        InternalConfig().shutdown()  # Ensure proper cleanup after tests
 
 
 @app.command()
