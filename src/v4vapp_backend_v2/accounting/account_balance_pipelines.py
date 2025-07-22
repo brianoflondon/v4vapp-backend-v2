@@ -365,9 +365,10 @@ def all_account_balances_pipeline(
                 "debits_view": [
                     {
                         "$project": {
-                            "type": "$debit.account_type",
+                            "account_type": "$debit.account_type",
                             "name": "$debit.name",
                             "sub": "$debit.sub",
+                            "contra": "$debit.contra",
                             "group_id": 1,
                             "short_id": 1,
                             "ledger_type": 1,
@@ -387,9 +388,10 @@ def all_account_balances_pipeline(
                 "credits_view": [
                     {
                         "$project": {
-                            "type": "$credit.account_type",
+                            "account_type": "$credit.account_type",
                             "name": "$credit.name",
                             "sub": "$credit.sub",
+                            "contra": "$credit.contra",
                             "group_id": 1,
                             "short_id": 1,
                             "ledger_type": 1,
@@ -413,7 +415,12 @@ def all_account_balances_pipeline(
         {"$replaceRoot": {"newRoot": "$combined"}},
         {
             "$group": {
-                "_id": {"type": "$type", "name": "$name", "sub": "$sub"},
+                "_id": {
+                    "account_type": "$account_type",
+                    "name": "$name",
+                    "sub": "$sub",
+                    "contra": "$contra",
+                },
                 "items": {"$push": "$$ROOT"},
             }
         },
@@ -725,19 +732,21 @@ def all_account_balances_pipeline(
                             },
                         },
                     }
-                }
+                },
             }
         },
         {"$project": {"unit_groups": {"$arrayToObject": "$unit_groups"}}},
         {
             "$project": {
-                "type": "$_id.type",
+                "_id": 0,
+                "account_type": "$_id.account_type",
                 "name": "$_id.name",
                 "sub": "$_id.sub",
+                "contra": "$_id.contra",
                 "balances": "$unit_groups",
             }
         },
-        {"$sort": {"type": 1, "name": 1, "sub": 1}},
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
     ]
 
     return pipeline
