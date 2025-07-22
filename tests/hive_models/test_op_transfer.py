@@ -109,11 +109,11 @@ async def test_model_dump_transfer_enhanced():
     v4v_config = V4VConfig()
     TrackedBaseModel.last_quote = last_quote()
     assert v4v_config.data.conv_fee_sats == 50
-    await Transfer.update_quote(store_db=False)
+    # await Transfer.update_quote(store_db=False)
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = Transfer.model_validate(hive_event)
-            await transfer.update_conv()
+            await transfer.update_conv(quote=last_quote())
             hive_event_model = transfer.model_dump(by_alias=True)
             assert hive_event_model["d_memo"] == transfer.d_memo
             assert hive_event_model["from"] == transfer.from_account

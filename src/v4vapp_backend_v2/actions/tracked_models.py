@@ -6,6 +6,7 @@ from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
@@ -566,6 +567,14 @@ class TrackedBaseModel(BaseModel):
                     extra={"notification": False},
                 )
                 return cls.last_quote
+
+        except ServerSelectionTimeoutError as e:
+            logger.error(
+                f"Failed to connect to the database: {e}",
+                extra={"notification": False},
+            )
+            return cls.last_quote
+
         except Exception as e:
             logger.warning(f"Failed to find nearest quote: {e}", extra={"notification": False})
         return cls.last_quote

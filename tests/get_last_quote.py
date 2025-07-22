@@ -59,4 +59,4 @@ def last_quote() -> QuoteResponse:
         fetch_date=fetch_date,
         source="Binance",
     )
-    return all_quotes.get_binance_quote()
+    return all_quotes.quotes["Binance"]
