@@ -5,7 +5,10 @@ from pprint import pprint
 import pytest
 from bson import json_util
 
-from v4vapp_backend_v2.accounting.account_balance_pipelines import account_balance_details_pipeline
+from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    account_balance_details_pipeline,
+    all_account_balances_pipeline,
+)
 from v4vapp_backend_v2.accounting.account_balances import (
     get_account_balance,
     get_account_balance_printout,
@@ -107,4 +110,23 @@ async def test_account_details_pipeline():
             print(f"Unit: {unit}")
             for line in lines:
                 print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")
-                
+
+
+
+async def test_all_account_balances_pipeline():
+    """
+    Test the account details pipeline.
+    """
+    account = LiabilityAccount(name="Keepsats Hold", sub="keepsats")
+    pipeline = all_account_balances_pipeline(account=account)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    pprint(results)
+    # pprint(results[0])
+    # for result in results:
+    #     print(result)
+    # for unit_result in results:
+    #     for unit, lines in unit_result.items():
+    #         print(f"Unit: {unit}")
+    #         for line in lines:
+    #             print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")

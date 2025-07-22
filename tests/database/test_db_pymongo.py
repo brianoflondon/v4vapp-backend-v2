@@ -33,6 +33,9 @@ async def set_base_config_path_combined(module_monkeypatch):
     )
     module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
     i_c = InternalConfig()
+    # Reset DB client completely
+    if hasattr(InternalConfig, "db_client"):
+        delattr(InternalConfig, "db_client")
     print("InternalConfig initialized:", i_c)
     db_conn = DBConn()
     await db_conn.setup_database()

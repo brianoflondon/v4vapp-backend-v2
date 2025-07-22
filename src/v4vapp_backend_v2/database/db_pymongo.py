@@ -224,8 +224,8 @@ class DBConn:
                 f"{DATABASE_ICON} {logger.name} "
                 f"Database {self.db_name} is set up with user {self.db_user}"
             )
-            if InternalConfig.db_client:
-                await InternalConfig.db_client.close()
+            # if InternalConfig.db_client:
+            #     await InternalConfig.db_client.close()
             InternalConfig.db_client = AsyncMongoClient(self.uri, tz_aware=True)
             InternalConfig.db = InternalConfig.db_client[self.db_name]
             logger.info(
@@ -568,4 +568,7 @@ class DBConn:
                 )
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
+                logger.error(message, extra={"notification": False})
                 logger.error(message, extra={"notification": False})

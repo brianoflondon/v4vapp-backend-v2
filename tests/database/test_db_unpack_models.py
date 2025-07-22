@@ -48,7 +48,6 @@ params = {
 }
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("collection_name,validator", params.items())
 async def test_db_collections(collection_name, validator):
     """
