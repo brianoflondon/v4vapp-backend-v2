@@ -1,12 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, RootModel
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 """
@@ -86,21 +87,63 @@ class LightningLimitSummary:
     limit_ok: bool
 
 
-class AccountBalanceDetails(BaseModel):
-    """
-    Model for account balance details.
-    """
+class AccountBalanceLine(BaseModel):
+    group_id: str = ""
+    short_id: str = ""
+    ledger_type: str = ""
+    timestamp: datetime = datetime.now(tz=timezone.utc)
+    description: str = ""
+    cust_id: str = ""
+    op_type: str = ""
+    account_type: str = ""
+    name: str = ""
+    sub: str = ""
+    contra: bool = False
+    amount: float | int = 0
+    amount_signed: float | int = 0
+    unit: str = ""
+    conv: CryptoConv = CryptoConv()
+    conv_signed: CryptoConv = CryptoConv()
+    side: str = Field("", description="The side of the transaction, e.g., 'debit' or 'credit'")
+    amount_running_total: float | int = 0
+    conv_running_total: ConvertedSummary = ConvertedSummary()
 
-    unit: Currency
-    lines: List[Dict[str, Any]] = []
+
+class LedgerAccountDetails(LedgerAccount):
+    balances: Dict[Currency, List[AccountBalanceLine]] = {}
 
 
-class AccountBalance(BaseModel):
-    """
-    Model for account balance details.
-    """
+class AccountBalances(RootModel):
+    root: List[LedgerAccountDetails]
 
-    account: LedgerAccount
-    balances: Dict[str, List[Dict[str, Any]]] = {}
-    as_of_date: datetime = datetime.now(tz=timezone.utc)
-    age: timedelta = timedelta(days=0)
+
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line

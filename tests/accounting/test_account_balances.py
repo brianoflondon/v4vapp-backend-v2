@@ -10,10 +10,12 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
 )
 from v4vapp_backend_v2.accounting.account_balances import (
-    get_account_balance,
-    get_account_balance_printout,
+    account_balance_printout,
+    all_account_balances,
     list_all_accounts,
+    one_account_balance,
 )
+from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -72,31 +74,6 @@ async def test_list_all_accounts():
     pprint(accounts)
 
 
-async def test_get_account_balance():
-    """
-    Test to get the balance of a specific account.
-    """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_df = await get_account_balance(account)
-    assert balance_df is not None
-    assert not balance_df.empty
-    print(balance_df)
-
-
-async def test_get_account_balance_printout():
-    """
-    Test to get the balance of a specific account.
-    """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_printout, balance_data = await get_account_balance_printout(account, line_items=True)
-    print(balance_printout)
-    pprint(balance_data)
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_printout, balance_data = await get_account_balance_printout(account)
-    print(balance_printout)
-    # pprint(balance_data)
-
-
 async def test_account_details_pipeline():
     """
     Test the account details pipeline.
@@ -112,21 +89,59 @@ async def test_account_details_pipeline():
                 print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")
 
 
-
 async def test_all_account_balances_pipeline():
     """
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="Keepsats Hold", sub="keepsats")
     pipeline = all_account_balances_pipeline(account=account)
-    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
-    results = await cursor.to_list()
-    pprint(results)
-    # pprint(results[0])
-    # for result in results:
-    #     print(result)
-    # for unit_result in results:
-    #     for unit, lines in unit_result.items():
-    #         print(f"Unit: {unit}")
-    #         for line in lines:
-    #             print(f"  {line['timestamp']} {line['amount_running_total']} {line['unit']}")
+    assert isinstance(pipeline, list)
+    assert len(pipeline) > 0
+
+
+async def test_all_account_balances():
+    """Test to get all account balances."""
+    balances = await all_account_balances()
+    assert isinstance(balances, AccountBalances)
+
+    for item in balances.root:
+        print(item)
+        for currency, lines in item.balances.items():
+            last_running_total = lines[-1].amount_running_total
+            print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
+
+
+async def test_one_account_balances():
+    """Test to get all account balances."""
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance = await one_account_balance(account=account)
+    assert isinstance(balance, LedgerAccountDetails)
+
+    print(balance)
+    for currency, lines in balance.balances.items():
+        print(f"Currency: {currency}")
+        for line in lines:
+            print(f"  {line.timestamp} {line.amount_running_total:,.2f} {line.unit}")
+        if not lines:
+            print("  No lines found for this currency.")
+
+            last_running_total = lines[-1].amount_running_total
+            print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
+
+    units = set(balance.balances.keys())
+    for unit in units:
+        if balance.balances[unit]:
+            for row in balance.balances[unit]:
+                timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
+                print(timestamp)
+
+
+async def test_get_account_balance_printout2():
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    result, details = await account_balance_printout(account, line_items=True)
+    print(result)
+    result, details = await account_balance_printout(account, line_items=False)
+    print(result)
+    accounts = await list_all_accounts()
+    for account in accounts:
+        result, details = await account_balance_printout(account)

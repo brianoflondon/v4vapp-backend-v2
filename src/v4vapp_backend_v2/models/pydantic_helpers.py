@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, List
 
 from bson import Int64
 from pydantic import GetCoreSchemaHandler, ValidationInfo
@@ -54,7 +54,9 @@ def convert_timestamp_to_datetime(timestamp: int | float) -> datetime:
     return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
 
 
-def convert_datetime_fields(item: dict) -> dict:
+def convert_datetime_fields(
+    item: dict[str, Any] | List[dict[str, Any]],
+) -> dict | List[dict[str, Any]]:
     """
     Converts timestamp fields in an item dictionary to datetime objects.
 
@@ -106,12 +108,16 @@ def convert_datetime_fields(item: dict) -> dict:
         # Always return a UTC tz-aware datetime as fallback
         return datetime.now(tz=timezone.utc)
 
+    if isinstance(item, list):
+        return [convert_datetime_fields(i) for i in item]
+
     keys = [
         "creation_date",
         "settle_date",
         "creation_time_ns",
         "resolve_time_ns",
         "attempt_time_ns",
+        "fetch_date",
     ]
     for key in keys:
         value = item.get(key)

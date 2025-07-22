@@ -1,6 +1,7 @@
 import asyncio
 from timeit import default_timer as timer
 from typing import List, Union
+from uuid import uuid4
 
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
@@ -54,8 +55,9 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
-    cust_id = getattr(tracked_op, "cust_id", "unknown_cust_id")
-    cust_id = "unknown_cust_id" if not cust_id else cust_id
+    unknown_cust_id = uuid4()
+    cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
+    cust_id = str(unknown_cust_id) if not cust_id else cust_id
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
     start = timer()
     try:
@@ -109,17 +111,13 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         tracked_op.process_time = process_time
         await tracked_op.save()
         logger.info(f"{'=' * 50}")
-        logger.info(
-            f"{process_time:>7,.2f} s {cust_id} processing tracked operation\n{tracked_op.log_str}"
-        )
+        logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
+        logger.info(f"{tracked_op.log_str}")
         logger.info(f"{'=' * 50}")
         # if cust_id:
         #     # Ensure the lock is released even if an error occurs
         #     logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
         #     await CustID.release_lock(cust_id)
-        logger.info(
-            f"Finished Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}"
-        )
 
 
 async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:

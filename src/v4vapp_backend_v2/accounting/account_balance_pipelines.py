@@ -341,33 +341,43 @@ def all_account_balances_pipeline(
 
     """
     if account:
-        stage_0 = {
+        facet_debit_match = {
             "$match": {
-                "$or": [
-                    {"debit.name": account.name, "debit.sub": account.sub},
-                    {"credit.name": account.name, "credit.sub": account.sub},
-                ]
+                "debit.name": account.name,
+                "debit.sub": account.sub,
+                "debit.account_type": account.account_type,
+            }
+        }
+        facet_credit_match = {
+            "$match": {
+                "credit.name": account.name,
+                "credit.sub": account.sub,
+                "credit.account_type": account.account_type,
             }
         }
     else:
-        stage_0 = {"$match": {}}
+        facet_debit_match = {"$match": {}}
+        facet_credit_match = {"$match": {}}
+
     if age:
         start_date = as_of_date - age
         date_range_query = {"$gte": start_date, "$lte": as_of_date}
     else:
         date_range_query = {"$lte": as_of_date}
 
-    pipeline = [
-        stage_0,
+    pipeline: Sequence[Mapping[str, Any]] = [
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$facet": {
                 "debits_view": [
+                    facet_debit_match,
                     {
                         "$project": {
-                            "type": "$debit.account_type",
+                            "_id": 0,
+                            "account_type": "$debit.account_type",
                             "name": "$debit.name",
                             "sub": "$debit.sub",
+                            "contra": "$debit.contra",
                             "group_id": 1,
                             "short_id": 1,
                             "ledger_type": 1,
@@ -382,14 +392,17 @@ def all_account_balances_pipeline(
                             "op_type": 1,
                             "side": "debit",
                         }
-                    }
+                    },
                 ],
                 "credits_view": [
+                    facet_credit_match,
                     {
                         "$project": {
-                            "type": "$credit.account_type",
+                            "_id": 0,
+                            "account_type": "$credit.account_type",
                             "name": "$credit.name",
                             "sub": "$credit.sub",
+                            "contra": "$credit.contra",
                             "group_id": 1,
                             "short_id": 1,
                             "ledger_type": 1,
@@ -404,7 +417,7 @@ def all_account_balances_pipeline(
                             "op_type": 1,
                             "side": "credit",
                         }
-                    }
+                    },
                 ],
             }
         },
@@ -413,7 +426,12 @@ def all_account_balances_pipeline(
         {"$replaceRoot": {"newRoot": "$combined"}},
         {
             "$group": {
-                "_id": {"type": "$type", "name": "$name", "sub": "$sub"},
+                "_id": {
+                    "account_type": "$account_type",
+                    "name": "$name",
+                    "sub": "$sub",
+                    "contra": "$contra",
+                },
                 "items": {"$push": "$$ROOT"},
             }
         },
@@ -725,19 +743,21 @@ def all_account_balances_pipeline(
                             },
                         },
                     }
-                }
+                },
             }
         },
         {"$project": {"unit_groups": {"$arrayToObject": "$unit_groups"}}},
         {
             "$project": {
-                "type": "$_id.type",
+                "_id": 0,
+                "account_type": "$_id.account_type",
                 "name": "$_id.name",
                 "sub": "$_id.sub",
+                "contra": "$_id.contra",
                 "balances": "$unit_groups",
             }
         },
-        {"$sort": {"type": 1, "name": 1, "sub": 1}},
+        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
     ]
 
     return pipeline

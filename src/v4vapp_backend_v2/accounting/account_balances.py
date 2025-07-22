@@ -1,24 +1,24 @@
-from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, List, Mapping, Tuple
 
-import pandas as pd
-
-from v4vapp_backend_v2.accounting.account_balance_pipelines import list_all_accounts_pipeline
+from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    all_account_balances_pipeline,
+    list_all_accounts_pipeline,
+)
 from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalances,
     AccountBalanceSummary,
     ConvertedSummary,
+    LedgerAccountDetails,
     LedgerConvSummary,
     LightningLimitSummary,
     UnitSummary,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    NORMAL_DEBIT_ACCOUNTS,
     AssetAccount,
     LedgerAccount,
     LiabilityAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
@@ -27,6 +27,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
 UNIT_TOLERANCE = {
     "HIVE": 0.001,
@@ -35,120 +36,49 @@ UNIT_TOLERANCE = {
 }
 
 
-async def get_account_balance(
+async def all_account_balances(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> AccountBalances:
+    pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    clean_results = convert_datetime_fields(results)
+
+    account_balances = AccountBalances.model_validate(clean_results)
+
+    return account_balances
+
+
+async def one_account_balance(
     account: LedgerAccount,
-    df: pd.DataFrame = pd.DataFrame(),
-    full_history: bool = False,
-    as_of_date: datetime | None = None,
-) -> pd.DataFrame:
-    """
-    Asynchronously retrieves and computes the account balance transactions for a given ledger account.
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta | None = None,
+) -> LedgerAccountDetails:
+    pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    clean_results = convert_datetime_fields(results)
 
-    Args:
-        account (LedgerAccount): The ledger account for which to retrieve the balance.
-        df (pd.DataFrame, optional): An optional DataFrame containing ledger transactions. If not provided or empty, transactions will be fetched.
-        full_history (bool, optional): If True, retrieves the full transaction history. (Currently unused in this function.)
-        as_of_date (datetime | None, optional): The cutoff date for transactions. Defaults to the current UTC time if not provided.
+    account_balance = AccountBalances.model_validate(clean_results)
 
-    Returns:
-        pd.DataFrame: A DataFrame containing the account's debit and credit transactions, with signed amounts calculated according to account type.
-        If no transactions are found, returns an empty DataFrame.
-
-    Notes:
-        - The function filters transactions for the specified account and sub-account (if provided).
-        - Signed amounts are positive for debits to Asset accounts and negative for credits; the opposite applies for other account types.
-        - The resulting DataFrame includes both debit and credit transactions, sorted by timestamp.
-    """
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
-    if df.empty:
-        df = await get_ledger_dataframe(
-            as_of_date=as_of_date,
-            filter_by_account=account,
+    return (
+        account_balance.root[0]
+        if account_balance.root
+        else LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
         )
-
-    if df.empty:
-        logger.debug(
-            f"No transactions found for account {account.name} up to {as_of_date}.",
-            extra={"notification": False, "account": account.name, "as_of_date": as_of_date},
-        )
-        return pd.DataFrame()
-
-    # Filter transactions for the account (debit or credit)
-    debit_df = df[df["debit_name"] == account.name].copy()
-    credit_df = df[df["credit_name"] == account.name].copy()
-
-    # Apply sub-account filter if provided
-    if account.sub:
-        debit_df = debit_df[debit_df["debit_sub"] == account.sub]
-        credit_df = credit_df[credit_df["credit_sub"] == account.sub]
-
-    # Prepare debit and credit DataFrames
-    debit_df = debit_df[
-        [
-            "timestamp",
-            "description",
-            "ledger_type",
-            "short_id",
-            "debit_amount",
-            "debit_unit",
-            "debit_conv_hive",
-            "debit_conv_hbd",
-            "debit_conv_usd",
-            "debit_conv_sats",
-            "debit_conv_msats",
-            "debit_contra",
-        ]
-    ].copy()
-    credit_df = credit_df[
-        [
-            "timestamp",
-            "description",
-            "ledger_type",
-            "short_id",
-            "credit_amount",
-            "credit_unit",
-            "credit_conv_hive",
-            "credit_conv_hbd",
-            "credit_conv_usd",
-            "credit_conv_sats",
-            "credit_conv_msats",
-            "credit_contra",
-        ]
-    ].copy()
-
-    # Add debit/credit columns and signed amounts
-    debit_df["debit_amount"] = debit_df["debit_amount"]
-    debit_df["credit_amount"] = 0.0
-    debit_df["debit_unit"] = debit_df["debit_unit"]
-    debit_df["credit_unit"] = None
-    credit_df["debit_amount"] = 0.0
-    credit_df["credit_amount"] = credit_df["credit_amount"]
-    credit_df["debit_unit"] = None
-    credit_df["credit_unit"] = credit_df["credit_unit"]
-
-    # Determine signed amounts based on account type
-    if account.account_type in NORMAL_DEBIT_ACCOUNTS:
-        # Asset, Expense, Dividends
-        debit_df["signed_amount"] = debit_df["debit_amount"]
-        credit_df["signed_amount"] = -credit_df["credit_amount"]
-    else:  # Liability, Equity, Revenue ECONOMIC_BENEFIT_CREDIT_INCREASE
-        debit_df["signed_amount"] = -debit_df["debit_amount"]
-        credit_df["signed_amount"] = credit_df["credit_amount"]
-
-    # Combine debits and credits
-    combined_df = pd.concat([debit_df, credit_df], ignore_index=True)
-    combined_df = combined_df.sort_values(by="timestamp").reset_index(drop=True)
-
-    return combined_df
+    )
 
 
-async def get_account_balance_printout(
+async def account_balance_printout(
     account: LedgerAccount,
-    df: pd.DataFrame = pd.DataFrame(),
     line_items: bool = False,
-    as_of_date: datetime | None = None,
-) -> Tuple[str, AccountBalanceSummary]:
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta = timedelta(seconds=0),
+) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
     Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
@@ -170,65 +100,26 @@ async def get_account_balance_printout(
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
 
-    combined_df = await get_account_balance(
-        account=account,
-        df=df,
-        full_history=line_items,
-        as_of_date=as_of_date,
-    )
-    if combined_df.empty:
-        return "No transactions found for this account up to today.", AccountBalanceSummary()
+    ledger_account_details = await one_account_balance(account=account, as_of_date=as_of_date)
+    units = set(ledger_account_details.balances.keys())
 
-    # Group by unit (process debit_unit and credit_unit separately)
-    units = set(combined_df["debit_unit"].dropna().unique()).union(
-        set(combined_df["credit_unit"].dropna().unique())
-    )
     title_line = f"Balance for {account}"
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
     output.append("-" * max_width)
 
-    if combined_df.empty:
+    if not ledger_account_details.balances:
         output.append("No transactions found for this account up to today.")
         output.append("=" * max_width)
-        return "\n".join(output), AccountBalanceSummary()
+        return "\n".join(output), ledger_account_details
 
-    total_usd = 0.0
-    total_sats = 0.0
-    unit_balances = {unit: 0.0 for unit in units}
+    total_usd = 0
+    total_sats = 0
 
-    summary = AccountBalanceSummary()
-    summary.total_usd = 0.0
-    summary.total_sats = 0.0
-    summary.line_items = []
-    summary.unit_summaries = {}
-
-    for unit in units:
-        unit_df = combined_df[
-            (combined_df["debit_unit"] == unit) | (combined_df["credit_unit"] == unit)
-        ].copy()
-        if unit_df.empty:
+    for unit in ["hive", "hbd", "msats"]:
+        if unit not in units:
             continue
-
-        # Fill NaN in conv fields with 0 to avoid NaN propagation
-        conv_columns = [
-            "debit_conv_hive",
-            "debit_conv_hbd",
-            "debit_conv_usd",
-            "debit_conv_sats",
-            "debit_conv_msats",
-            "credit_conv_hive",
-            "credit_conv_hbd",
-            "credit_conv_usd",
-            "credit_conv_sats",
-            "credit_conv_msats",
-        ]
-        unit_df[conv_columns] = unit_df[conv_columns].fillna(0)
-
-        # Calculate running balance for this unit
-        unit_df["running_balance"] = unit_df["signed_amount"].cumsum()
-
         # Determine display unit: if MSATS, display as SATS
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
         conversion_factor = 1000 if unit.upper() == "MSATS" else 1  # Convert MSATS to SATS
@@ -236,21 +127,17 @@ async def get_account_balance_printout(
         # Format output for this unit
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
-        if line_items:
-            for _, row in unit_df.iterrows():
-                contra_str = (
-                    "(-)"
-                    if (pd.notna(row["credit_contra"]) and row["credit_contra"])
-                    or (pd.notna(row["debit_contra"]) and row["debit_contra"])
-                    else "   "
-                )
-                timestamp = row["timestamp"].strftime("%Y-%m-%d %H:%M")
-                description = truncate_text(row["description"], 45)
-                ledger_type = row["ledger_type"]
-                debit = row["debit_amount"] if row["debit_unit"] == unit else 0.0
-                credit = row["credit_amount"] if row["credit_unit"] == unit else 0.0
-                balance = row["running_balance"]
-                short_id = row.get("short_id", "")
+        all_rows = ledger_account_details.balances[unit]
+        if all_rows:
+            for row in all_rows:
+                contra_str = "-c-" if row.contra else "   "
+                timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
+                description = truncate_text(row.description, 45)
+                ledger_type = row.ledger_type
+                debit = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                credit = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                balance = row.amount_running_total
+                short_id = row.short_id
                 if unit.upper() == "MSATS":
                     debit = debit / conversion_factor
                     credit = credit / conversion_factor
@@ -270,51 +157,18 @@ async def get_account_balance_printout(
                     f"{short_id:>15} "
                     f"{ledger_type:>11}"
                 )
-                summary.line_items.append(line)
-                output.append(line)
+                if line_items:
+                    output.append(line)
 
-        # Get the final balance for this unit and calculate converted values
-        final_balance = unit_df["running_balance"].iloc[-1]
-        unit_balances[unit] = final_balance
-
-        if abs(final_balance) > UNIT_TOLERANCE.get(unit, 0):
-            # Sum signed conversions row by row
-            total_hive = 0.0
-            total_hbd = 0.0
-            total_usd_for_unit = 0.0
-            total_sats_for_unit = 0.0
-            total_msats = 0.0
-
-            for _, row in unit_df.iterrows():
-                sign_factor = 1 if row["signed_amount"] > 0 else -1
-
-                conv_hive = sign_factor * max(row["debit_conv_hive"], row["credit_conv_hive"])
-                conv_hbd = sign_factor * max(row["debit_conv_hbd"], row["credit_conv_hbd"])
-                conv_usd = sign_factor * max(row["debit_conv_usd"], row["credit_conv_usd"])
-                conv_sats = sign_factor * max(row["debit_conv_sats"], row["credit_conv_sats"])
-                conv_msats = sign_factor * max(row["debit_conv_msats"], row["credit_conv_msats"])
-
-                total_hive += conv_hive
-                total_hbd += conv_hbd
-                total_usd_for_unit += conv_usd
-                total_sats_for_unit += conv_sats
-                total_msats += conv_msats
-
-            summary.unit_summaries[unit] = UnitSummary(
-                final_balance=final_balance,
-                converted=ConvertedSummary(
-                    hive=total_hive,
-                    hbd=total_hbd,
-                    usd=total_usd_for_unit,
-                    sats=total_sats_for_unit,
-                    msats=total_msats,
-                ),
+            final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
+            final_conv_balance = (
+                all_rows[-1].conv_running_total if all_rows else ConvertedSummary()
             )
-            summary.total_usd += total_usd_for_unit
-            summary.total_sats += total_sats_for_unit
-            summary.total_hive += total_hive
-            summary.total_hbd += total_hbd
-            summary.total_msats += total_msats
+            total_hive = final_conv_balance.hive if final_conv_balance else 0.0
+            total_hbd = final_conv_balance.hbd if final_conv_balance else 0.0
+            total_usd_for_unit = final_conv_balance.usd if final_conv_balance else 0
+            total_sats_for_unit = final_conv_balance.sats if final_conv_balance else 0
+            total_msats = final_conv_balance.msats if final_conv_balance else 0
 
             output.append("-" * max_width)
             output.append(
@@ -348,10 +202,9 @@ async def get_account_balance_printout(
     output.append(title_line)
 
     output.append("=" * max_width + "\n")
+    output_text = "\n".join(output)
 
-    summary.output_text = "\n".join(output)
-
-    return summary.output_text, summary
+    return output_text, ledger_account_details
 
 
 async def list_all_accounts() -> List[LedgerAccount]:
@@ -369,62 +222,6 @@ async def list_all_accounts() -> List[LedgerAccount]:
         account = LedgerAccount.model_validate(doc)
         accounts.append(account)
     return accounts
-
-
-async def get_all_accounts(
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
-) -> Dict[LedgerAccount, AccountBalanceSummary]:
-    """
-    Fetches the balance summaries for all accounts as of a specified date.
-
-    This asynchronous function retrieves all accounts from the ledger, computes their balances as of the given date,
-    and returns a dictionary mapping account identifiers to their respective balance summaries.
-
-        as_of_date (datetime, optional): The cutoff date for fetching account balances. Defaults to the current UTC datetime.
-
-        Dict[LedgerAccount, AccountBalanceSummary]: A dictionary where each key is an account identifier and each value is an
-        AccountBalanceSummary object representing the account's balance summary as of the specified date.
-
-    Raises:
-        Exception: Logs and skips any account for which balance computation fails.
-
-    """
-    accounts = await list_all_accounts()
-    ledger_df = await get_ledger_dataframe(
-        as_of_date=as_of_date,
-        filter_by_account=None,  # No specific account filter
-    )
-    try:
-        async with TaskGroup() as tg:
-            tasks = {
-                account: tg.create_task(
-                    get_account_balance_printout(
-                        account=account,
-                        df=ledger_df,
-                        line_items=False,
-                        as_of_date=as_of_date,
-                    )
-                )
-                for account in accounts
-            }
-    except Exception as e:
-        logger.exception(
-            f"Error creating tasks for accounts: {e}",
-            extra={"notification": False},
-        )
-        return {}
-    result = {}
-    for account, task in tasks.items():
-        try:
-            output_text, summary = await task
-            summary.output_text = None  # Remove output_text from summary
-            result[account] = summary
-        except Exception as e:
-            logger.error(
-                f"Error processing account {account}: {e}",
-                extra={"notification": False, "account": account, "error": str(e)},
-            )
-    return result
 
 
 async def ledger_pipeline_result(

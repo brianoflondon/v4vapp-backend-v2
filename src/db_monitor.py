@@ -242,8 +242,8 @@ async def subscribe_stream(
                 group_id = full_document.get("group_id", None) or ""
                 if ignore_changes(change):
                     # If the change is a lock, we want to resume the stream
-                    # and not process the operation.
-                    logger.info(
+                    # and not process the operation silently
+                    logger.debug(
                         f"{ICON}🔒 Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
