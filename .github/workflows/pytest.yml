@@ -74,6 +74,8 @@ jobs:
           mongodb-version: '8.0'
           mongodb-replica-set: rsPytest
           mongodb-port: 37017
+          mongodb-username: root
+          mongodb-password: test-admin-password
 
       # Set PYTHONPATH
       - name: Set PYTHONPATH
