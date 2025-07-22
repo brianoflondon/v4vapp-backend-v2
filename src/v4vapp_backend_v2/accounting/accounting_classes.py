@@ -1,10 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Any, Dict, List
+
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 """
 Helper classes for accounting summaries, including account balances and lightning conv summaries.
@@ -81,3 +84,23 @@ class LightningLimitSummary:
     total_msats: float
     output_text: str
     limit_ok: bool
+
+
+class AccountBalanceDetails(BaseModel):
+    """
+    Model for account balance details.
+    """
+
+    unit: Currency
+    lines: List[Dict[str, Any]] = []
+
+
+class AccountBalance(BaseModel):
+    """
+    Model for account balance details.
+    """
+
+    account: LedgerAccount
+    balances: Dict[str, List[Dict[str, Any]]] = {}
+    as_of_date: datetime = datetime.now(tz=timezone.utc)
+    age: timedelta = timedelta(days=0)
