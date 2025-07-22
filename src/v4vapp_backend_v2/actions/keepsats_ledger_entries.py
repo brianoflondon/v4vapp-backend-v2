@@ -33,7 +33,6 @@ async def hold_keepsats(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        op=hive_transfer,
         description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -74,7 +73,6 @@ async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None
         ledger_type=ledger_type,
         group_id=group_id,
         timestamp=datetime.now(tz=timezone.utc),
-        op=hive_transfer,
         description=f"Release Keepsats for {existing_entry.cust_id}",
         debit=LiabilityAccount(name="Keepsats Hold", sub="keepsats"),
         debit_unit=Currency.MSATS,

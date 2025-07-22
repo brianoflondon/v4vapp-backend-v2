@@ -80,7 +80,7 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     logger.info(
         f"Checking Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats"
     )
-    if not keepsats_balance:
+    if not keepsats_balance.balances.get(Currency.MSATS):
         raise HiveToLightningError(
             "Pay with sats operation detected, but no Keepsats balance found."
         )
@@ -649,7 +649,7 @@ async def convert_hive_to_keepsats(
             logger.info(f"Ledger Entries for hive to keepsats conversion: {hive_transfer.log_str}")
             logger.info(entry)
             await entry.save()
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
         keepsats_balance_after, net_sats_after = await get_keepsats_balance(
             cust_id=hive_transfer.from_account
         )
@@ -869,5 +869,3 @@ async def get_verified_hive_client_for_accounts(
         nobroadcast=nobroadcast,
     )
     return hive_client
-
-

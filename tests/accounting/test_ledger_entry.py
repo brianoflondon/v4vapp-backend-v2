@@ -48,7 +48,6 @@ async def test_ledger_entry_constructor():
         ledger_type=ledger_type,
         group_id=f"group_id_{ledger_type}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Conv Hive to Lightning {ledger_type}",
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -99,7 +98,6 @@ async def test_ledger_entry_constructor_conv_account():
         ledger_type=ledger_type,
         group_id=f"group_id_{ledger_type}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Conv Hive to Lightning {ledger_type}",
         debit=AssetAccount(
             name="Treasury Lightning",

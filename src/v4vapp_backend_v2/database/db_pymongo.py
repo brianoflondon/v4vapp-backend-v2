@@ -36,7 +36,15 @@ class DBConn:
         Returns:
             AsyncMongoClient: An instance of AsyncMongoClient connected to the database.
         """
-        return AsyncMongoClient(self.uri, tz_aware=True)
+        return AsyncMongoClient(
+            self.uri,
+            tz_aware=True,
+            connectTimeoutMS=10000,
+            serverSelectionTimeoutMS=10000,
+            retryWrites=True,
+            retryReads=True,
+            readPreference="primaryPreferred",
+        )
 
     def admin_client(self) -> AsyncMongoClient[Dict[str, Any]]:
         """

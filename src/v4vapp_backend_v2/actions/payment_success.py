@@ -103,7 +103,6 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {payment.destination} for {cust_id}",
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -131,7 +130,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
+
         description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
         debit=AssetAccount(
             name="Customer Deposits Hive",
@@ -169,7 +168,6 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Fee Lightning {cust_id} {cost_of_payment_msat / 1000:,.0f} sats",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -203,7 +201,6 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Allocate outgoing Lightning {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -229,7 +226,6 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
         debit=AssetAccount(
             name="External Lightning Payments",
@@ -262,7 +258,6 @@ async def hive_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
-            op=payment,
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",
@@ -349,7 +344,6 @@ async def keepsats_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"Allocate outgoing Keepsats {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -375,7 +369,6 @@ async def keepsats_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=payment,
         description=f"External Lightning payment {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
         debit=AssetAccount(
             name="External Lightning Payments",
@@ -411,7 +404,6 @@ async def keepsats_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
-            op=payment,
             description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
             debit=LiabilityAccount(
                 name="Customer Liability",
@@ -435,7 +427,6 @@ async def keepsats_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
-            op=payment,
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",

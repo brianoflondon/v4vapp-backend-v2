@@ -18,7 +18,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     return_hive_transfer,
 )
 from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
-from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
+from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
     keepsats_to_lightning_payment_success,
@@ -192,7 +192,8 @@ async def process_lightning_invoice(
         ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
         return [ledger_entry]
     if invoice.is_lndtohive:
-        await process_lightning_to_hive(invoice=invoice)
+        ledger_entries = await process_lightning_to_hive_or_keepsats(invoice=invoice)
+        return ledger_entries
     elif "Exchange" in invoice.memo:
         print(invoice)
 

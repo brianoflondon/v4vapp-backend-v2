@@ -7,12 +7,10 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
-    AccountBalanceSummary,
     ConvertedSummary,
     LedgerAccountDetails,
     LedgerConvSummary,
     LightningLimitSummary,
-    UnitSummary,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -75,7 +73,7 @@ async def one_account_balance(
 
 async def account_balance_printout(
     account: LedgerAccount,
-    line_items: bool = False,
+    line_items: bool = True,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(seconds=0),
 ) -> Tuple[str, LedgerAccountDetails]:
@@ -114,10 +112,11 @@ async def account_balance_printout(
         output.append("=" * max_width)
         return "\n".join(output), ledger_account_details
 
-    total_usd = 0
-    total_sats = 0
+    total_usd = 0.0
+    total_sats = 0.0
 
     for unit in ["hive", "hbd", "msats"]:
+        final_balance = 0
         if unit not in units:
             continue
         # Determine display unit: if MSATS, display as SATS
@@ -368,9 +367,9 @@ async def check_hive_conversion_limits(
 
 async def get_keepsats_balance(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     line_items: bool = False,
-) -> Tuple[AccountBalanceSummary, float]:
+) -> Tuple[LedgerAccountDetails, float]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -382,15 +381,17 @@ async def get_keepsats_balance(
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to the current UTC time.
 
     Returns:
-        AccountBalanceSummary: An object containing the balance summary for the specified customer.
+        LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(
         name="Customer Liability",
         sub=cust_id,
     )
 
-    printout_str, summary = await get_account_balance_printout(
-        account=account, as_of_date=as_of_date, line_items=line_items
+    account_balance = await one_account_balance(
+        account=account,
+        as_of_date=as_of_date + timedelta(hours=1),
     )
-    net_sats = summary.unit_summaries.get(Currency.MSATS, UnitSummary()).final_balance / 1000
-    return summary, net_sats
+    net_msats_details = account_balance.balances.get(Currency.MSATS, [])
+    net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
+    return account_balance, net_msats // 1000
