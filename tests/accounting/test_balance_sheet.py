@@ -15,6 +15,8 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
+from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report, profit_and_loss_printout
+
 
 @pytest.fixture(scope="module")
 def module_monkeypatch():
@@ -75,3 +77,17 @@ async def test_check_balance_sheet_mongodb():
 
     print(is_balanced, tolerance)
     assert is_balanced, "Balance sheet isn't balanced"
+
+
+
+async def test_generate_profit_and_loss_report():
+    pl_report = await generate_profit_and_loss_report()
+    print(pl_report)
+
+    assert "Revenue" in pl_report, "Profit and Loss report does not contain Revenue."
+    assert "Expenses" in pl_report, "Profit and Loss report does not contain Expenses."
+    assert "Net Income" in pl_report, "Profit and Loss report does not contain Net Income."
+
+    pl_printout = await profit_and_loss_printout(pl_report=pl_report)
+    print(pl_printout)
+

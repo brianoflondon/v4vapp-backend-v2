@@ -10,10 +10,8 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
 )
 from v4vapp_backend_v2.accounting.account_balances import (
+    account_balance_printout,
     all_account_balances,
-    get_account_balance,
-    get_account_balance_printout,
-    get_account_balance_printout2,
     list_all_accounts,
     one_account_balance,
 )
@@ -74,31 +72,6 @@ async def test_list_all_accounts():
     assert isinstance(accounts, list)
     assert len(accounts) > 0
     pprint(accounts)
-
-
-async def test_get_account_balance():
-    """
-    Test to get the balance of a specific account.
-    """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_df = await get_account_balance(account)
-    assert balance_df is not None
-    assert not balance_df.empty
-    print(balance_df)
-
-
-async def test_get_account_balance_printout():
-    """
-    Test to get the balance of a specific account.
-    """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_printout, balance_data = await get_account_balance_printout(account, line_items=True)
-    print(balance_printout)
-    pprint(balance_data)
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balance_printout, balance_data = await get_account_balance_printout(account)
-    print(balance_printout)
-    # pprint(balance_data)
 
 
 async def test_account_details_pipeline():
@@ -165,8 +138,10 @@ async def test_one_account_balances():
 
 async def test_get_account_balance_printout2():
     account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    result = await get_account_balance_printout2(account, line_items=True)
+    result, details = await account_balance_printout(account, line_items=True)
+    print(result)
+    result, details = await account_balance_printout(account, line_items=False)
     print(result)
     accounts = await list_all_accounts()
     for account in accounts:
-        result = await get_account_balance_printout2(account)
+        result, details = await account_balance_printout(account)
