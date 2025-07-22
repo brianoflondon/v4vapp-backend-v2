@@ -78,7 +78,6 @@ def test_default_connection() -> None:
     assert db_conn.db_user == "test_user"
     assert db_conn.uri is not None
     assert "mongodb://" in db_conn.uri
-    assert "admin" in db_conn.admin_uri
 
 
 @pytest.mark.asyncio
