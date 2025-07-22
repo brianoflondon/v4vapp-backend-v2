@@ -39,7 +39,6 @@ class ReplyModel(BaseModel):
     )
     reply_error: str | None = Field(None, description="Error in the reply, if any", exclude=False)
 
-
     def __init__(self, **data):
         """
         Initialize the ReplyModel with the provided data.
@@ -407,7 +406,9 @@ class TrackedBaseModel(BaseModel):
     # MARK: Quote Management
 
     @classmethod
-    def update_quote_sync(cls, quote: QuoteResponse | None = None) -> None:
+    def update_quote_sync(
+        cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
+    ) -> None:
         """
         Synchronously updates the last quote for the class.
 
@@ -429,7 +430,7 @@ class TrackedBaseModel(BaseModel):
                     "update_quote_sync cannot be called in an async context. Use update_quote instead."
                 )
             else:
-                loop.run_until_complete(cls.update_quote())
+                loop.run_until_complete(cls.update_quote(use_cache=use_cache, store_db=store_db))
         except RuntimeError as e:
             # Handle cases where the event loop is already running
             # logger.error(f"Error in update_quote_sync: {e}")

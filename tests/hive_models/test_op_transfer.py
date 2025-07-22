@@ -109,7 +109,7 @@ async def test_model_dump_transfer_enhanced():
     v4v_config = V4VConfig()
     TrackedBaseModel.last_quote = last_quote()
     assert v4v_config.data.conv_fee_sats == 50
-    await Transfer.update_quote()
+    await Transfer.update_quote(store_db=False)
     for hive_event in load_hive_events(OpTypes.TRANSFER):
         if hive_event["type"] == "transfer":
             transfer = Transfer.model_validate(hive_event)

@@ -8,7 +8,7 @@ def test_invoice_model_validate():
     """
     Test the InvoiceModel.validate method.
     """
-    TrackedBaseModel.update_quote_sync()
+    TrackedBaseModel.update_quote_sync(store_db=False)
     with open("tests/data/lnd_to_pydantic_models/invoices.jsonl", "r") as f:
         for line in f:
             invoice = None
