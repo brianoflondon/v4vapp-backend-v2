@@ -1,12 +1,13 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Dict, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 """
@@ -86,21 +87,49 @@ class LightningLimitSummary:
     limit_ok: bool
 
 
-class AccountBalanceDetails(BaseModel):
-    """
-    Model for account balance details.
-    """
+class AccountBalanceLine(BaseModel):
+    group_id: str | None = None
+    short_id: str | None = None
+    ledger_type: str | None = None
+    timestamp: datetime | None = None
+    description: str | None = None
+    cust_id: str | None = None
+    op_type: str | None = None
+    account_type: str | None = None
+    name: str | None = None
+    sub: str | None = None
+    contra: bool | None = None
+    amount: float | None = None
+    amount_signed: float | None = None
+    unit: str | None = None
+    conv: CryptoConv | None = None
+    conv_signed: CryptoConv | None = None
+    side: str | None = None
+    amount_running_total: float | None = None
+    conv_running_total: ConvertedSummary | None = None
 
-    unit: Currency
-    lines: List[Dict[str, Any]] = []
+
+class LedgerAccountDetails(LedgerAccount):
+    balances: Dict[Currency, List[AccountBalanceLine]] = {}
 
 
-class AccountBalance(BaseModel):
-    """
-    Model for account balance details.
-    """
+class AccountBalances(RootModel):
+    root: List[LedgerAccountDetails]
 
-    account: LedgerAccount
-    balances: Dict[str, List[Dict[str, Any]]] = {}
-    as_of_date: datetime = datetime.now(tz=timezone.utc)
-    age: timedelta = timedelta(days=0)
+
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line
+# This is the last line# This is the last line

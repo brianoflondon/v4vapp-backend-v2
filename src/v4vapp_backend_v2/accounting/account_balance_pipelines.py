@@ -341,30 +341,39 @@ def all_account_balances_pipeline(
 
     """
     if account:
-        stage_0 = {
+        facet_debit_match = {
             "$match": {
-                "$or": [
-                    {"debit.name": account.name, "debit.sub": account.sub},
-                    {"credit.name": account.name, "credit.sub": account.sub},
-                ]
+                "debit.name": account.name,
+                "debit.sub": account.sub,
+                "debit.account_type": account.account_type,
+            }
+        }
+        facet_credit_match = {
+            "$match": {
+                "credit.name": account.name,
+                "credit.sub": account.sub,
+                "credit.account_type": account.account_type,
             }
         }
     else:
-        stage_0 = {"$match": {}}
+        facet_debit_match = {"$match": {}}
+        facet_credit_match = {"$match": {}}
+
     if age:
         start_date = as_of_date - age
         date_range_query = {"$gte": start_date, "$lte": as_of_date}
     else:
         date_range_query = {"$lte": as_of_date}
 
-    pipeline = [
-        stage_0,
+    pipeline: Sequence[Mapping[str, Any]] = [
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$facet": {
                 "debits_view": [
+                    facet_debit_match,
                     {
                         "$project": {
+                            "_id": 0,
                             "account_type": "$debit.account_type",
                             "name": "$debit.name",
                             "sub": "$debit.sub",
@@ -383,11 +392,13 @@ def all_account_balances_pipeline(
                             "op_type": 1,
                             "side": "debit",
                         }
-                    }
+                    },
                 ],
                 "credits_view": [
+                    facet_credit_match,
                     {
                         "$project": {
+                            "_id": 0,
                             "account_type": "$credit.account_type",
                             "name": "$credit.name",
                             "sub": "$credit.sub",
@@ -406,7 +417,7 @@ def all_account_balances_pipeline(
                             "op_type": 1,
                             "side": "credit",
                         }
-                    }
+                    },
                 ],
             }
         },

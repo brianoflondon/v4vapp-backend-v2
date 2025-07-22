@@ -4,8 +4,12 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 import pandas as pd
 
-from v4vapp_backend_v2.accounting.account_balance_pipelines import list_all_accounts_pipeline
+from v4vapp_backend_v2.accounting.account_balance_pipelines import (
+    all_account_balances_pipeline,
+    list_all_accounts_pipeline,
+)
 from v4vapp_backend_v2.accounting.accounting_classes import (
+    AccountBalances,
     AccountBalanceSummary,
     ConvertedSummary,
     LedgerConvSummary,
@@ -27,12 +31,41 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
 UNIT_TOLERANCE = {
     "HIVE": 0.001,
     "HBD": 0.001,
     "MSATS": 10,
 }
+
+
+async def all_account_balances(
+    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+) -> AccountBalances:
+    pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    clean_results = convert_datetime_fields(results)
+
+    account_balances = AccountBalances.model_validate(clean_results)
+
+    return account_balances
+
+
+async def one_account_balance(
+    account: LedgerAccount,
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta | None = None,
+) -> AccountBalances:
+    pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list()
+    clean_results = convert_datetime_fields(results)
+
+    account_balance = AccountBalances.model_validate(clean_results)
+
+    return account_balance
 
 
 async def get_account_balance(
