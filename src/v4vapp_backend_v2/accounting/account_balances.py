@@ -12,6 +12,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
     AccountBalanceSummary,
     ConvertedSummary,
+    LedgerAccountDetails,
     LedgerConvSummary,
     LightningLimitSummary,
     UnitSummary,
@@ -57,7 +58,7 @@ async def one_account_balance(
     account: LedgerAccount,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
-) -> AccountBalances:
+) -> LedgerAccountDetails:
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -65,7 +66,16 @@ async def one_account_balance(
 
     account_balance = AccountBalances.model_validate(clean_results)
 
-    return account_balance
+    return (
+        account_balance.root[0]
+        if account_balance.root
+        else LedgerAccountDetails(
+            name=account.name,
+            account_type=account.account_type,
+            sub=account.sub,
+            contra=account.contra,
+        )
+    )
 
 
 async def get_account_balance(
@@ -385,6 +395,139 @@ async def get_account_balance_printout(
     summary.output_text = "\n".join(output)
 
     return summary.output_text, summary
+
+
+async def get_account_balance_printout2(
+    account: LedgerAccount,
+    line_items: bool = False,
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    age: timedelta = timedelta(seconds=0),
+) -> str:
+    """
+    Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
+    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
+    Properly accounts for assets and liabilities, and includes converted values to other units
+    (SATS, HIVE, HBD, USD, msats).
+
+    Args:
+        account (Account): An Account object specifying the account name, type, and optional sub-account.
+        df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
+        full_history (bool, optional): If True, shows the full transaction history with running balances.
+                                       If False, shows only the closing balance. Defaults to False.
+        as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
+
+    Returns:
+        str: A formatted string containing either the full transaction history or the closing balance
+             for the specified account and sub-account up to the specified date.
+    """
+    max_width = 135
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+
+    ledger_account_details = await one_account_balance(account=account, as_of_date=as_of_date)
+    units = set(ledger_account_details.balances.keys())
+
+    title_line = f"Balance for {account}"
+    output = ["_" * max_width]
+    output.append(title_line)
+    output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    output.append("-" * max_width)
+
+    if not ledger_account_details.balances:
+        output.append("No transactions found for this account up to today.")
+        output.append("=" * max_width)
+        return "\n".join(output)
+
+    total_usd = 0
+    total_sats = 0
+
+    for unit in ["hive", "hbd", "msats"]:
+        if unit not in units:
+            continue
+        # Determine display unit: if MSATS, display as SATS
+        display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
+        conversion_factor = 1000 if unit.upper() == "MSATS" else 1  # Convert MSATS to SATS
+
+        # Format output for this unit
+        output.append(f"\nUnit: {display_unit}")
+        output.append("-" * 10)
+        all_rows = ledger_account_details.balances[unit]
+        if all_rows:
+            for row in all_rows:
+                contra_str = "-c-" if row.contra else "   "
+                timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
+                description = truncate_text(row.description, 45)
+                ledger_type = row.ledger_type
+                debit = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                credit = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                balance = row.amount_running_total
+                short_id = row.short_id
+                if unit.upper() == "MSATS":
+                    debit = debit / conversion_factor
+                    credit = credit / conversion_factor
+                    balance = balance / conversion_factor
+                debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
+                credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
+                balance_str = (
+                    f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
+                )
+                line = (
+                    f"{timestamp:<18} "
+                    f"{description:<45} "
+                    f"{contra_str} "
+                    f"{debit_str:>12} "
+                    f"{credit_str:>12} "
+                    f"{balance_str:>12} "
+                    f"{short_id:>15} "
+                    f"{ledger_type:>11}"
+                )
+                output.append(line)
+
+            final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
+            final_conv_balance = (
+                all_rows[-1].conv_running_total if all_rows else ConvertedSummary()
+            )
+            total_hive = final_conv_balance.hive if final_conv_balance else 0.0
+            total_hbd = final_conv_balance.hbd if final_conv_balance else 0.0
+            total_usd_for_unit = final_conv_balance.usd if final_conv_balance else 0
+            total_sats_for_unit = final_conv_balance.sats if final_conv_balance else 0
+            total_msats = final_conv_balance.msats if final_conv_balance else 0
+
+            output.append("-" * max_width)
+            output.append(
+                f"{'Converted    ':<10} "
+                f"{total_hive:>15,.3f} HIVE "
+                f"{total_hbd:>12,.3f} HBD "
+                f"{total_usd_for_unit:>12,.3f} USD "
+                f"{total_sats_for_unit:>12,.0f} SATS "
+                f"{total_msats:>16,.0f} msats"
+            )
+        else:
+            total_usd_for_unit = 0.0
+            total_sats_for_unit = 0.0
+
+        output.append("-" * max_width)
+        # Display final balance in SATS if unit is MSATS
+        display_balance = (
+            final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
+        )
+        balance_str = (
+            f"{display_balance:,.0f}" if unit.upper() == "MSATS" else f"{display_balance:>10,.3f}"
+        )
+        output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
+
+        total_usd += total_usd_for_unit
+        total_sats += total_sats_for_unit
+
+    output.append("-" * max_width)
+    output.append(f"Total USD: {total_usd:>19,.3f}")
+    output.append(f"Total SATS: {total_sats:>18,.0f}")
+    output.append(title_line)
+
+    output.append("=" * max_width + "\n")
+    output_text = "\n".join(output)
+
+    return output_text
 
 
 async def list_all_accounts() -> List[LedgerAccount]:

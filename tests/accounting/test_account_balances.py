@@ -13,10 +13,11 @@ from v4vapp_backend_v2.accounting.account_balances import (
     all_account_balances,
     get_account_balance,
     get_account_balance_printout,
+    get_account_balance_printout2,
     list_all_accounts,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances
+from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -140,17 +141,32 @@ async def test_all_account_balances():
 async def test_one_account_balances():
     """Test to get all account balances."""
     account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
-    balances = await one_account_balance(account=account)
-    assert isinstance(balances, AccountBalances)
+    balance = await one_account_balance(account=account)
+    assert isinstance(balance, LedgerAccountDetails)
 
-    for item in balances.root:
-        print(item)
-        for currency, lines in item.balances.items():
-            print(f"Currency: {currency}")
-            for line in lines:
-                print(f"  {line.timestamp} {line.amount_running_total:,.2f} {line.unit}")
-            if not lines:
-                print("  No lines found for this currency.")
+    print(balance)
+    for currency, lines in balance.balances.items():
+        print(f"Currency: {currency}")
+        for line in lines:
+            print(f"  {line.timestamp} {line.amount_running_total:,.2f} {line.unit}")
+        if not lines:
+            print("  No lines found for this currency.")
 
             last_running_total = lines[-1].amount_running_total
             print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
+
+    units = set(balance.balances.keys())
+    for unit in units:
+        if balance.balances[unit]:
+            for row in balance.balances[unit]:
+                timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
+                print(timestamp)
+
+
+async def test_get_account_balance_printout2():
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    result = await get_account_balance_printout2(account, line_items=True)
+    print(result)
+    accounts = await list_all_accounts()
+    for account in accounts:
+        result = await get_account_balance_printout2(account)
