@@ -17,7 +17,7 @@ from v4vapp_backend_v2.actions.hive_to_lightning import (
     process_hive_to_lightning,
     return_hive_transfer,
 )
-from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
+from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,

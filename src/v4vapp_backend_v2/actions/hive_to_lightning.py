@@ -11,7 +11,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
-from v4vapp_backend_v2.actions.keepsats_ledger_entries import hold_keepsats, release_keepsats
+from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
