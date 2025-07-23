@@ -1,4 +1,3 @@
-import asyncio
 from typing import Dict, List, Tuple
 
 from nectar.amount import Amount
@@ -645,11 +644,7 @@ async def convert_hive_to_keepsats(
         )
         logger.info(f"Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats")
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
-        for entry in ledger_entries:
-            logger.info(f"Ledger Entries for hive to keepsats conversion: {hive_transfer.log_str}")
-            logger.info(entry)
-            await entry.save()
-        await asyncio.sleep(1)
+
         keepsats_balance_after, net_sats_after = await get_keepsats_balance(
             cust_id=hive_transfer.from_account
         )

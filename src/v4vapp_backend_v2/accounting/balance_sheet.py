@@ -1,7 +1,6 @@
 import math
 from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
-from timeit import default_timer as timeit
 from typing import Dict, Tuple
 
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
@@ -10,10 +9,11 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import async_time_stats_decorator
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
+@async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
 ) -> Dict:
@@ -33,18 +33,15 @@ async def generate_balance_sheet_mongodb(
     bs_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_pipeline)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
 
-    start = timeit()
     async with TaskGroup() as tg:
         balance_sheet_task = tg.create_task(bs_cursor.to_list())
         profit_loss_task = tg.create_task(pl_cursor.to_list())
         balance_sheet_check_task = tg.create_task(
             check_balance_sheet_mongodb(as_of_date=as_of_date, age=age)
         )
-    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
     balance_sheet_list = await balance_sheet_task
     profit_loss_list = await profit_loss_task
     is_balanced, tolerance_msats = await balance_sheet_check_task
-    logger.info(f"Time: {timeit() - start:.2f} seconds for balance sheet generation")
 
     balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
     profit_loss = profit_loss_list[0] if profit_loss_list else {}

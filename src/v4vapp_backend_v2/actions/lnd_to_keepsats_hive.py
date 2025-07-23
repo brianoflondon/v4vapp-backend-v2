@@ -4,12 +4,17 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
-from v4vapp_backend_v2.actions.hive_to_lightning import MEMO_FOOTER, get_verified_hive_client
+from v4vapp_backend_v2.actions.actions_errors import (
+    HiveToLightningError,
+    KeepsatsDepositNotificationError,
+)
+from v4vapp_backend_v2.actions.cust_id_class import CustID
+from v4vapp_backend_v2.actions.hive_to_lnd import MEMO_FOOTER, get_verified_hive_client
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, send_transfer
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigData
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 
@@ -36,15 +41,21 @@ async def process_lightning_to_hive_or_keepsats(
         ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
             invoice, nobroadcast
         )
-        if message:
-            logger.info(f"Message for customer: {message}")
+        if invoice.value_msat <= V4VConfig().data.minimum_invoice_payment_sats * 1_000:
+            logger.info(f"Invoice {invoice.short_id} is below the minimum notification threshold.")
+            return ledger_entries
         if return_amount:
             logger.info(f"Return amount to customer: {return_amount}")
             try:
-                await return_hive_transfer(
+                await send_notification_hive_transfer(
                     invoice=invoice,
                     reason=message,
                     nobroadcast=nobroadcast,
+                )
+            except KeepsatsDepositNotificationError as e:
+                logger.warning(
+                    f"Failed to send notification for invoice, skipped {invoice.short_id}: {e}",
+                    extra={"notification": False, **invoice.log_extra},
                 )
             except Exception as e:
                 logger.exception(
@@ -85,9 +96,9 @@ async def lightning_to_keepsats_deposit(
             "Invoice does not have a customer ID.",
             extra={"notification": False, **invoice.log_extra},
         )
-        cust_id = "123_unknown"
+        cust_id = CustID("keepsats")
     else:
-        cust_id = invoice.cust_id
+        cust_id = CustID(invoice.cust_id)
 
     msats_received = invoice.value_msat
     if invoice.conv is None or invoice.conv.is_unset():
@@ -126,29 +137,46 @@ async def lightning_to_keepsats_deposit(
 
 
 # TODO: this must be adapted for Lightning Keepsats replies
-async def return_hive_transfer(
+async def send_notification_hive_transfer(
     invoice: Invoice,
     reason: str,
     amount: Amount | None = None,
     nobroadcast: bool = False,
 ) -> Dict[str, str]:
     """
-    Repay a Hive to Lightning transfer by returning funds to the original sender.
-    This asynchronous function is invoked when a Lightning payment associated with a Hive to Lightning operation fails or expires.
-    It attempts to repay the original Hive sender by transferring the funds back to their account.
-    Args:
-        op (TransferBase): The original transfer operation containing details of the Hive to Lightning transaction.
-        reason (str): The reason for repayment, included in the memo of the repayment transaction.
-        nobroadcast (bool, optional): If True, the transaction will not be broadcast to the Hive network. Defaults to False.
-    Raises:
-        HiveToLightningError: If required Hive server account configuration or keys are missing, or if the repayment transfer fails.
-    Side Effects:
-        - Logs the repayment attempt and result.
-        - Updates the original operation with the reply transaction ID or error.
-        - Sends a Hive transfer to the original sender if possible.
+    Send a notification and process a Hive transfer repayment for a given invoice.
 
+    This function handles the process of sending a Hive transfer (typically a repayment or change)
+    to the original sender of an invoice, logs relevant information, updates the invoice with
+    the transaction details, and manages error handling and notifications.
+
+    Args:
+        invoice (Invoice): The invoice object representing the original Hive to Lightning operation.
+        reason (str): The reason for the repayment or change transaction.
+        amount (Amount | None, optional): The amount to transfer. Defaults to 0.001 HIVE if not provided.
+        nobroadcast (bool, optional): If True, do not broadcast the transaction. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The transaction details as returned by the Hive client.
+
+    Raises:
+        KeepsatsDepositNotificationError: If the repayment fails or an unexpected error occurs.
     """
-    # Placeholder for actual implementation
+
+    if not invoice.cust_id:
+        logger.error(
+            "Invoice does not have a customer ID.",
+            extra={"notification": False, **invoice.log_extra},
+        )
+        raise KeepsatsDepositNotificationError("Invoice does not have a customer ID.")
+
+    if not CustID(invoice.cust_id).is_hive:
+        logger.error(
+            "Invoice customer ID is not a valid Hive account.",
+            extra={"notification": False, **invoice.log_extra},
+        )
+        raise KeepsatsDepositNotificationError("Invoice customer ID is not a valid Hive account.")
+
     logger.info(
         f"Processing return/change for: {invoice.log_str}",
         extra={"notification": False, **invoice.log_extra},

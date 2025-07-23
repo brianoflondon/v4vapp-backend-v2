@@ -13,12 +13,12 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.hive_to_lightning import (
+from v4vapp_backend_v2.actions.hive_to_lnd import (
     process_hive_to_lightning,
     return_hive_transfer,
 )
 from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
-from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive_or_keepsats
+from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
     keepsats_to_lightning_payment_success,
@@ -80,7 +80,6 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             for ledger_entry in ledger_entries:
                 try:
                     # DEBUG section
-                    logger.info("\n" + str(ledger_entry))
                     is_balanced, _ = await check_balance_sheet_mongodb()
                     if not is_balanced:
                         logger.warning(
@@ -178,19 +177,22 @@ async def process_lightning_invoice(
     # Invoice means we are receiving sats from external.
     # Invoice is locked by outer process.
     node_name = InternalConfig().config.lnd_config.default
+    # MARK: Funding
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
-    ledger_entry.cust_id = invoice.cust_id if invoice.cust_id is not None else node_name
-    ledger_entry.description = invoice.memo
-    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
-    ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
-    ledger_entry.credit_conv = invoice.conv or CryptoConv()
-    ledger_entry.debit_conv = invoice.conv or CryptoConv()
     if "funding" in invoice.memo.lower():
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+        ledger_entry.cust_id = invoice.cust_id if invoice.cust_id is not None else node_name
+        ledger_entry.description = invoice.memo
+        ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
+        ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
+        ledger_entry.credit_conv = invoice.conv or CryptoConv()
+        ledger_entry.debit_conv = invoice.conv or CryptoConv()
         ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
         ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
+        await ledger_entry.save()
         return [ledger_entry]
+    # MARK: Regular Invoice LND to Hive or Keepsats
     if invoice.is_lndtohive:
         ledger_entries = await process_lightning_to_hive_or_keepsats(invoice=invoice)
         return ledger_entries

@@ -513,6 +513,9 @@ class LedgerEntry(BaseModel):
             LedgerEntryDuplicateException: If a duplicate ledger entry is detected.
         Returns:
             InsertOneResult: The result of the insert operation.
+        Side effects:
+            - Inserts the LedgerEntry into the database.
+            - Logs the operation details.
 
         """
         self.db_checks()
@@ -520,13 +523,22 @@ class LedgerEntry(BaseModel):
             ans = await InternalConfig.db["ledger"].insert_one(
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
+            logger.info(f"Ledger Entry saved: {self.group_id} {self.ledger_type_str} ")
+            logger.info(f"{self.log_str}", extra={"notification": False, **self.log_extra})
+            logger.info(f"\n{self}")
             return ans
         except DuplicateKeyError as e:
-            logger.error(f"Duplicate ledger entry detected: {e}")
+            logger.warning(
+                f"Duplicate ledger entry detected: {e}",
+                extra={"notification": False, **self.log_extra},
+            )
             raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
 
         except Exception as e:
-            logger.error(f"Error saving ledger entry to database: {e}")
+            logger.error(
+                f"Error saving ledger entry to database: {e}",
+                extra={"notification": True, **self.log_extra},
+            )
             raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
 
     def draw_t_diagram(self) -> str:
@@ -692,8 +704,8 @@ class LedgerEntry(BaseModel):
             1000 if self.credit_unit and self.credit_unit.value.upper() == "MSATS" else 1
         )
 
-        debit_contra_str = "-ve" if self.debit.contra else "   "
-        credit_contra_str = "-ve" if self.credit.contra else "   "
+        debit_contra_str = "-c-" if self.debit.contra else "   "
+        credit_contra_str = "-c-" if self.credit.contra else "   "
 
         # Format the amounts: SATS with no decimals and commas, others with 2 decimals
         debit_amount = self.debit_amount if self.debit_amount else 0.00

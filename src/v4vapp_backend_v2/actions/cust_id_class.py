@@ -8,6 +8,7 @@ from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import LockError, LockNotOwnedError
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
 LOCK_REPORTING_TIME = 5
 
@@ -20,7 +21,7 @@ class CustIDLockException(Exception):
     pass
 
 
-class CustID(str):
+class CustID(AccName):
     """
     Customer ID class with simplified locking functionality.
 

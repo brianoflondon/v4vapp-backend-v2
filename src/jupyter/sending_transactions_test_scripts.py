@@ -13,7 +13,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_mongodb,
 )
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.actions.hive_to_lightning import (
+from v4vapp_backend_v2.actions.hive_to_lnd import (
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
 )

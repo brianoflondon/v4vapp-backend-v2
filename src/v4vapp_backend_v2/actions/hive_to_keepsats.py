@@ -118,6 +118,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(conversion_ledger_entry)
+    await conversion_ledger_entry.save()
     # NOTE: The Treasury Lightning account now holds converted sats but in reality these are
     # Probably need a contra asset account for the Treasury Lightning account to track the conversion
 
@@ -145,6 +146,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(contra_ledger_entry)
+    await contra_ledger_entry.save()
 
     # MARK: 4 Fee Income
     ledger_type = LedgerType.FEE_INCOME
@@ -176,6 +178,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=fee_credit_conv,
     )
     ledger_entries_list.append(fee_ledger_entry)
+    await fee_ledger_entry.save()
 
     # MARK: 5 Convert to Keepsats in customer account into the Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
@@ -200,6 +203,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_conv,
     )
     ledger_entries_list.append(deposit_ledger_entry)
+    await deposit_ledger_entry.save()
 
     reason = f"Keepsats deposit of {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}"
 

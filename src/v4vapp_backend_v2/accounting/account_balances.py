@@ -21,7 +21,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -34,6 +34,7 @@ UNIT_TOLERANCE = {
 }
 
 
+@async_time_stats_decorator()
 async def all_account_balances(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
 ) -> AccountBalances:
@@ -47,6 +48,7 @@ async def all_account_balances(
     return account_balances
 
 
+@async_time_stats_decorator()
 async def one_account_balance(
     account: LedgerAccount,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
@@ -71,6 +73,7 @@ async def one_account_balance(
     )
 
 
+@async_time_stats_decorator()
 async def account_balance_printout(
     account: LedgerAccount,
     line_items: bool = True,
@@ -115,7 +118,7 @@ async def account_balance_printout(
     total_usd = 0.0
     total_sats = 0.0
 
-    for unit in ["hive", "hbd", "msats"]:
+    for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         final_balance = 0
         if unit not in units:
             continue
