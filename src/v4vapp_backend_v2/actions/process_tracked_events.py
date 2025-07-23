@@ -634,8 +634,8 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                     custom_json=custom_json,
                     keepsats_transfer=keepsats_transfer,
                 )
+                return custom_json_ledger_entry
 
-            return custom_json_ledger_entry
             except CustomJsonToLightningError as e:
                 logger.error(f"Error processing CustomJson to Lightning: {e}")
                 raise LedgerEntryCreationException(

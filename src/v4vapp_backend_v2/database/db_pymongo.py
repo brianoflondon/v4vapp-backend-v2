@@ -36,15 +36,25 @@ class DBConn:
         Returns:
             AsyncMongoClient: An instance of AsyncMongoClient connected to the database.
         """
-        return AsyncMongoClient(
-            self.uri,
-            tz_aware=True,
-            connectTimeoutMS=10000,
-            serverSelectionTimeoutMS=10000,
-            retryWrites=True,
-            retryReads=True,
-            readPreference="primaryPreferred",
+        client = AsyncMongoClient(
+            self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
+            tz_aware=True,  # Enables timezone-aware datetime objects
+            connectTimeoutMS=10000,  # Timeout for establishing a connection (10 seconds)
+            serverSelectionTimeoutMS=10000,  # Timeout for selecting a server (10 seconds)
+            retryWrites=True,  # Automatically retry write operations on failure
+            retryReads=True,  # Automatically retry read operations on failure
+            readPreference="primaryPreferred",  # Prefer primary for reads
+            # appName="my-async-application",  # Optional: for MongoDB monitoring
         )
+
+        # client.write_concern = (
+        #     WriteConcern(
+        #         w="majority",  # Ensure writes are acknowledged by majority of replica set members
+        #         j=False,  # Do not require journal commit (optional, adjust based on needs)
+        #     )
+        # )
+
+        return client
 
     def admin_client(self) -> AsyncMongoClient[Dict[str, Any]]:
         """
@@ -207,7 +217,15 @@ class DBConn:
         Returns:
             MongoClient: An instance of MongoClient connected to the database.
         """
-        return MongoClient(self.uri, tz_aware=True)
+        return MongoClient(
+            self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
+            tz_aware=True,  # Enables timezone-aware datetime objects
+            connectTimeoutMS=10000,  # Timeout for establishing a connection (10 seconds)
+            serverSelectionTimeoutMS=10000,  # Timeout for selecting a server (10 seconds)
+            retryWrites=True,  # Automatically retry write operations on failure
+            retryReads=True,  # Automatically retry read operations on failure
+            readPreference="primaryPreferred",  # Prefer primary for reads
+        )
 
     def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover
         """
@@ -584,8 +602,7 @@ class DBConn:
             except Exception as ex:
                 message = f"{DATABASE_ICON} {logger.name} Failed to create time series collection {timeseries_name} {ex}"
                 logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
-                logger.error(message, extra={"notification": False})
+                pass
+
+
+# # End of DBConn class
