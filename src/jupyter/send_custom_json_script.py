@@ -1,20 +1,90 @@
 import asyncio
 import os
+from pprint import pprint
+from typing import Any
 
+from google.protobuf.json_format import MessageToDict
+from nectar.amount import Amount
+
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.hive_to_lnd import get_verified_hive_client_for_accounts
-from v4vapp_backend_v2.config.setup import InternalConfig
-from v4vapp_backend_v2.hive.hive_extras import send_custom_json
+from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.hive.hive_extras import send_custom_json, send_transfer
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+
+
+async def get_lightning_invoice(
+    value_sat: int, memo: str, connection_name: str = "umbrel"
+) -> lnrpc.AddInvoiceResponse:
+    """
+    Creates a Lightning invoice with the specified value and memo.
+    """
+    value_msat = value_sat * 1000  # Convert satoshis to millisatoshis
+    async with LNDClient(connection_name=connection_name) as client:
+        request = lnrpc.Invoice(value_msat=value_msat, memo=memo)
+        response: lnrpc.AddInvoiceResponse = await client.lightning_stub.AddInvoice(request)
+        add_invoice_response_dict = MessageToDict(response, preserving_proto_field_name=True)
+        logger.info(
+            f"Invoice generated: {memo} {value_msat // 1000:,} sats",
+            extra={"add_invoice_response_dict": add_invoice_response_dict},
+        )
+        return response
+
+
+async def send_hive_customer_to_server(
+    send_sats: int = 0,
+    amount: Amount = Amount("0 HIVE"),
+    memo: str = "",
+    customer: str = "v4vapp-test",
+) -> dict[str, Any]:
+    if send_sats > 0:
+        send_conv = CryptoConversion(
+            conv_from=Currency.SATS,
+            value=send_sats,
+        )
+        await send_conv.get_quote()
+        conv = send_conv.conversion
+        amount_to_send_msats = conv.msats + conv.msats_fee + 200_000
+        amount_to_send_msats = conv.msats + conv.msats_fee + 200_000  # Adding a buffer for fees
+        amount_to_send_hive = (amount_to_send_msats // 1000) / conv.sats_hive
+        hive_amount = Amount(f"{amount_to_send_hive:.3f} HIVE")
+
+    else:
+        hive_amount = amount
+
+    hive_config = InternalConfig().config.hive
+    hive_client = await get_verified_hive_client_for_accounts([customer])
+    server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
+
+    trx = await send_transfer(
+        from_account=customer,
+        to_account=server,
+        hive_client=hive_client,
+        amount=hive_amount,
+        memo=memo,
+    )
+    return trx
 
 
 async def main():
     """
     Main function to run the checks and print results.
     """
+
+    # Deposit Hive as Keepsats
+
+    trx = await send_hive_customer_to_server(
+        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
+    )
+    pprint(trx)
+
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         sats=1000,
-        invoice_message="brianoflondon@walletofsatoshi.com",
+        memo="brianoflondon@walletofsatoshi.com",
     )
     # hive_config = InternalConfig().config.hive
     hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])

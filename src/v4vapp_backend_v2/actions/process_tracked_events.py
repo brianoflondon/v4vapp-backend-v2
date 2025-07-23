@@ -131,15 +131,19 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
-    ledger_entry = LedgerEntry(
-        group_id=op.group_id,
-        timestamp=op.timestamp,
-    )
     if isinstance(op, Invoice):
-        ledger_entry.op_type = "invoice"
+        ledger_entry = LedgerEntry(
+            group_id=op.group_id,
+            timestamp=op.timestamp,
+            op_type="invoice",
+        )
         ledger_entries = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
     elif isinstance(op, Payment):
-        ledger_entry.op_type = "payment"
+        ledger_entry = LedgerEntry(
+            group_id=op.group_id,
+            timestamp=op.timestamp,
+            op_type="payment",
+        )
         ledger_entries = await process_lightning_payment(payment=op)
 
     return ledger_entries
@@ -631,7 +635,7 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                     keepsats_transfer=keepsats_transfer,
                 )
 
-                return custom_json_ledger_entry
+            return custom_json_ledger_entry
             except CustomJsonToLightningError as e:
                 logger.error(f"Error processing CustomJson to Lightning: {e}")
                 raise LedgerEntryCreationException(

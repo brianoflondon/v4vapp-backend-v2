@@ -43,6 +43,8 @@ async def process_custom_json_to_lightning(
         keepsats_balance, net_sats = await get_keepsats_balance(
             cust_id=keepsats_transfer.from_account
         )
+        logger.info(f"Keepsats balance BEFORE Hold: {net_sats:,.0f}")
+
         if keepsats_balance is None or net_sats is None:
             raise CustomJsonToLightningError("Failed to retrieve Keepsats balance or net sats.")
 
@@ -56,6 +58,11 @@ async def process_custom_json_to_lightning(
             cust_id=custom_json.cust_id,
             tracked_op=custom_json,
         )
+
+        keepsats_balance, net_sats = await get_keepsats_balance(
+            cust_id=keepsats_transfer.from_account
+        )
+        logger.info(f"Keepsats balance AFTER Hold: {net_sats:,.0f}")
 
         amount_msats = min(
             keepsats_transfer.sats * 1000, pay_req.amount_msat, int(net_sats * 1000)

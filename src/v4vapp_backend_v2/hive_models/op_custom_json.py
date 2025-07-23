@@ -25,7 +25,7 @@ class CustomJson(OpBase):
     required_posting_auths: List[str]
 
     cust_id: CustIDType = Field(
-        default="", alias="Customer ID determined from the `required_auths` field"
+        default="", description="Customer ID determined from the `required_auths` field"
     )
 
     # Extra Fields
@@ -68,14 +68,15 @@ class CustomJson(OpBase):
         # The customer is the from account.
         try:
             if (
-                self.is_watched
-                and self.json_data
-                and hasattr(self.json_data, "from_account")
-                and hasattr(self.json_data, "to_account")
+                self.json_data
+                and (
+                    hasattr(self.json_data, "from_account")
+                    or hasattr(self.json_data, "to_account")
+                )
             ):
                 if self.required_auths and self.required_auths[0]:
                     if (
-                        self.json_data.from_account == self.required_auths[0]
+                        self.json_data.from_account in self.required_auths
                         or self.required_auths[0]
                         in InternalConfig().config.hive.server_account_names
                     ):

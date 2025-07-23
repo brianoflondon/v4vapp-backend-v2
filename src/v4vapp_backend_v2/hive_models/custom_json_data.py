@@ -35,11 +35,11 @@ class KeepsatsTransfer(BaseModel):
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
     sats: int
-    memo: str = Field("", alias="The memo which comes in from the transfer")
+    memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
     HIVE: float | None = None
     HBD: float | None = None
-    invoice_message: str | None = Field(None, alias="Used specifically for invoice messages")
+    invoice_message: str | None = Field(None, description="Used specifically for invoice messages")
 
     model_config = ConfigDict(populate_by_name=True)
 
