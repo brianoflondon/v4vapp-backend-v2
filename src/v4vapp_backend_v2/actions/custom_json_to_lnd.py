@@ -24,7 +24,7 @@ async def process_custom_json_to_lightning(
 ) -> None:
     """ """
     # is this a lightning invoice?
-    if not keepsats_transfer.invoice_message:
+    if not keepsats_transfer.memo:
         raise CustomJsonToLightningError("Keepsats transfer does not have an invoice message.")
     lnd_config = InternalConfig().config.lnd_config
     lnd_client = LNDClient(connection_name=lnd_config.default)
@@ -32,7 +32,7 @@ async def process_custom_json_to_lightning(
     release_hold = True
     try:
         pay_req = await decode_any_lightning_string(
-            input=keepsats_transfer.invoice_message,
+            input=keepsats_transfer.memo,
             lnd_client=lnd_client,
             zero_amount_invoice_send_msats=keepsats_transfer.sats * 1000,
         )

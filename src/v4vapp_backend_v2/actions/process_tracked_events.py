@@ -260,6 +260,9 @@ async def process_lightning_payment(
                     )
                 return ledger_entries_list
             elif isinstance(initiating_op, CustomJson):
+
+                #TODO: This is where to record the ledger entry for the custom_json payment
+                # need to rebuild and modify keepsats_to_lightning_payment_success
                 raise NotImplementedError(
                     f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
                 )
@@ -608,14 +611,14 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
 
         # If this has an invoice message we will process it as an external lightning transfer
-        if keepsats_transfer.invoice_message:
+        if keepsats_transfer.memo:
             try:
                 ledger_type = LedgerType.CUSTOM_JSON_NOTIFICATION
                 custom_json_ledger_entry = LedgerEntry(
                     cust_id=custom_json.cust_id,
                     short_id=custom_json.short_id,
                     ledger_type=ledger_type,
-                    group_id=f"{custom_json.group_id}-{ledger_type.value}",
+                    group_id=f"{custom_json.group_id}",  # We don't want ledger_type here !!!!
                     timestamp=custom_json.timestamp,
                     description=keepsats_transfer.description,
                     op_type=custom_json.op_type,

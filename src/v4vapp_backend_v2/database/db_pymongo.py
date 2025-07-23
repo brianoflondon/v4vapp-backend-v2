@@ -36,7 +36,7 @@ class DBConn:
         Returns:
             AsyncMongoClient: An instance of AsyncMongoClient connected to the database.
         """
-        client = AsyncMongoClient(
+        client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
             self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
             tz_aware=True,  # Enables timezone-aware datetime objects
             connectTimeoutMS=10000,  # Timeout for establishing a connection (10 seconds)
@@ -44,15 +44,11 @@ class DBConn:
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
+            w="majority",  # Ensure write operations are acknowledged by the majority of nodes
+            # r="majority",  # Ensure read operations are from the majority of nodes
+            # j=True,
             # appName="my-async-application",  # Optional: for MongoDB monitoring
         )
-
-        # client.write_concern = (
-        #     WriteConcern(
-        #         w="majority",  # Ensure writes are acknowledged by majority of replica set members
-        #         j=False,  # Do not require journal commit (optional, adjust based on needs)
-        #     )
-        # )
 
         return client
 
@@ -225,6 +221,9 @@ class DBConn:
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
+            w="majority",  # Ensure write operations are acknowledged by the majority of nodes
+            # r="majority",  # Ensure read operations are from the majority of nodes
+            # j=True,  # Ensure write operations are journaled
         )
 
     def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover
