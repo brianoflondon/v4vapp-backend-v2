@@ -23,3 +23,12 @@ class KeepsatsDepositNotificationError(HiveLightningError):
     """
 
     pass
+
+
+class CustomJsonToLightningError(HiveLightningError):
+    """
+    Custom exception for errors related to processing CustomJson data to Lightning.
+    This can be used to handle specific cases where the conversion or processing fails.
+    """
+
+    pass

@@ -12,11 +12,10 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
     LedgerType,
 )
+from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.hive_to_lnd import (
-    process_hive_to_lightning,
-    return_hive_transfer,
-)
+from v4vapp_backend_v2.actions.custom_json_to_lnd import process_custom_json_to_lightning
+from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning, return_hive_transfer
 from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
@@ -30,6 +29,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -249,7 +249,7 @@ async def process_lightning_payment(
                     )
                     if ledger_entries_list:
                         # We can now safely release the hold on the Keepsats
-                        await release_keepsats(hive_transfer=initiating_op)
+                        await release_keepsats(tracked_op=initiating_op)
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(
                         payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
@@ -356,15 +356,13 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     try:
         if isinstance(op, TransferBase):
             ledger_entry = await process_transfer_op(hive_transfer=op, ledger_entry=ledger_entry)
-
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(
                 limit_fill_order=op, ledger_entry=ledger_entry
             )
-
         elif isinstance(op, CustomJson):
             # CustomJson operations are not yet implemented
-            raise NotImplementedError("CustomJson operations are not yet implemented.")
+            ledger_entry = await process_custom_json(custom_json=op)
         return ledger_entry
 
     except LedgerEntryException as e:
@@ -582,3 +580,89 @@ async def process_create_fill_order_op(
         logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
     return ledger_entry
+
+
+# MARK: CustomJson Operations
+async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
+    """
+    Processes a CustomJson operation and creates a ledger entry if applicable.
+
+    This method handles CustomJson operations, ensuring that appropriate debit and credit
+    accounts are assigned based on the operation type. If a ledger entry with the same group_id
+    already exists, the operation is skipped.
+
+    Returns:
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    """
+    if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
+        # This is a transfer operation, we need to process it as such
+        if not custom_json.conv or custom_json.conv.is_unset():
+            await custom_json.update_conv()
+            if custom_json.conv.is_unset():
+                raise LedgerEntryCreationException("Conversion not set in CustomJson operation.")
+
+        keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
+
+        # If this has an invoice message we will process it as an external lightning transfer
+        if keepsats_transfer.invoice_message:
+            try:
+                ledger_type = LedgerType.CUSTOM_JSON_NOTIFICATION
+                custom_json_ledger_entry = LedgerEntry(
+                    cust_id=custom_json.cust_id,
+                    short_id=custom_json.short_id,
+                    ledger_type=ledger_type,
+                    group_id=f"{custom_json.group_id}-{ledger_type.value}",
+                    timestamp=custom_json.timestamp,
+                    description=keepsats_transfer.description,
+                    op_type=custom_json.op_type,
+                    debit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    debit_conv=custom_json.conv,
+                    debit_unit=Currency.MSATS,
+                    debit_amount=custom_json.conv.msats,
+                    credit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    credit_conv=custom_json.conv,
+                    credit_unit=Currency.MSATS,
+                    credit_amount=custom_json.conv.msats,
+                )
+                await custom_json_ledger_entry.save()
+
+                await process_custom_json_to_lightning(
+                    custom_json=custom_json,
+                    keepsats_transfer=keepsats_transfer,
+                )
+
+                return custom_json_ledger_entry
+            except CustomJsonToLightningError as e:
+                logger.error(f"Error processing CustomJson to Lightning: {e}")
+                raise LedgerEntryCreationException(
+                    f"Error processing CustomJson to Lightning: {e}"
+                ) from e
+
+            except Exception as e:
+                logger.error(f"Failed to process CustomJson to Lightning: {e}")
+                raise LedgerEntryCreationException(
+                    f"Failed to process CustomJson to Lightning: {e}"
+                ) from e
+
+        if keepsats_transfer.to_account != keepsats_transfer.from_account:
+            # This is a transfer between two different accounts
+            logger.info(
+                f"Transfer between two different accounts: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
+            )
+            raise NotImplementedError(
+                "Transfer between two different accounts is not implemented yet."
+            )
+
+            ledger_entry = LedgerEntry(
+                group_id=custom_json.group_id,
+                short_id=custom_json.short_id,
+                timestamp=custom_json.timestamp,
+                op_type=custom_json.op_type,
+                description=keepsats_transfer.description,
+                debit_unit=Currency.MSATS,
+            )
+
+            return ledger_entry
+
+
+# Last line of the file

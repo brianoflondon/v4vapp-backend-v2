@@ -112,6 +112,8 @@ class LedgerType(StrEnum):
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
+    CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
+
     WITHDRAW_LIGHTNING = "withdraw_l"
     LIGHTNING_EXTERNAL_SEND = "l_contra_e"
 

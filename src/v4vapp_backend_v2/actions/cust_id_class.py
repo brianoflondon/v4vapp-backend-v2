@@ -15,6 +15,7 @@ LOCK_REPORTING_TIME = 5
 
 ICON = "🔒"  # Icon to represent the lock in logs and messages
 
+
 class CustIDLockException(Exception):
     """Custom exception for CustID lock acquisition failures."""
 

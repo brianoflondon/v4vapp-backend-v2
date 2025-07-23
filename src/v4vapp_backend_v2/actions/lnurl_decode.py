@@ -108,7 +108,6 @@ async def decode_any_lightning_string(
     input: str,
     zero_amount_invoice_send_msats: int = 0,
     comment: str = "",
-    ignore_limits: bool = False,
     lnd_client: LNDClient | None = None,
 ) -> PayReq:
     """
@@ -116,13 +115,15 @@ async def decode_any_lightning_string(
 
     Args:
         input (str): The input string to decode.
-        msats (int, optional): The amount in millisatoshis. Defaults to 0.
+        zero_amount_invoice_send_msats (int, optional): The amount in millisatoshis. Defaults to 0.
+                this amount is used for zero amount invoices and ignored if not a zero amount invoice.
         comment (str, optional): A comment to include. Defaults to "".
-        ignore_limits (bool, optional): Whether to ignore limits. Defaults to False.
 
     Returns:
         PayReq: Returns a PayReq object if the input is a valid Lightning invoice,
                   otherwise raises an exception.
+
+        the value which will be paid is pay_req.value_msat, which is the amount in millisatoshis.
 
     Raises:
         LNDInvoiceError: If the amount is out of the allowed range or the comment is too long

@@ -101,6 +101,7 @@ async def hive_to_lightning_payment_success(
         cust_id=cust_id,
         short_id=payment.short_id,
         ledger_type=ledger_type,
+        op_type=payment.op_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
         description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {payment.destination} for {cust_id}",
@@ -128,6 +129,7 @@ async def hive_to_lightning_payment_success(
         cust_id=cust_id,
         short_id=payment.short_id,
         ledger_type=ledger_type,
+        op_type=payment.op_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
 
@@ -167,6 +169,7 @@ async def hive_to_lightning_payment_success(
         short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
+        op_type=payment.op_type,
         timestamp=next(timestamp),
         description=f"Fee Lightning {cust_id} {cost_of_payment_msat / 1000:,.0f} sats",
         debit=LiabilityAccount(
@@ -200,6 +203,7 @@ async def hive_to_lightning_payment_success(
         short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
+        op_type=payment.op_type,
         timestamp=next(timestamp),
         description=f"Allocate outgoing Lightning {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
@@ -225,6 +229,7 @@ async def hive_to_lightning_payment_success(
         short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
+        op_type=payment.op_type,
         timestamp=next(timestamp),
         description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
         debit=AssetAccount(
@@ -257,6 +262,7 @@ async def hive_to_lightning_payment_success(
             short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
+            op_type=payment.op_type,
             timestamp=next(timestamp),
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(

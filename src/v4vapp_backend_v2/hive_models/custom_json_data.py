@@ -35,11 +35,11 @@ class KeepsatsTransfer(BaseModel):
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
     sats: int
-    memo: str = ""
+    memo: str = Field("", alias="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
     HIVE: float | None = None
     HBD: float | None = None
-    invoice_message: str | None = None
+    invoice_message: str | None = Field(None, alias="Used specifically for invoice messages")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -59,6 +59,15 @@ class KeepsatsTransfer(BaseModel):
         return (
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
+
+    @property
+    def description(self) -> str:
+        """
+        Returns a description string for the Keepsats transfer.
+        Used in the LedgerEntry creation.
+        If the invoice_message is set, it returns that; otherwise, it returns the memo.
+        """
+        return self.log_str
 
     @property
     def notification_str(self) -> str:
