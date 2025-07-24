@@ -44,7 +44,7 @@ class DBConn:
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
-            w="majority",  # Ensure write operations are acknowledged by the majority of nodes
+            # w="majority",  # Ensure write operations are acknowledged by the majority of nodes
             # r="majority",  # Ensure read operations are from the majority of nodes
             # j=True,
             # appName="my-async-application",  # Optional: for MongoDB monitoring

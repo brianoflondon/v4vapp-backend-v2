@@ -34,7 +34,7 @@ UNIT_TOLERANCE = {
 }
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def all_account_balances(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
 ) -> AccountBalances:
@@ -48,7 +48,7 @@ async def all_account_balances(
     return account_balances
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def one_account_balance(
     account: LedgerAccount,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
@@ -73,7 +73,7 @@ async def one_account_balance(
     )
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def account_balance_printout(
     account: LedgerAccount,
     line_items: bool = True,

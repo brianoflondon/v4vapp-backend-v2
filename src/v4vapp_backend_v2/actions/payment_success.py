@@ -19,8 +19,11 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import timestamp_inc
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.payment_models import Payment
+
+# MARK: Hive Payment Success
 
 
 async def hive_to_lightning_payment_success(
@@ -132,7 +135,6 @@ async def hive_to_lightning_payment_success(
         op_type=payment.op_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-
         description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
         debit=AssetAccount(
             name="Customer Deposits Hive",
@@ -316,27 +318,27 @@ async def keepsats_to_lightning_payment_success(
     payment fulfillment, and fee expenses.
 
         payment (Payment): The Keepsats payment object containing payment details and custom records.
-        nobroadcast (bool, optional): If True, prevents broadcasting of certain events. Defaults to False.
+        old_ledger_entry (LedgerEntry): The original ledger entry associated with the payment.
+        nobroadcast (bool, optional): If True, prevents broadcasting of reply events. Defaults to False.
 
     Returns:
         list[LedgerEntry]: A list of new ledger entries created as a result of the successful payment.
     """
-    # MARK: Keepsats Payment Success
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
     timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
-    hive_transfer = await load_tracked_object(old_ledger_entry.group_id)
-    if not isinstance(hive_transfer, TransferBase):
+    original_op = await load_tracked_object(old_ledger_entry.group_id)
+    if not isinstance(original_op, TransferBase | CustomJson):
         raise NotImplementedError(
-            f"Unhandled operation type: {type(hive_transfer)} for hive_to_lightning_payment_success {payment.group_id_p}"
+            f"Unhandled operation type: {type(original_op)} for hive_to_lightning_payment_success {payment.group_id_p}"
         )
 
     # Identify the customer and server
-    cust_id = hive_transfer.from_account
+    cust_id = original_op.cust_id
     # server_id = hive_transfer.to_account
 
     # Mark: Record the Payment in the Hive Op
     cost_of_payment_msat = payment.value_msat + payment.fee_msat
-    message = f"Keepsats payment sent for operation {hive_transfer.group_id_p}: {payment.payment_hash} {payment.route_str} {cost_of_payment_msat / 1000:,.0f} sats"
+    message = f"Keepsats payment sent for operation {original_op.group_id_p}: {payment.payment_hash} {payment.route_str} {cost_of_payment_msat / 1000:,.0f} sats"
 
     node_name = "keepsats"
     ledger_entries_list = []
@@ -452,20 +454,28 @@ async def keepsats_to_lightning_payment_success(
         await fee_ledger_entry_sats.save()
         ledger_entries_list.append(fee_ledger_entry_sats)
 
-    hive_transfer.change_amount = hive_transfer.amount
+    # Custom Json doesn't have an amount, or change.
+    if isinstance(original_op, TransferBase):
+        original_op.change_amount = original_op.amount
 
-    hive_transfer.add_reply(
+    original_op.add_reply(
         reply_id=payment.group_id_p,
         reply_type="payment",
         reply_msat=cost_of_payment_msat,
         reply_error=None,
         reply_message=message,
     )
-    await hive_transfer.save()
+    await original_op.save()
 
-    await lightning_payment_sent(
-        payment=payment,
-        hive_transfer=hive_transfer,
-        nobroadcast=nobroadcast,
-    )
+    # For Hive transfer we send a payment notification.
+    # The question is whether we should send a notification for CustomJson
+    # events too.
+    # TODO: #142 Send custom_json receipt and process notifications or not?
+
+    if isinstance(original_op, TransferBase):
+        await lightning_payment_sent(
+            payment=payment,
+            hive_transfer=original_op,
+            nobroadcast=nobroadcast,
+        )
     return ledger_entries_list

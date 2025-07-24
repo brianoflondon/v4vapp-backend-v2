@@ -13,7 +13,7 @@ from v4vapp_backend_v2.config.setup import async_time_stats_decorator
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
 ) -> Dict:
@@ -118,8 +118,9 @@ async def check_balance_sheet_mongodb(
     bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
     bs_check = await bs_check_cursor.to_list()
 
+    # Database is empty or no data found
     if not bs_check:
-        return False, 0.0
+        return True, 0.0
 
     tolerance_msats = 10_000  # tolerance of 10 sats.
     is_balanced = math.isclose(

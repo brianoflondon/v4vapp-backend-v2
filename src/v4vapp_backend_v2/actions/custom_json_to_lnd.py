@@ -1,10 +1,7 @@
 from typing import Any, Dict
 
 from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
-from v4vapp_backend_v2.actions.actions_errors import (
-    CustomJsonToLightningError,
-    HiveToLightningError,
-)
+from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -16,7 +13,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentExpired,
     send_lightning_to_pay_req,
 )
-from v4vapp_backend_v2.models.payment_models import Payment
 
 
 async def process_custom_json_to_lightning(
@@ -35,10 +31,10 @@ async def process_custom_json_to_lightning(
             input=keepsats_transfer.memo,
             lnd_client=lnd_client,
             zero_amount_invoice_send_msats=keepsats_transfer.sats * 1000,
+            comment=keepsats_transfer.invoice_message,
         )
         if not pay_req:
             raise CustomJsonToLightningError("Failed to decode Lightning payment request.")
-
 
         keepsats_balance, net_sats = await get_keepsats_balance(
             cust_id=keepsats_transfer.from_account

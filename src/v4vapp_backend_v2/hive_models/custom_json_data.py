@@ -39,7 +39,10 @@ class KeepsatsTransfer(BaseModel):
     pay_result: PayResult | None = None
     HIVE: float | None = None
     HBD: float | None = None
-    invoice_message: str | None = Field(None, description="Used specifically for invoice messages")
+    invoice_message: str | None = Field(
+        None,
+        description="Used specifically for invoice messages, when requesting an invoice from a foreign service, this comment will be sent",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 

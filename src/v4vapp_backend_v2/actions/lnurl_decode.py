@@ -107,7 +107,7 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 async def decode_any_lightning_string(
     input: str,
     zero_amount_invoice_send_msats: int = 0,
-    comment: str = "",
+    comment: str | None = None,
     lnd_client: LNDClient | None = None,
 ) -> PayReq:
     """

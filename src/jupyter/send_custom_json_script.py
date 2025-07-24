@@ -76,26 +76,35 @@ async def main():
 
     # Deposit Hive as Keepsats
 
-    # trx = await send_hive_customer_to_server(
-    #     amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
-    # )
-    # pprint(trx)
+    trx = await send_hive_customer_to_server(
+        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
+    )
+    pprint(trx)
 
+    # Send Sats back to this node.
+    # invoice = await get_lightning_invoice(
+    #     5010, "v4vapp.qrc #v4vapp Sending sats to another account"
+    # )
+    invoice = await get_lightning_invoice(5010, "Blank not message")
+    # the invoice_message has no effect if the invoice is generated and sent in the message.
+    # It is only used when the invoice is generated lightning_address
+    # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
-        sats=1000,
-        memo="brianoflondon@walletofsatoshi.com",
+        sats=10000,
+        memo=invoice.payment_request,
+        invoice_message="v4vapp.qrc #v4vapp Sending sats to another account",
     )
     # hive_config = InternalConfig().config.hive
     hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
     trx = await send_custom_json(
-        json_data=transfer.model_dump(),
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
         send_account=transfer.from_account,
         active=True,
         id="v4vapp_dev_transfer",
         hive_client=hive_client,
     )
-    print(f"Transaction sent: {trx}")
+    pprint(trx)
 
 
 if __name__ == "__main__":
