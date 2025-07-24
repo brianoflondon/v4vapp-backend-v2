@@ -7,8 +7,10 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
     get_keepsats_balance,
+    one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
@@ -33,6 +35,10 @@ async def get_limits():
 
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
+
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance = await one_account_balance(account=account)
+    pprint(balance)
 
 
 async def main():
@@ -64,6 +70,7 @@ async def main():
     ans, tolerance = await check_balance_sheet_mongodb()
     print("Balance Sheet Check Result:", ans)
     print("Balance Sheet Check Tolerance:", tolerance)
+
 
 if __name__ == "__main__":
     target_dir = "/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/"

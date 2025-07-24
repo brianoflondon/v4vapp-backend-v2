@@ -21,7 +21,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -197,6 +197,11 @@ async def account_balance_printout(
 
         total_usd += total_usd_for_unit
         total_sats += total_sats_for_unit
+
+    # WE don't need to do the summing up of totals here, they are performed in the LedgerAccountDetails class
+    # assert ledger_account_details.conv_total.usd == total_usd, (
+    #     f"Total USD mismatch: {ledger_account_details.conv_total.usd} != {total_usd}"
+    # )
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>19,.3f}")
@@ -395,6 +400,9 @@ async def get_keepsats_balance(
         account=account,
         as_of_date=as_of_date + timedelta(hours=1),
     )
-    net_msats_details = account_balance.balances.get(Currency.MSATS, [])
-    net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
+    # net_msats_details = account_balance.balances.get(Currency.MSATS, [])
+    # net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
+    # Use the sub totaled net msats balance so if there is a negative Hive account it is
+    # accounted for.
+    net_msats = account_balance.conv_total.msats if account_balance.conv_total else 0.0
     return account_balance, net_msats // 1000
