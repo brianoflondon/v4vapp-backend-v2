@@ -7,11 +7,14 @@ from google.protobuf.json_format import MessageToDict
 from nectar.amount import Amount
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.actions.hive_to_lnd import get_verified_hive_client_for_accounts
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.hive_extras import send_custom_json, send_transfer
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_verified_hive_client_for_accounts,
+    send_custom_json,
+    send_transfer,
+)
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
@@ -94,6 +97,24 @@ async def main():
         sats=10000,
         memo=invoice.payment_request,
         invoice_message="v4vapp.qrc #v4vapp Sending sats to another account",
+    )
+    # hive_config = InternalConfig().config.hive
+    hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+    trx = await send_custom_json(
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=transfer.from_account,
+        active=True,
+        id="v4vapp_dev_transfer",
+        hive_client=hive_client,
+    )
+    pprint(trx)
+
+    # Transfer from test to qrc
+    transfer = KeepsatsTransfer(
+        from_account="v4vapp-test",
+        to_account="v4vapp.qrc",
+        sats=7_018,
+        memo="This is a message to go with the transfer",
     )
     # hive_config = InternalConfig().config.hive
     hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])

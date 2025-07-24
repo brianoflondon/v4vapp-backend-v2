@@ -1,10 +1,13 @@
-from typing import Any, Dict
-
 from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
+from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -85,7 +88,7 @@ async def process_custom_json_to_lightning(
         )
         # If the payment succeeded we do not release the HOLD here, were release it when the payment ledger entries are made
         release_hold = False
-        return payment
+        return
 
     except CustomJsonToLightningError as e:
         return_hive_message = f"Error processing Hive to Lightning operation: {e}"
@@ -122,10 +125,14 @@ async def process_custom_json_to_lightning(
 
         if return_hive_message:
             try:
-                await custom_json_notification(
-                    custom_json=custom_json,
+                trx = await send_notification_hive_transfer(
+                    tracked_op=custom_json,
                     reason=return_hive_message,
                     nobroadcast=nobroadcast,
+                )
+                logger.info(
+                    f"Notification transaction created for operation {custom_json.group_id}",
+                    extra={"notification": True, "trx": trx, **custom_json.log_extra},
                 )
             except Exception as e:
                 logger.exception(
@@ -138,22 +145,61 @@ async def process_custom_json_to_lightning(
                 )
 
 
-async def custom_json_notification(
-    custom_json: CustomJson,
-    reason: str,
-    nobroadcast: bool = False,
-) -> Dict[str, Any]:
+async def custom_json_transfer(
+    custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
+) -> LedgerEntry:
     """
-    Create a notification payload for a custom JSON operation.
+    Process a custom JSON transfer operation.
+    This function handles the transfer of Keepsats and sends a notification if necessary.
     """
-    return {
-        "type": "custom_json_notification",
-        "short_id": custom_json.short_id,
-        "group_id": custom_json.group_id,
-        "cust_id": custom_json.cust_id,
-        "reason": reason,
-        "nobroadcast": nobroadcast,
-    }
+    # This is a transfer between two accounts
+    logger.info(
+        f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+    )
+    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    transfer_ledger_entry = LedgerEntry(
+        cust_id=custom_json.cust_id,
+        short_id=custom_json.short_id,
+        ledger_type=ledger_type,
+        group_id=custom_json.group_id,
+        timestamp=custom_json.timestamp,
+        description=f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats",
+        op_type=custom_json.op_type,
+        debit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.from_account),
+        debit_conv=custom_json.conv,
+        debit_amount=keepsats_transfer.sats * 1000,
+        debit_unit=Currency.MSATS,
+        credit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.to_account),
+        credit_conv=custom_json.conv,
+        credit_unit=Currency.MSATS,
+        credit_amount=keepsats_transfer.sats * 1000,
+        user_memo=keepsats_transfer.memo or "",
+    )
+    # TODO: #144 need to look into where else `user_memo` needs to be used
+    await transfer_ledger_entry.save()
+
+    if keepsats_transfer.sats <= V4VConfig().data.minimum_invoice_payment_sats:
+        logger.info(f"Invoice {custom_json.short_id} is below the minimum notification threshold.")
+        return transfer_ledger_entry
+
+    if keepsats_transfer.memo:
+        reason = f"{keepsats_transfer.memo}"
+    else:
+        reason = (
+            f"You received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+        )
+
+    trx = await send_notification_hive_transfer(
+        pay_to_cust_id=keepsats_transfer.to_account,
+        tracked_op=custom_json,
+        reason=reason,
+        nobroadcast=nobroadcast,
+    )
+    logger.info(
+        f"Notification transaction created for operation {custom_json.group_id}",
+        extra={"notification": True, "trx": trx, **custom_json.log_extra},
+    )
+    return transfer_ledger_entry
 
 
 # Last line of the file

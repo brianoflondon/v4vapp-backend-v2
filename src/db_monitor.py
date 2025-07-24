@@ -240,7 +240,7 @@ async def subscribe_stream(
             pipeline=pipeline,
             full_document="updateLookup",
             resume_after=resume_token,
-            start_at_operation_time=ts if not resume_token else None,
+            # start_at_operation_time=ts if not resume_token else None,
         ) as stream:
             async for change in stream:
                 full_document = change.get("fullDocument") or {}

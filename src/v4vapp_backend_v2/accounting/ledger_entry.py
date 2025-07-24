@@ -112,6 +112,7 @@ class LedgerType(StrEnum):
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
+    CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
@@ -195,6 +196,9 @@ class LedgerEntry(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
     description: str = Field("", description="Description of the ledger entry")
+    user_memo: str = Field(
+        "", description="A memo which can be shown to users for the ledger entry"
+    )
     cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )

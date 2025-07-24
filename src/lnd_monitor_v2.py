@@ -2,6 +2,7 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
+from pprint import pprint
 from typing import Annotated, Any, List
 
 import typer
@@ -643,6 +644,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
                     filter=query,
                 )
                 if read_invoice:
+                    continue
+                    # this match is only necessary if running for the first time or filling an empty database
                     try:
                         db_invoice = Invoice(**read_invoice)
                         if db_invoice == invoice:
@@ -728,6 +731,19 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
             index_offset = payments_raw.first_index_offset
             bulk_updates = []
             for payment in list_payments.payments:
+                query = {"payment_hash": payment.payment_hash}
+                read_payment = await Payment.collection().find_one(
+                    filter=query,
+                )
+                if read_payment and read_payment.get("route_str"):
+                    continue
+                    try:
+                        db_payment = Payment.model_validate(read_payment)
+                        if db_payment == payment:
+                            continue
+                    except Exception as e:
+                        logger.warning(e, extra={"notification": False, "payment": read_payment})
+                        pass
                 await update_payment_route_with_alias(
                     lnd_client=lnd_client,
                     payment=payment,
@@ -737,18 +753,6 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
-                query = {"payment_hash": payment.payment_hash}
-                read_payment = await Payment.collection().find_one(
-                    filter=query,
-                )
-                if read_payment:
-                    try:
-                        db_payment = Payment.model_validate(read_payment)
-                        if db_payment == payment:
-                            continue
-                    except Exception as e:
-                        logger.warning(e, extra={"notification": False, "payment": read_payment})
-                        pass
                 bulk_updates.append(
                     {
                         "filter": query,

@@ -1,3 +1,5 @@
+import os
+import sys
 from datetime import datetime, timezone
 from typing import Any, Dict
 from urllib.parse import quote_plus
@@ -8,6 +10,8 @@ from pymongo.database import Database
 from pymongo.errors import CollectionInvalid, OperationFailure
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
+
+app_name = os.path.basename(sys.argv[0])
 
 DATABASE_ICON = "📁"
 
@@ -44,10 +48,9 @@ class DBConn:
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
-            # w="majority",  # Ensure write operations are acknowledged by the majority of nodes
-            # r="majority",  # Ensure read operations are from the majority of nodes
-            # j=True,
-            # appName="my-async-application",  # Optional: for MongoDB monitoring
+            w=1,  # Ensure write operations are acknowledged by the majority of nodes
+            journal=True,  # If True block until write operations have been committed to the journal
+            appName=app_name,  # Optional: for MongoDB monitoring
         )
 
         return client
@@ -221,9 +224,9 @@ class DBConn:
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
-            w="majority",  # Ensure write operations are acknowledged by the majority of nodes
-            # r="majority",  # Ensure read operations are from the majority of nodes
-            # j=True,  # Ensure write operations are journaled
+            w=1,  # Ensure write operations are acknowledged by the majority of nodes
+            journal=True,  # If True block until write operations have been committed to the journal
+            appName=app_name,  # Optional: for MongoDB monitoring
         )
 
     def db_sync(self) -> Database[Dict[str, Any]]:  # pragma: no cover

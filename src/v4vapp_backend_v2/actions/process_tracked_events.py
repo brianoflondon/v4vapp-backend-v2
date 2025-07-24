@@ -14,8 +14,12 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
 )
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.custom_json_to_lnd import process_custom_json_to_lightning
-from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning, return_hive_transfer
+from v4vapp_backend_v2.actions.custom_json_to_lnd import (
+    custom_json_transfer,
+    process_custom_json_to_lightning,
+)
+from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning
 from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
@@ -287,8 +291,8 @@ async def process_lightning_payment(
                         f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
                     )
                     try:
-                        await return_hive_transfer(
-                            hive_transfer=hive_transfer,
+                        await send_notification_hive_transfer(
+                            tracked_op=hive_transfer,
                             reason=return_hive_message,
                             nobroadcast=nobroadcast,
                         )
@@ -606,10 +610,21 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
 
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
 
+        if (
+            keepsats_transfer.from_account
+            and keepsats_transfer.to_account
+            and keepsats_transfer.sats
+            and keepsats_transfer.from_account != keepsats_transfer.to_account
+        ):
+            ledger_entry = await custom_json_transfer(
+                custom_json=custom_json, keepsats_transfer=keepsats_transfer
+            )
+            return ledger_entry
+
         # If this has an invoice message we will process it as an external lightning transfer
-        if keepsats_transfer.memo:
+        elif keepsats_transfer.memo and not keepsats_transfer.to_account:
             try:
-                ledger_type = LedgerType.CUSTOM_JSON_NOTIFICATION
+                ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
                 custom_json_ledger_entry = LedgerEntry(
                     cust_id=custom_json.cust_id,
                     short_id=custom_json.short_id,
@@ -647,25 +662,9 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                     f"Failed to process CustomJson to Lightning: {e}"
                 ) from e
 
-        if keepsats_transfer.to_account != keepsats_transfer.from_account:
-            # This is a transfer between two different accounts
-            logger.info(
-                f"Transfer between two different accounts: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
-            )
-            raise NotImplementedError(
-                "Transfer between two different accounts is not implemented yet."
-            )
-
-            ledger_entry = LedgerEntry(
-                group_id=custom_json.group_id,
-                short_id=custom_json.short_id,
-                timestamp=custom_json.timestamp,
-                op_type=custom_json.op_type,
-                description=keepsats_transfer.description,
-                debit_unit=Currency.MSATS,
-            )
-
-            return ledger_entry
+        raise NotImplementedError(
+            "Transfer between two different accounts is not implemented yet."
+        )
 
 
 # Last line of the file
