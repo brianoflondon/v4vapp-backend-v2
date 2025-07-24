@@ -12,6 +12,7 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     all_account_balances,
+    get_keepsats_balance,
     list_all_accounts,
     one_account_balance,
 )
@@ -117,7 +118,6 @@ async def test_one_account_balances():
     balance = await one_account_balance(account=account)
     assert isinstance(balance, LedgerAccountDetails)
 
-    print(balance)
     for currency, lines in balance.balances.items():
         print(f"Currency: {currency}")
         for line in lines:
@@ -134,7 +134,7 @@ async def test_one_account_balances():
             for row in balance.balances[unit]:
                 timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
                 print(timestamp)
-
+    pprint(balance)
 
 async def test_get_account_balance_printout2():
     account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
@@ -145,3 +145,10 @@ async def test_get_account_balance_printout2():
     accounts = await list_all_accounts()
     for account in accounts:
         result, details = await account_balance_printout(account)
+
+
+async def test_get_keepsats_balance():
+    cust_id = "v4vapp-test"
+    details, net_sats = await get_keepsats_balance(cust_id=cust_id)
+    pprint(details)
+    print(f"Net Sats for {cust_id}: {net_sats}")

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Tuple
+from typing import List, Tuple
 
 from nectar.amount import Amount
 
@@ -21,7 +21,7 @@ from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 async def hive_to_keepsats_deposit(
     hive_transfer: TrackedTransfer, nobroadcast: bool = False
-) -> Tuple[list[LedgerEntry], str, Amount]:
+) -> Tuple[List[LedgerEntry], str, Amount]:
     """
     Handle a deposit to Keepsats from Hive, returns the ledger entries for this operation and
     the message and amount to be sent back to the customer as change.
@@ -101,7 +101,6 @@ async def hive_to_keepsats_deposit(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=hive_transfer,
         description=f"Convert {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -119,6 +118,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(conversion_ledger_entry)
+    await conversion_ledger_entry.save()
     # NOTE: The Treasury Lightning account now holds converted sats but in reality these are
     # Probably need a contra asset account for the Treasury Lightning account to track the conversion
 
@@ -131,7 +131,6 @@ async def hive_to_keepsats_deposit(
         ledger_type=LedgerType.CONTRA_HIVE_TO_KEEPSATS,
         group_id=f"{hive_transfer.group_id}-{LedgerType.CONTRA_HIVE_TO_KEEPSATS.value}",
         timestamp=next(timestamp),
-        op=hive_transfer,
         description=f"Contra asset for Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=hive_transfer.unit,
@@ -147,6 +146,7 @@ async def hive_to_keepsats_deposit(
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(contra_ledger_entry)
+    await contra_ledger_entry.save()
 
     # MARK: 4 Fee Income
     ledger_type = LedgerType.FEE_INCOME
@@ -161,7 +161,6 @@ async def hive_to_keepsats_deposit(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=hive_transfer,
         description=f"Fee for Keepsats deposit {hive_transfer.amount_str} to {amount_to_deposit_msats / 1000:,.0f} sats deposit",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -179,17 +178,17 @@ async def hive_to_keepsats_deposit(
         credit_conv=fee_credit_conv,
     )
     ledger_entries_list.append(fee_ledger_entry)
+    await fee_ledger_entry.save()
 
     # MARK: 5 Convert to Keepsats in customer account into the Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
-    outgoing_ledger_entry = LedgerEntry(
+    deposit_ledger_entry = LedgerEntry(
         short_id=hive_transfer.short_id,
         op_type=hive_transfer.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
-        op=hive_transfer,
         description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -203,7 +202,8 @@ async def hive_to_keepsats_deposit(
         credit_amount=amount_to_deposit_msats,
         credit_conv=amount_to_deposit_conv,
     )
-    ledger_entries_list.append(outgoing_ledger_entry)
+    ledger_entries_list.append(deposit_ledger_entry)
+    await deposit_ledger_entry.save()
 
     reason = f"Keepsats deposit of {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}"
 

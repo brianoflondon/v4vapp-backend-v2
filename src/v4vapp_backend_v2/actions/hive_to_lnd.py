@@ -1,4 +1,3 @@
-import asyncio
 from typing import Dict, List, Tuple
 
 from nectar.amount import Amount
@@ -11,7 +10,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
-from v4vapp_backend_v2.actions.keepsats_ledger_entries import hold_keepsats, release_keepsats
+from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -62,97 +61,6 @@ class HiveRefundNeeded(HiveToLightningError):
         self.reason = reason
         self.group_id = group_id
         self.fee = fee
-
-
-async def check_for_hive_to_lightning(op: OpAny) -> bool:
-    """
-    Check if the Hive to Lightning process is running.
-    """
-    # Placeholder for actual implementation
-    return True
-
-
-async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
-    """
-    Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
-    """
-    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=hive_transfer.from_account)
-    logger.info(
-        f"Checking Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats"
-    )
-    if not keepsats_balance:
-        raise HiveToLightningError(
-            "Pay with sats operation detected, but no Keepsats balance found."
-        )
-    # TODO: Need to account for routing fees in Keepsats payments
-    if net_sats < pay_req.value:
-        raise HiveToLightningError(
-            f"Not enough Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
-        )
-    return ""
-
-
-async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
-    """
-    Asynchronously checks whether a payment attempt can be made for a given payment request.
-
-    This function verifies the status of the invoice associated with the provided payment request
-    by querying the database. If the invoice does not exist in the database, it is assumed that
-    a payment attempt can be made. If the invoice exists but its status is not "open", payment
-    cannot be attempted. Otherwise, payment can be attempted.
-
-    Args:
-        pay_req (PayReq): The payment request object containing the payment request string and logging context.
-
-    Returns:
-        bool: True if payment can be attempted, False otherwise.
-
-    Raises:
-        AssertionError: If the database client is not initialized.
-    """
-    if pay_req.is_zero_value:
-        if hive_transfer.conv.in_limits():
-            return ""
-        else:
-            return "Payment request has zero value, but conversion limits exceeded."
-
-    surplus_msats = hive_transfer.max_send_amount_msats() - pay_req.value_msat
-    if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
-        if hive_transfer.conv.conv_from == Currency.HIVE:
-            surplus_hive = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3)
-            failure_reason = (
-                f"Not enough sent to process this payment request: {surplus_hive} HIVE"
-            )
-        elif hive_transfer.conv.conv_from == Currency.HBD:
-            surplus_hbd = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3)
-            failure_reason = f"Not enough sent to process this payment request: {surplus_hbd} HBD"
-        else:
-            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
-
-        return failure_reason
-    return ""
-
-
-async def check_user_limits(extra_spend_sats: int, hive_transfer: TrackedTransfer) -> str:
-    """
-    Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
-
-        pay_req (PayReq): The payment request object containing details of the Lightning payment.
-        hive_transfer (TrackedTransfer): The Hive transfer object representing the user's transfer details.
-
-        str: An empty string if the user has sufficient limits; otherwise, a message describing the limit violation.
-
-    """
-    limit_check = await check_hive_conversion_limits(
-        hive_accname=hive_transfer.from_account, extra_spend_sats=extra_spend_sats
-    )
-    for limit in limit_check:
-        if not limit.limit_ok:
-            logger.warning(
-                limit.output_text, extra={"notification": False, **hive_transfer.log_extra}
-            )
-            return limit.output_text
-    return ""
 
 
 async def process_hive_to_lightning(
@@ -288,8 +196,8 @@ async def process_hive_to_lightning(
                         # be updated to the final entry on success.
                         await hold_keepsats(
                             amount_msats=pay_req.value_msat + pay_req.fee_estimate,
-                            cust_id=hive_transfer.from_account,
-                            hive_transfer=hive_transfer,
+                            cust_id=hive_transfer.cust_id,
+                            tracked_op=hive_transfer,
                         )
 
                     chat_message = f"Sending sats from v4v.app | § {hive_transfer.short_id} |"
@@ -346,7 +254,7 @@ async def process_hive_to_lightning(
 
                 finally:
                     if hive_transfer.paywithsats and release_hold:
-                        await release_keepsats(hive_transfer=hive_transfer)
+                        await release_keepsats(tracked_op=hive_transfer)
 
                     if return_hive_message:
                         try:
@@ -373,6 +281,97 @@ async def process_hive_to_lightning(
                     f"🟥 Failed to take action on Hive Transfer {hive_transfer.notification_str}",
                     extra={"notification": True, **hive_transfer.log_extra},
                 )
+
+
+async def check_for_hive_to_lightning(op: OpAny) -> bool:
+    """
+    Check if the Hive to Lightning process is running.
+    """
+    # Placeholder for actual implementation
+    return True
+
+
+async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
+    """
+    Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
+    """
+    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=hive_transfer.from_account)
+    logger.info(
+        f"Checking Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats"
+    )
+    if not keepsats_balance.balances.get(Currency.MSATS):
+        raise HiveToLightningError(
+            "Pay with sats operation detected, but no Keepsats balance found."
+        )
+    # TODO: Need to account for routing fees in Keepsats payments
+    if net_sats < pay_req.value:
+        raise HiveToLightningError(
+            f"Not enough Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+        )
+    return ""
+
+
+async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
+    """
+    Asynchronously checks whether a payment attempt can be made for a given payment request.
+
+    This function verifies the status of the invoice associated with the provided payment request
+    by querying the database. If the invoice does not exist in the database, it is assumed that
+    a payment attempt can be made. If the invoice exists but its status is not "open", payment
+    cannot be attempted. Otherwise, payment can be attempted.
+
+    Args:
+        pay_req (PayReq): The payment request object containing the payment request string and logging context.
+
+    Returns:
+        bool: True if payment can be attempted, False otherwise.
+
+    Raises:
+        AssertionError: If the database client is not initialized.
+    """
+    if pay_req.is_zero_value:
+        if hive_transfer.conv.in_limits():
+            return ""
+        else:
+            return "Payment request has zero value, but conversion limits exceeded."
+
+    surplus_msats = hive_transfer.max_send_amount_msats() - pay_req.value_msat
+    if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
+        if hive_transfer.conv.conv_from == Currency.HIVE:
+            surplus_hive = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3)
+            failure_reason = (
+                f"Not enough sent to process this payment request: {surplus_hive} HIVE"
+            )
+        elif hive_transfer.conv.conv_from == Currency.HBD:
+            surplus_hbd = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3)
+            failure_reason = f"Not enough sent to process this payment request: {surplus_hbd} HBD"
+        else:
+            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
+
+        return failure_reason
+    return ""
+
+
+async def check_user_limits(extra_spend_sats: int, hive_transfer: TrackedTransfer) -> str:
+    """
+    Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
+
+        pay_req (PayReq): The payment request object containing details of the Lightning payment.
+        hive_transfer (TrackedTransfer): The Hive transfer object representing the user's transfer details.
+
+        str: An empty string if the user has sufficient limits; otherwise, a message describing the limit violation.
+
+    """
+    limit_check = await check_hive_conversion_limits(
+        hive_accname=hive_transfer.from_account, extra_spend_sats=extra_spend_sats
+    )
+    for limit in limit_check:
+        if not limit.limit_ok:
+            logger.warning(
+                limit.output_text, extra={"notification": False, **hive_transfer.log_extra}
+            )
+            return limit.output_text
+    return ""
 
 
 async def decode_incoming_and_checks(
@@ -645,11 +644,7 @@ async def convert_hive_to_keepsats(
         )
         logger.info(f"Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats")
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
-        for entry in ledger_entries:
-            logger.info(f"Ledger Entries for hive to keepsats conversion: {hive_transfer.log_str}")
-            logger.info(entry)
-            await entry.save()
-        await asyncio.sleep(5)
+
         keepsats_balance_after, net_sats_after = await get_keepsats_balance(
             cust_id=hive_transfer.from_account
         )
@@ -796,7 +791,7 @@ async def return_hive_transfer(
         )
         raise HiveToLightningError(message)
 
-
+#TODO: Move this to a separate file hive extras
 async def get_verified_hive_client(
     hive_role: HiveRoles = HiveRoles.server,
     nobroadcast: bool = False,
@@ -869,5 +864,3 @@ async def get_verified_hive_client_for_accounts(
         nobroadcast=nobroadcast,
     )
     return hive_client
-
-

@@ -7,6 +7,7 @@ import pytest
 
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
 
 @pytest.fixture(autouse=True)
@@ -80,3 +81,15 @@ async def test_cust_id_lock():
     )
     await CustID.clear_all_locks()
     logger.info("All locks cleared after test completion.")
+
+def test_cust_id():
+    cust_id = CustID("testaccount")
+    assert isinstance(cust_id, str), "CustID should be a string"
+    assert cust_id.link == "https://hivehub.dev/@testaccount", "Link property is incorrect"
+    assert cust_id.markdown_link == "[testaccount](https://hivehub.dev/@testaccount)", (
+        "Markdown link property is incorrect"
+    )
+    assert cust_id.is_hive, "valid_hive_account should return True for valid account"
+
+    cust_id = CustID("0x98689kjhkjhiuh")
+    assert not cust_id.is_hive, "valid_hive_account should return False for invalid account"

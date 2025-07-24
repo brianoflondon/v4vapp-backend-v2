@@ -12,7 +12,6 @@ from v4vapp_backend_v2.config.setup import logger
 
 async def get_ledger_entries(
     as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
-    collection_name: str = "",
     filter_by_account: LedgerAccount | None = None,
     cust_id: str | None = None,
     filter_by_ledger_types: list[LedgerType] | None = None,

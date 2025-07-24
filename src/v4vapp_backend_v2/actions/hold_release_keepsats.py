@@ -6,10 +6,11 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 
 async def hold_keepsats(
-    amount_msats: int, cust_id: str, hive_transfer: TrackedTransfer
+    amount_msats: int, cust_id: str, tracked_op: TrackedTransfer | CustomJson
 ) -> LedgerEntry:
     """
     Creates and saves a ledger entry representing the withdrawal of Keepsats from a customer's liability account to the treasury.
@@ -28,12 +29,11 @@ async def hold_keepsats(
     ledger_type = LedgerType.HOLD_KEEPSATS
     withdraw_ledger_entry = LedgerEntry(
         cust_id=cust_id,
-        short_id=hive_transfer.short_id,
-        op_type=hive_transfer.op_type,
+        short_id=tracked_op.short_id,
+        op_type=tracked_op.op_type,
         ledger_type=ledger_type,
-        group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        op=hive_transfer,
         description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -51,9 +51,9 @@ async def hold_keepsats(
     return withdraw_ledger_entry
 
 
-async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None:
+async def release_keepsats(tracked_op: TrackedTransfer | CustomJson) -> LedgerEntry | None:
     ledger_type = LedgerType.HOLD_KEEPSATS
-    group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
+    group_id = f"{tracked_op.group_id}-{ledger_type.value}"
     existing_entry_raw = await LedgerEntry.collection().find_one(
         filter={"group_id": group_id},
     )
@@ -66,15 +66,14 @@ async def release_keepsats(hive_transfer: TrackedTransfer) -> LedgerEntry | None
         return None
 
     ledger_type = LedgerType.RELEASE_KEEPSATS
-    group_id = f"{hive_transfer.group_id}-{ledger_type.value}"
+    group_id = f"{tracked_op.group_id}-{ledger_type.value}"
     release_ledger_entry = LedgerEntry(
         cust_id=existing_entry.cust_id,
-        short_id=hive_transfer.short_id,
-        op_type=hive_transfer.op_type,
+        short_id=tracked_op.short_id,
+        op_type=tracked_op.op_type,
         ledger_type=ledger_type,
         group_id=group_id,
         timestamp=datetime.now(tz=timezone.utc),
-        op=hive_transfer,
         description=f"Release Keepsats for {existing_entry.cust_id}",
         debit=LiabilityAccount(name="Keepsats Hold", sub="keepsats"),
         debit_unit=Currency.MSATS,

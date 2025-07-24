@@ -8,11 +8,13 @@ from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import LockError, LockNotOwnedError
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
 LOCK_REPORTING_TIME = 5
 
 
 ICON = "🔒"  # Icon to represent the lock in logs and messages
+
 
 class CustIDLockException(Exception):
     """Custom exception for CustID lock acquisition failures."""
@@ -20,7 +22,7 @@ class CustIDLockException(Exception):
     pass
 
 
-class CustID(str):
+class CustID(AccName):
     """
     Customer ID class with simplified locking functionality.
 

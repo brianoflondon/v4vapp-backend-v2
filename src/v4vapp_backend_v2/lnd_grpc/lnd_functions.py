@@ -266,7 +266,7 @@ async def send_lightning_to_pay_req(
     pay_with_sats: str = str(paywithsats)
 
     dest_custom_records = {
-        # 5482373484: b64_hex_transform(pre_image), # Used in keysend
+        # 5482373484: b64_hex_transform(pre_image), # Used in keysend to carry the pre-image
         # 818818: b64_transform(hive_accname),   Used in V4Vapp podcasting
         34349334: chat_message.encode(),  # Used in V4Vapp
         1818181818: group_id.encode(),  # Used in V4Vapp
@@ -295,7 +295,7 @@ async def send_lightning_to_pay_req(
         )
     # Must prevent 0 fee limit which is an unlimited fee.
     fee_limit_msat = max(fee_limit_msat, 1000)
-    logger.info(f"Fee limit: {fee_limit_msat/1000:.0f} sats")
+    logger.info(f"Fee limit: {fee_limit_msat / 1000:.0f} sats")
     failure_reason = "Unknown Failure"
     # Construct the SendPaymentRequest parameters
     request_params = request_params | {
@@ -341,8 +341,11 @@ async def send_lightning_to_pay_req(
         try:
             await logging_task
         except asyncio.CancelledError:
-            logger.info(f"{payment_id} Payment logging task cancelled")
             pass
+        except Exception as e:
+            logger.error(
+                f"{payment_id} Error during logging task: {e}", extra={"notification": False}
+            )
 
     # NOTHING VITAL HAPPENS IF A PAYMENT IS A HOLD INVOICE AND THIS IS INTERRUPTED
     # The payment for the hold invoice, if it happens, will be found by db_monitor
@@ -409,7 +412,7 @@ async def log_payment_in_process(payment_id: str, response_queue: asyncio.Queue)
                     },
                 )
         except asyncio.CancelledError:
-            logger.info(f"{payment_id} Payment logging cancelled by successful payment")
+            logger.info(f"{payment_id} Payment logging ended by successful payment")
             raise
         except Exception as e:
             logger.error(f"{payment_id} Error logging payment in process: {e}")

@@ -1,10 +1,11 @@
 import asyncio
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
 import typer
+from bson.timestamp import Timestamp
 from pydantic import BaseModel, Field
 from pymongo.errors import OperationFailure
 
@@ -232,10 +233,14 @@ async def subscribe_stream(
     resume = ResumeToken(collection=collection_name)
     try:
         resume_token = resume.token
+        # Convert one_minute_ago to a Timestamp object
+        one_minute_ago = datetime.now(tz=timezone.utc) - timedelta(minutes=10)
+        ts = Timestamp(int(one_minute_ago.timestamp()), 1)
         async with await collection.watch(
             pipeline=pipeline,
             full_document="updateLookup",
             resume_after=resume_token,
+            start_at_operation_time=ts if not resume_token else None,
         ) as stream:
             async for change in stream:
                 full_document = change.get("fullDocument") or {}

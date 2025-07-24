@@ -7,8 +7,10 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
     get_keepsats_balance,
+    one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
@@ -33,6 +35,10 @@ async def get_limits():
 
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
+
+    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    balance = await one_account_balance(account=account)
+    pprint(balance)
 
 
 async def main():
@@ -59,103 +65,12 @@ async def main():
 
     print("-------------- Keepsats balance ----------------")
     keepsats_balance, net_sats = await get_keepsats_balance(cust_id=cust_id, line_items=False)
-    print("Keepsats Balance Summary:")
+
     pprint(net_sats)
-
-    aggregation_pipeline = [
-        {"$match": {"cust_id": cust_id}},
-        {
-            "$facet": {
-                # Original sum calculations
-                "debit_sum": [
-                    {
-                        "$match": {
-                            "debit.name": "Customer Liability",
-                            "debit.account_type": "Liability",
-                            "debit.sub": cust_id,
-                        }
-                    },
-                    {"$group": {"_id": None, "total": {"$sum": "$debit_amount_signed"}}},
-                ],
-                "credit_sum": [
-                    {
-                        "$match": {
-                            "credit.name": "Customer Liability",
-                            "credit.account_type": "Liability",
-                            "credit.sub": cust_id,
-                        }
-                    },
-                    {"$group": {"_id": None, "total": {"$sum": "$credit_amount_signed"}}},
-                ],
-                # New line item details
-                "debit_items": [
-                    {
-                        "$match": {
-                            "debit.name": "Customer Liability",
-                            "debit.account_type": "Liability",
-                            "debit.sub": cust_id,
-                        }
-                    },
-                    {
-                        "$project": {
-                            "description": 1,
-                            "ledger_type": 1,
-                            # "timestamp": 1,
-                            # "amount": "$debit_amount",
-                            # "unit": "$debit_unit",
-                            # "amount_signed": "$debit_amount_signed",
-                            # "short_id": 1,
-                            # "debit_conv": "$debit_conv",
-                        }
-                    },
-                    {"$sort": {"timestamp": -1}},  # Newest first
-                ],
-                "credit_items": [
-                    {
-                        "$match": {
-                            "credit.name": "Customer Liability",
-                            "credit.account_type": "Liability",
-                            "credit.sub": cust_id,
-                        }
-                    },
-                    {
-                        "$project": {
-                            "description": 1,
-                            "ledger_type": 1,
-                            "timestamp": 1,
-                            "amount": "$credit_amount",
-                            "unit": "$credit_unit",
-                            "amount_signed": "$credit_amount_signed",
-                            "short_id": 1,
-                        }
-                    },
-                    {"$sort": {"timestamp": -1}},  # Newest first
-                ],
-            }
-        },
-        {
-            "$project": {
-                "debit_total": {"$arrayElemAt": ["$debit_sum.total", 0]},
-                "credit_total": {"$arrayElemAt": ["$credit_sum.total", 0]},
-                "grand_total": {
-                    "$add": [
-                        {"$arrayElemAt": ["$debit_sum.total", 0]},
-                        {"$arrayElemAt": ["$credit_sum.total", 0]},
-                    ]
-                },
-                "debit_items": 1,
-                "credit_items": 1,
-            }
-        },
-    ]
-
-    cursor = await InternalConfig.db["ledger"].aggregate(aggregation_pipeline)
-    result = await cursor.to_list(length=None)
-    pprint(result)
-
-
-    ans = await check_balance_sheet_mongodb()
+    ans, tolerance = await check_balance_sheet_mongodb()
     print("Balance Sheet Check Result:", ans)
+    print("Balance Sheet Check Tolerance:", tolerance)
+
 
 if __name__ == "__main__":
     target_dir = "/Users/bol/Documents/dev/v4vapp/v4vapp-backend-v2/"

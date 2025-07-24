@@ -5,8 +5,6 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 
 
-
-
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
@@ -39,7 +37,7 @@ def filter_by_account_as_of_date_query(
     else:
         date_range_query = {"$lte": as_of_date}
 
-    query: Mapping[str, Any] = {"timestamp": date_range_query}
+    query: Dict[str, Any] = {"timestamp": date_range_query}
 
     if account:
         query["$or"] = [

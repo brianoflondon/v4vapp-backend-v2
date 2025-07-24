@@ -9,7 +9,6 @@ import sys
 import time
 from enum import StrEnum
 from pathlib import Path
-from statistics import mean, stdev
 from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
 import colorlog
@@ -902,7 +901,10 @@ class InternalConfig:
             loop = asyncio.get_running_loop()
             if loop is not self.notification_loop:
                 loop.create_task(self.close_db_clients_async())
-                if hasattr(InternalConfig, "redis_async") and InternalConfig.redis_async is not None:
+                if (
+                    hasattr(InternalConfig, "redis_async")
+                    and InternalConfig.redis_async is not None
+                ):
                     loop.create_task(InternalConfig.redis_async.close())
                     logger.info("Closed async Redis client.")
         except RuntimeError:
@@ -1036,8 +1038,12 @@ def async_time_stats_decorator(runs=1):
         Exception: Re-raises any exception encountered during the execution of the
         decorated function, after logging the failure and execution time.
     """
+    ICON = "⏰"
 
     def decorator(func):
+        import time  # Local import to ensure availability
+        from statistics import mean, stdev  # Also import these locally
+
         timings = []
 
         @functools.wraps(func)
@@ -1053,13 +1059,13 @@ def async_time_stats_decorator(runs=1):
                 if len(timings) >= runs:
                     avg_time = mean(timings)
                     logger.info(
-                        f"Function '{func.__qualname__[:26]}' stats - "
-                        f"Last: {execution_time:.4f}s, "
-                        f"Avg: {avg_time:.4f}s, "
-                        f"Runs: {len(timings)}"
+                        f"{ICON} Last: {execution_time * 1000:>4.0f}ms, "
+                        f"Avg: {avg_time * 1000:>4.0f}ms, "
+                        f"Runs: {len(timings)} "
+                        f"{func.__qualname__[:34]:<38} - {kwargs}"
                     )
                     if len(timings) > 1:
-                        logger.info(f"Std Dev: {stdev(timings):.4f}s")
+                        logger.info(f"{ICON} Std Dev: {stdev(timings) * 1000:>4.0f}ms")
                     timings = []  # Reset after reporting
 
                 return result
@@ -1067,7 +1073,7 @@ def async_time_stats_decorator(runs=1):
                 end_time = time.time()
                 execution_time = end_time - start_time
                 logger.warning(
-                    f"Function '{func.__qualname__[:26]}' failed after "
+                    f"{ICON} Function '{func.__qualname__[:26]}' failed after "
                     f"{execution_time:.4f}s with error: {str(e)}"
                 )
                 raise

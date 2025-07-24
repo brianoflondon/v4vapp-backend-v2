@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
+from dataclasses import field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
 from pydantic import BaseModel, Field, RootModel
+from pydantic.dataclasses import dataclass
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
@@ -111,39 +112,33 @@ class AccountBalanceLine(BaseModel):
 
 class LedgerAccountDetails(LedgerAccount):
     balances: Dict[Currency, List[AccountBalanceLine]] = {}
+    hive: float = 0.0
+    hbd: float = 0.0
+    usd: float = 0.0
+    msats: int = 0
+    sats: int = 0
+    conv_total: ConvertedSummary = ConvertedSummary()
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        if Currency.HIVE in self.balances:
+            self.hive = round(self.balances[Currency.HIVE][-1].amount_running_total, 3)
+            self.conv_total += self.balances[Currency.HIVE][-1].conv_running_total
+        if Currency.HBD in self.balances:
+            self.hbd = round(self.balances[Currency.HBD][-1].amount_running_total, 3)
+            self.conv_total += self.balances[Currency.HBD][-1].conv_running_total
+        if Currency.USD in self.balances:
+            self.usd = round(self.balances[Currency.USD][-1].amount_running_total, 3)
+            self.conv_total += self.balances[Currency.USD][-1].conv_running_total
+        if Currency.MSATS in self.balances:
+            self.msats = int(self.balances[Currency.MSATS][-1].amount_running_total)
+            self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
+            self.sats = int(round(self.msats / 1000, 0))
 
 
 class AccountBalances(RootModel):
     root: List[LedgerAccountDetails]
 
 
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
-# This is the last line# This is the last line
 # This is the last line# This is the last line

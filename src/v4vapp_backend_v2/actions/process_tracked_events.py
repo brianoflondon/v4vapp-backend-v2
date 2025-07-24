@@ -12,13 +12,12 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
     LedgerEntryException,
     LedgerType,
 )
+from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.hive_to_lightning import (
-    process_hive_to_lightning,
-    return_hive_transfer,
-)
-from v4vapp_backend_v2.actions.keepsats_ledger_entries import release_keepsats
-from v4vapp_backend_v2.actions.lightning_to_hive import process_lightning_to_hive
+from v4vapp_backend_v2.actions.custom_json_to_lnd import process_custom_json_to_lightning
+from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning, return_hive_transfer
+from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
+from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
     keepsats_to_lightning_payment_success,
@@ -30,6 +29,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case, lightning_memo
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -80,7 +80,6 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             for ledger_entry in ledger_entries:
                 try:
                     # DEBUG section
-                    logger.info("\n" + str(ledger_entry))
                     is_balanced, _ = await check_balance_sheet_mongodb()
                     if not is_balanced:
                         logger.warning(
@@ -131,16 +130,10 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
 
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
-    """
-    ledger_entry = LedgerEntry(
-        group_id=op.group_id,
-        timestamp=op.timestamp,
-    )
+    """  # Combine these
     if isinstance(op, Invoice):
-        ledger_entry.op_type = "invoice"
-        ledger_entries = await process_lightning_invoice(invoice=op, ledger_entry=ledger_entry)
+        ledger_entries = await process_lightning_invoice(invoice=op)
     elif isinstance(op, Payment):
-        ledger_entry.op_type = "payment"
         ledger_entries = await process_lightning_payment(payment=op)
 
     return ledger_entries
@@ -151,9 +144,7 @@ async def process_lightning_op(op: Invoice | Payment) -> List[LedgerEntry]:
 # MARK: Invoice (inbound Lightning)
 
 
-async def process_lightning_invoice(
-    invoice: Invoice, ledger_entry: LedgerEntry
-) -> List[LedgerEntry]:
+async def process_lightning_invoice(invoice: Invoice) -> List[LedgerEntry]:
     """
     Processes a Lightning Network invoice and updates the corresponding ledger entry.
 
@@ -178,23 +169,33 @@ async def process_lightning_invoice(
     # Invoice means we are receiving sats from external.
     # Invoice is locked by outer process.
     node_name = InternalConfig().config.lnd_config.default
+    # MARK: Funding
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
-    ledger_entry.cust_id = invoice.cust_id if invoice.cust_id is not None else node_name
-    ledger_entry.description = invoice.memo
-    ledger_entry.credit_unit = ledger_entry.debit_unit = Currency.MSATS
-    ledger_entry.credit_amount = ledger_entry.debit_amount = float(invoice.amt_paid_msat)
-    ledger_entry.credit_conv = invoice.conv or CryptoConv()
-    ledger_entry.debit_conv = invoice.conv or CryptoConv()
     if "funding" in invoice.memo.lower():
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
-        ledger_entry.debit = AssetAccount(name="Treasury Lightning", sub=node_name)
-        ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name)
+        ledger_entry = LedgerEntry(
+            group_id=invoice.group_id,
+            short_id=invoice.short_id,
+            description=invoice.memo,
+            timestamp=invoice.timestamp,
+            op_type=invoice.op_type,
+            cust_id=invoice.cust_id or node_name,
+            debit=AssetAccount(name="Treasury Lightning", sub=node_name),
+            debit_unit=Currency.MSATS,
+            debit_amount=float(invoice.amt_paid_msat),
+            credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name),
+            credit_amount=float(invoice.amt_paid_msat),
+            credit_unit=Currency.MSATS,
+        )
+        await ledger_entry.save()
         return [ledger_entry]
+    # MARK: Regular Invoice LND to Hive or Keepsats
     if invoice.is_lndtohive:
-        await process_lightning_to_hive(invoice=invoice)
+        ledger_entries = await process_lightning_to_hive_or_keepsats(invoice=invoice)
+        return ledger_entries
     elif "Exchange" in invoice.memo:
-        print(invoice)
+        raise NotImplementedError("Exchange invoice processing is not implemented yet.")
 
     raise NotImplementedError("process_lightning_op is not implemented yet.")
 
@@ -237,8 +238,10 @@ async def process_lightning_payment(
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
             initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
-            if isinstance(initiating_op, TransferBase):
-                if getattr(initiating_op, "paywithsats", None):
+            if isinstance(initiating_op, TransferBase | CustomJson):
+                if getattr(initiating_op, "paywithsats", None) or isinstance(
+                    initiating_op, CustomJson
+                ):
                     ledger_entries_list = await keepsats_to_lightning_payment_success(
                         payment=payment,
                         old_ledger_entry=old_ledger_entry,
@@ -246,16 +249,19 @@ async def process_lightning_payment(
                     )
                     if ledger_entries_list:
                         # We can now safely release the hold on the Keepsats
-                        await release_keepsats(hive_transfer=initiating_op)
+                        await release_keepsats(tracked_op=initiating_op)
                 else:
                     ledger_entries_list = await hive_to_lightning_payment_success(
                         payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
                     )
                 return ledger_entries_list
-            elif isinstance(initiating_op, CustomJson):
-                raise NotImplementedError(
-                    f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
-                )
+            # elif isinstance(initiating_op, CustomJson):
+
+            #     #TODO: This is where to record the ledger entry for the custom_json payment
+            #     # need to rebuild and modify keepsats_to_lightning_payment_success
+            #     raise NotImplementedError(
+            #         f"CustomJson operation not implemented for v4vapp_group_id: {v4vapp_group_id}."
+            #     )
 
         message = f"Not implemented yet {v4vapp_group_id} {keysend_message}"
         logger.error(message)
@@ -353,15 +359,13 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     try:
         if isinstance(op, TransferBase):
             ledger_entry = await process_transfer_op(hive_transfer=op, ledger_entry=ledger_entry)
-
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(
                 limit_fill_order=op, ledger_entry=ledger_entry
             )
-
         elif isinstance(op, CustomJson):
             # CustomJson operations are not yet implemented
-            raise NotImplementedError("CustomJson operations are not yet implemented.")
+            ledger_entry = await process_custom_json(custom_json=op)
         return ledger_entry
 
     except LedgerEntryException as e:
@@ -579,3 +583,89 @@ async def process_create_fill_order_op(
         logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
     return ledger_entry
+
+
+# MARK: CustomJson Operations
+async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
+    """
+    Processes a CustomJson operation and creates a ledger entry if applicable.
+
+    This method handles CustomJson operations, ensuring that appropriate debit and credit
+    accounts are assigned based on the operation type. If a ledger entry with the same group_id
+    already exists, the operation is skipped.
+
+    Returns:
+        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    """
+    if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
+        # This is a transfer operation, we need to process it as such
+        if not custom_json.conv or custom_json.conv.is_unset():
+            await custom_json.update_conv()
+            if custom_json.conv.is_unset():
+                raise LedgerEntryCreationException("Conversion not set in CustomJson operation.")
+
+        keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
+
+        # If this has an invoice message we will process it as an external lightning transfer
+        if keepsats_transfer.memo:
+            try:
+                ledger_type = LedgerType.CUSTOM_JSON_NOTIFICATION
+                custom_json_ledger_entry = LedgerEntry(
+                    cust_id=custom_json.cust_id,
+                    short_id=custom_json.short_id,
+                    ledger_type=ledger_type,
+                    group_id=f"{custom_json.group_id}",  # We don't want ledger_type here !!!!
+                    timestamp=custom_json.timestamp,
+                    description=keepsats_transfer.description,
+                    op_type=custom_json.op_type,
+                    debit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    debit_conv=custom_json.conv,
+                    debit_unit=Currency.MSATS,
+                    debit_amount=custom_json.conv.msats,
+                    credit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    credit_conv=custom_json.conv,
+                    credit_unit=Currency.MSATS,
+                    credit_amount=custom_json.conv.msats,
+                )
+                await custom_json_ledger_entry.save()
+
+                await process_custom_json_to_lightning(
+                    custom_json=custom_json,
+                    keepsats_transfer=keepsats_transfer,
+                )
+                return custom_json_ledger_entry
+
+            except CustomJsonToLightningError as e:
+                logger.error(f"Error processing CustomJson to Lightning: {e}")
+                raise LedgerEntryCreationException(
+                    f"Error processing CustomJson to Lightning: {e}"
+                ) from e
+
+            except Exception as e:
+                logger.error(f"Failed to process CustomJson to Lightning: {e}")
+                raise LedgerEntryCreationException(
+                    f"Failed to process CustomJson to Lightning: {e}"
+                ) from e
+
+        if keepsats_transfer.to_account != keepsats_transfer.from_account:
+            # This is a transfer between two different accounts
+            logger.info(
+                f"Transfer between two different accounts: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
+            )
+            raise NotImplementedError(
+                "Transfer between two different accounts is not implemented yet."
+            )
+
+            ledger_entry = LedgerEntry(
+                group_id=custom_json.group_id,
+                short_id=custom_json.short_id,
+                timestamp=custom_json.timestamp,
+                op_type=custom_json.op_type,
+                description=keepsats_transfer.description,
+                debit_unit=Currency.MSATS,
+            )
+
+            return ledger_entry
+
+
+# Last line of the file
