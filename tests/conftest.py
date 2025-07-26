@@ -10,6 +10,8 @@ from queue import Queue
 
 import pytest
 
+from v4vapp_backend_v2.config.setup import InternalConfig
+
 """
     1. Add a Session-Scoped Event Loop
 Create a conftest.py in your tests directory to override the
@@ -47,6 +49,7 @@ def full_stack_setup():
                     queue.put(line)
                     print(f"{name.upper()}: {line.strip()}")
 
+    ic = InternalConfig(config_filename="config/devhive.config.yaml")
     # Start processes
     processes = {
         "hive": subprocess.Popen(
