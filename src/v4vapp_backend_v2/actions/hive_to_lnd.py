@@ -1,7 +1,6 @@
-from typing import List, Tuple
+from typing import Tuple
 
 from nectar.amount import Amount
-from nectar.hive import Hive
 
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
@@ -15,11 +14,10 @@ from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, relea
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -296,7 +294,7 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=hive_transfer.from_account)
+    net_sats, keepsats_balance = await get_keepsats_balance(cust_id=hive_transfer.from_account)
     logger.info(
         f"Checking Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats"
     )
@@ -640,13 +638,13 @@ async def convert_hive_to_keepsats(
     """
     try:
         # Perform the conversion logic here
-        keepsats_balance_before, net_sats = await get_keepsats_balance(
+        net_sats, keepsats_balance_before = await get_keepsats_balance(
             cust_id=hive_transfer.from_account
         )
         logger.info(f"Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats")
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
 
-        keepsats_balance_after, net_sats_after = await get_keepsats_balance(
+        net_sats_after, keepsats_balance_after = await get_keepsats_balance(
             cust_id=hive_transfer.from_account
         )
         logger.info(
@@ -791,4 +789,3 @@ async def convert_hive_to_keepsats(
 #             extra={"notification": False, **hive_transfer.log_extra},
 #         )
 #         raise HiveToLightningError(message)
-

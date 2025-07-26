@@ -136,11 +136,14 @@ async def test_one_account_balances():
                 print(timestamp)
     pprint(balance)
 
-async def test_get_account_balance_printout2():
+
+async def test_get_account_balance_printout():
     account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
     result, details = await account_balance_printout(account, line_items=True)
     print(result)
     result, details = await account_balance_printout(account, line_items=False)
+    print(result)
+    result, details = await account_balance_printout("v4vapp-test", line_items=False)
     print(result)
     accounts = await list_all_accounts()
     for account in accounts:
@@ -149,6 +152,6 @@ async def test_get_account_balance_printout2():
 
 async def test_get_keepsats_balance():
     cust_id = "v4vapp-test"
-    details, net_sats = await get_keepsats_balance(cust_id=cust_id)
+    net_sats, details = await get_keepsats_balance(cust_id=cust_id)
     pprint(details)
     print(f"Net Sats for {cust_id}: {net_sats}")

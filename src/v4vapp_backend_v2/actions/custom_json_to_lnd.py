@@ -39,7 +39,7 @@ async def process_custom_json_to_lightning(
         if not pay_req:
             raise CustomJsonToLightningError("Failed to decode Lightning payment request.")
 
-        keepsats_balance, net_sats = await get_keepsats_balance(
+        net_sats, keepsats_balance = await get_keepsats_balance(
             cust_id=keepsats_transfer.from_account
         )
         logger.info(f"Keepsats balance BEFORE Hold: {net_sats:,.0f}")
@@ -58,7 +58,7 @@ async def process_custom_json_to_lightning(
             tracked_op=custom_json,
         )
 
-        keepsats_balance, net_sats = await get_keepsats_balance(
+        net_sats, keepsats_balance = await get_keepsats_balance(
             cust_id=keepsats_transfer.from_account
         )
         logger.info(f"Keepsats balance AFTER Hold: {net_sats:,.0f}")

@@ -75,7 +75,7 @@ async def one_account_balance(
 
 # @async_time_stats_decorator()
 async def account_balance_printout(
-    account: LedgerAccount,
+    account: LedgerAccount | str,
     line_items: bool = True,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(seconds=0),
@@ -87,7 +87,8 @@ async def account_balance_printout(
     (SATS, HIVE, HBD, USD, msats).
 
     Args:
-        account (Account): An Account object specifying the account name, type, and optional sub-account.
+        account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
+        a str is passed, we assume this is a `Customer Liability` account for customer `account`.
         df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
         full_history (bool, optional): If True, shows the full transaction history with running balances.
                                        If False, shows only the closing balance. Defaults to False.
@@ -97,11 +98,19 @@ async def account_balance_printout(
         str: A formatted string containing either the full transaction history or the closing balance
              for the specified account and sub-account up to the specified date.
     """
+    if isinstance(account, str):
+        account = LiabilityAccount(
+            name="Customer Liability",
+            sub=account,
+        )
+
     max_width = 135
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(minutes=1)
 
-    ledger_account_details = await one_account_balance(account=account, as_of_date=as_of_date)
+    ledger_account_details = await one_account_balance(
+        account=account, as_of_date=as_of_date, age=age
+    )
     units = set(ledger_account_details.balances.keys())
 
     title_line = f"Balance for {account}"
@@ -377,7 +386,7 @@ async def get_keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     line_items: bool = False,
-) -> Tuple[LedgerAccountDetails, float]:
+) -> Tuple[float, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -389,6 +398,8 @@ async def get_keepsats_balance(
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to the current UTC time.
 
     Returns:
+        Tuple:
+        net_sats (float): The net balance of Keepsats in satoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(
@@ -405,4 +416,4 @@ async def get_keepsats_balance(
     # Use the sub totaled net msats balance so if there is a negative Hive account it is
     # accounted for.
     net_msats = account_balance.conv_total.msats if account_balance.conv_total else 0.0
-    return account_balance, net_msats // 1000
+    return net_msats // 1000, account_balance
