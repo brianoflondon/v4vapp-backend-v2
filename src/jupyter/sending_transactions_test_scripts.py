@@ -226,6 +226,6 @@ if __name__ == "__main__":
     CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
     asyncio.run(main())
-    CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
-    asyncio.run(main())
+
+# Last line

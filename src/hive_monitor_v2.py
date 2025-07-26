@@ -550,9 +550,9 @@ async def store_rates() -> None:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=600)
             except asyncio.TimeoutError:
                 continue  # Timeout means 10 minutes passed, so loop again
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} store_rates cancelled or interrupted, exiting.")
-        return
+        raise e
 
 
 async def main_async_start(
@@ -587,8 +587,9 @@ async def main_async_start(
             store_rates(),
         ]
         await asyncio.gather(*tasks)
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
+        raise e
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})

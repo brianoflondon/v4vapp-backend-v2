@@ -32,6 +32,32 @@ class PayResult(BaseModel):
 
 
 class KeepsatsTransfer(BaseModel):
+    """
+    Represents a Keepsats transfer transaction, including sender and receiver Hive account names, amount in sats,
+    memo, payment result, and optional invoice message.
+
+    Attributes:
+        from_account (AccNameType): Hive account name of the sender.
+        to_account (AccNameType): Hive account name of the receiver.
+        sats (int): Amount of sats transferred.
+        memo (str): Memo associated with the transfer.
+        pay_result (PayResult | None): Result of the payment, if available.
+        HIVE (float | None): Optional amount in HIVE currency.
+        HBD (float | None): Optional amount in HBD currency.
+        invoice_message (str | None): Message used for invoices from foreign services.
+
+    Properties:
+        log_str (str): Returns a formatted log string describing the transfer.
+        description (str): Returns a description string for the transfer, used in ledger entries.
+        notification_str (str): Returns a formatted notification string for the transfer.
+
+    Config:
+        model_config: ConfigDict to allow population by field name.
+
+    Methods:
+        __init__(**data): Initializes the KeepsatsTransfer object, ensuring memo is set to an empty string if not provided.
+    """
+
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
     sats: int
