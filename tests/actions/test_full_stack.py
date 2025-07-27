@@ -99,7 +99,8 @@ async def test_pay_invoice_with_hive():
     Raises:
          AssertionError: If any expected ledger entry type is missing or the number of entries is incorrect.
     """
-
+    starting_ledger = await all_ledger_entries()
+    assert len(starting_ledger) == 0, "Expected no ledger entries at the start of the test"
     invoice = await get_lightning_invoice(5010, "Test test_pay_invoice_with_hive")
     logger.info(invoice)
 
@@ -146,19 +147,25 @@ async def test_deposit_hive_to_keepsats():
     Raises:
         AssertionError: If the transaction fails or the server's balance is not updated.
     """
+    starting_ledger = await all_ledger_entries()
+    starting_ledger_count = len(starting_ledger)
+    expected_test_ledger_count = 7
+
     trx = await send_hive_customer_to_server(
         amount=Amount("50 HIVE"), memo="Deposit #sats", customer="v4vapp-test"
     )
     logger.info(trx)
     assert trx, "Transaction failed or returned no data"
 
-    ledger_entries = await watch_for_ledger_count(14)
+    ledger_entries = await watch_for_ledger_count(
+        starting_ledger_count + expected_test_ledger_count
+    )
 
     await asyncio.sleep(1)
     keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp-test")
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     # Only check ledger types from the 7th entry onward
-    keepsats_ledger_types = ledger_types[7:]
+    keepsats_ledger_types = ledger_types[starting_ledger_count + 1 :]
 
     expected_keepsats_types = {
         LedgerType.CUSTOMER_HIVE_OUT,
@@ -182,6 +189,11 @@ async def test_check_hive_conversion_limits():
     50 Hive to x amount of sats.
     25 Hive to x amount of sats.
     """
+    starting_ledger = await all_ledger_entries()
+    starting_ledger_count = len(starting_ledger)
+    if starting_ledger_count == 0:
+        logger.info("No ledger entries found, skipping conversion limits test.")
+        return
     conv_limits = await check_hive_conversion_limits("v4vapp-test")
     assert conv_limits, "Hive conversion limits should not be empty"
     conversion_entries = (
@@ -204,7 +216,8 @@ async def test_check_hive_conversion_limits():
     )
     assert total_msats == conv_limits[0].total_msats
 
-async def test_paywithsats():
+
+async def test_paywithsats_and_lightning_to_keepsats_deposit():
     """
     Test the process of paying with sats.
 
@@ -217,8 +230,17 @@ async def test_paywithsats():
     Raises:
          AssertionError: If any expected ledger entry type is missing or the number of entries is incorrect.
     """
+    starting_ledger = await all_ledger_entries()
+    starting_ledger_count = len(starting_ledger)
+    if starting_ledger_count == 0:
+        logger.info("No ledger entries found, skipping paywithsats test.")
+        return
+
     before_net_sats, ledger_details = await keepsats_balance_printout(cust_id="v4vapp-test")
-    invoice = await get_lightning_invoice(2121, memo="")
+    # This invoice will be received and deposited into v4vapp.qrc account
+    invoice = await get_lightning_invoice(
+        2121, memo="v4vapp.qrc #v4vapp #sats Paying invoice with Keepsats"
+    )
     # the invoice_message has no effect if the invoice is generated and sent in the message.
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
@@ -246,16 +268,17 @@ async def test_paywithsats():
     ledger_entries = await all_ledger_entries()
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     logger.info(f"Ledger types: {ledger_types}")
-    assert len(ledger_entries) == 21, f"Expected 21 ledger entries, found {len(ledger_entries)}"
-    paywithsats_types = ledger_types[:14]
+    assert len(ledger_entries) == 23, f"Expected 23 ledger entries, found {len(ledger_entries)}"
+    paywithsats_types = ledger_types[starting_ledger_count + 1 :]
     excepted_paywithsats_types = {
-        LedgerType.CUSTOM_JSON_TRANSFER,
         LedgerType.HOLD_KEEPSATS,
+        LedgerType.DEPOSIT_KEEPSATS,
         LedgerType.WITHDRAW_KEEPSATS,
         LedgerType.LIGHTNING_EXTERNAL_SEND,
         LedgerType.FEE_CHARGE,
         LedgerType.FEE_EXPENSE,
         LedgerType.RELEASE_KEEPSATS,
+        LedgerType.CUSTOMER_HIVE_OUT,
     }
     assert excepted_paywithsats_types <= set(paywithsats_types), (
         f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"

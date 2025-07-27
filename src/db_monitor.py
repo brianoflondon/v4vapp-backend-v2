@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
+import bson
 import typer
 from pydantic import BaseModel, Field
 from pymongo.errors import OperationFailure
@@ -200,7 +201,10 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
             return
         except NotImplementedError:
-            logger.warning(f"{ICON} Operation not implemented for {op.op_type} {op.group_id}", extra={"notification": False})
+            logger.warning(
+                f"{ICON} Operation not implemented for {op.op_type} {op.group_id}",
+                extra={"notification": False},
+            )
             logger.warning(f"{ICON} {op.log_str}", extra={"notification": False})
             return
         except LedgerEntryException as e:
@@ -238,12 +242,20 @@ async def subscribe_stream(
             resume_token = resume.token
         else:
             resume_token = None
-        async with await collection.watch(
-            pipeline=pipeline,
-            full_document="updateLookup",
-            resume_after=resume_token,
-            # start_at_operation_time=ts if not resume_token else None,
-        ) as stream:
+
+        watch_kwargs = {
+            "pipeline": pipeline,
+            "full_document": "updateLookup",
+        }
+        if resume_token:
+            watch_kwargs["resume_after"] = resume_token
+        else:
+            # Get the unix timestamp for 60 seconds ago
+            unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
+            # The second argument (increment) is usually 0 for new watches
+            watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
+
+        async with await collection.watch(**watch_kwargs) as stream:
             async for change in stream:
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
@@ -279,12 +291,12 @@ async def subscribe_stream(
 
     except OperationFailure as e:
         logger.error(
-            f"{ICON} Operation failure in stream subscription: {e}",
+            f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
             extra={"error": e, "notification": False},
         )
         if "resume" in str(e):
             logger.warning(
-                f"{ICON} Resume token error in stream subscription: {e}",
+                f"{ICON} {collection_name} Resume token error in stream subscription: {e}",
                 extra={"error": e, "notification": False},
             )
             resume.delete_token()
