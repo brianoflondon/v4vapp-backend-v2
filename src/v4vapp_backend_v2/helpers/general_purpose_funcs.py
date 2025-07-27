@@ -2,6 +2,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
+
 
 def snake_case(name: str) -> str:
     """
@@ -142,6 +144,23 @@ def detect_keepsats(memo: str) -> bool:
     return False
 
 
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
+
+
 def detect_paywithsats(memo: str) -> bool:
     """
     Detects if the given memo contains the phrase '#paywithsats'.
@@ -160,6 +179,7 @@ def detect_paywithsats(memo: str) -> bool:
         return True
     return False
 
+
 def paywithsats_amount(memo: str) -> int:
     """
     Extracts the amount specified in a memo string formatted as "paywithsats:amount".
@@ -174,6 +194,7 @@ def paywithsats_amount(memo: str) -> int:
     if match:
         return int(match.group(1))
     return 0
+
 
 def detect_hbd(memo: str) -> bool:
     if not memo:

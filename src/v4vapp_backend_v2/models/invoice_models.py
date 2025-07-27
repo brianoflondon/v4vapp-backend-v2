@@ -13,7 +13,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.helpers.general_purpose_funcs import currency_to_receive, format_time_delta
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
@@ -347,6 +347,16 @@ class Invoice(TrackedBaseModel):
             "group_id": self.r_hash,
             "log_str": self.log_str,
         }
+
+    @property
+    def recv_currency(self) -> Currency:
+        """
+        Returns the currency in which the invoice is received.
+
+        Returns:
+            Currency: The currency in which the invoice is received.
+        """
+        return currency_to_receive(self.memo)
 
     def fill_cust_id(self) -> None:
         """

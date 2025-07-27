@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Mapping, Tuple
 
@@ -55,8 +56,17 @@ async def one_account_balance(
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
+    await asyncio.sleep(0.1)
+    check_ledger = await LedgerEntry.collection().count_documents({})
+    if check_ledger == 0:
+        logger.warning(
+            "Ledger is empty, cannot calculate account balance.", extra={"notification": False}
+        )
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
+    if not results:
+        logger.warning(f"No results for {account}", extra={"notification": False})
+
     clean_results = convert_datetime_fields(results)
 
     account_balance = AccountBalances.model_validate(clean_results)
@@ -106,7 +116,7 @@ async def account_balance_printout(
 
     max_width = 135
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc) + timedelta(minutes=1)
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
 
     ledger_account_details = await one_account_balance(
         account=account, as_of_date=as_of_date, age=age
@@ -246,8 +256,8 @@ async def ledger_pipeline_result(
     cust_id: str,
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
 ) -> LedgerConvSummary:
     """
     Executes a MongoDB aggregation pipeline and returns the result as a LedgerConvSummary.
@@ -297,7 +307,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -393,7 +403,7 @@ async def get_keepsats_balance(
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
     represent deposits, while debits represent withdrawals.
-    Adds a net_balance field to the output summing up deposits and withdrawls
+    Adds a net_balance field to the output summing up deposits and withdrawals
 
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
@@ -411,7 +421,7 @@ async def get_keepsats_balance(
 
     account_balance = await one_account_balance(
         account=account,
-        as_of_date=as_of_date + timedelta(hours=1),
+        as_of_date=as_of_date + timedelta(seconds=10),
     )
     # net_msats_details = account_balance.balances.get(Currency.MSATS, [])
     # net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0

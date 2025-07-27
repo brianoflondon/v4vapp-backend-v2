@@ -46,8 +46,8 @@ in the debugger.
 
 
 @pytest.fixture(scope="module", autouse=True)
-# async def config_file(full_stack_setup):
 async def config_file():
+# async def config_file(full_stack_setup):
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     trx = await send_server_balance_to_test()
     logger.info(f"Starting test run at {datetime.now()}", extra={"notification": True})
@@ -282,6 +282,10 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     }
     assert excepted_paywithsats_types <= set(paywithsats_types), (
         f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"
+    )
+    keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp.qrc")
+    assert abs(keepsats_balance - 2121) < 2, (
+        f"Expected Keepsats balance for v4vapp.qrc to be close to 2121, found {keepsats_balance}"
     )
 
 

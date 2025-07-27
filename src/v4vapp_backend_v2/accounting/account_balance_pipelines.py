@@ -89,7 +89,8 @@ def account_balance_details_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+        {"$match": {"conv_signed": {"$exists": True}}},
+        # {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$facet": {
                 "debits": [
