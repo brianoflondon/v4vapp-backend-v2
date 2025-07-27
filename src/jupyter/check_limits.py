@@ -61,12 +61,13 @@ async def main():
     # print(account_printout_str)
     # pprint(account_details)
 
-    cust_id = "v4vapp.qrc"
+    cust_id = "v4vapp-test"
 
     print("-------------- Keepsats balance ----------------")
-    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=cust_id, line_items=False)
+    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=False)
 
-    pprint(net_sats)
+    print(f"Net: sats for account {cust_id}: {net_sats}")
+    pprint(account_balance.model_dump())
     ans, tolerance = await check_balance_sheet_mongodb()
     print("Balance Sheet Check Result:", ans)
     print("Balance Sheet Check Tolerance:", tolerance)

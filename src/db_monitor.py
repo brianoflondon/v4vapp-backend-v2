@@ -200,14 +200,15 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
             return
         except NotImplementedError:
-            logger.info(f"{ICON} Operation not implemented for {type(op)} {op.group_id}")
+            logger.warning(f"{ICON} Operation not implemented for {op.op_type} {op.group_id}", extra={"notification": False})
+            logger.warning(f"{ICON} {op.log_str}", extra={"notification": False})
             return
         except LedgerEntryException as e:
-            logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
+            logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
             return
         except CustIDLockException as e:
-            logger.error(f"{ICON} CustID lock error: {e}", extra={"error": e})
-            await asyncio.sleep(1)
+            logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
+            await asyncio.sleep(5)
 
 
 async def subscribe_stream(

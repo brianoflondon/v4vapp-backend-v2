@@ -10,8 +10,11 @@ from nectar.account import Account
 from nectar.amount import Amount
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.account_balances import (
+    check_hive_conversion_limits,
+    keepsats_balance_printout,
+)
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -28,9 +31,22 @@ from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
 
+"""
+This module attempts to test the main monitoring and ledger generating parts of the stack by running them
+as background processes and then running tests against them.
+It includes fixtures for setup and teardown, as well as tests for various payment scenarios.
+
+You can either run this by including the `full_stack_setup` fixture in your tests or by running the tests
+in this module directly after starting each of the three monitor apps db_monitor hive_monitor_v2 and lnd_monitor_v2
+in the debugger.
+
+
+"""
+
 
 @pytest.fixture(scope="module", autouse=True)
-async def config_file(full_stack_setup):
+# async def config_file(full_stack_setup):
+async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     trx = await send_server_balance_to_test()
     logger.info("Server balance sent to test account:")
@@ -38,7 +54,8 @@ async def config_file(full_stack_setup):
     if trx:
         await asyncio.sleep(15)
     await clear_database()
-    await clear_database()
+    await watch_for_ledger_count(0)
+    logger.info("Database cleared and ledger count reset.")
     yield
     await close_all_db_connections()
 
@@ -50,10 +67,11 @@ async def test_full_stack_setup():
     """
     # The fixture will automatically start the processes and yield control
     # Here we can add assertions or checks if needed, but for now, we just run it
-    print("Running the first test.")
+    logger.info("Running the first test.")
     await asyncio.sleep(1)  # Allow some time for the processes to start
-    assert True  # Placeholder assertion to indicate the test ran successfully
-    print("finished")
+    ledger_entries = await watch_for_ledger_count(0)  # Ensure no ledger entries are present
+    assert len(ledger_entries) == 0
+    logger.info("Finished running the first test. Ledger Empty")
 
 
 async def test_pay_invoice_with_hive():
@@ -88,11 +106,24 @@ async def test_pay_invoice_with_hive():
     )
     logger.info(trx)
 
-    ledger_entries = await watch_for_ledger_count(2)
+    ledger_entries = await watch_for_ledger_count(6)
 
-    keepsats_balance, ledger_details = await get_keepsats_balance("v4vapp-test")
-    logger.info(f"Keepsats balance: {keepsats_balance:,.0f}")
+    keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp-test")
     # assert keepsats_balance == 0, "Expected Keepsats balance to be 0 after payment"
+    await asyncio.sleep(10)
+    ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
+    expected_types = {
+        LedgerType.CUSTOMER_HIVE_IN,
+        LedgerType.CONV_HIVE_TO_LIGHTNING,
+        LedgerType.CONTRA_HIVE_TO_LIGHTNING,
+        LedgerType.FEE_INCOME,
+        LedgerType.WITHDRAW_LIGHTNING,
+        LedgerType.LIGHTNING_EXTERNAL_SEND,
+        LedgerType.FEE_EXPENSE,
+    }
+    assert expected_types <= set(ledger_types), (
+        f"Missing expected ledger types: {expected_types - set(ledger_types)}"
+    )
 
 
 async def test_deposit_hive_to_keepsats():
@@ -119,11 +150,53 @@ async def test_deposit_hive_to_keepsats():
     logger.info(trx)
     assert trx, "Transaction failed or returned no data"
 
-    ledger_entries = await watch_for_ledger_count(6)
+    ledger_entries = await watch_for_ledger_count(14)
 
-    await asyncio.sleep(20)
-    keepsats_balance, ledger_details = await get_keepsats_balance("v4vapp-test")
-    print(f"v4vapp-test Keepsats balance: {keepsats_balance}")
+    await asyncio.sleep(10)
+    keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp-test")
+    ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
+    # Only check ledger types from the 7th entry onward
+    keepsats_ledger_types = ledger_types[6:]
+
+    expected_keepsats_types = {
+        LedgerType.CUSTOMER_HIVE_OUT,
+        LedgerType.CUSTOMER_HIVE_IN,
+        LedgerType.CONV_HIVE_TO_KEEPSATS,
+        LedgerType.CONTRA_HIVE_TO_KEEPSATS,
+        LedgerType.FEE_INCOME,
+        LedgerType.DEPOSIT_KEEPSATS,
+        LedgerType.CUSTOMER_HIVE_OUT,
+    }
+
+    assert expected_keepsats_types <= set(keepsats_ledger_types), (
+        f"Missing expected Keepsats ledger types: {expected_keepsats_types - set(keepsats_ledger_types)}"
+    )
+
+
+async def test_check_hive_conversion_limits():
+    """
+    Test the Hive conversion limits for Keepsats.
+    After the previous transactions the conversion should be
+    50 Hive to x amount of sats.
+    25 Hive to x amount of sats.
+    """
+    conv_limits = await check_hive_conversion_limits("v4vapp-test")
+    assert conv_limits, "Hive conversion limits should not be empty"
+    conversion_entries = (
+        await LedgerEntry.collection()
+        .find(
+            {
+                "cust_id": "v4vapp-test",
+                "$or": [
+                    {"ledger_type": LedgerType.CONV_HIVE_TO_KEEPSATS.value},
+                    {"ledger_type": LedgerType.CONV_HIVE_TO_LIGHTNING.value},
+                ],
+            }
+        )
+        .to_list()
+    )
+    pprint(conversion_entries)
+    logger.info(f"Hive conversion limits: {conv_limits}")
 
 
 async def test_paywithsats():
@@ -139,9 +212,8 @@ async def test_paywithsats():
     Raises:
          AssertionError: If any expected ledger entry type is missing or the number of entries is incorrect.
     """
-    before_net_sats, ledger_details = await get_keepsats_balance(cust_id="v4vapp-test")
-    logger.info(f"Before sats: {before_net_sats:,.0f}")
-    invoice = await get_lightning_invoice(2121, memo="Blank not message")
+    before_net_sats, ledger_details = await keepsats_balance_printout(cust_id="v4vapp-test")
+    invoice = await get_lightning_invoice(2121, memo="")
     # the invoice_message has no effect if the invoice is generated and sent in the message.
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
@@ -160,35 +232,60 @@ async def test_paywithsats():
         hive_client=hive_client,
     )
     pprint(trx)
-    ledger_entries = await watch_for_ledger_count(16)
-    await asyncio.sleep(20)
-    after_net_sats, ledger_details = await get_keepsats_balance(cust_id="v4vapp-test")
-    logger.info(
-        f"After sats: {after_net_sats:,.0f} - Before {before_net_sats:,.0f} Diff {after_net_sats - before_net_sats:,.0f}"
+    ledger_entries = await watch_for_ledger_count(21)
+    await asyncio.sleep(10)
+    after_net_sats, ledger_details = await keepsats_balance_printout(
+        cust_id="v4vapp-test", previous_sats=before_net_sats
     )
 
+    ledger_entries = await all_ledger_entries()
+    ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
+    logger.info(f"Ledger types: {ledger_types}")
+    assert len(ledger_entries) == 21, f"Expected 21 ledger entries, found {len(ledger_entries)}"
+    paywithsats_types = ledger_types[:14]
+    excepted_paywithsats_types = {
+        LedgerType.CUSTOM_JSON_TRANSFER,
+        LedgerType.HOLD_KEEPSATS,
+        LedgerType.WITHDRAW_KEEPSATS,
+        LedgerType.LIGHTNING_EXTERNAL_SEND,
+        LedgerType.FEE_CHARGE,
+        LedgerType.FEE_EXPENSE,
+        LedgerType.RELEASE_KEEPSATS,
+    }
+    assert excepted_paywithsats_types <= set(paywithsats_types), (
+        f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"
+    )
 
 
 # MARK: Helper functions
 
 
-async def watch_for_ledger_count(count: int, timeout: int = 120) -> List[LedgerEntry]:
-    ledger_entries: List[LedgerEntry] = []
+async def all_ledger_entries() -> List[LedgerEntry]:
+    """
+    Fetches all ledger entries from the database and returns them as a list of LedgerEntry models.
+    This function is useful for retrieving all ledger entries for validation or processing purposes.
+    Returns:
+        List[LedgerEntry]: A list of all ledger entries in the database.
+    """
+    all_ledger_entries = await LedgerEntry.collection().find({}).to_list()
+    return [LedgerEntry.model_validate(le) for le in all_ledger_entries]
+
+
+async def watch_for_ledger_count(count: int, timeout: int = 30) -> List[LedgerEntry]:
     start_time = timeit()
-    ledger_entries = await LedgerEntry.collection().find({}).to_list()
-    starting_count = len(ledger_entries)
+    raw_entries = []
     while timeit() - start_time < timeout:
-        ledger_entries = await LedgerEntry.collection().find({}).to_list()
-        if len(ledger_entries) >= count:
+        ledger_entries = await all_ledger_entries()
+        if (count > 0 and len(ledger_entries) >= count) or (
+            count == 0 and len(ledger_entries) == 0
+        ):
             logger.info(f"Count {count} found")
             return ledger_entries
-        elif len(ledger_entries) > starting_count:
-            logger.info(f"Found {len(ledger_entries)} entries, waiting for {count}...")
-            starting_count = len(ledger_entries)
         await asyncio.sleep(5)
     logger.warning(
-        f"⏰ Timeout after {timeout}s waiting for ledger entries count {count} {len(ledger_entries)} found"
+        f"⏰ Timeout after {timeout}s waiting for ledger entries count {count} {len(raw_entries)} found"
     )
+    ledger_entries = await all_ledger_entries()
     return ledger_entries
 
 

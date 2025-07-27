@@ -821,6 +821,25 @@ async def get_verified_hive_client_for_accounts(
     return hive_client
 
 
+def process_user_memo(memo: str) -> str:
+    """
+    Processes a user memo by removing any leading '#' character.
+
+    Args:
+        memo (str): The user memo to process.
+
+    Returns:
+        str: The processed memo without the leading '#' character.
+    """
+    # TODO: This needs to process tags like #clean and #keepsats to return a correct memo to pass on.
+    # this is where #clean needs to be evaluated
+    if not memo:
+        return ""
+    if memo.startswith("#"):
+        return memo[1:]
+    return memo
+
+
 if __name__ == "__main__":
     nodes = get_good_nodes()
     print(nodes)

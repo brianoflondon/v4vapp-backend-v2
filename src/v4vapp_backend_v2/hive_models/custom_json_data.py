@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Type, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
 
@@ -97,6 +98,17 @@ class KeepsatsTransfer(BaseModel):
         If the invoice_message is set, it returns that; otherwise, it returns the memo.
         """
         return self.log_str
+
+    @property
+    def user_memo(self) -> str:
+        """
+        Returns the user memo, which is the decoded memo if available,
+        otherwise returns the original memo.
+
+        Returns:
+            str: The user memo.
+        """
+        return process_user_memo(self.memo)
 
     @property
     def notification_str(self) -> str:

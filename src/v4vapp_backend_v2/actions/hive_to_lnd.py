@@ -4,7 +4,7 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
-    get_keepsats_balance,
+    keepsats_balance_printout,
 )
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
@@ -294,9 +294,8 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    net_sats, keepsats_balance = await get_keepsats_balance(cust_id=hive_transfer.from_account)
-    logger.info(
-        f"Checking Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats"
+    net_sats, keepsats_balance = await keepsats_balance_printout(
+        cust_id=hive_transfer.from_account
     )
     if not keepsats_balance.balances.get(Currency.MSATS):
         raise HiveToLightningError(
@@ -638,14 +637,13 @@ async def convert_hive_to_keepsats(
     """
     try:
         # Perform the conversion logic here
-        net_sats, keepsats_balance_before = await get_keepsats_balance(
+        net_sats, keepsats_balance_before = await keepsats_balance_printout(
             cust_id=hive_transfer.from_account
         )
-        logger.info(f"Keepsats balance for {hive_transfer.from_account}: {net_sats:,.0f} sats")
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
 
-        net_sats_after, keepsats_balance_after = await get_keepsats_balance(
-            cust_id=hive_transfer.from_account
+        net_sats_after, keepsats_balance_after = await keepsats_balance_printout(
+            cust_id=hive_transfer.from_account, previous_sats=net_sats
         )
         logger.info(
             f"Keepsats balance for {hive_transfer.from_account}: {net_sats_after:,.0f} sats "

@@ -202,7 +202,9 @@ async def account_balance_printout(
         balance_str = (
             f"{display_balance:,.0f}" if unit.upper() == "MSATS" else f"{display_balance:>10,.3f}"
         )
-        output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
+        output.append(
+            f"{'Final Balance ' + f'{display_unit}':<18} {balance_str:>10} {display_unit:<5}"
+        )
 
         total_usd += total_usd_for_unit
         total_sats += total_sats_for_unit
@@ -213,8 +215,8 @@ async def account_balance_printout(
     # )
 
     output.append("-" * max_width)
-    output.append(f"Total USD: {total_usd:>19,.3f}")
-    output.append(f"Total SATS: {total_sats:>18,.0f}")
+    output.append(f"Total USD: {total_usd:>18,.3f} USD")
+    output.append(f"Total SATS: {total_sats:>17,.0f} SATS")
     output.append(title_line)
 
     output.append("=" * max_width + "\n")
@@ -417,3 +419,33 @@ async def get_keepsats_balance(
     # accounted for.
     net_msats = account_balance.conv_total.msats if account_balance.conv_total else 0.0
     return net_msats // 1000, account_balance
+
+
+async def keepsats_balance_printout(
+    cust_id: str, previous_sats: float | None = None
+) -> Tuple[float, LedgerAccountDetails]:
+    """
+    Generates and logs a printout of the Keepsats balance for a given customer.
+
+    Args:
+        cust_id (str): The customer ID for which to retrieve the Keepsats balance.
+        previous_sats (float, optional): The previous balance in sats to compare against. Defaults to 0.
+
+    Returns:
+        Tuple[float, LedgerAccountDetails]: A tuple containing the net Keepsats balance in sats and the account balance details.
+
+    Logs:
+        - Customer ID and Keepsats balance information.
+        - Net balance, previous balance (if provided), and the delta between balances.
+    """
+    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id)
+
+    logger.info("_" * 50)
+    logger.info(f"Customer ID {cust_id} Keepsats balance:")
+    logger.info(f"  Net balance:      {net_sats:,.0f} sats")
+    if previous_sats is not None:
+        logger.info(f"  Previous balance: {previous_sats:,.0f} sats")
+        logger.info(f"  Delta:           {net_sats - previous_sats:,.0f} sats")
+    logger.info("_" * 50)
+
+    return net_sats, account_balance

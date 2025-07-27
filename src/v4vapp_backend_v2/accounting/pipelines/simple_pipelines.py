@@ -212,6 +212,8 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                                             "process_time",
                                             "change_amount",
                                             "locked",
+                                            "extensions",
+                                            "fee_conv"
                                         ],
                                     ]
                                 }

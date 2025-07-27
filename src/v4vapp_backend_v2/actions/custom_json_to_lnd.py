@@ -1,4 +1,4 @@
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
@@ -39,10 +39,9 @@ async def process_custom_json_to_lightning(
         if not pay_req:
             raise CustomJsonToLightningError("Failed to decode Lightning payment request.")
 
-        net_sats, keepsats_balance = await get_keepsats_balance(
+        net_sats, keepsats_balance = await keepsats_balance_printout(
             cust_id=keepsats_transfer.from_account
         )
-        logger.info(f"Keepsats balance BEFORE Hold: {net_sats:,.0f}")
 
         if keepsats_balance is None or net_sats is None:
             raise CustomJsonToLightningError("Failed to retrieve Keepsats balance or net sats.")
@@ -58,13 +57,12 @@ async def process_custom_json_to_lightning(
             tracked_op=custom_json,
         )
 
-        net_sats, keepsats_balance = await get_keepsats_balance(
-            cust_id=keepsats_transfer.from_account
+        net_sats_after, keepsats_balance = await keepsats_balance_printout(
+            cust_id=keepsats_transfer.from_account, previous_sats=net_sats
         )
-        logger.info(f"Keepsats balance AFTER Hold: {net_sats:,.0f}")
 
         amount_msats = min(
-            keepsats_transfer.sats * 1000, pay_req.amount_msat, int(net_sats * 1000)
+            keepsats_transfer.sats * 1000, pay_req.amount_msat, int(net_sats_after * 1000)
         )
 
         chat_message = f"Sending sats from v4v.app | § {custom_json.short_id} |"
@@ -145,12 +143,23 @@ async def process_custom_json_to_lightning(
                 )
 
 
-async def custom_json_transfer(
+async def custom_json_internal_transfer(
     custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
 ) -> LedgerEntry:
     """
-    Process a custom JSON transfer operation.
-    This function handles the transfer of Keepsats and sends a notification if necessary.
+    Processes an internal transfer operation based on custom JSON input.
+    This asynchronous function handles the transfer of Keepsats between two accounts,
+    records the transaction in the ledger, and sends a notification to the recipient if the transfer amount
+    exceeds the minimum invoice payment threshold.
+    Args:
+        custom_json (CustomJson): The custom JSON object containing operation details.
+        keepsats_transfer (KeepsatsTransfer): The transfer details including source, destination, amount, and memo.
+        nobroadcast (bool, optional): If True, suppresses broadcasting the notification. Defaults to False.
+    Returns:
+        LedgerEntry: The ledger entry representing the transfer transaction.
+    Notes:
+        - If the transfer amount is below the minimum notification threshold, no notification is sent.
+        - The function saves the ledger entry and optionally sends a notification to the recipient.
     """
     # This is a transfer between two accounts
     logger.info(
@@ -161,7 +170,8 @@ async def custom_json_transfer(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,
         ledger_type=ledger_type,
-        group_id=custom_json.group_id,
+        group_id=f"{custom_json.group_id}-{ledger_type.value}",
+        user_memo=keepsats_transfer.user_memo,
         timestamp=custom_json.timestamp,
         description=f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats",
         op_type=custom_json.op_type,
@@ -173,7 +183,6 @@ async def custom_json_transfer(
         credit_conv=custom_json.conv,
         credit_unit=Currency.MSATS,
         credit_amount=keepsats_transfer.sats * 1000,
-        user_memo=keepsats_transfer.memo or "",
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
@@ -182,8 +191,9 @@ async def custom_json_transfer(
         logger.info(f"Invoice {custom_json.short_id} is below the minimum notification threshold.")
         return transfer_ledger_entry
 
-    if keepsats_transfer.memo:
-        reason = f"{keepsats_transfer.memo}"
+    # this is where #clean needs to be evaluated
+    if keepsats_transfer.user_memo:
+        reason = f"{keepsats_transfer.user_memo}"
     else:
         reason = (
             f"You received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"

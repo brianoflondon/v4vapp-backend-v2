@@ -3,6 +3,7 @@ from timeit import default_timer as timer
 from typing import List, Union
 from uuid import uuid4
 
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import (
@@ -15,7 +16,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import (
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.custom_json_to_lnd import (
-    custom_json_transfer,
+    custom_json_internal_transfer,
     process_custom_json_to_lightning,
 )
 from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
@@ -62,6 +63,8 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     unknown_cust_id = uuid4()
     cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
     cust_id = str(unknown_cust_id) if not cust_id else cust_id
+    await keepsats_balance_printout(cust_id=cust_id)
+
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
     start = timer()
     try:
@@ -350,23 +353,15 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
     # Check if the transfer is between the server account and the treasury account
     # Check if the transfer is between specific accounts
 
-    ledger_entry = LedgerEntry(
-        group_id=op.group_id,
-        short_id=op.short_id,
-        timestamp=op.timestamp,
-        op_type=op.op_type,
-    )
     # MARK: Transfers or Recurrent Transfers
     if isinstance(op, BlockMarker):
         raise LedgerEntryCreationException("BlockMarker is not a valid operation.")
 
     try:
         if isinstance(op, TransferBase):
-            ledger_entry = await process_transfer_op(hive_transfer=op, ledger_entry=ledger_entry)
+            ledger_entry = await process_transfer_op(hive_transfer=op)
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
-            ledger_entry = await process_create_fill_order_op(
-                limit_fill_order=op, ledger_entry=ledger_entry
-            )
+            ledger_entry = await process_create_fill_order_op(limit_fill_order=op)
         elif isinstance(op, CustomJson):
             # CustomJson operations are not yet implemented
             ledger_entry = await process_custom_json(custom_json=op)
@@ -377,11 +372,9 @@ async def process_hive_op(op: TrackedAny) -> LedgerEntry:
         raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
 
 
-async def process_transfer_op(
-    hive_transfer: TrackedTransfer, ledger_entry: LedgerEntry
-) -> LedgerEntry:
+async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
     """
-    Processes the transfer operation and creates a ledger entry if applicable.
+    Processes a Hive transfer operation and creates a ledger entry if applicable.
 
     This method handles various types of transfers, including those between the server account,
     treasury account, funding account, exchange account, and customer accounts. It ensures that
@@ -391,6 +384,13 @@ async def process_transfer_op(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    ledger_entry = LedgerEntry(
+        group_id=hive_transfer.group_id,
+        short_id=hive_transfer.short_id,
+        timestamp=hive_transfer.timestamp,
+        op_type=hive_transfer.op_type,
+        user_memo=hive_transfer.user_memo,
+    )
     expense_accounts = ["privex"]
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
     base_description = f"{hive_transfer.amount_str} from {hive_transfer.from_account} to {hive_transfer.to_account} {processed_d_memo}"
@@ -515,7 +515,7 @@ async def process_transfer_op(
 
 
 async def process_create_fill_order_op(
-    limit_fill_order: Union[LimitOrderCreate, FillOrder], ledger_entry: LedgerEntry
+    limit_fill_order: Union[LimitOrderCreate, FillOrder],
 ) -> LedgerEntry:
     """
     Processes the create or fill order operation and creates a ledger entry if applicable.
@@ -527,6 +527,12 @@ async def process_create_fill_order_op(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    ledger_entry = LedgerEntry(
+        group_id=limit_fill_order.group_id,
+        short_id=limit_fill_order.short_id,
+        timestamp=limit_fill_order.timestamp,
+        op_type=limit_fill_order.op_type,
+    )
     if isinstance(limit_fill_order, LimitOrderCreate):
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
@@ -616,12 +622,13 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
             and keepsats_transfer.sats
             and keepsats_transfer.from_account != keepsats_transfer.to_account
         ):
-            ledger_entry = await custom_json_transfer(
+            ledger_entry = await custom_json_internal_transfer(
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer
             )
             return ledger_entry
 
-        # If this has an invoice message we will process it as an external lightning transfer
+        # If this has a memo that should contain the invoice and the instructions like "#clean"
+        # invoice_message we will use to send on if we generate an invoice form a lightning address
         elif keepsats_transfer.memo and not keepsats_transfer.to_account:
             try:
                 ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
@@ -629,9 +636,10 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                     cust_id=custom_json.cust_id,
                     short_id=custom_json.short_id,
                     ledger_type=ledger_type,
-                    group_id=f"{custom_json.group_id}",  # We don't want ledger_type here !!!!
+                    group_id=f"{custom_json.group_id}",  # The inital recording of an inbound Hive transaction does not have ledger_type
                     timestamp=custom_json.timestamp,
                     description=keepsats_transfer.description,
+                    user_memo=keepsats_transfer.user_memo,
                     op_type=custom_json.op_type,
                     debit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
                     debit_conv=custom_json.conv,
@@ -662,9 +670,13 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                     f"Failed to process CustomJson to Lightning: {e}"
                 ) from e
 
-        raise NotImplementedError(
-            "Transfer between two different accounts is not implemented yet."
-        )
+    logger.error(
+        f"CustomJson operation not implemented for v4vapp_group_id: {custom_json.group_id}.",
+        extra={"notification": False},
+    )
+    raise NotImplementedError(
+        f"Some other custom_json functionality which hasn't been implemented yet {custom_json.group_id}."
+    )
 
 
 # Last line of the file
