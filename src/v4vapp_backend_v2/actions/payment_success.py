@@ -412,7 +412,7 @@ async def keepsats_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
-            description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
+            description=f"Fee of {payment.fee_msat / 1000:,.0f} sending SATS to {payment.destination}",
             debit=LiabilityAccount(
                 name="Customer Liability",
                 sub=cust_id,

@@ -61,7 +61,10 @@ class KeepsatsTransfer(BaseModel):
 
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
-    sats: int
+    sats: int | None = Field(
+        None,
+        description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
+    )
     memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
     HIVE: float | None = None

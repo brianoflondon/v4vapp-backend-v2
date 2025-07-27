@@ -30,10 +30,11 @@ async def process_custom_json_to_lightning(
     return_hive_message = ""
     release_hold = True
     try:
+        zero_amount_invoice = keepsats_transfer.sats * 1000 if keepsats_transfer.sats else 0
         pay_req = await decode_any_lightning_string(
             input=keepsats_transfer.memo,
             lnd_client=lnd_client,
-            zero_amount_invoice_send_msats=keepsats_transfer.sats * 1000,
+            zero_amount_invoice_send_msats=zero_amount_invoice,
             comment=keepsats_transfer.invoice_message,
         )
         if not pay_req:
@@ -56,14 +57,14 @@ async def process_custom_json_to_lightning(
             cust_id=custom_json.cust_id,
             tracked_op=custom_json,
         )
-
+        logger.info(
+            f"Hold placed for {pay_req.value_msat + pay_req.fee_estimate} msats {keepsats_transfer.from_account}"
+        )
         net_sats_after, keepsats_balance = await keepsats_balance_printout(
             cust_id=keepsats_transfer.from_account, previous_sats=net_sats
         )
 
-        amount_msats = min(
-            keepsats_transfer.sats * 1000, pay_req.amount_msat, int(net_sats_after * 1000)
-        )
+        amount_msats = min(zero_amount_invoice, pay_req.amount_msat, int(net_sats_after * 1000))
 
         chat_message = f"Sending sats from v4v.app | § {custom_json.short_id} |"
         payment = await send_lightning_to_pay_req(
@@ -120,6 +121,7 @@ async def process_custom_json_to_lightning(
     finally:
         if release_hold:
             await release_keepsats(tracked_op=custom_json)
+            logger.info(f"Hold released for {keepsats_transfer.from_account}")
 
         if return_hive_message:
             try:

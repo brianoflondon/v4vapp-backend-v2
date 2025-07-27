@@ -23,8 +23,8 @@
                 "--config-filename",
                 "devhive.config.yaml",
                 "--start-block",
-                // "-1"
-                "98004288"
+                "-1"
+                // "98004288"
             ],
             "justMyCode": true,
         },

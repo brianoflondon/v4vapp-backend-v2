@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, List
@@ -49,6 +50,7 @@ in the debugger.
 async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     trx = await send_server_balance_to_test()
+    logger.info(f"Starting test run at {datetime.now()}", extra={"notification": True})
     logger.info("Server balance sent to test account:")
     pprint(trx)
     if trx:
@@ -106,11 +108,11 @@ async def test_pay_invoice_with_hive():
     )
     logger.info(trx)
 
-    ledger_entries = await watch_for_ledger_count(6)
+    ledger_entries = await watch_for_ledger_count(7)
 
     keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp-test")
     # assert keepsats_balance == 0, "Expected Keepsats balance to be 0 after payment"
-    await asyncio.sleep(10)
+    await asyncio.sleep(1)
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     expected_types = {
         LedgerType.CUSTOMER_HIVE_IN,
@@ -152,11 +154,11 @@ async def test_deposit_hive_to_keepsats():
 
     ledger_entries = await watch_for_ledger_count(14)
 
-    await asyncio.sleep(10)
+    await asyncio.sleep(1)
     keepsats_balance, ledger_details = await keepsats_balance_printout("v4vapp-test")
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     # Only check ledger types from the 7th entry onward
-    keepsats_ledger_types = ledger_types[6:]
+    keepsats_ledger_types = ledger_types[7:]
 
     expected_keepsats_types = {
         LedgerType.CUSTOMER_HIVE_OUT,
@@ -197,7 +199,10 @@ async def test_check_hive_conversion_limits():
     )
     pprint(conversion_entries)
     logger.info(f"Hive conversion limits: {conv_limits}")
-
+    total_msats = sum(
+        entry["debit_amount"] for entry in conversion_entries if entry["debit_unit"] == "msats"
+    )
+    assert total_msats == conv_limits[0].total_msats
 
 async def test_paywithsats():
     """
