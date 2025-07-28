@@ -306,7 +306,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(days=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -370,6 +370,7 @@ async def check_hive_conversion_limits(
         )
         return []
 
+    as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
     for limit in lightning_rate_limits:
         age = timedelta(hours=limit.hours)
         limit_timedelta = timedelta(hours=limit.hours)
@@ -377,7 +378,7 @@ async def check_hive_conversion_limits(
             limit_timedelta, fractions=True, just_days_or_hours=True
         )
         lightning_conv = await get_account_lightning_conv(
-            cust_id=hive_accname, age=age, line_items=line_items
+            as_of_date=as_of_date, cust_id=hive_accname, age=age, line_items=line_items
         )
         limit_summary = LightningLimitSummary(
             conv_summary=lightning_conv,
@@ -423,15 +424,7 @@ async def get_keepsats_balance(
         account=account,
         as_of_date=as_of_date + timedelta(days=1),
     )
-    # account_balances = await all_account_balances(
-    #     as_of_date=as_of_date + timedelta(seconds=10),
-    #     age=timedelta(seconds=0),
-    # )
-    # account_balance = account_balances[]
-    # net_msats_details = account_balance.balances.get(Currency.MSATS, [])
-    # net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
-    # Use the sub totaled net msats balance so if there is a negative Hive account it is
-    # accounted for.
+
     net_msats = account_balance.conv_total.msats
     net_sats = net_msats // 1000 if net_msats else 0.0
     return net_sats, account_balance
@@ -457,7 +450,6 @@ async def keepsats_balance_printout(
     net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
 
     logger.info("_" * 50)
-    logger.info(InternalConfig.db)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")
     logger.info(f"  Net balance:      {net_sats:,.0f} sats")
     if previous_sats is not None:
