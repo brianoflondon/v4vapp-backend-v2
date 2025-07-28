@@ -6,11 +6,9 @@ from pprint import pprint
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
-    get_keepsats_balance,
     keepsats_balance_printout,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -27,7 +25,7 @@ async def get_limits():
     for limit in limits:
         print("Limit OK:", limit.limit_ok)
         print("Spend Summary:")
-        pprint(limit.conv_summary)
+        # pprint(limit.conv_summary)
         print("Total Sats:", limit.total_sats)
         print("Total Msats:", limit.total_msats)
 
@@ -42,6 +40,14 @@ async def get_limits():
     pprint(balance)
 
 
+async def count_hours():
+    for minutes in range(0, 60):
+        age = timedelta(seconds=minutes * 60)
+        ans = await get_account_lightning_conv(cust_id="v4vapp-test", age=age)
+        print(f"Minutes: {minutes}, Sats: {ans.sats}, Msats: {ans.msats}")
+        await asyncio.sleep(0.1)
+
+
 async def main():
     """
     Main function to run the checks and print results.
@@ -49,7 +55,8 @@ async def main():
     # Example usage of get_account_lightning_conv
     db_conn = DBConn()
     await db_conn.setup_database()
-
+    await count_hours()
+    return
     await get_limits()
 
     amount_msats = 3_000_000

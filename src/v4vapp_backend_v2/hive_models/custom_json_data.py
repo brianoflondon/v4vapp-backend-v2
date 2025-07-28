@@ -67,6 +67,12 @@ class KeepsatsTransfer(BaseModel):
     )
     memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
+    notification: bool = Field(
+        False, description="If True, this is a notification rather than a transfer"
+    )
+    parent_id: str | None = Field(
+        None, description="The short ID of the parent transaction, if applicable"
+    )
     HIVE: float | None = None
     HBD: float | None = None
     invoice_message: str | None = Field(
@@ -92,6 +98,26 @@ class KeepsatsTransfer(BaseModel):
         return (
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary of extra log information for the Keepsats transfer.
+        This is used for logging purposes to provide additional context about the transfer.
+        """
+        return {
+            "from_account": self.from_account,
+            "to_account": self.to_account,
+            "sats": self.sats,
+            "memo": self.memo,
+            "invoice_message": self.invoice_message,
+            "HIVE": self.HIVE,
+            "HBD": self.HBD,
+            "parent_id": self.parent_id,
+            "pay_result": self.pay_result.model_dump(exclude_none=True, exclude_unset=True)
+            if self.pay_result
+            else None,
+        }
 
     @property
     def description(self) -> str:

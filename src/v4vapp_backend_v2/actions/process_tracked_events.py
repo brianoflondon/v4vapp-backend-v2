@@ -615,7 +615,7 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                 raise LedgerEntryCreationException("Conversion not set in CustomJson operation.")
 
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
-
+        # MARK: CustomJson Transfer user to user
         if (
             keepsats_transfer.from_account
             and keepsats_transfer.to_account
@@ -626,7 +626,7 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer
             )
             return ledger_entry
-
+        # MARK: CustomJson Pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
         # invoice_message we will use to send on if we generate an invoice form a lightning address
         elif keepsats_transfer.memo and not keepsats_transfer.to_account:

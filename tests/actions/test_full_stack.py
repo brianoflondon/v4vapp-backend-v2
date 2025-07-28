@@ -1,6 +1,6 @@
 import asyncio
-import os
 from datetime import datetime
+import os
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, List
@@ -48,8 +48,10 @@ in the debugger.
 
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
-# async def config_file(full_stack_setup):
+    # async def config_file(full_stack_setup):
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
+    db_conn = DBConn()
+    await db_conn.setup_database()
     trx = await send_server_balance_to_test()
     logger.info(f"Starting test run at {datetime.now()}", extra={"notification": True})
     logger.info("Server balance sent to test account:")
@@ -228,6 +230,19 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     3. Watches the ledger collection for changes and collects relevant ledger entries.
     4. Waits briefly to allow asynchronous operations to complete.
 
+    Code Paths:
+    actions
+        process_tracked_events
+            process_tracked_event
+            process_custom_json
+        hold_release_keepsats
+            hold_keepsats
+            release_keepsats
+        custom_json_to_lnd
+            process_custom_json_to_lightning
+    lnd_grpc.lnd_functions.send_lightning_to_pay_req
+
+
     Raises:
          AssertionError: If any expected ledger entry type is missing or the number of entries is incorrect.
     """
@@ -279,7 +294,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
         LedgerType.FEE_CHARGE,
         LedgerType.FEE_EXPENSE,
         LedgerType.RELEASE_KEEPSATS,
-        LedgerType.CUSTOMER_HIVE_OUT,
+        # LedgerType.CUSTOMER_HIVE_OUT,
     }
     assert excepted_paywithsats_types <= set(paywithsats_types), (
         f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"

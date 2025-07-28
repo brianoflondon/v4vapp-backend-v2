@@ -2,12 +2,14 @@ from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_print
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
-from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.hive_notification import (
+    send_notification_custom_json,
+    send_notification_hive_transfer,
+)
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -168,49 +170,45 @@ async def custom_json_internal_transfer(
         f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     )
     ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    if not keepsats_transfer.sats:
+        raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
+    debit_credit_amount = keepsats_transfer.sats * 1_000
+
+    user_memo = (
+        keepsats_transfer.user_memo
+        or f"You received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+    )
+
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,
         ledger_type=ledger_type,
         group_id=f"{custom_json.group_id}-{ledger_type.value}",
-        user_memo=keepsats_transfer.user_memo,
+        user_memo=user_memo,
         timestamp=custom_json.timestamp,
         description=f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats",
         op_type=custom_json.op_type,
         debit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.from_account),
         debit_conv=custom_json.conv,
-        debit_amount=keepsats_transfer.sats * 1000,
+        debit_amount=debit_credit_amount,
         debit_unit=Currency.MSATS,
         credit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.to_account),
         credit_conv=custom_json.conv,
         credit_unit=Currency.MSATS,
-        credit_amount=keepsats_transfer.sats * 1000,
+        credit_amount=debit_credit_amount,
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
 
-    if keepsats_transfer.sats <= V4VConfig().data.minimum_invoice_payment_sats:
-        logger.info(f"Invoice {custom_json.short_id} is below the minimum notification threshold.")
-        return transfer_ledger_entry
-
-    # this is where #clean needs to be evaluated
-    if keepsats_transfer.user_memo:
-        reason = f"{keepsats_transfer.user_memo}"
-    else:
-        reason = (
-            f"You received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
-        )
-
-    trx = await send_notification_hive_transfer(
-        pay_to_cust_id=keepsats_transfer.to_account,
-        tracked_op=custom_json,
-        reason=reason,
-        nobroadcast=nobroadcast,
+    notification = KeepsatsTransfer(
+        from_account=InternalConfig().config.hive.server_account,
+        to_account=keepsats_transfer.from_account,
+        memo=keepsats_transfer.log_str,
+        notification=True,
+        invoice_message=keepsats_transfer.invoice_message,
+        parent_id=custom_json.group_id,
     )
-    logger.info(
-        f"Notification transaction created for operation {custom_json.group_id}",
-        extra={"notification": True, "trx": trx, **custom_json.log_extra},
-    )
+    trx = await send_notification_custom_json(notification)
     return transfer_ledger_entry
 
 
