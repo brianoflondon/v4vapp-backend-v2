@@ -117,6 +117,7 @@ def account_balance_details_pipeline(
                             "debit": 1,
                             "credit": 1,
                             "op_type": 1,
+                            "user_memo": 1,
                             "conv_signed": "$conv_signed.debit",
                         }
                     },
@@ -146,6 +147,7 @@ def account_balance_details_pipeline(
                             "debit": 1,
                             "credit": 1,
                             "op_type": 1,
+                            "user_memo": 1,
                             "conv_signed": "$conv_signed.credit",
                         }
                     },
