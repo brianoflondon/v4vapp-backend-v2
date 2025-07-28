@@ -2,10 +2,7 @@ from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_print
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
-from v4vapp_backend_v2.actions.hive_notification import (
-    send_notification_custom_json,
-    send_notification_hive_transfer,
-)
+from v4vapp_backend_v2.actions.hive_notification import send_notification_custom_json
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -125,26 +122,21 @@ async def process_custom_json_to_lightning(
             await release_keepsats(tracked_op=custom_json)
             logger.info(f"Hold released for {keepsats_transfer.from_account}")
 
-        if return_hive_message:
-            try:
-                trx = await send_notification_hive_transfer(
-                    tracked_op=custom_json,
-                    reason=return_hive_message,
-                    nobroadcast=nobroadcast,
-                )
-                logger.info(
-                    f"Notification transaction created for operation {custom_json.group_id}",
-                    extra={"notification": True, "trx": trx, **custom_json.log_extra},
-                )
-            except Exception as e:
-                logger.exception(
-                    f"Error returning Hive transfer: {e}",
-                    extra={
-                        "notification": False,
-                        "reason": return_hive_message,
-                        **custom_json.log_extra,
-                    },
-                )
+        notification = KeepsatsTransfer(
+            from_account=InternalConfig().config.hive.server_account.name,
+            to_account=keepsats_transfer.from_account,
+            memo=return_hive_message or keepsats_transfer.log_str,
+            notification=True,
+            invoice_message=keepsats_transfer.invoice_message,
+            parent_id=custom_json.group_id,
+        )
+        trx = await send_notification_custom_json(
+            tracked_op=custom_json, notification=notification
+        )
+        logger.info(
+            f"Notification transaction created for operation {custom_json.group_id}",
+            extra={"notification": False, "trx": trx, **custom_json.log_extra},
+        )
 
 
 async def custom_json_internal_transfer(
@@ -201,15 +193,17 @@ async def custom_json_internal_transfer(
     await transfer_ledger_entry.save()
 
     notification = KeepsatsTransfer(
-        from_account=InternalConfig().config.hive.server_account,
+        from_account=InternalConfig().config.hive.server_account.name,
         to_account=keepsats_transfer.from_account,
         memo=keepsats_transfer.log_str,
         notification=True,
         invoice_message=keepsats_transfer.invoice_message,
         parent_id=custom_json.group_id,
     )
-    trx = await send_notification_custom_json(notification)
+    trx = await send_notification_custom_json(tracked_op=custom_json, notification=notification)
     return transfer_ledger_entry
 
 
+# Last line of the file
+# Last line of the file
 # Last line of the file

@@ -1,6 +1,6 @@
 import asyncio
-from datetime import datetime
 import os
+from datetime import datetime
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, List
@@ -47,11 +47,9 @@ in the debugger.
 
 
 @pytest.fixture(scope="module", autouse=True)
-async def config_file():
-    # async def config_file(full_stack_setup):
+# async def config_file():
+async def config_file(full_stack_setup):
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
-    db_conn = DBConn()
-    await db_conn.setup_database()
     trx = await send_server_balance_to_test()
     logger.info(f"Starting test run at {datetime.now()}", extra={"notification": True})
     logger.info("Server balance sent to test account:")
@@ -240,6 +238,8 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
             release_keepsats
         custom_json_to_lnd
             process_custom_json_to_lightning
+            custom_json_internal_transfer
+
     lnd_grpc.lnd_functions.send_lightning_to_pay_req
 
 

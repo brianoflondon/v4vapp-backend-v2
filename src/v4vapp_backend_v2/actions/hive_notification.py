@@ -164,6 +164,7 @@ async def send_notification_hive_transfer(
 
 
 async def send_notification_custom_json(
+    tracked_op: TrackedAny,
     notification: KeepsatsTransfer,
 ) -> Dict[str, str]:
     """
@@ -188,8 +189,21 @@ async def send_notification_custom_json(
             json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
             send_account=notification.from_account,
             active=True,
-            id="v4vapp_dev_transfer",
+            id="v4vapp_dev_notification",
             hive_client=hive_client,
+        )
+        reason = f"Custom Json reply for operation {tracked_op.group_id}: {trx.get('trx_id', '')}"
+        tracked_op.add_reply(
+            reply_id=trx.get("trx_id", ""),
+            reply_type="custom_json",
+            reply_msat=0,
+            reply_error=None,
+            reply_message=reason,
+        )
+        await tracked_op.save()
+        logger.info(
+            f"Updated tracked_op with reply: {tracked_op.replies[-1]}",
+            extra={"notification": False, **tracked_op.log_extra},
         )
         return trx
     except Exception as e:

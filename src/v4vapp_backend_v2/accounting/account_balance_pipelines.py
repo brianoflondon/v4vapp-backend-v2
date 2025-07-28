@@ -357,14 +357,14 @@ def all_account_balances_pipeline(
             "$match": {
                 "debit.name": account.name,
                 "debit.sub": account.sub,
-                "debit.account_type": account.account_type.value,
+                "debit.account_type": account.account_type,
             }
         }
         facet_credit_match = {
             "$match": {
                 "credit.name": account.name,
                 "credit.sub": account.sub,
-                "credit.account_type": account.account_type.value,
+                "credit.account_type": account.account_type,
             }
         }
     else:

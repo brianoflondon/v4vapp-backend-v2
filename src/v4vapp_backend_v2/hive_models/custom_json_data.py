@@ -88,9 +88,15 @@ class KeepsatsTransfer(BaseModel):
         super().__init__(**data)
 
     @property
+    def notification_str(self) -> str:
+        return self.log_str
+
+    @property
     def log_str(self) -> str:
         message_memo = self.invoice_message or self.memo
         message_memo = lightning_memo(message_memo)
+        if self.sats is None or self.notification:
+            return f"⏩️{self.from_account} notification {message_memo} {self.to_account}"
         if self.to_account == "":
             return (
                 f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
@@ -139,24 +145,14 @@ class KeepsatsTransfer(BaseModel):
         """
         return process_user_memo(self.memo)
 
-    @property
-    def notification_str(self) -> str:
-        message_memo = self.invoice_message or self.memo
-        message_memo = lightning_memo(message_memo)
-        if self.to_account == "":
-            return (
-                f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
-            )
-        return (
-            f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
-        )
-
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
 CUSTOM_JSON_IDS = {
     "v4vapp_dev_transfer": KeepsatsTransfer,
+    "v4vapp_dev_notification": KeepsatsTransfer,
     "v4vapp_transfer": KeepsatsTransfer,
+    "v4vapp_notification": KeepsatsTransfer,
     "vsc.transfer": VSCTransfer,
     "vsc.withdraw": VSCTransfer,
     "vsc.withdraw_hbd": VSCTransfer,

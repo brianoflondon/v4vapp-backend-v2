@@ -88,13 +88,13 @@ async def main():
     # invoice = await get_lightning_invoice(
     #     5010, "v4vapp.qrc #v4vapp Sending sats to another account"
     # )
-    invoice = await get_lightning_invoice(5010, "Blank not message")
+    invoice = await get_lightning_invoice(2312, "v4vapp.qrc #v4vapp Sending sats to another account")
     # the invoice_message has no effect if the invoice is generated and sent in the message.
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
-        sats=10000,
+        sats=2312,
         memo=invoice.payment_request,
         invoice_message="v4vapp.qrc #v4vapp Sending sats to another account",
     )
