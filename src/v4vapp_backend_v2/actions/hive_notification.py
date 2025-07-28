@@ -7,11 +7,17 @@ from v4vapp_backend_v2.actions.actions_errors import (
     KeepsatsDepositNotificationError,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
-from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.hive.hive_extras import HiveTransferError, send_transfer
+from v4vapp_backend_v2.hive.hive_extras import (
+    HiveTransferError,
+    get_verified_hive_client,
+    get_verified_hive_client_for_accounts,
+    send_custom_json,
+    send_transfer,
+)
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
@@ -155,3 +161,40 @@ async def send_notification_hive_transfer(
             extra={"notification": False, **tracked_op.log_extra},
         )
         raise HiveToLightningError(message)
+
+
+async def send_notification_custom_json(
+    notification: KeepsatsTransfer,
+) -> Dict[str, str]:
+    """
+    Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
+
+    Args:
+        notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
+
+    Returns:
+        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+
+    Raises:
+        Exception: Logs and handles any exceptions that occur during the notification process.
+    """
+    try:
+        logger.info(
+            f"Sending custom_json notification for Keepsats transfer: {notification.log_str}",
+            extra={"notification": True, **notification.log_extra},
+        )
+        hive_client = await get_verified_hive_client_for_accounts([notification.from_account])
+        trx = await send_custom_json(
+            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+            send_account=notification.from_account,
+            active=True,
+            id="v4vapp_dev_transfer",
+            hive_client=hive_client,
+        )
+        return trx
+    except Exception as e:
+        logger.error(
+            f"Error sending custom_json notification: {e}",
+            extra={"notification": False, **notification.log_extra},
+        )
+        return {}
