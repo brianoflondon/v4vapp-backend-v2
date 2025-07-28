@@ -530,8 +530,7 @@ class LedgerEntry(BaseModel):
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
             logger.info(f"Ledger Entry saved: {self.group_id}")
-            logger.info(f"{self.log_str}", extra={"notification": False, **self.log_extra})
-            logger.info(f"\n{self}")
+            logger.info(f"\n{self}", extra={"notification": False, **self.log_extra})
 
             return ans
         except DuplicateKeyError as e:

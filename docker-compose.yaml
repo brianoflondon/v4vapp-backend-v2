@@ -70,48 +70,48 @@ services:
     volumes:
       - redis_data:/data
 
-  voltage-node-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/voltage:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
-    restart: unless-stopped
-    stop_grace_period: 20s
+  # voltage-node-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/voltage:/app/logs
+  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
 
 
-  umbrel-node-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/umbrel:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "--config", "umbrel"]
-    restart: unless-stopped
-    stop_grace_period: 20s
+  # umbrel-node-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/umbrel:/app/logs
+  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "umbrel"]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
 
 
-  hive-monitor:
-    depends_on:
-      - node-monitor
-    image: node-monitor:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/hive:/app/logs
-    command: [
-      "python", "src/hive_monitor_v2.py",
-      "--config", "hive.config",
-    ]
-    restart: unless-stopped
-    stop_grace_period: 20s
-    networks:
-      - v4vapp-backend
+  # hive-monitor:
+  #   depends_on:
+  #     - node-monitor
+  #   image: node-monitor:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/hive:/app/logs
+  #   command: [
+  #     "python", "src/hive_monitor_v2.py",
+  #     "--config", "hive.config",
+  #   ]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
+  #   networks:
+  #     - v4vapp-backend
 
   # binance-monitor:
   #   depends_on:

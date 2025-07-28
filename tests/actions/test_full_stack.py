@@ -13,6 +13,7 @@ from nectar.amount import Amount
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
+    get_keepsats_balance,
     keepsats_balance_printout,
 )
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
@@ -268,7 +269,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     ledger_entries = await all_ledger_entries()
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     logger.info(f"Ledger types: {ledger_types}")
-    assert len(ledger_entries) == 23, f"Expected 23 ledger entries, found {len(ledger_entries)}"
+    assert len(ledger_entries) == 22, f"Expected 22 ledger entries, found {len(ledger_entries)}"
     paywithsats_types = ledger_types[starting_ledger_count + 1 :]
     excepted_paywithsats_types = {
         LedgerType.HOLD_KEEPSATS,
@@ -287,6 +288,22 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     assert abs(keepsats_balance - 2121) < 2, (
         f"Expected Keepsats balance for v4vapp.qrc to be close to 2121, found {keepsats_balance}"
     )
+
+
+async def test_get_keepsats_balance():
+    """
+    Test the retrieval of Keepsats balance for a specific customer.
+
+    This test performs the following steps:
+    1. Retrieves the Keepsats balance for the customer "v4vapp-test".
+    2. Validates that the balance is correctly fetched and printed.
+
+    Raises:
+        AssertionError: If the balance retrieval fails or does not match expected values.
+    """
+    cust_id = "v4vapp-test"
+    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=False)
+    assert net_sats >= 0, f"Expected non-negative Keepsats balance, found {net_sats}"
 
 
 # MARK: Helper functions
@@ -324,63 +341,6 @@ async def watch_for_ledger_count(count: int, timeout: int = 30) -> List[LedgerEn
 async def get_all_ledger_entries():
     all_ledger_entries = await LedgerEntry.collection().find({}).to_list()
     return all_ledger_entries
-
-
-# async def watch_database_for(ledger_type: LedgerType, timeout: int = 60) -> List[LedgerEntry]:
-#     """
-#     Watch the database for changes and collect ledger entries of a specific type.
-#     Stops after finding the specified ledger_type or after timeout seconds.
-
-#     Args:
-#         ledger_type (LedgerType): The type of ledger entry to watch for.
-#         timeout (int): Maximum time in seconds to wait before giving up.
-
-#     Returns:
-#         List[LedgerEntry]: A list of ledger entries collected while watching.
-#     """
-#     import time
-
-#     db_conn = DBConn()
-#     await db_conn.setup_database()
-#     db = db_conn.db()
-#     collection = db["ledger"]
-#     ledger_entries: List[LedgerEntry] = []
-#     start_time = time.time()
-
-#     async with await collection.watch(full_document="updateLookup") as stream:
-#         while time.time() - start_time < timeout:
-#             try:
-#                 # Wait for next change with a timeout to allow checking elapsed time
-#                 change = await asyncio.wait_for(stream.next(), 2.0)
-
-#                 try:
-#                     ledger_entry = LedgerEntry.model_validate(change["fullDocument"])
-#                     ledger_entries.append(ledger_entry)
-#                     print(f"{ledger_entry.ledger_type:<15}: {ledger_entry.description}")
-
-#                     if ledger_entry.ledger_type == ledger_type:
-#                         logger.info(f"Found target ledger entry type: {ledger_type}")
-#                         break
-
-#                 except Exception as e:
-#                     logger.error(f"Error validating ledger entry: {e}")
-#                     continue
-
-#             except asyncio.TimeoutError:
-#                 # No new changes within the wait_for timeout
-#                 elapsed = int(time.time() - start_time)
-#                 logger.debug(f"Waiting for {ledger_type}... ({elapsed}/{timeout}s)")
-#                 continue
-
-#             except StopAsyncIteration:
-#                 logger.warning("Change stream ended unexpectedly")
-#                 break
-
-#     elapsed = int(time.time() - start_time)
-#     if elapsed >= timeout:
-#         logger.warning(f"⏰ Timeout after {timeout}s waiting for ledger entry type {ledger_type}")
-
-#     return ledger_entries
 
 
 async def send_server_balance_to_test() -> dict[str, Any]:

@@ -89,12 +89,17 @@ def account_balance_details_pipeline(
         date_range_query = {"$lte": as_of_date}
 
     pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"conv_signed": {"$exists": True}}},
-        # {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+        {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
         {
             "$facet": {
                 "debits": [
-                    {"$match": {"debit.name": account.name, "debit.sub": account.sub}},
+                    {
+                        "$match": {
+                            "debit.name": account.name,
+                            "debit.sub": account.sub,
+                            "debit.account_type": account.account_type,
+                        }
+                    },
                     {
                         "$project": {
                             "_id": 0,
@@ -117,7 +122,13 @@ def account_balance_details_pipeline(
                     },
                 ],
                 "credits": [
-                    {"$match": {"credit.name": account.name, "credit.sub": account.sub}},
+                    {
+                        "$match": {
+                            "credit.name": account.name,
+                            "credit.sub": account.sub,
+                            "credit.account_type": account.account_type,
+                        }
+                    },
                     {
                         "$project": {
                             "_id": 0,
@@ -346,14 +357,14 @@ def all_account_balances_pipeline(
             "$match": {
                 "debit.name": account.name,
                 "debit.sub": account.sub,
-                "debit.account_type": account.account_type,
+                "debit.account_type": account.account_type.value,
             }
         }
         facet_credit_match = {
             "$match": {
                 "credit.name": account.name,
                 "credit.sub": account.sub,
-                "credit.account_type": account.account_type,
+                "credit.account_type": account.account_type.value,
             }
         }
     else:

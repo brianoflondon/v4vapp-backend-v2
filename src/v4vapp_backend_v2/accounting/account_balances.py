@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Mapping, Tuple
 
@@ -56,8 +55,8 @@ async def one_account_balance(
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
-    await asyncio.sleep(0.1)
     check_ledger = await LedgerEntry.collection().count_documents({})
+    logger.info(f"Ledger has {check_ledger} entries as of {as_of_date}.")
     if check_ledger == 0:
         logger.warning(
             "Ledger is empty, cannot calculate account balance.", extra={"notification": False}
@@ -307,7 +306,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(days=1),
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -417,22 +416,29 @@ async def get_keepsats_balance(
     account = LiabilityAccount(
         name="Customer Liability",
         sub=cust_id,
+        contra=False,
     )
-
+    logger.info(account)
     account_balance = await one_account_balance(
         account=account,
-        as_of_date=as_of_date + timedelta(seconds=10),
+        as_of_date=as_of_date + timedelta(days=1),
     )
+    # account_balances = await all_account_balances(
+    #     as_of_date=as_of_date + timedelta(seconds=10),
+    #     age=timedelta(seconds=0),
+    # )
+    # account_balance = account_balances[]
     # net_msats_details = account_balance.balances.get(Currency.MSATS, [])
     # net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
     # Use the sub totaled net msats balance so if there is a negative Hive account it is
     # accounted for.
-    net_msats = account_balance.conv_total.msats if account_balance.conv_total else 0.0
-    return net_msats // 1000, account_balance
+    net_msats = account_balance.conv_total.msats
+    net_sats = net_msats // 1000 if net_msats else 0.0
+    return net_sats, account_balance
 
 
 async def keepsats_balance_printout(
-    cust_id: str, previous_sats: float | None = None
+    cust_id: str, previous_sats: float | None = None, line_items: bool = False
 ) -> Tuple[float, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
@@ -448,9 +454,10 @@ async def keepsats_balance_printout(
         - Customer ID and Keepsats balance information.
         - Net balance, previous balance (if provided), and the delta between balances.
     """
-    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id)
+    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
 
     logger.info("_" * 50)
+    logger.info(InternalConfig.db)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")
     logger.info(f"  Net balance:      {net_sats:,.0f} sats")
     if previous_sats is not None:

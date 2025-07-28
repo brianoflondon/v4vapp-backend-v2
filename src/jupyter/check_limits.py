@@ -7,11 +7,12 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
     get_keepsats_balance,
+    keepsats_balance_printout,
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
@@ -49,11 +50,11 @@ async def main():
     db_conn = DBConn()
     await db_conn.setup_database()
 
-    # await get_limits()
+    await get_limits()
 
-    # amount_msats = 3_000_000
+    amount_msats = 3_000_000
 
-    # cust_id = "v4vapp-test"
+    cust_id = "v4vapp-test"
     # account_printout_str, account_details = await get_account_balance_printout(
     #     account=LiabilityAccount(name="Customer Liability", sub=cust_id), line_items=False
     # )
@@ -64,13 +65,13 @@ async def main():
     cust_id = "v4vapp-test"
 
     print("-------------- Keepsats balance ----------------")
-    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=False)
-
+    net_sats, account_balance = await keepsats_balance_printout(cust_id=cust_id, line_items=False)
+    logger.info(InternalConfig.db)
     print(f"Net: sats for account {cust_id}: {net_sats}")
-    pprint(account_balance.model_dump())
-    ans, tolerance = await check_balance_sheet_mongodb()
-    print("Balance Sheet Check Result:", ans)
-    print("Balance Sheet Check Tolerance:", tolerance)
+    # pprint(account_balance.model_dump())
+    # ans, tolerance = await check_balance_sheet_mongodb()
+    # print("Balance Sheet Check Result:", ans)
+    # print("Balance Sheet Check Tolerance:", tolerance)
 
 
 if __name__ == "__main__":
