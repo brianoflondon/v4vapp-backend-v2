@@ -381,10 +381,13 @@ class TrackedBaseModel(BaseModel):
         Returns:
             UpdateResult | None: The result of the update operation, or None if no database client is available.
         """
+        update = self.model_dump(
+            exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+        )
+        if update.get("replies") == []:
+            update.pop("replies", None)  # Remove empty replies list if it exists
         update = {
-            "$set": self.model_dump(
-                exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
-            )
+            "$set": update,
         }
         return await InternalConfig.db[self.collection_name].update_one(
             filter=self.group_id_query,

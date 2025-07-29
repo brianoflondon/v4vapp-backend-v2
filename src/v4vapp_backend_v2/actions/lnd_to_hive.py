@@ -196,12 +196,12 @@ async def process_lightning_to_hive(
         group_id=f"{invoice.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee Lightning {cust_id} {invoice.value_msat / 1000:,.0f} sats",
-        debit=LiabilityAccount(
-            name="Customer Liability",
-            sub=cust_id,
+        debit=AssetAccount(
+            name="Treasury Lightning",
+            sub=node_name,
         ),
-        debit_unit=invoice.recv_currency,
-        debit_amount=fee_amount_hive_hbd.amount,
+        debit_unit=Currency.MSATS,
+        debit_amount=invoice.conv.msats_fee,
         debit_conv=fee_amount_conv,
         credit=RevenueAccount(
             name="Fee Income Hive",
@@ -215,32 +215,32 @@ async def process_lightning_to_hive(
     ledger_entries_list.append(fee_income_ledger_entry)
 
     # MARK: 5 Transfer Hive to Customer
-    ledger_type = LedgerType.WITHDRAW_HIVE
-    withdrawal_ledger_entry = LedgerEntry(
-        cust_id=cust_id,
-        short_id=invoice.short_id,
-        ledger_type=ledger_type,
-        op_type=invoice.op_type,
-        group_id=f"{invoice.group_id}-{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Withdraw {receive_amount_hive_hbd} to {cust_id}",
-        debit=AssetAccount(
-            name="Customer Deposits Hive",
-            sub=server_id,
-        ),
-        debit_unit=invoice.recv_currency,
-        debit_amount=receive_amount_hive_hbd.amount,
-        debit_conv=net_value_conv,
-        credit=LiabilityAccount(
-            name="Customer Liability",
-            sub=cust_id,
-        ),
-        credit_unit=invoice.recv_currency,
-        credit_amount=receive_amount_hive_hbd.amount,
-        credit_conv=net_value_conv,
-    )
-    await withdrawal_ledger_entry.save()
-    ledger_entries_list.append(withdrawal_ledger_entry)
+    # ledger_type = LedgerType.WITHDRAW_HIVE
+    # withdrawal_ledger_entry = LedgerEntry(
+    #     cust_id=cust_id,
+    #     short_id=invoice.short_id,
+    #     ledger_type=ledger_type,
+    #     op_type=invoice.op_type,
+    #     group_id=f"{invoice.group_id}-{ledger_type.value}",
+    #     timestamp=datetime.now(tz=timezone.utc),
+    #     description=f"Withdraw {receive_amount_hive_hbd} to {cust_id}",
+    #     debit=AssetAccount(
+    #         name="Customer Deposits Hive",
+    #         sub=server_id,
+    #     ),
+    #     debit_unit=invoice.recv_currency,
+    #     debit_amount=receive_amount_hive_hbd.amount,
+    #     debit_conv=net_value_conv,
+    #     credit=LiabilityAccount(
+    #         name="Customer Liability",
+    #         sub=cust_id,
+    #     ),
+    #     credit_unit=invoice.recv_currency,
+    #     credit_amount=receive_amount_hive_hbd.amount,
+    #     credit_conv=net_value_conv,
+    # )
+    # await withdrawal_ledger_entry.save()
+    # ledger_entries_list.append(withdrawal_ledger_entry)
 
     reason = f"You received {value_msat / 1000:,.0f} sats converted to {receive_amount_hive_hbd}"
     return ledger_entries_list, reason, receive_amount_hive_hbd
