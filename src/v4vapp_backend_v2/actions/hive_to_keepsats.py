@@ -26,6 +26,11 @@ async def hive_to_keepsats_deposit(
     Handle a deposit to Keepsats from Hive, returns the ledger entries for this operation and
     the message and amount to be sent back to the customer as change.
 
+    This is similar in its first 5 steps to
+        actions.payment_success.hive_to_lightning_payment_success
+        actions.hive_to_keepsats.hive_to_keepsats_deposit
+    which runs after a Lightning Payment is found. or after receiving a Hive transfer.
+
     Args:
         hive_transfer (TrackedTransfer): The Hive transfer operation that was successful.
 
@@ -122,14 +127,14 @@ async def hive_to_keepsats_deposit(
     # NOTE: The Treasury Lightning account now holds converted sats but in reality these are
     # Probably need a contra asset account for the Treasury Lightning account to track the conversion
 
-    # MARK: 3 Contra Asset Account
-
+    # MARK: 3 Contra Reconciliation Entry
+    ledger_type = LedgerType.CONTRA_HIVE_TO_KEEPSATS
     contra_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         short_id=hive_transfer.short_id,
         op_type=hive_transfer.op_type,
-        ledger_type=LedgerType.CONTRA_HIVE_TO_KEEPSATS,
-        group_id=f"{hive_transfer.group_id}-{LedgerType.CONTRA_HIVE_TO_KEEPSATS.value}",
+        ledger_type=ledger_type,
+        group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=next(timestamp),
         description=f"Contra asset for Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
@@ -180,11 +185,12 @@ async def hive_to_keepsats_deposit(
     ledger_entries_list.append(fee_ledger_entry)
     await fee_ledger_entry.save()
 
-    # MARK: 5 Convert to Keepsats in customer account into the Keepsats
+    # MARK: 5 Deposit Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
     deposit_ledger_entry = LedgerEntry(
         short_id=hive_transfer.short_id,
         op_type=hive_transfer.op_type,
+        user_memo=hive_transfer.user_memo,
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",

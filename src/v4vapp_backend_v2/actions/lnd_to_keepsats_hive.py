@@ -124,6 +124,7 @@ async def lightning_to_keepsats_deposit(
     deposit_ledger_entry = LedgerEntry(
         short_id=invoice.short_id,
         op_type=invoice.op_type,
+        user_memo=invoice.memo if invoice.memo else "",
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{invoice.group_id}-{ledger_type.value}",
@@ -171,3 +172,6 @@ async def lightning_to_hive_convert_deposit(
     """
     # This function is a placeholder for future implementation
     raise NotImplementedError("Lightning to Hive conversion deposit is not implemented yet.")
+
+
+# Last line of the file
