@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timezone
 from typing import List, Tuple
 
 from nectar.amount import Amount
@@ -15,7 +15,6 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import timestamp_inc
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
@@ -72,8 +71,6 @@ async def hive_to_keepsats_deposit(
 
     amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
 
-    timestamp = timestamp_inc(hive_transfer.timestamp, inc=timedelta(seconds=0.01))
-
     amount_to_deposit_before_fee_conv = CryptoConversion(
         conv_from=hive_transfer.amount.unit,
         value=amount_to_deposit_before_fee.amount,
@@ -105,7 +102,7 @@ async def hive_to_keepsats_deposit(
         op_type=hive_transfer.op_type,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Convert {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -135,7 +132,7 @@ async def hive_to_keepsats_deposit(
         op_type=hive_transfer.op_type,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Contra asset for Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=hive_transfer.unit,
@@ -165,7 +162,7 @@ async def hive_to_keepsats_deposit(
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee for Keepsats deposit {hive_transfer.amount_str} to {amount_to_deposit_msats / 1000:,.0f} sats deposit",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -194,7 +191,7 @@ async def hive_to_keepsats_deposit(
         cust_id=cust_id,
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="Customer Liability",

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timezone
 
 from nectar.amount import Amount
 
@@ -18,7 +18,6 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import timestamp_inc
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.payment_models import Payment
@@ -57,7 +56,6 @@ async def hive_to_lightning_payment_success(
     """
     # MARK: Hive to Lightning Payment Success
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
-    timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
     hive_transfer = await load_tracked_object(old_ledger_entry.group_id)
     if not isinstance(hive_transfer, TransferBase):
         raise NotImplementedError(
@@ -112,7 +110,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         op_type=payment.op_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Conv {conversion_credit_amount} to {conversion_debit_amount / 1000:,.0f} sats {payment.destination} for {cust_id}",
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -140,7 +138,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         op_type=payment.op_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Contra conversion of {conversion_credit_amount} for Hive balance reconciliation",
         debit=AssetAccount(
             name="Customer Deposits Hive",
@@ -178,7 +176,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         op_type=payment.op_type,
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee Lightning {cust_id} {cost_of_payment_msat / 1000:,.0f} sats",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -212,7 +210,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         op_type=payment.op_type,
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Allocate outgoing Lightning {outgoing_debit_amount} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -238,7 +236,7 @@ async def hive_to_lightning_payment_success(
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
         op_type=payment.op_type,
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
         debit=AssetAccount(
             name="External Lightning Payments",
@@ -271,7 +269,7 @@ async def hive_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             op_type=payment.op_type,
-            timestamp=next(timestamp),
+            timestamp=datetime.now(tz=timezone.utc),
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",
@@ -331,7 +329,7 @@ async def keepsats_to_lightning_payment_success(
         list[LedgerEntry]: A list of new ledger entries created as a result of the successful payment.
     """
     quote = await TrackedBaseModel.nearest_quote(payment.timestamp)
-    timestamp = timestamp_inc(payment.timestamp, inc=timedelta(seconds=0.01))
+    timestamp = payment.timestamp
     original_op = await load_tracked_object(old_ledger_entry.group_id)
     if not isinstance(original_op, TransferBase | CustomJson):
         raise NotImplementedError(
@@ -357,7 +355,7 @@ async def keepsats_to_lightning_payment_success(
         short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"Allocate outgoing Keepsats {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
@@ -382,7 +380,7 @@ async def keepsats_to_lightning_payment_success(
         short_id=payment.short_id,
         ledger_type=ledger_type,
         group_id=f"{payment.group_id}-{ledger_type.value}",
-        timestamp=next(timestamp),
+        timestamp=datetime.now(tz=timezone.utc),
         description=f"External Lightning payment {payment.value_msat / 1000:,.0f} sats to {payment.destination}",
         debit=AssetAccount(
             name="External Lightning Payments",
@@ -417,7 +415,7 @@ async def keepsats_to_lightning_payment_success(
             short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
-            timestamp=next(timestamp),
+            timestamp=datetime.now(tz=timezone.utc),
             description=f"Fee of {payment.fee_msat / 1000:,.0f} sending SATS to {payment.destination}",
             debit=LiabilityAccount(
                 name="Customer Liability",
@@ -440,7 +438,7 @@ async def keepsats_to_lightning_payment_success(
             short_id=payment.short_id,
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
-            timestamp=next(timestamp),
+            timestamp=datetime.now(tz=timezone.utc),
             description=f"Fee Expenses Lightning fee: {payment.fee_msat / 1000:,.0f} sats",
             debit=ExpenseAccount(
                 name="Fee Expenses Lightning",
