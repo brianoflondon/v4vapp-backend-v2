@@ -7,7 +7,12 @@ from typing import Annotated, Any, Mapping, Sequence
 import bson
 import typer
 from pydantic import BaseModel, Field
-from pymongo.errors import OperationFailure
+from pymongo.errors import (
+    ConnectionFailure,
+    NetworkTimeout,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
@@ -305,6 +310,21 @@ async def subscribe_stream(
             )
             return
 
+    except (
+        ServerSelectionTimeoutError,
+        NetworkTimeout,
+        ConnectionFailure,
+    ) as e:
+        logger.error(
+            f"{ICON} {collection_name} MongoDB connection error, will retry: {e}",
+            extra={"error": e, "notification": True},
+        )
+        # Wait before attempting to reconnect
+        await asyncio.sleep(10)
+        logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
+        asyncio.create_task(subscribe_stream(collection_name=collection_name, pipeline=pipeline))
+        return
+
     except Exception as e:
         logger.error(f"{ICON} Error in stream subscription: {e}", extra={"error": e})
         raise e
@@ -453,6 +473,19 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("👋 Goodbye!")
         sys.exit(0)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
+        sys.exit(0)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
 
     except Exception as e:
         logger.exception(e)
