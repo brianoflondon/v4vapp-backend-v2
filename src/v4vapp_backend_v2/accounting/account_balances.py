@@ -23,7 +23,11 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    format_time_delta,
+    lightning_memo,
+    truncate_text,
+)
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
@@ -55,21 +59,12 @@ async def one_account_balance(
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
-    check_ledger = await LedgerEntry.collection().count_documents({})
-    logger.info(f"Ledger has {check_ledger} entries as of {as_of_date}.")
-    if check_ledger == 0:
-        logger.warning(
-            "Ledger is empty, cannot calculate account balance.", extra={"notification": False}
-        )
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
     if not results:
         logger.warning(f"No results for {account}", extra={"notification": False})
-
     clean_results = convert_datetime_fields(results)
-
     account_balance = AccountBalances.model_validate(clean_results)
-
     return (
         account_balance.root[0]
         if account_balance.root
@@ -86,6 +81,7 @@ async def one_account_balance(
 async def account_balance_printout(
     account: LedgerAccount | str,
     line_items: bool = True,
+    user_memos: bool = True,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(seconds=0),
 ) -> Tuple[str, LedgerAccountDetails]:
@@ -179,6 +175,9 @@ async def account_balance_printout(
                 )
                 if line_items:
                     output.append(line)
+                if user_memos and row.user_memo:
+                    memo = truncate_text(lightning_memo(row.user_memo), 60)
+                    output.append(f"{' ' * 20} {memo}")
 
             final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
             final_conv_balance = (
