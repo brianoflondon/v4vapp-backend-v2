@@ -324,8 +324,8 @@ async def subscribe_stream(
     ) as e:
         error_count += 1
         logger.error(
-            f"{ICON} {collection_name} MongoDB connection error, will retry: {e}",
-            extra={"error": e, "notification": True},
+            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {e}",
+            extra={"error_code": f"mongodb_stream_error_{collection_name}", "notification": True},
         )
         # Wait before attempting to reconnect
         await asyncio.sleep(max(30 * error_count, 180))
