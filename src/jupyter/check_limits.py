@@ -55,8 +55,7 @@ async def main():
     # Example usage of get_account_lightning_conv
     db_conn = DBConn()
     await db_conn.setup_database()
-    await count_hours()
-    return
+    # await count_hours()
     await get_limits()
 
     amount_msats = 3_000_000
@@ -75,6 +74,9 @@ async def main():
     net_sats, account_balance = await keepsats_balance_printout(cust_id=cust_id, line_items=False)
     logger.info(InternalConfig.db)
     print(f"Net: sats for account {cust_id}: {net_sats}")
+
+
+    
     # pprint(account_balance.model_dump())
     # ans, tolerance = await check_balance_sheet_mongodb()
     # print("Balance Sheet Check Result:", ans)
