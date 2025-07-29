@@ -196,7 +196,7 @@ async def hive_to_lightning_payment_success(
     await fee_ledger_entry_hive.save()
     ledger_entries_list.append(fee_ledger_entry_hive)
 
-    # MARK: 5 Withdra Lightning
+    # MARK: 5 Withdraw Lightning
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     outgoing_debit_amount = conversion_credit_amount - fee_debit_amount_hive
     outgoing_conv = CryptoConversion(

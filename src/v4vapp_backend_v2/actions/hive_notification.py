@@ -139,6 +139,7 @@ async def send_notification_hive_transfer(
         else:
             raise HiveTransferError("No transaction created during Hive to Lightning repayment")
     except HiveTransferError as e:
+        #TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
         message = f"Failed to repay Hive to Lightning operation: {e}"
         tracked_op.add_reply(
             reply_id="", reply_type="transfer", reply_error=str(e), reply_message=message

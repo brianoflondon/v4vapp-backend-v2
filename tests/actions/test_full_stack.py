@@ -262,7 +262,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
-        sats=10000,
+        sats=2200,
         memo=invoice.payment_request,
         invoice_message="paying an invoice with keepsasts",
     )
@@ -275,7 +275,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
         hive_client=hive_client,
     )
     pprint(trx)
-    ledger_entries = await watch_for_ledger_count(21)
+    ledger_entries = await watch_for_ledger_count(23)
     await asyncio.sleep(10)
     after_net_sats, ledger_details = await keepsats_balance_printout(
         cust_id="v4vapp-test", previous_sats=before_net_sats
@@ -284,7 +284,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     ledger_entries = await all_ledger_entries()
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     logger.info(f"Ledger types: {ledger_types}")
-    assert len(ledger_entries) == 22, f"Expected 22 ledger entries, found {len(ledger_entries)}"
+    assert len(ledger_entries) == 23, f"Expected 23 ledger entries, found {len(ledger_entries)}"
     paywithsats_types = ledger_types[starting_ledger_count + 1 :]
     excepted_paywithsats_types = {
         LedgerType.HOLD_KEEPSATS,
@@ -294,7 +294,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
         LedgerType.FEE_CHARGE,
         LedgerType.FEE_EXPENSE,
         LedgerType.RELEASE_KEEPSATS,
-        # LedgerType.CUSTOMER_HIVE_OUT,
+        LedgerType.CUSTOMER_HIVE_OUT,
     }
     assert excepted_paywithsats_types <= set(paywithsats_types), (
         f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"

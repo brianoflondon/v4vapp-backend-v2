@@ -116,17 +116,23 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
-    LIGHTNING_EXTERNAL_SEND = "l_contra_e"
+    LIGHTNING_EXTERNAL_SEND = "l_contra_e"  # Perhaps change to l_external_out
+    LIGHTNING_EXTERNAL_IN = "l_external_in"  # Lightning incoming transaction
+
+    WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's account
 
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
+
+    CONTRA_LIGHTNING_TO_HIVE = "l_contra_h"  # Contra entry for Lightning to Hive conversion
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
     FEE_CHARGE = "fee_charge"  # Fee charges from a customer
 
-    CUSTOMER_HIVE_IN = "cust_h_in"
-    CUSTOMER_HIVE_OUT = "cust_h_out"
+    CUSTOMER_HIVE_IN = "cust_h_in"  # Customer deposit into Hive account
+    CUSTOMER_HIVE_OUT = "cust_h_out"  # Customer withdrawal from Hive account
+
     SERVER_TO_TREASURY = "serv_to_t"  # Server to Treasury transfer
     TREASURY_TO_SERVER = "t_to_serv"  # Treasury to Server transfer
     FUNDING_TO_TREASURY = "fund_to_t"  # Funding to Treasury transfer

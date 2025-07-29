@@ -7,8 +7,10 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import KeepsatsDepositNotificationError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 
@@ -32,20 +34,20 @@ async def process_lightning_to_hive_or_keepsats(
     """
     if invoice.cust_id and invoice.is_lndtohive and invoice.state == InvoiceState.SETTLED:
         # For now we will treat any inbound amount as Keepsats.
+        # MARK: Sats in to Keepsats
         if invoice.recv_currency == Currency.SATS:
-            logger.info(
-                f"Processing Lightning to Hive transfer for customer ID: {invoice.cust_id}"
-            )
+            logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")
             ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
                 invoice, nobroadcast
             )
-
-            return ledger_entries
+            # This line here bypasses the Hive Return logic.
+            # return ledger_entries
+        # MARK: Sats to Hive or HBD
         elif invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
             logger.info(
                 f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}"
             )
-            ledger_entries, message, return_amount = await lightning_to_hive_convert_deposit(
+            ledger_entries, message, return_amount = await lightning_to_hive_convert(
                 invoice, nobroadcast
             )
         else:
@@ -68,6 +70,8 @@ async def process_lightning_to_hive_or_keepsats(
                     tracked_op=invoice,
                     reason=message,
                     nobroadcast=nobroadcast,
+                    amount=return_amount,
+                    pay_to_cust_id=invoice.cust_id,
                 )
             except KeepsatsDepositNotificationError as e:
                 logger.warning(
@@ -89,6 +93,7 @@ async def process_lightning_to_hive_or_keepsats(
     raise NotImplementedError("Processing Lightning to Hive transfer is not implemented yet.")
 
 
+# MARK: LND to Keepsats deposit
 async def lightning_to_keepsats_deposit(
     invoice: Invoice, nobroadcast: bool = False
 ) -> Tuple[list[LedgerEntry], str, Amount]:
@@ -147,16 +152,24 @@ async def lightning_to_keepsats_deposit(
     )
     ledger_entries_list.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
+
+    if is_clean_memo(invoice.memo):
+        # If the memo is clean, we can pass it on directly in the reply.
+        message = process_clean_memo(invoice.memo)
+    else:
+        message = f"Deposit of {msats_received / 1000:,.0f} sats - {invoice.memo}"
+
     return (
         ledger_entries_list,
-        f"Deposit of {msats_received / 1000:,.0f} sats successful",
+        message,
         return_amount,
     )
 
 
-async def lightning_to_hive_convert_deposit(
+# MARK: LND to Hive deposit
+async def lightning_to_hive_convert(
     invoice: Invoice, nobroadcast: bool = False
-) -> Tuple[list[LedgerEntry], str, Amount]:
+) -> Tuple[List[LedgerEntry], str, Amount]:
     """
     Convert a Lightning deposit to Hive.
 
@@ -170,8 +183,11 @@ async def lightning_to_hive_convert_deposit(
             - str: The message to be sent back to the customer as change.
             - Amount: The amount to be returned to the customer after fees (Hive or HBD).
     """
-    # This function is a placeholder for future implementation
-    raise NotImplementedError("Lightning to Hive conversion deposit is not implemented yet.")
+    try:
+        return await process_lightning_to_hive(invoice, nobroadcast)
+    except Exception as e:
+        logger.error(f"Error processing Lightning to Hive conversion: {e}")
+        raise NotImplementedError("Lightning to Hive conversion deposit is not implemented yet.")
 
 
 # Last line of the file
