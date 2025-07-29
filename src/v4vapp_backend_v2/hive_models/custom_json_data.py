@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Type, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
 
@@ -32,11 +33,46 @@ class PayResult(BaseModel):
 
 
 class KeepsatsTransfer(BaseModel):
+    """
+    Represents a Keepsats transfer transaction, including sender and receiver Hive account names, amount in sats,
+    memo, payment result, and optional invoice message.
+
+    Attributes:
+        from_account (AccNameType): Hive account name of the sender.
+        to_account (AccNameType): Hive account name of the receiver.
+        sats (int): Amount of sats transferred.
+        memo (str): Memo associated with the transfer.
+        pay_result (PayResult | None): Result of the payment, if available.
+        HIVE (float | None): Optional amount in HIVE currency.
+        HBD (float | None): Optional amount in HBD currency.
+        invoice_message (str | None): Message used for invoices from foreign services.
+
+    Properties:
+        log_str (str): Returns a formatted log string describing the transfer.
+        description (str): Returns a description string for the transfer, used in ledger entries.
+        notification_str (str): Returns a formatted notification string for the transfer.
+
+    Config:
+        model_config: ConfigDict to allow population by field name.
+
+    Methods:
+        __init__(**data): Initializes the KeepsatsTransfer object, ensuring memo is set to an empty string if not provided.
+    """
+
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
-    sats: int
+    sats: int | None = Field(
+        None,
+        description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
+    )
     memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
+    notification: bool = Field(
+        False, description="If True, this is a notification rather than a transfer"
+    )
+    parent_id: str | None = Field(
+        None, description="The short ID of the parent transaction, if applicable"
+    )
     HIVE: float | None = None
     HBD: float | None = None
     invoice_message: str | None = Field(
@@ -52,9 +88,15 @@ class KeepsatsTransfer(BaseModel):
         super().__init__(**data)
 
     @property
+    def notification_str(self) -> str:
+        return self.log_str
+
+    @property
     def log_str(self) -> str:
         message_memo = self.invoice_message or self.memo
         message_memo = lightning_memo(message_memo)
+        if self.sats is None or self.notification:
+            return f"⏩️{self.from_account} notification {message_memo} {self.to_account}"
         if self.to_account == "":
             return (
                 f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
@@ -62,6 +104,26 @@ class KeepsatsTransfer(BaseModel):
         return (
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary of extra log information for the Keepsats transfer.
+        This is used for logging purposes to provide additional context about the transfer.
+        """
+        return {
+            "from_account": self.from_account,
+            "to_account": self.to_account,
+            "sats": self.sats,
+            "memo": self.memo,
+            "invoice_message": self.invoice_message,
+            "HIVE": self.HIVE,
+            "HBD": self.HBD,
+            "parent_id": self.parent_id,
+            "pay_result": self.pay_result.model_dump(exclude_none=True, exclude_unset=True)
+            if self.pay_result
+            else None,
+        }
 
     @property
     def description(self) -> str:
@@ -73,23 +135,24 @@ class KeepsatsTransfer(BaseModel):
         return self.log_str
 
     @property
-    def notification_str(self) -> str:
-        message_memo = self.invoice_message or self.memo
-        message_memo = lightning_memo(message_memo)
-        if self.to_account == "":
-            return (
-                f"⏩️{self.from_account} sent {self.sats:,.0f} sats via Keepsats to {message_memo}"
-            )
-        return (
-            f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
-        )
+    def user_memo(self) -> str:
+        """
+        Returns the user memo, which is the decoded memo if available,
+        otherwise returns the original memo.
+
+        Returns:
+            str: The user memo.
+        """
+        return process_user_memo(self.memo)
 
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
 CUSTOM_JSON_IDS = {
     "v4vapp_dev_transfer": KeepsatsTransfer,
+    "v4vapp_dev_notification": KeepsatsTransfer,
     "v4vapp_transfer": KeepsatsTransfer,
+    "v4vapp_notification": KeepsatsTransfer,
     "vsc.transfer": VSCTransfer,
     "vsc.withdraw": VSCTransfer,
     "vsc.withdraw_hbd": VSCTransfer,

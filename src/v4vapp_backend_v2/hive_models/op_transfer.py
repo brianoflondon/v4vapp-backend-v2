@@ -16,7 +16,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     paywithsats_amount,
     seconds_only_time_diff,
 )
-from v4vapp_backend_v2.hive.hive_extras import decode_memo
+from v4vapp_backend_v2.hive.hive_extras import decode_memo, process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -195,6 +195,18 @@ class TransferBase(OpBase):
         else:
             memo = f"💬{self.d_memo}"
         return memo
+
+    @property
+    def user_memo(self) -> str:
+        """
+        Returns the user memo, which is the decoded memo if available,
+        otherwise returns the original memo.
+
+        Returns:
+            str: The user memo.
+        """
+        # this is where #clean needs to be evaluated
+        return process_user_memo(self.d_memo)
 
     @property
     def extract_reply_short_id(self) -> str:

@@ -2,7 +2,10 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Generator
 
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
+
+# MARK: General Text
 def snake_case(name: str) -> str:
     """
     Convert a string to snake_case.
@@ -49,6 +52,7 @@ def cap_camel_case(snake_str: str) -> str:
     return camel_case_word[0].upper() + camel_case_word[1:]
 
 
+# MARK: Date & Time
 def seconds_only(delta: timedelta) -> timedelta:
     """
     Returns a new timedelta object with only the days and seconds
@@ -118,6 +122,7 @@ def get_in_flight_time(creation_date: datetime) -> str:
     return in_flight_time
 
 
+# MARK: Memo processing
 def detect_keepsats(memo: str) -> bool:
     """
     Detects if the given memo contains keywords related to keeping sats.
@@ -142,6 +147,23 @@ def detect_keepsats(memo: str) -> bool:
     return False
 
 
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
+
+
 def detect_paywithsats(memo: str) -> bool:
     """
     Detects if the given memo contains the phrase '#paywithsats'.
@@ -160,6 +182,7 @@ def detect_paywithsats(memo: str) -> bool:
         return True
     return False
 
+
 def paywithsats_amount(memo: str) -> int:
     """
     Extracts the amount specified in a memo string formatted as "paywithsats:amount".
@@ -174,6 +197,7 @@ def paywithsats_amount(memo: str) -> int:
     if match:
         return int(match.group(1))
     return 0
+
 
 def detect_hbd(memo: str) -> bool:
     if not memo:
@@ -198,6 +222,42 @@ def detect_convert_keepsats(memo: str) -> bool:
     if "#convertkeepsats" in memo.lower():
         return True
     return False
+
+
+def process_clean_memo(
+    memo: str,
+) -> str:
+    """
+    Cleans and processes a memo string by removing the '#clean' tag and handling special cases.
+    If the memo contains '#clean' (case-insensitive), the function:
+    - Removes the '#clean' tag and trims whitespace.
+    - If `detect_keepsats(memo)` returns True:
+        - Keeps only the part before the first ' | ' separator.
+        - Appends ' | #sats' to the message.
+        - If a transaction code matching 'v4v-<word>' exists, appends it as ' | <transaction_code>'.
+    - If `detect_keepsats(memo)` returns False:
+        - Keeps only the part before the first ' | ' separator.
+        - Removes the '#clean' tag and trims whitespace.
+    Args:
+        memo (str): The input memo string to be cleaned and processed.
+    Returns:
+        str: The cleaned and processed memo string.
+    """
+    message = memo
+    if "#clean" in memo.lower():
+        if detect_keepsats(memo):
+            message = memo.split(" | ")[0]
+            message = message.replace("#clean", "").strip()
+            message = f"{message} | #sats"
+            # Detect special case of POS v4vapp looking the #
+            transaction_checkCode = re.findall(r"v4v-\w+", memo)
+            if transaction_checkCode:
+                message = f"{message} | {transaction_checkCode[0]}"
+        else:
+            message = memo.split(" | ")[0]
+            message = message.replace("#clean", "").strip()
+
+    return message
 
 
 # MARK: Markdown Functions
@@ -346,14 +406,6 @@ def sanitize_markdown_v2(text: str) -> str:
         text = text.replace(placeholder_escaped, f"[{link_text_escaped}]({url})")
 
     return text
-
-
-# Test with your message
-if __name__ == "__main__":
-    message = "🐝 🧱 Delta 0:55:33 | Mean 0:55:43 | producer_reward | 1 | [HiveHub](https://hivehub.dev/tx/95024715/0000000000000000000000000000000000000000/1) | 0:00:02"
-    sanitized = sanitize_markdown_v2(message)
-    print("Original:", message)
-    print("Sanitized:", sanitized)
 
 
 def draw_percentage_meter(percentage, max_percent=200, width=20):
@@ -532,3 +584,14 @@ def timestamp_inc(
     while True:
         current_time += inc
         yield current_time
+
+
+# Test with your message
+if __name__ == "__main__":
+    message = "🐝 🧱 Delta 0:55:33 | Mean 0:55:43 | producer_reward | 1 | [HiveHub](https://hivehub.dev/tx/95024715/0000000000000000000000000000000000000000/1) | 0:00:02"
+    sanitized = sanitize_markdown_v2(message)
+    print("Original:", message)
+    print("Sanitized:", sanitized)
+    print("Sanitized:", sanitized)
+    print("Sanitized:", sanitized)
+    print("Sanitized:", sanitized)

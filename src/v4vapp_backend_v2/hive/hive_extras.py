@@ -1,7 +1,7 @@
 import json
 import random
 import struct
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import httpx
 from ecdsa import MalformedPointError  # type: ignore
@@ -18,7 +18,8 @@ from nectarapi.exceptions import UnhandledRPCError
 from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
+from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 
 DEFAULT_GOOD_NODES = [
@@ -744,6 +745,99 @@ async def send_transfer(
             )
             raise HiveSomeOtherRPCException(f"{ex}")
     return {}
+
+
+async def get_verified_hive_client(
+    hive_role: HiveRoles = HiveRoles.server,
+    nobroadcast: bool = False,
+) -> Tuple[Hive, str]:
+    """
+    Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
+
+    Args:
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+        hive_role (HiveRoles, optional): The role to use for the Hive client. Defaults to HiveRoles.server.
+
+    Returns:
+        Tuple[Hive, str]: A tuple containing the initialized Hive client and the server account name.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
+    hive_config = InternalConfig().config.hive
+
+    hive_account = hive_config.get_hive_role_account(hive_role)
+
+    if not hive_account:
+        raise HiveToLightningError("Missing Hive server account configuration for repayment")
+
+    memo_key = hive_account.memo_key or ""
+    active_key = hive_account.active_key or ""
+    if not memo_key or not active_key:
+        raise HiveToLightningError("Missing Hive server account keys for repayment")
+
+    hive_client = get_hive_client(
+        keys=[
+            hive_account.memo_key,
+            hive_account.active_key,
+        ],
+        nobroadcast=nobroadcast,
+    )
+    return hive_client, hive_account.name
+
+
+async def get_verified_hive_client_for_accounts(
+    accounts: List[str],
+    nobroadcast: bool = False,
+) -> Hive:
+    """
+    Asynchronously obtains a verified Hive client instance for a list of accounts using server account credentials from the internal configuration.
+
+    Args:
+        accounts (List[str]): A list of Hive account names to verify.
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+
+    Returns:
+        Hive: An initialized Hive client instance.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
+    hive_config = InternalConfig().config.hive
+    hive_accounts = []
+    keys = []
+    for account in accounts:
+        if hive_config.hive_accs.get(account):
+            hive_account = hive_config.hive_accs[account]
+            hive_accounts.append(hive_account)
+            all_keys = hive_account.keys
+            if all_keys:
+                keys.extend(all_keys)
+
+    hive_client = get_hive_client(
+        keys=keys,
+        nobroadcast=nobroadcast,
+    )
+    return hive_client
+
+
+def process_user_memo(memo: str) -> str:
+    """
+    Processes a user memo by removing any leading '#' character.
+
+    Args:
+        memo (str): The user memo to process.
+
+    Returns:
+        str: The processed memo without the leading '#' character.
+    """
+    # TODO: This needs to process tags like #clean and #keepsats to return a correct memo to pass on.
+    # this is where #clean needs to be evaluated
+    if not memo:
+        return ""
+    if memo.startswith("#"):
+        return memo[1:]
+    return memo
 
 
 if __name__ == "__main__":

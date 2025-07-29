@@ -6,12 +6,11 @@ from pprint import pprint
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     get_account_lightning_conv,
-    get_keepsats_balance,
+    keepsats_balance_printout,
     one_account_balance,
 )
-from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
@@ -26,7 +25,7 @@ async def get_limits():
     for limit in limits:
         print("Limit OK:", limit.limit_ok)
         print("Spend Summary:")
-        pprint(limit.conv_summary)
+        # pprint(limit.conv_summary)
         print("Total Sats:", limit.total_sats)
         print("Total Msats:", limit.total_msats)
 
@@ -41,6 +40,14 @@ async def get_limits():
     pprint(balance)
 
 
+async def count_hours():
+    for minutes in range(0, 60):
+        age = timedelta(seconds=minutes * 60)
+        ans = await get_account_lightning_conv(cust_id="v4vapp-test", age=age)
+        print(f"Minutes: {minutes}, Sats: {ans.sats}, Msats: {ans.msats}")
+        await asyncio.sleep(0.1)
+
+
 async def main():
     """
     Main function to run the checks and print results.
@@ -48,12 +55,12 @@ async def main():
     # Example usage of get_account_lightning_conv
     db_conn = DBConn()
     await db_conn.setup_database()
+    # await count_hours()
+    await get_limits()
 
-    # await get_limits()
+    amount_msats = 3_000_000
 
-    # amount_msats = 3_000_000
-
-    # cust_id = "v4vapp-test"
+    cust_id = "v4vapp-test"
     # account_printout_str, account_details = await get_account_balance_printout(
     #     account=LiabilityAccount(name="Customer Liability", sub=cust_id), line_items=False
     # )
@@ -61,15 +68,19 @@ async def main():
     # print(account_printout_str)
     # pprint(account_details)
 
-    cust_id = "v4vapp.qrc"
+    cust_id = "v4vapp-test"
 
     print("-------------- Keepsats balance ----------------")
-    keepsats_balance, net_sats = await get_keepsats_balance(cust_id=cust_id, line_items=False)
+    net_sats, account_balance = await keepsats_balance_printout(cust_id=cust_id, line_items=False)
+    logger.info(InternalConfig.db)
+    print(f"Net: sats for account {cust_id}: {net_sats}")
 
-    pprint(net_sats)
-    ans, tolerance = await check_balance_sheet_mongodb()
-    print("Balance Sheet Check Result:", ans)
-    print("Balance Sheet Check Tolerance:", tolerance)
+
+    
+    # pprint(account_balance.model_dump())
+    # ans, tolerance = await check_balance_sheet_mongodb()
+    # print("Balance Sheet Check Result:", ans)
+    # print("Balance Sheet Check Tolerance:", tolerance)
 
 
 if __name__ == "__main__":

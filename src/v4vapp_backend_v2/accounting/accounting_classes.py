@@ -94,6 +94,7 @@ class AccountBalanceLine(BaseModel):
     ledger_type: str = ""
     timestamp: datetime = datetime.now(tz=timezone.utc)
     description: str = ""
+    user_memo: str = ""
     cust_id: str = ""
     op_type: str = ""
     account_type: str = ""
@@ -141,4 +142,6 @@ class AccountBalances(RootModel):
     root: List[LedgerAccountDetails]
 
 
+# This is the last line# This is the last line
+# This is the last line# This is the last line
 # This is the last line# This is the last line

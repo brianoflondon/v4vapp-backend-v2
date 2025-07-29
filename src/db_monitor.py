@@ -1,13 +1,18 @@
 import asyncio
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
+import bson
 import typer
-from bson.timestamp import Timestamp
 from pydantic import BaseModel, Field
-from pymongo.errors import OperationFailure
+from pymongo.errors import (
+    ConnectionFailure,
+    NetworkTimeout,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
@@ -201,18 +206,24 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
             return
         except NotImplementedError:
-            logger.info(f"{ICON} Operation not implemented for {type(op)} {op.group_id}")
+            logger.warning(
+                f"{ICON} Operation not implemented for {op.op_type} {op.group_id}",
+                extra={"notification": False},
+            )
+            logger.warning(f"{ICON} {op.log_str}", extra={"notification": False})
             return
         except LedgerEntryException as e:
-            logger.info(f"{ICON} Ledger entry error: {e}", extra={"error": e})
+            logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
             return
         except CustIDLockException as e:
-            logger.error(f"{ICON} CustID lock error: {e}", extra={"error": e})
-            await asyncio.sleep(1)
+            logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
+            await asyncio.sleep(5)
 
 
 async def subscribe_stream(
-    collection_name: str = "invoices", pipeline: Sequence[Mapping[str, Any]] | None = None
+    collection_name: str = "invoices",
+    pipeline: Sequence[Mapping[str, Any]] | None = None,
+    use_resume=True,
 ):
     """
     Asynchronously subscribes to a stream and logs updates.
@@ -232,16 +243,24 @@ async def subscribe_stream(
     collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
-        resume_token = resume.token
-        # Convert one_minute_ago to a Timestamp object
-        one_minute_ago = datetime.now(tz=timezone.utc) - timedelta(minutes=10)
-        ts = Timestamp(int(one_minute_ago.timestamp()), 1)
-        async with await collection.watch(
-            pipeline=pipeline,
-            full_document="updateLookup",
-            resume_after=resume_token,
-            start_at_operation_time=ts if not resume_token else None,
-        ) as stream:
+        if use_resume:
+            resume_token = resume.token
+        else:
+            resume_token = None
+
+        watch_kwargs = {
+            "pipeline": pipeline,
+            "full_document": "updateLookup",
+        }
+        if resume_token:
+            watch_kwargs["resume_after"] = resume_token
+        else:
+            # Get the unix timestamp for 60 seconds ago
+            unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
+            # The second argument (increment) is usually 0 for new watches
+            watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
+
+        async with await collection.watch(**watch_kwargs) as stream:
             async for change in stream:
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
@@ -265,23 +284,24 @@ async def subscribe_stream(
                     break
                 continue
 
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
+        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
         InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
         logger.info(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
             extra={"notification": True},
         )
-        return
+        raise e
 
     except OperationFailure as e:
         logger.error(
-            f"{ICON} Operation failure in stream subscription: {e}",
+            f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
             extra={"error": e, "notification": False},
         )
         if "resume" in str(e):
             logger.warning(
-                f"{ICON} Resume token error in stream subscription: {e}",
+                f"{ICON} {collection_name} Resume token error in stream subscription: {e}",
                 extra={"error": e, "notification": False},
             )
             resume.delete_token()
@@ -289,6 +309,21 @@ async def subscribe_stream(
                 subscribe_stream(collection_name=collection_name, pipeline=pipeline)
             )
             return
+
+    except (
+        ServerSelectionTimeoutError,
+        NetworkTimeout,
+        ConnectionFailure,
+    ) as e:
+        logger.error(
+            f"{ICON} {collection_name} MongoDB connection error, will retry: {e}",
+            extra={"error": e, "notification": True},
+        )
+        # Wait before attempting to reconnect
+        await asyncio.sleep(10)
+        logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
+        asyncio.create_task(subscribe_stream(collection_name=collection_name, pipeline=pipeline))
+        return
 
     except Exception as e:
         logger.error(f"{ICON} Error in stream subscription: {e}", extra={"error": e})
@@ -305,7 +340,7 @@ def handle_shutdown_signal():
     shutdown_event.set()
 
 
-async def main_async_start():
+async def main_async_start(use_resume: bool = True):
     """
     Main function to run Database Monitor app.
     Args:
@@ -335,13 +370,25 @@ async def main_async_start():
         while not shutdown_event.is_set():
             tasks = [
                 asyncio.create_task(
-                    subscribe_stream(collection_name="invoices", pipeline=db_pipelines["invoices"])
+                    subscribe_stream(
+                        collection_name="invoices",
+                        pipeline=db_pipelines["invoices"],
+                        use_resume=use_resume,
+                    )
                 ),
                 asyncio.create_task(
-                    subscribe_stream(collection_name="payments", pipeline=db_pipelines["payments"])
+                    subscribe_stream(
+                        collection_name="payments",
+                        pipeline=db_pipelines["payments"],
+                        use_resume=use_resume,
+                    )
                 ),
                 asyncio.create_task(
-                    subscribe_stream(collection_name="hive_ops", pipeline=db_pipelines["hive_ops"])
+                    subscribe_stream(
+                        collection_name="hive_ops",
+                        pipeline=db_pipelines["hive_ops"],
+                        use_resume=use_resume,
+                    )
                 ),
             ]
             await asyncio.gather(*tasks)
@@ -383,11 +430,24 @@ def main(
             show_default=True,
         ),
     ] = DEFAULT_CONFIG_FILENAME,
+    use_resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume/--no-resume",  # Define both positive and negative flags
+            "-r",
+            help="Resume the stream from the last known token",
+            is_flag=True,  # Mark as a flag option
+        ),
+    ] = True,
 ):
     """
-    Main function to do what you want.
+    DB Monitor App.
+    This app monitors the database for changes and processes them accordingly.
+    It uses a change stream to listen for changes in the database and processes
+    them in real-time.
     Args:
         config_filename (str): The name of the config file (in a folder called ./config).
+        resume (bool): Whether to resume the stream from the last known token.
 
     Returns:
         None
@@ -402,7 +462,7 @@ def main(
         extra={"notification": False},
     )
 
-    asyncio.run(main_async_start())
+    asyncio.run(main_async_start(use_resume=use_resume))
 
 
 if __name__ == "__main__":
@@ -413,6 +473,19 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("👋 Goodbye!")
         sys.exit(0)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
+        sys.exit(0)
+
+    except Exception as e:
+        logger.exception(e)
+        sys.exit(1)
 
     except Exception as e:
         logger.exception(e)

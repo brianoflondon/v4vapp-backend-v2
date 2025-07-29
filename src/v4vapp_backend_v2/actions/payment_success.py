@@ -38,6 +38,12 @@ async def hive_to_lightning_payment_success(
     and fee expenses. If a matching inbound Hive payment is found, it updates the ledger accordingly.
     Otherwise, it raises a NotImplementedError for unhandled cases.
 
+    This is similar in its first 5 steps to
+        actions.payment_success.hive_to_lightning_payment_success
+        actions.hive_to_keepsats.hive_to_keepsats_deposit
+    which runs after a Lightning Payment is found. or after receiving a Hive transfer.
+
+    Args:
         payment (Payment): The Lightning payment object containing payment details and custom records.
         nobroadcast (bool, optional): If True, prevents broadcasting of certain events. Defaults to False.
 
@@ -192,7 +198,7 @@ async def hive_to_lightning_payment_success(
     await fee_ledger_entry_hive.save()
     ledger_entries_list.append(fee_ledger_entry_hive)
 
-    # MARK: 5 Fulfill Main Payment Obligation
+    # MARK: 5 Withdra Lightning
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     outgoing_debit_amount = conversion_credit_amount - fee_debit_amount_hive
     outgoing_conv = CryptoConversion(
@@ -412,7 +418,7 @@ async def keepsats_to_lightning_payment_success(
             ledger_type=ledger_type,
             group_id=f"{payment.group_id}-{ledger_type.value}",
             timestamp=next(timestamp),
-            description=f"External Lightning payment of {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
+            description=f"Fee of {payment.fee_msat / 1000:,.0f} sending SATS to {payment.destination}",
             debit=LiabilityAccount(
                 name="Customer Liability",
                 sub=cust_id,

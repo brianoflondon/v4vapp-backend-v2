@@ -13,7 +13,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_mongodb,
 )
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.actions.hive_to_lnd import (
+from v4vapp_backend_v2.hive.hive_extras import (
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
 )
@@ -131,6 +131,12 @@ async def main():
     )
     pprint(trx)
 
+    # Deposit Hive as Keepsats
+    trx = await send_hive_customer_to_server(amount=Amount("45 HIVE"), memo="Deposit some #sats")
+    pprint(trx)
+    trx = await send_hive_customer_to_server(
+        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp.qrc"
+    )
     # Pay invoice with Hive transfer
     invoice = await get_lightning_invoice(5030, "Test Invoice for v4vapp.qrc")
     pprint(invoice)
@@ -139,12 +145,6 @@ async def main():
     )
     pprint(trx)
 
-    # Deposit Hive as Keepsats
-    trx = await send_hive_customer_to_server(amount=Amount("100 HIVE"), memo="Deposit some #sats")
-    pprint(trx)
-    trx = await send_hive_customer_to_server(
-        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp.qrc"
-    )
     pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
     # pprint(trx)
@@ -226,6 +226,6 @@ if __name__ == "__main__":
     CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
     asyncio.run(main())
-    CONFIG = InternalConfig(config_filename="devhive.config.yaml").config
 
-    asyncio.run(main())
+
+# Last line

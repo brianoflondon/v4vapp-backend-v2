@@ -112,6 +112,7 @@ class LedgerType(StrEnum):
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
+    CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
@@ -195,6 +196,9 @@ class LedgerEntry(BaseModel):
         datetime.now(tz=timezone.utc), description="Timestamp of the ledger entry"
     )
     description: str = Field("", description="Description of the ledger entry")
+    user_memo: str = Field(
+        "", description="A memo which can be shown to users for the ledger entry"
+    )
     cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )
@@ -525,15 +529,16 @@ class LedgerEntry(BaseModel):
             ans = await InternalConfig.db["ledger"].insert_one(
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
-            # logger.info(f"Ledger Entry saved: {self.group_id} {self.ledger_type_str} ")
-            # logger.info(f"{self.log_str}", extra={"notification": False, **self.log_extra})
-            # logger.info(f"\n{self}")
+            logger.info(f"Ledger Entry saved: {self.group_id}")
+            logger.info(f"\n{self}", extra={"notification": False, **self.log_extra})
+
             return ans
         except DuplicateKeyError as e:
             logger.warning(
                 f"Duplicate ledger entry detected: {e}",
                 extra={"notification": False, **self.log_extra},
             )
+            logger.warning(f"\n{self}")
             raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
 
         except Exception as e:

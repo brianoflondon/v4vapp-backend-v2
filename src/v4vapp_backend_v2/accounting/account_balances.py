@@ -23,7 +23,11 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    format_time_delta,
+    lightning_memo,
+    truncate_text,
+)
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
@@ -57,10 +61,10 @@ async def one_account_balance(
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
+    if not results:
+        logger.warning(f"No results for {account}", extra={"notification": False})
     clean_results = convert_datetime_fields(results)
-
     account_balance = AccountBalances.model_validate(clean_results)
-
     return (
         account_balance.root[0]
         if account_balance.root
@@ -75,8 +79,9 @@ async def one_account_balance(
 
 # @async_time_stats_decorator()
 async def account_balance_printout(
-    account: LedgerAccount,
+    account: LedgerAccount | str,
     line_items: bool = True,
+    user_memos: bool = True,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(seconds=0),
 ) -> Tuple[str, LedgerAccountDetails]:
@@ -87,7 +92,8 @@ async def account_balance_printout(
     (SATS, HIVE, HBD, USD, msats).
 
     Args:
-        account (Account): An Account object specifying the account name, type, and optional sub-account.
+        account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
+        a str is passed, we assume this is a `Customer Liability` account for customer `account`.
         df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
         full_history (bool, optional): If True, shows the full transaction history with running balances.
                                        If False, shows only the closing balance. Defaults to False.
@@ -97,11 +103,19 @@ async def account_balance_printout(
         str: A formatted string containing either the full transaction history or the closing balance
              for the specified account and sub-account up to the specified date.
     """
+    if isinstance(account, str):
+        account = LiabilityAccount(
+            name="Customer Liability",
+            sub=account,
+        )
+
     max_width = 135
     if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
 
-    ledger_account_details = await one_account_balance(account=account, as_of_date=as_of_date)
+    ledger_account_details = await one_account_balance(
+        account=account, as_of_date=as_of_date, age=age
+    )
     units = set(ledger_account_details.balances.keys())
 
     title_line = f"Balance for {account}"
@@ -161,6 +175,9 @@ async def account_balance_printout(
                 )
                 if line_items:
                     output.append(line)
+                if user_memos and row.user_memo:
+                    memo = truncate_text(lightning_memo(row.user_memo), 60)
+                    output.append(f"{' ' * 20} {memo}")
 
             final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
             final_conv_balance = (
@@ -193,7 +210,9 @@ async def account_balance_printout(
         balance_str = (
             f"{display_balance:,.0f}" if unit.upper() == "MSATS" else f"{display_balance:>10,.3f}"
         )
-        output.append(f"{'Final Balance':<18} {balance_str:>10} {display_unit:<5}")
+        output.append(
+            f"{'Final Balance ' + f'{display_unit}':<18} {balance_str:>10} {display_unit:<5}"
+        )
 
         total_usd += total_usd_for_unit
         total_sats += total_sats_for_unit
@@ -204,8 +223,8 @@ async def account_balance_printout(
     # )
 
     output.append("-" * max_width)
-    output.append(f"Total USD: {total_usd:>19,.3f}")
-    output.append(f"Total SATS: {total_sats:>18,.0f}")
+    output.append(f"Total USD: {total_usd:>18,.3f} USD")
+    output.append(f"Total SATS: {total_sats:>17,.0f} SATS")
     output.append(title_line)
 
     output.append("=" * max_width + "\n")
@@ -235,8 +254,8 @@ async def ledger_pipeline_result(
     cust_id: str,
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
 ) -> LedgerConvSummary:
     """
     Executes a MongoDB aggregation pipeline and returns the result as a LedgerConvSummary.
@@ -286,7 +305,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -350,6 +369,7 @@ async def check_hive_conversion_limits(
         )
         return []
 
+    as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
     for limit in lightning_rate_limits:
         age = timedelta(hours=limit.hours)
         limit_timedelta = timedelta(hours=limit.hours)
@@ -357,7 +377,7 @@ async def check_hive_conversion_limits(
             limit_timedelta, fractions=True, just_days_or_hours=True
         )
         lightning_conv = await get_account_lightning_conv(
-            cust_id=hive_accname, age=age, line_items=line_items
+            as_of_date=as_of_date, cust_id=hive_accname, age=age, line_items=line_items
         )
         limit_summary = LightningLimitSummary(
             conv_summary=lightning_conv,
@@ -377,32 +397,63 @@ async def get_keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     line_items: bool = False,
-) -> Tuple[LedgerAccountDetails, float]:
+) -> Tuple[float, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
     represent deposits, while debits represent withdrawals.
-    Adds a net_balance field to the output summing up deposits and withdrawls
+    Adds a net_balance field to the output summing up deposits and withdrawals
 
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
         as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to the current UTC time.
 
     Returns:
+        Tuple:
+        net_sats (float): The net balance of Keepsats in satoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(
         name="Customer Liability",
         sub=cust_id,
+        contra=False,
     )
-
+    logger.info(account)
     account_balance = await one_account_balance(
         account=account,
-        as_of_date=as_of_date + timedelta(hours=1),
+        as_of_date=as_of_date + timedelta(days=1),
     )
-    # net_msats_details = account_balance.balances.get(Currency.MSATS, [])
-    # net_msats = net_msats_details[-1].amount_running_total if net_msats_details else 0.0
-    # Use the sub totaled net msats balance so if there is a negative Hive account it is
-    # accounted for.
-    net_msats = account_balance.conv_total.msats if account_balance.conv_total else 0.0
-    return account_balance, net_msats // 1000
+
+    net_msats = account_balance.conv_total.msats
+    net_sats = net_msats // 1000 if net_msats else 0.0
+    return net_sats, account_balance
+
+
+async def keepsats_balance_printout(
+    cust_id: str, previous_sats: float | None = None, line_items: bool = False
+) -> Tuple[float, LedgerAccountDetails]:
+    """
+    Generates and logs a printout of the Keepsats balance for a given customer.
+
+    Args:
+        cust_id (str): The customer ID for which to retrieve the Keepsats balance.
+        previous_sats (float, optional): The previous balance in sats to compare against. Defaults to 0.
+
+    Returns:
+        Tuple[float, LedgerAccountDetails]: A tuple containing the net Keepsats balance in sats and the account balance details.
+
+    Logs:
+        - Customer ID and Keepsats balance information.
+        - Net balance, previous balance (if provided), and the delta between balances.
+    """
+    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
+
+    logger.info("_" * 50)
+    logger.info(f"Customer ID {cust_id} Keepsats balance:")
+    logger.info(f"  Net balance:      {net_sats:,.0f} sats")
+    if previous_sats is not None:
+        logger.info(f"  Previous balance: {previous_sats:,.0f} sats")
+        logger.info(f"  Delta:           {net_sats - previous_sats:,.0f} sats")
+    logger.info("_" * 50)
+
+    return net_sats, account_balance

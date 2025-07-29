@@ -145,7 +145,6 @@ class CustomJson(OpBase):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-
         if getattr(self.json_data, "sats", None) is not None:
             if self.conv.sats_hbd == 0:
                 if not quote:

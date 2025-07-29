@@ -10,7 +10,12 @@ import typer
 from nectar.amount import Amount
 
 # from colorama import Fore, Style
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import (
+    ConnectionFailure,
+    DuplicateKeyError,
+    NetworkTimeout,
+    ServerSelectionTimeoutError,
+)
 from pymongo.results import BulkWriteResult, UpdateResult
 
 from v4vapp_backend_v2 import __version__
@@ -110,25 +115,55 @@ async def db_store_op(
     """
     global COMMAND_LINE_WATCH_USERS, HIVE_DATABASE_CONNECTION, HIVE_DATABASE, HIVE_DATABASE_USER
     db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
+    while True:
+        error_count = 0
+        try:
+            collection = OpBase.collection()
+            db_ans = await collection.update_one(
+                filter=op.group_id_query,
+                update={
+                    "$set": op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
+                },
+                upsert=True,
+            )
+            if error_count > 0:
+                logger.info(
+                    f"{icon} Reconnected to MongoDB after {error_count} errors",
+                    extra={"notification": True},
+                )
+                logger.info(f"{icon} SAVED {op.log_str}")
+                error_count = 0
+            return db_ans
+        except DuplicateKeyError as e:
+            logger.info(
+                f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
+                extra={"notification": False, "error": e, **op.log_extra},
+            )
+            return []
 
-    try:
-        collection = OpBase.collection()
-        db_ans = await collection.update_one(
-            filter=op.group_id_query,
-            update={"$set": op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)},
-            upsert=True,
-        )
-        return db_ans
-    except DuplicateKeyError as e:
-        logger.info(
-            f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
-            extra={"notification": False, "error": e, **op.log_extra},
-        )
-        return []
+        except (
+            ServerSelectionTimeoutError,
+            NetworkTimeout,
+            ConnectionFailure,
+        ) as e:
+            error_count += 1
+            logger.error(
+                f"{icon} Error {error_count} MongoDB connection error, while trying to save: {e}",
+                extra={"error": e, "notification": True},
+            )
+            logger.warning(op.log_str, extra={"notification": False, **op.log_extra})
+            # Wait before attempting to reconnect
+            await asyncio.sleep(30)
+            logger.info(f"{icon} Attempting to reconnect to MongoDb")
 
-    except Exception as e:
-        logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
-        return []
+        except Exception as e:
+            logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
+            logger.warning(
+                f"{icon} {op.log_str}",
+                extra={"notification": False, "error": e, **op.log_extra},
+            )
+            logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
+            return []
 
 
 async def balance_server_hbd_level(transfer: Transfer) -> None:
@@ -550,9 +585,9 @@ async def store_rates() -> None:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=600)
             except asyncio.TimeoutError:
                 continue  # Timeout means 10 minutes passed, so loop again
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} store_rates cancelled or interrupted, exiting.")
-        return
+        raise e
 
 
 async def main_async_start(
@@ -587,8 +622,9 @@ async def main_async_start(
             store_rates(),
         ]
         await asyncio.gather(*tasks)
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
+        raise e
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})

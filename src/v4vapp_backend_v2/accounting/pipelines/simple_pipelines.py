@@ -8,7 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
 def filter_by_account_as_of_date_query(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
 ) -> Dict[str, Any]:
@@ -70,7 +70,7 @@ def filter_by_account_as_of_date_query(
 def filter_sum_credit_debit_pipeline(
     account: LedgerAccount | None = None,
     cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
     age: timedelta | None = None,
     line_items: bool = False,
@@ -174,49 +174,85 @@ def filter_sum_credit_debit_pipeline(
 
 
 def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
-    # Can't find any way to filter this in the pipeline, will do it in code.
-    pipeline_exclude_locked_changes: list[Mapping[str, Any]] = []
+    """
+    Generates MongoDB aggregation pipelines for monitoring database changes in payments, invoices, and hive operations collections.
 
-    payments_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-        {"$match": {"operationType": {"$ne": "delete"}}},
+    Returns:
+        Dict[str, Sequence[Mapping[str, Any]]]:
+            A dictionary containing named pipelines:
+                - "payments": Pipeline to monitor payment documents, excluding deletes and filtering by group ID and status.
+                - "invoices": Pipeline to monitor invoice documents, excluding deletes and filtering for settled state.
+                - "hive_ops": Pipeline to monitor hive operation documents, excluding deletes and block marker types.
+            Each pipeline also ignores certain update operations that only affect specified fields ("replies", "change_conv", "process_time").
+    """
+
+    ignore_updates_match: Mapping[str, Any] = {
+        "$match": {
+            "$or": [
+                {"operationType": {"$ne": "update"}},
+                {
+                    "operationType": "update",
+                    "$expr": {
+                        "$gt": [
+                            {
+                                "$size": {
+                                    "$setDifference": [
+                                        {
+                                            "$map": {
+                                                "input": {
+                                                    "$objectToArray": "$updateDescription.updatedFields"
+                                                },
+                                                "as": "field",
+                                                "in": "$$field.k",
+                                            }
+                                        },
+                                        [
+                                            "replies",
+                                            "change_conv",
+                                            "process_time",
+                                            "change_amount",
+                                            "locked",
+                                            "extensions",
+                                            "fee_conv"
+                                        ],
+                                    ]
+                                }
+                            },
+                            0,
+                        ]
+                    },
+                },
+            ]
+        }
+    }
+
+    payments_pipeline: Sequence[Mapping[str, Any]] = [
         {
             "$match": {
+                "operationType": {"$ne": "delete"},
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
-                "fullDocument.status": {
-                    "$in": ["FAILED", "SUCCEEDED"]
-                },  # status must be FAILED or SUCCEEDED
+                "fullDocument.status": {"$in": ["FAILED", "SUCCEEDED"]},
             }
         },
-        # {
-        #     "$project": {
-        #         "fullDocument.creation_date": 1,
-        #         "fullDocument.payment_hash": 1,
-        #         "fullDocument.status": 1,
-        #         "fullDocument.value_msat": 1,
-        #     }
-        # },
+        ignore_updates_match,
     ]
-    invoices_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-        {"$match": {"operationType": {"$ne": "delete"}}},
-        {"$match": {"fullDocument.state": "SETTLED"}},  # state must exist and be SETTLED
-        # {
-        #     "$project": {
-        #         "fullDocument.creation_date": 1,
-        #         "fullDocument.r_hash": 1,
-        #         "fullDocument.state": 1,
-        #         "fullDocument.amt_paid_msat": 1,
-        #         "fullDocument.value_msat": 1,
-        #         "fullDocument.memo": 1,
-        #     }
-        # },
-    ]
-    hive_ops_pipeline: Sequence[Mapping[str, Any]] = pipeline_exclude_locked_changes + [
-        {"$match": {"operationType": {"$ne": "delete"}}},
+    invoices_pipeline: Sequence[Mapping[str, Any]] = [
         {
             "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.state": "SETTLED",
+            }
+        },
+        ignore_updates_match,
+    ]
+    hive_ops_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
                 "fullDocument.type": {"$ne": "block_marker"},
             }
         },
+        ignore_updates_match,
     ]
 
     return {
