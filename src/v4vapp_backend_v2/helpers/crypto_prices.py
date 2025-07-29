@@ -316,7 +316,7 @@ class AllQuotes(BaseModel):
         all_services = [
             CoinGecko(),
             Binance(),
-            # CoinMarketCap(),
+            CoinMarketCap(),
             HiveInternalMarket(),
         ]
         self.fetch_date = datetime.now(tz=timezone.utc)
