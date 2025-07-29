@@ -129,7 +129,7 @@ async def db_store_op(
             if error_count > 0:
                 logger.info(
                     f"{icon} Reconnected to MongoDB after {error_count} errors",
-                    extra={"notification": True},
+                    extra={"notification": True, "error_code_clear": "mongodb_save_error"},
                 )
                 logger.info(f"{icon} SAVED {op.log_str}")
                 error_count = 0
@@ -149,11 +149,11 @@ async def db_store_op(
             error_count += 1
             logger.error(
                 f"{icon} Error {error_count} MongoDB connection error, while trying to save: {e}",
-                extra={"error": e, "notification": True},
+                extra={"error_code": "mongodb_save_error", "notification": True},
             )
             logger.warning(op.log_str, extra={"notification": False, **op.log_extra})
             # Wait before attempting to reconnect
-            await asyncio.sleep(30)
+            await asyncio.sleep(max(30 * error_count, 300))
             logger.info(f"{icon} Attempting to reconnect to MongoDb")
 
         except Exception as e:

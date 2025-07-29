@@ -164,9 +164,10 @@ async def stream_ops_async(
                 try:
                     op_base = op_any_or_base(hive_event)
                 except ValueError as e:
+                    logger.warning(hive_event)
                     logger.warning(
                         f"ValidationError in block_stream:{hive_event.get('block_num')} {hive_event.get('trx_id')}: {e}",
-                        extra={"notification": True, "hive_event": hive_event},
+                        extra={"notification": False, "hive_event": hive_event},
                     )
                     continue
 
