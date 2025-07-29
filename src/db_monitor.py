@@ -224,6 +224,7 @@ async def subscribe_stream(
     collection_name: str = "invoices",
     pipeline: Sequence[Mapping[str, Any]] | None = None,
     use_resume=True,
+    error_count: int = 0,
 ):
     """
     Asynchronously subscribes to a stream and logs updates.
@@ -261,6 +262,12 @@ async def subscribe_stream(
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
 
         async with await collection.watch(**watch_kwargs) as stream:
+            if error_count > 0:
+                logger.info(
+                    f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
+                    extra={"error_code_clear": "stream_error"},
+                )
+                error_code = 0
             async for change in stream:
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
@@ -315,18 +322,25 @@ async def subscribe_stream(
         NetworkTimeout,
         ConnectionFailure,
     ) as e:
+        error_count += 1
         logger.error(
             f"{ICON} {collection_name} MongoDB connection error, will retry: {e}",
             extra={"error": e, "notification": True},
         )
         # Wait before attempting to reconnect
-        await asyncio.sleep(10)
+        await asyncio.sleep(max(30 * error_count, 180))
         logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
-        asyncio.create_task(subscribe_stream(collection_name=collection_name, pipeline=pipeline))
+        asyncio.create_task(
+            subscribe_stream(
+                collection_name=collection_name, pipeline=pipeline, error_count=error_count
+            )
+        )
         return
 
     except Exception as e:
-        logger.error(f"{ICON} Error in stream subscription: {e}", extra={"error": e})
+        logger.error(
+            f"{ICON} Error in stream subscription: {e}", extra={"error_code": "stream_error"}
+        )
         raise e
     finally:
         logger.info(f"{ICON} Closed connection to {collection_name} stream.")
