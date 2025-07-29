@@ -5,10 +5,7 @@ from pprint import pprint
 import pytest
 from bson import json_util
 
-from v4vapp_backend_v2.accounting.account_balance_pipelines import (
-    account_balance_details_pipeline,
-    all_account_balances_pipeline,
-)
+from v4vapp_backend_v2.accounting.account_balance_pipelines import all_account_balances_pipeline
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     all_account_balances,
@@ -80,7 +77,7 @@ async def test_account_details_pipeline():
     Test the account details pipeline.
     """
     account = LiabilityAccount(name="Customer Liability", sub="v4vapp.dev")
-    pipeline = account_balance_details_pipeline(account)
+    pipeline = all_account_balances_pipeline(account)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
     for unit_result in results:
