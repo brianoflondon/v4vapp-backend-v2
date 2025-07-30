@@ -173,7 +173,9 @@ def filter_sum_credit_debit_pipeline(
     return pipeline
 
 
-def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
+def db_monitor_pipelines(
+    start_date: datetime | None = None,
+) -> Dict[str, Sequence[Mapping[str, Any]]]:
     """
     Generates MongoDB aggregation pipelines for monitoring database changes in payments, invoices, and hive operations collections.
 
@@ -185,6 +187,11 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 - "hive_ops": Pipeline to monitor hive operation documents, excluding deletes and block marker types.
             Each pipeline also ignores certain update operations that only affect specified fields ("replies", "change_conv", "process_time").
     """
+
+    if start_date is not None:
+        date_query = {"$gte": start_date}
+    else:
+        date_query = {}
 
     ignore_updates_match: Mapping[str, Any] = {
         "$match": {
@@ -213,7 +220,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                                             "change_amount",
                                             "locked",
                                             "extensions",
-                                            "fee_conv"
+                                            "fee_conv",
                                         ],
                                     ]
                                 }
@@ -232,6 +239,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
                 "operationType": {"$ne": "delete"},
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
                 "fullDocument.status": {"$in": ["FAILED", "SUCCEEDED"]},
+                "fullDocument.creation_date": date_query,
             }
         },
         ignore_updates_match,
@@ -241,6 +249,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             "$match": {
                 "operationType": {"$ne": "delete"},
                 "fullDocument.state": "SETTLED",
+                "fullDocument.creation_date": date_query,
             }
         },
         ignore_updates_match,
@@ -250,6 +259,7 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
             "$match": {
                 "operationType": {"$ne": "delete"},
                 "fullDocument.type": {"$ne": "block_marker"},
+                "fullDocument.timestamp": date_query,
             }
         },
         ignore_updates_match,
