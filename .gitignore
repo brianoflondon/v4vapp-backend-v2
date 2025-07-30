@@ -1,6 +1,6 @@
 # Local data
 archive_data/*
-
+d_vol/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
