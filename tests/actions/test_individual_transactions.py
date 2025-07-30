@@ -10,8 +10,17 @@ from tests.actions.test_full_stack import (
     send_hive_customer_to_server,
     watch_for_ledger_count,
 )
+from v4vapp_backend_v2.accounting.account_balances import (
+    account_balance_printout,
+    list_all_accounts,
+)
+from v4vapp_backend_v2.accounting.balance_sheet import (
+    balance_sheet_all_currencies_printout,
+    generate_balance_sheet_mongodb,
+)
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -38,8 +47,14 @@ async def config_file():
 
 async def test_hive_to_lnd_and_lnd_to_hive():
     """
-    Test the full stack by sending a payment from Hive to LND and then back to Hive.
-    This will test the entire flow of payments through the system.
+    Integration test for transferring funds between Hive and Lightning Network Daemon (LND).
+    This test performs the following steps:
+    1. Resets the test environment to a clean state.
+    2. Generates a Lightning invoice for 10,000 satoshis with a specific memo.
+    3. Sends 10,000 satoshis from a Hive customer to the server using the generated invoice.
+    4. Waits for the ledger to record 13 entries, indicating all expected transactions have occurred.
+    5. Asserts that exactly 13 ledger entries exist after the operations.
+    Ensures the correct flow and ledger recording for Hive-to-LND and LND-to-Hive transactions.
     """
     await clear_and_reset()
 
@@ -54,6 +69,27 @@ async def test_hive_to_lnd_and_lnd_to_hive():
 
     await asyncio.sleep(1)
     assert len(all_ledger_entries) == 13, "Expected 13 ledger entries"
+
+
+async def test_complete_balance_sheet_accounts_ledger():
+    balance_sheet = await generate_balance_sheet_mongodb()
+    balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)
+    complete_printout = f"{balance_sheet_currencies_str}\n"
+    all_accounts = await list_all_accounts()
+    for account in all_accounts:
+        printout, details = await account_balance_printout(
+            account=account,
+            line_items=True,
+        )
+        complete_printout += "\n" + printout
+    print(complete_printout)
+    text_to_rtf(
+        input_text=complete_printout,
+        output_file="balance_sheet.rtf",
+        max_lines_per_page=50,
+        font_name="AndaleMono",
+        font_size=10,
+    )
 
 
 # Last line of the file
