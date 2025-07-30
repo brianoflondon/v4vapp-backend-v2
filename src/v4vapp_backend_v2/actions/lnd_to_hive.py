@@ -196,9 +196,9 @@ async def process_lightning_to_hive(
         group_id=f"{invoice.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee Lightning {cust_id} {invoice.value_msat / 1000:,.0f} sats",
-        debit=AssetAccount(
-            name="Treasury Lightning",
-            sub=node_name,
+        debit=LiabilityAccount(
+            name="Customer Liability",
+            sub=cust_id,
         ),
         debit_unit=Currency.MSATS,
         debit_amount=invoice.conv.msats_fee,
