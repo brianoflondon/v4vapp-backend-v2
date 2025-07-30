@@ -116,8 +116,8 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
-    LIGHTNING_EXTERNAL_SEND = "l_contra_e"  # Perhaps change to l_external_out
-    LIGHTNING_EXTERNAL_IN = "l_external_in"  # Lightning incoming transaction
+    LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
+    LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
 
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's account
 
