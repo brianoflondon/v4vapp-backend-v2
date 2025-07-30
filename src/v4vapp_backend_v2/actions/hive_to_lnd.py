@@ -89,7 +89,6 @@ async def process_hive_to_lightning(
     if reply_messages:
         raise HiveToLightningError(f"Operation already has replies: {', '.join(reply_messages)}")
 
-
     hive_config = InternalConfig().config.hive
     lnd_config = InternalConfig().config.lnd_config
     if (

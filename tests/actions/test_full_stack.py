@@ -331,11 +331,12 @@ async def all_ledger_entries() -> List[LedgerEntry]:
     Returns:
         List[LedgerEntry]: A list of all ledger entries in the database.
     """
-    ledger_entries = await LedgerEntry.collection().find({}).to_list()
-    if not ledger_entries:
+    ledger_entries_raw = await LedgerEntry.collection().find({}).to_list()
+    if not ledger_entries_raw:
         logger.info("No ledger entries found in the database.")
         return []
-    for entry in ledger_entries:
+    ledger_entries = []
+    for entry in ledger_entries_raw:
         try:
             ledger_entry = LedgerEntry.model_validate(entry)
             ledger_entries.append(ledger_entry)

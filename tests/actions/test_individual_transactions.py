@@ -1,24 +1,27 @@
 import asyncio
 import os
+from pprint import pprint
 
 import pytest
 
 from tests.actions.test_full_stack import (
     clear_and_reset,
     close_all_db_connections,
+    get_ledger_count,
     get_lightning_invoice,
     send_hive_customer_to_server,
     watch_for_ledger_count,
 )
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
+    check_hive_conversion_limits,
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     generate_balance_sheet_mongodb,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
 
@@ -58,17 +61,51 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     """
     await clear_and_reset()
 
+    ledger_count = await get_ledger_count()
+    limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+
     invoice = await get_lightning_invoice(
         value_sat=10_000, memo="v4vapp.qrc | Your message goes here | #v4vapp"
     )
+    assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
         send_sats=10_000, memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
-
-    all_ledger_entries = await watch_for_ledger_count(13)
+    assert trx.get("trx_id"), "Transaction failed to send"
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 13)
 
     await asyncio.sleep(1)
     assert len(all_ledger_entries) == 13, "Expected 13 ledger entries"
+    limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    limit_increase = limits_after[0].total_sats - limits_before[0].total_sats
+    logger.info(f"Limit increase: {limit_increase} sats")
+    assert limit_increase > 0, "Total sats should increase after the transaction"
+
+
+async def test_check_conversion_limits():
+    """
+    Test to check the conversion limits for a specific customer.
+    This test retrieves the conversion limits for the customer 'v4vapp-test'
+    and asserts that the limits are greater than 0.
+    """
+
+    limits = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    assert limits, "Conversion limits should not be empty"
+    pprint(limits)
+
+
+async def test_hive_to_keepsats():
+    ledger_count = await get_ledger_count()
+    trx = await send_hive_customer_to_server(
+        send_sats=15_000, memo="Deposit #sats #v4vapp", customer="v4vapp-test"
+    )
+
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 6)
+
+    after_count = await get_ledger_count()
+    print(
+        f"Ledger count after transaction: {after_count} new entries: {after_count - ledger_count}"
+    )
 
 
 async def test_complete_balance_sheet_accounts_ledger():
