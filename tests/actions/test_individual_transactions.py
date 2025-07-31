@@ -70,7 +70,7 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
     invoice = await get_lightning_invoice(
-        value_sat=1_00, memo="v4vapp.qrc | Your message goes here | #v4vapp"
+        value_sat=1_000, memo="v4vapp.qrc | Your message goes here | #v4vapp"
     )
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(

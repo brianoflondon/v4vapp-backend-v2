@@ -6,7 +6,7 @@ from typing import Annotated, Any, Mapping, Sequence
 
 import bson
 import typer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import (
     ConnectionFailure,
     NetworkTimeout,
@@ -58,7 +58,7 @@ class ResumeToken(BaseModel):
     collection: str = Field("", description="Collection name for the change stream")
     redis_key: str = Field("", description="Redis key for storing the resume token")
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, collection: str, **data: Any):
         """

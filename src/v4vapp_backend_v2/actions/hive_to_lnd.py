@@ -8,7 +8,10 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.hive_notification import (
+    reply_with_hive,
+    send_notification_hive_transfer,
+)
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
@@ -21,6 +24,7 @@ from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimum
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_all import OpAny
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentError,
@@ -103,10 +107,22 @@ async def process_hive_to_lightning(
         )
         logger.warning(return_hive_message, extra={"notification": False})
         raise HiveToLightningError(return_hive_message)
+
+    # MARK: 2. Only past here is there any chance of payment or returning Hive
+
     server_account = hive_config.server_account.name
+    amount = Amount("0.001 HIVE")
     if hive_transfer.to_account == server_account:
         cust_id = CustID(hive_transfer.from_account)
-        logger.info(f"LOCKING {cust_id} {__name__}")
+        return_details = HiveReturnDetails(
+            tracked_op=hive_transfer,
+            original_memo=hive_transfer.d_memo,
+            reason_str="",
+            action=ReturnAction.IN_PROGRESS,
+            amount=AmountPyd(amount=amount),
+            pay_to_cust_id=cust_id,
+            nobroadcast=nobroadcast,
+        )
         # Process the operation
         if await check_for_hive_to_lightning(hive_transfer):
             logger.info(
@@ -187,30 +203,46 @@ async def process_hive_to_lightning(
                     return
 
                 except HiveToLightningError as e:
-                    return_hive_message = f"Error processing Hive to Lightning operation: {e}"
+                    # Various problems with Hive or Keepsats. Send it all back.
+                    return_details.action = ReturnAction.REFUND
+                    return_details.amount = hive_transfer.amount
+                    return_details.reason_str = (
+                        f"Error processing Hive to Lightning operation: {e}"
+                    )
                     logger.warning(
-                        return_hive_message,
+                        return_details.reason_str,
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
 
                 except LNDPaymentExpired as e:
-                    return_hive_message = f"Lightning payment expired: {e}"
+                    return_details.action = ReturnAction.REFUND
+                    return_details.amount = hive_transfer.amount
+                    return_details.reason_str = f"Lightning payment expired: {e}"
                     logger.warning(
-                        return_hive_message,
+                        return_details.reason_str,
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
 
                 except LNDPaymentError as e:
-                    return_hive_message = f"Lightning payment error: {e}"
+                    return_details.action = ReturnAction.REFUND
+                    return_details.amount = hive_transfer.amount
+                    return_details.reason_str = f"Lightning payment error: {e}"
                     logger.error(
-                        return_hive_message,
+                        return_details.reason_str,
                         extra={"notification": False, **hive_transfer.log_extra},
                     )
 
-                except Exception:
+                except Exception as e:
+                    # Unexpected error, log it but will not return Hive.
+                    return_details.action = ReturnAction.HOLD
+                    return_details.reason_str = f"Unexpected error occurred: {e}"
                     logger.exception(
-                        "Unexpected error during Hive to Lightning processing",
-                        extra={"notification": False, **hive_transfer.log_extra},
+                        return_details.reason_str,
+                        extra={
+                            "notification": False,
+                            **hive_transfer.log_extra,
+                            **return_details.log_extra,
+                        },
                     )
                     # we don't release a keepsats hold if an unknown error occurred
                     release_hold = False
@@ -219,12 +251,21 @@ async def process_hive_to_lightning(
                     if hive_transfer.paywithsats and release_hold:
                         await release_keepsats(tracked_op=hive_transfer)
 
-                    if return_hive_message:
+                    if return_details.reason_str:
                         try:
-                            await send_notification_hive_transfer(
-                                tracked_op=hive_transfer,
-                                reason=return_hive_message,
-                                nobroadcast=nobroadcast,
+                            # Arriving here we are usually returning the full amount sent.
+                            trx = await reply_with_hive(
+                                details=return_details, nobroadcast=nobroadcast
+                            )
+
+                            logger.info(
+                                "Reply with Hive transfer successful",
+                                extra={
+                                    "notification": False,
+                                    "trx": trx,
+                                    **hive_transfer.log_extra,
+                                    **return_details.log_extra,
+                                },
                             )
                         except Exception as e:
                             logger.exception(
@@ -300,13 +341,15 @@ async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> 
     surplus_msats = hive_transfer.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
         if hive_transfer.conv.conv_from == Currency.HIVE:
-            surplus_hive = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3)
+            surplus_hive = abs(round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3))
             failure_reason = (
-                f"Not enough sent to process this payment request: {surplus_hive} HIVE"
+                f"Not enough sent to process this payment request: {surplus_hive:,.3f} HIVE"
             )
         elif hive_transfer.conv.conv_from == Currency.HBD:
-            surplus_hbd = round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3)
-            failure_reason = f"Not enough sent to process this payment request: {surplus_hbd} HBD"
+            surplus_hbd = abs(round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3))
+            failure_reason = (
+                f"Not enough sent to process this payment request: {surplus_hbd:,.3f} HBD"
+            )
         else:
             failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
 

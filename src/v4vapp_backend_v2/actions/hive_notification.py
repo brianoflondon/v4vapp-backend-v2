@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Any, Dict
 
 from nectar.amount import Amount
 
@@ -19,8 +19,71 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
+
+
+async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False) -> Dict[str, str]:
+    if not CustID(details.pay_to_cust_id).is_hive:
+        logger.error(
+            "Tracked operation customer ID is not a valid Hive account.",
+            extra={"notification": False, **details.tracked_op.log_extra},
+        )
+        raise HiveTransferError("Tracked operation customer ID is not a valid Hive account.")
+
+    logger.info(
+        f"Processing return/change for: {details.tracked_op.group_id}",
+        extra={"notification": False, **details.tracked_op.log_extra},
+    )
+    # This is where we will deal with the inbound memo.
+
+    amount = Amount("0.001 HIVE")
+    if details.action == ReturnAction.REFUND:
+        amount = details.amount.beam
+
+    memo = details.reason_str if details.reason_str else "No reason provided"
+    memo += f" | § {details.tracked_op.short_id}{MEMO_FOOTER}"
+
+    hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
+    trx: Dict[str, Any] = await send_transfer(
+        hive_client=hive_client,
+        from_account=server_account_name,
+        to_account=details.pay_to_cust_id,  # Repay to the original sender
+        amount=amount,
+        memo=memo,
+    )
+    try:
+        return_amount = Amount(trx["operations"][0][1]["amount"])
+    except (KeyError, IndexError):
+        return_amount = Amount("0.001 HIVE")
+    if not return_amount:
+        return_amount = Amount("0.001 HIVE")
+    await TransferBase.update_quote()
+    details.tracked_op.change_conv = CryptoConversion(
+        conv_from=return_amount.symbol,
+        amount=return_amount,
+        quote=TransferBase.last_quote,
+    ).conversion
+    return_amount_msat = details.tracked_op.change_conv.msats
+    # Now add the Hive reply to the original Hive transfer operation
+    reason = (
+        f"Return transaction for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+    )
+    details.tracked_op.add_reply(
+        reply_id=trx.get("trx_id", ""),
+        reply_type="transfer",
+        reply_msat=return_amount_msat,
+        reply_error=None,
+        reply_message=reason,
+    )
+    await details.tracked_op.save()
+
+    return trx
+
+    # MARK: Process the return reason and memo
+
+    return {}
 
 
 async def send_notification_hive_transfer(
@@ -139,7 +202,7 @@ async def send_notification_hive_transfer(
         else:
             raise HiveTransferError("No transaction created during Hive to Lightning repayment")
     except HiveTransferError as e:
-        #TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
+        # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
         message = f"Failed to repay Hive to Lightning operation: {e}"
         tracked_op.add_reply(
             reply_id="", reply_type="transfer", reply_error=str(e), reply_message=message
