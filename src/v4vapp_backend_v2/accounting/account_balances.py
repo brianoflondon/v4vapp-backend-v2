@@ -145,39 +145,61 @@ async def account_balance_printout(
         output.append("-" * 10)
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
+            # Group transactions by date
+            transactions_by_date = {}
             for row in all_rows:
-                contra_str = "-c-" if row.contra else "   "
-                timestamp = f"{row.timestamp:%Y-%m-%d %H:%M}" if row.timestamp else "N/A"
-                description = truncate_text(row.description, 45)
-                ledger_type = row.ledger_type
-                debit = row.amount if row.side == "debit" and row.unit == unit else 0.0
-                credit = row.amount if row.side == "credit" and row.unit == unit else 0.0
-                balance = row.amount_running_total
-                short_id = row.short_id
-                if unit.upper() == "MSATS":
-                    debit = debit / conversion_factor
-                    credit = credit / conversion_factor
-                    balance = balance / conversion_factor
-                debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
-                credit_str = f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
-                balance_str = (
-                    f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
-                )
-                line = (
-                    f"{timestamp:<18} "
-                    f"{description:<45} "
-                    f"{contra_str} "
-                    f"{debit_str:>12} "
-                    f"{credit_str:>12} "
-                    f"{balance_str:>12} "
-                    f"{short_id:>15} "
-                    f"{ledger_type:>11}"
-                )
-                if line_items:
-                    output.append(line)
-                if user_memos and row.user_memo:
-                    memo = truncate_text(lightning_memo(row.user_memo), 60)
-                    output.append(f"{' ' * 20} {memo}")
+                if row.timestamp:
+                    date_str = f"{row.timestamp:%Y-%m-%d}"
+                    if date_str not in transactions_by_date:
+                        transactions_by_date[date_str] = []
+                    transactions_by_date[date_str].append(row)
+                else:
+                    # Handle entries with no timestamp
+                    if "No Date" not in transactions_by_date:
+                        transactions_by_date["No Date"] = []
+                    transactions_by_date["No Date"].append(row)
+
+            # Display transactions grouped by date
+            for date_str, rows in sorted(transactions_by_date.items()):
+                # Add date header with a distinctive format
+                output.append(f"\n=== {date_str} ===")
+
+                for row in rows:
+                    contra_str = "-c-" if row.contra else "   "
+                    # Only show time part since date is in the header
+                    timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:12] if row.timestamp else "N/A"
+                    description = truncate_text(row.description, 45)
+                    ledger_type = row.ledger_type
+                    debit = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                    credit = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                    balance = row.amount_running_total
+                    short_id = row.short_id
+                    if unit.upper() == "MSATS":
+                        debit = debit / conversion_factor
+                        credit = credit / conversion_factor
+                        balance = balance / conversion_factor
+                    debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
+                    credit_str = (
+                        f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
+                    )
+                    balance_str = (
+                        f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
+                    )
+                    line = (
+                        f"{timestamp:<14} "  # Shorter timestamp field (time only)
+                        f"{description:<49} "
+                        f"{contra_str} "
+                        f"{debit_str:>12} "
+                        f"{credit_str:>12} "
+                        f"{balance_str:>12} "
+                        f"{short_id:>15} "
+                        f"{ledger_type:>11}"
+                    )
+                    if line_items:
+                        output.append(line)
+                    if user_memos and row.user_memo:
+                        memo = truncate_text(lightning_memo(row.user_memo), 60)
+                        output.append(f"{' ' * 14} {memo}")  # Adjusted padding for memo
 
             final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
             final_conv_balance = (
@@ -359,6 +381,21 @@ async def get_account_lightning_conv(
 async def check_hive_conversion_limits(
     hive_accname: str, extra_spend_sats: int = 0, line_items: bool = False
 ) -> List[LightningLimitSummary]:
+    """
+    Checks if a Hive account's recent Lightning conversions are within configured rate limits.
+    Args:
+        hive_accname (str): The Hive account name to check conversion limits for.
+        extra_spend_sats (int, optional): Additional satoshis to consider in the limit check. Defaults to 0.
+        line_items (bool, optional): Whether to include line item details in the conversion summary. Defaults to False.
+    Returns:
+        List[LightningLimitSummary]: A list of LightningLimitSummary objects, each representing the conversion summary and limit status for a configured time window.
+    Raises:
+        None
+    Notes:
+        - If Lightning rate limits are not configured, a warning is logged and an empty list is returned.
+        - The function checks conversions for each configured limit window and determines if the account is within limits.
+    """
+
     v4v_config = V4VConfig()
     lightning_rate_limits = v4v_config.data.lightning_rate_limits
     ans = []

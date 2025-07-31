@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from timeit import default_timer as timer
 from typing import List, Union
 from uuid import uuid4
@@ -387,9 +388,9 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
     ledger_entry = LedgerEntry(
         group_id=hive_transfer.group_id,
         short_id=hive_transfer.short_id,
-        timestamp=hive_transfer.timestamp,
         op_type=hive_transfer.op_type,
         user_memo=hive_transfer.user_memo,
+        timestamp=datetime.now(tz=timezone.utc),
     )
     expense_accounts = ["privex"]
     processed_d_memo = lightning_memo(hive_transfer.d_memo)

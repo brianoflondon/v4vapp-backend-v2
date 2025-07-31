@@ -16,6 +16,15 @@ class HiveToLightningError(HiveLightningError):
     pass
 
 
+class LightningToHiveError(HiveLightningError):
+    """
+    Custom exception for Lightning to Hive errors.
+    This can be used to handle specific cases where the conversion or transfer fails.
+    """
+
+    pass
+
+
 class KeepsatsDepositNotificationError(HiveLightningError):
     """
     Custom exception for errors related to Keepsats deposit notifications.

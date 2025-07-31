@@ -224,6 +224,21 @@ def detect_convert_keepsats(memo: str) -> bool:
     return False
 
 
+def is_clean_memo(memo: str) -> bool:
+    """
+    Checks if the memo contains the '#clean' tag.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        bool: True if the memo contains '#clean', False otherwise.
+    """
+    if not memo:
+        return False
+    if "#clean" in memo.lower():
+        return True
+    return False
+
+
 def process_clean_memo(
     memo: str,
 ) -> str:
@@ -244,7 +259,7 @@ def process_clean_memo(
         str: The cleaned and processed memo string.
     """
     message = memo
-    if "#clean" in memo.lower():
+    if is_clean_memo(memo):
         if detect_keepsats(memo):
             message = memo.split(" | ")[0]
             message = message.replace("#clean", "").strip()
@@ -568,6 +583,7 @@ def timestamp_inc(
     start_time: datetime, inc: timedelta = timedelta(seconds=0.01)
 ) -> Generator[datetime, None, None]:
     """
+    Depreciated: not using it
     Increment a timestamp by a given timedelta.
 
     Args:

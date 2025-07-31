@@ -1,12 +1,12 @@
 services:
-  node-monitor:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: node-monitor:latest
-    volumes:
-      # - ./.certs:/app/.certs
-      - ./config:/app/config
+  # node-monitor:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   image: node-monitor:latest
+  #   volumes:
+  #     # - ./.certs:/app/.certs
+  #     - ./config:/app/config
 
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
@@ -26,7 +26,7 @@ services:
           echo 'Initializing replica set...';
           mongosh --port 37017 --eval 'rs.initiate({
             _id: \"rsPytest\",
-            members: [{ _id: 0, host: \"mongo-pytest-local:37017\" }]
+            members: [{ _id: 0, host: \"${LOCAL_TAILSCALE_IP}:37017\" }]
           })';
         else
           echo 'Replica set already initialized.';
@@ -127,8 +127,19 @@ services:
 
 volumes:
   mongo_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/d_vol/mongo_data
+      o: bind
   mongo_config:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/d_vol/mongo_config
+      o: bind
   redis_data:
+    driver: local
 
 networks:
   repl-mongo_repl-set:

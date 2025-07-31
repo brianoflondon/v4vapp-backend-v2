@@ -9,14 +9,13 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
-from v4vapp_backend_v2.config.setup import async_time_stats_decorator
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
 # @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
-) -> Dict:
+) -> Dict[str, Dict[str, Dict[str, float]]]:
     """
     Generates a balance sheet from MongoDB data.
 

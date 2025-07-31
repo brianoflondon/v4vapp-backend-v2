@@ -262,7 +262,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
-        sats=10000,
+        sats=2200,
         memo=invoice.payment_request,
         invoice_message="paying an invoice with keepsasts",
     )
@@ -275,7 +275,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
         hive_client=hive_client,
     )
     pprint(trx)
-    ledger_entries = await watch_for_ledger_count(21)
+    ledger_entries = await watch_for_ledger_count(23)
     await asyncio.sleep(10)
     after_net_sats, ledger_details = await keepsats_balance_printout(
         cust_id="v4vapp-test", previous_sats=before_net_sats
@@ -284,7 +284,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
     ledger_entries = await all_ledger_entries()
     ledger_types = [ledger_entry.ledger_type for ledger_entry in ledger_entries]
     logger.info(f"Ledger types: {ledger_types}")
-    assert len(ledger_entries) == 22, f"Expected 22 ledger entries, found {len(ledger_entries)}"
+    assert len(ledger_entries) == 23, f"Expected 23 ledger entries, found {len(ledger_entries)}"
     paywithsats_types = ledger_types[starting_ledger_count + 1 :]
     excepted_paywithsats_types = {
         LedgerType.HOLD_KEEPSATS,
@@ -294,7 +294,7 @@ async def test_paywithsats_and_lightning_to_keepsats_deposit():
         LedgerType.FEE_CHARGE,
         LedgerType.FEE_EXPENSE,
         LedgerType.RELEASE_KEEPSATS,
-        # LedgerType.CUSTOMER_HIVE_OUT,
+        LedgerType.CUSTOMER_HIVE_OUT,
     }
     assert excepted_paywithsats_types <= set(paywithsats_types), (
         f"Missing expected paywithsats ledger types: {excepted_paywithsats_types - set(paywithsats_types)}"
@@ -331,21 +331,45 @@ async def all_ledger_entries() -> List[LedgerEntry]:
     Returns:
         List[LedgerEntry]: A list of all ledger entries in the database.
     """
-    all_ledger_entries = await LedgerEntry.collection().find({}).to_list()
-    return [LedgerEntry.model_validate(le) for le in all_ledger_entries]
+    ledger_entries_raw = await LedgerEntry.collection().find({}).to_list()
+    if not ledger_entries_raw:
+        logger.info("No ledger entries found in the database.")
+        return []
+    ledger_entries = []
+    for entry in ledger_entries_raw:
+        try:
+            ledger_entry = LedgerEntry.model_validate(entry)
+            ledger_entries.append(ledger_entry)
+        except Exception as e:
+            logger.error(
+                f"Error validating ledger entry: {entry}. Error: {e}",
+                extra={"notification": False, "entry": entry, "error": str(e)},
+            )
+            continue
+    return ledger_entries
+
+
+async def get_ledger_count() -> int:
+    """
+    Returns the count of all ledger entries in the database.
+    This function is useful for checking the number of ledger entries present.
+    Returns:
+        int: The count of ledger entries in the database.
+    """
+    count = await LedgerEntry.collection().count_documents({})
+    logger.info(f"Current ledger entry count: {count}")
+    return count
 
 
 async def watch_for_ledger_count(count: int, timeout: int = 30) -> List[LedgerEntry]:
     start_time = timeit()
     raw_entries = []
     while timeit() - start_time < timeout:
-        ledger_entries = await all_ledger_entries()
-        if (count > 0 and len(ledger_entries) >= count) or (
-            count == 0 and len(ledger_entries) == 0
-        ):
+        ledger_count = await get_ledger_count()
+        if (count > 0 and ledger_count >= count) or (count == 0 and ledger_count == 0):
             logger.info(f"Count {count} found")
-            return ledger_entries
-        await asyncio.sleep(5)
+            return await all_ledger_entries()
+        await asyncio.sleep(1)
     logger.warning(
         f"⏰ Timeout after {timeout}s waiting for ledger entries count {count} {len(raw_entries)} found"
     )
@@ -378,6 +402,17 @@ async def send_server_balance_to_test() -> dict[str, Any]:
             pprint(f"Transfer transaction: {trx}")
             return trx
     return {}
+
+
+async def clear_and_reset():
+    ledger_count = await get_ledger_count()
+    trx = await send_server_balance_to_test()
+    if trx:
+        logger.info(f"Transaction sent: {trx}")
+        await watch_for_ledger_count(ledger_count + 1)
+
+    await clear_database()
+    logger.info("Clearing Database.")
 
 
 async def clear_database():
@@ -413,6 +448,20 @@ async def send_hive_customer_to_server(
     memo: str = "",
     customer: str = "v4vapp-test",
 ) -> dict[str, Any]:
+    """
+    Send a HIVE transfer from a customer account to the server account.
+    Depending on the provided arguments, the function either:
+    - Converts a given amount of sats (send_sats) to HIVE, including fees and a buffer, and sends that amount.
+    - Sends a specified HIVE amount directly.
+    Args:
+        send_sats (int, optional): Amount in sats to convert and send as HIVE. Defaults to 0.
+        amount (Amount, optional): Amount of HIVE to send if send_sats is 0. Defaults to Amount("0 HIVE").
+        memo (str, optional): Memo to include with the transfer. Defaults to "".
+        customer (str, optional): Hive account name of the customer sending the transfer. Defaults to "v4vapp-test".
+    Returns:
+        dict[str, Any]: The transaction result dictionary.
+    """
+
     if send_sats > 0:
         send_conv = CryptoConversion(
             conv_from=Currency.SATS,
