@@ -1,7 +1,7 @@
 import asyncio
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
@@ -377,7 +377,9 @@ async def main_async_start(use_resume: bool = True):
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
-    db_pipelines = db_monitor_pipelines()
+    db_pipelines = db_monitor_pipelines(
+        start_date=datetime.now(tz=timezone.utc) - timedelta(hours=1)
+    )
     try:
         logger.info(f"{ICON} Database Monitor App started.")
         # Simulate some work
