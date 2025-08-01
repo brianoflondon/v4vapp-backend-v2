@@ -184,7 +184,7 @@ async def test_complete_balance_sheet_accounts_ledger():
     text_to_rtf(
         input_text=complete_printout,
         output_file="balance_sheet.rtf",
-        max_lines_per_page=50,
+        max_lines_per_page=45,
         font_name="AndaleMono",
         font_size=10,
     )

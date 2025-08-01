@@ -15,11 +15,10 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
 async def hive_to_keepsats_deposit(
-    hive_transfer: TrackedTransfer, nobroadcast: bool = False
+    hive_transfer: TrackedTransfer, msats_to_deposit: int, nobroadcast: bool = False
 ) -> Tuple[List[LedgerEntry], str, Amount]:
     """
     Handle a deposit to Keepsats from Hive, returns the ledger entries for this operation and
@@ -32,6 +31,8 @@ async def hive_to_keepsats_deposit(
 
     Args:
         hive_transfer (TrackedTransfer): The Hive transfer operation that was successful.
+        msats_to_deposit (int): The amount in millisatoshis to deposit if we are not converting the
+            entire Hive/HBD amount into Keepsats. (This is used for payments with change.)
 
     Returns:
         Tuple[list[LedgerEntry], str, Amount]:
@@ -39,8 +40,9 @@ async def hive_to_keepsats_deposit(
             - str: The message to be sent back to the customer as change.
             - Amount: The amount to be returned to the customer after fees (Hive or HBD).
     """
+    quote = await TrackedBaseModel.nearest_quote(timestamp=hive_transfer.timestamp)
     if hive_transfer.conv is None or hive_transfer.conv.is_unset():
-        await hive_transfer.update_conv()
+        await hive_transfer.update_conv(quote=quote)
 
     if not hive_transfer.conv:
         logger.error(
@@ -50,32 +52,42 @@ async def hive_to_keepsats_deposit(
         raise HiveToLightningError("Conversion details not found for operation")
 
     ledger_entries_list: list[LedgerEntry] = []
-    quote = await TrackedBaseModel.nearest_quote(timestamp=hive_transfer.timestamp)
+
+    # If msats_to_deposit is provided, ensure it is not more than the transfer amount
+    # Raise error if it exceeds the transfer amount
+    if msats_to_deposit and msats_to_deposit > hive_transfer.conv.msats:
+        logger.error(
+            "msats_to_deposit exceeds the transfer amount, adjusting to transfer amount.",
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        raise HiveToLightningError(
+            f"msats_to_deposit {msats_to_deposit} exceeds the transfer amount {hive_transfer.conv.msats}."
+        )
 
     # Identify the customer and server
     cust_id = hive_transfer.from_account
     server_id = hive_transfer.to_account
 
-    # The hive_transfer is already locked from within process_hive_to_lightning in hive_to_lightning.py
-    return_hive_amount: Amount = Amount("0.001 HIVE")  # Default return amount
-    if hive_transfer.amount.unit == Currency.HIVE:
-        return_hive_amount = Amount("0.001 HIVE")
+    return_hive_amount = (
+        Amount("0.001 HIVE") if hive_transfer.amount.unit == Currency.HIVE else Amount("0.001 HBD")
+    )
+
+    if not msats_to_deposit or msats_to_deposit <= 0:
+        # If no msats_to_deposit is provided, use the full amount of the transfer
+        amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
+        amount_to_deposit_before_fee_conv = CryptoConversion(
+            conv_from=hive_transfer.amount.unit,
+            value=amount_to_deposit_before_fee.amount,
+            quote=quote,
+        ).conversion
+        msats_to_deposit = hive_transfer.conv.msats
     else:
-        return_hive_amount = Amount("0.001 HBD")
-    hive_transfer.change_amount = AmountPyd(amount=return_hive_amount)
-    hive_transfer.change_conv = CryptoConversion(
-        conv_from=hive_transfer.amount.unit,
-        value=return_hive_amount.amount,
-        quote=quote,
-    ).conversion
-
-    amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
-
-    amount_to_deposit_before_fee_conv = CryptoConversion(
-        conv_from=hive_transfer.amount.unit,
-        value=amount_to_deposit_before_fee.amount,
-        quote=quote,
-    ).conversion
+        amount_to_deposit_before_fee_conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=msats_to_deposit,
+            quote=quote,
+        ).conversion
+        amount_to_deposit_before_fee = amount_to_deposit_before_fee_conv.amount
 
     amount_to_deposit_msats = (
         amount_to_deposit_before_fee_conv.msats - amount_to_deposit_before_fee_conv.msats_fee
@@ -103,10 +115,10 @@ async def hive_to_keepsats_deposit(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Convert {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Convert {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id} after fee {amount_to_deposit_conv.msats_fee / 1000:,.0f} sats",
         debit=AssetAccount(
-            name="Treasury Keepsats",
-            sub=server_id,  # This is the Asset account for the server, where keepsats are held
+            name="Treasury Lightning",
+            sub="keepsats",  # This is the Customer Keepsats Lightning balance
         ),
         debit_unit=Currency.MSATS,
         debit_amount=amount_to_deposit_before_fee_conv.msats,
@@ -121,8 +133,6 @@ async def hive_to_keepsats_deposit(
     )
     ledger_entries_list.append(conversion_ledger_entry)
     await conversion_ledger_entry.save()
-    # NOTE: The Treasury Lightning account now holds converted sats but in reality these are
-    # Probably need a contra asset account for the Treasury Lightning account to track the conversion
 
     # MARK: 3 Contra Reconciliation Entry
     ledger_type = LedgerType.CONTRA_HIVE_TO_KEEPSATS
@@ -133,7 +143,7 @@ async def hive_to_keepsats_deposit(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra asset for Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Contra asset for Keepsats {amount_to_deposit_before_fee_conv.amount} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=hive_transfer.unit,
         debit_amount=amount_to_deposit_before_fee.amount,
@@ -195,14 +205,17 @@ async def hive_to_keepsats_deposit(
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
-        debit=AssetAccount(
-            name="Treasury Keepsats",
-            sub=server_id,  # This is the asset account for the server, where keepsats are held
+        debit=LiabilityAccount(
+            name="Customer Liability",
+            sub=cust_id,  # This is the Customer Keepsats Lightning balance
         ),
         debit_unit=hive_transfer.unit,
         debit_amount=hive_deposit_value,
         debit_conv=amount_to_deposit_conv,
-        credit=LiabilityAccount(name="Customer Liability", sub=cust_id),
+        credit=LiabilityAccount(
+            name="Customer Liability",
+            sub=cust_id,  # This is the asset account for the server, where keepsats are held
+        ),
         credit_unit=Currency.MSATS,
         credit_amount=amount_to_deposit_msats,
         credit_conv=amount_to_deposit_conv,

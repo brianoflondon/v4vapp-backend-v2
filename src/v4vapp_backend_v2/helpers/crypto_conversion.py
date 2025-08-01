@@ -271,6 +271,21 @@ class CryptoConv(BaseModel):
         """
         return Amount(f"{self.hbd:.3f} HBD")
 
+    @property
+    def amount(self) -> Amount:
+        """
+        Returns the conversion value in the original currency as an Amount object.
+
+        Returns:
+            Amount: The conversion value in the original currency.
+        """
+        if self.conv_from == Currency.HIVE:
+            return self.amount_hive
+        elif self.conv_from == Currency.HBD:
+            return self.amount_hbd
+        else:
+            raise ValueError(f"Unsupported conversion from {self.conv_from}")
+
 
 class CryptoConversion(BaseModel):
     conv_from: Currency = Currency.HIVE
@@ -436,4 +451,5 @@ if __name__ == "__main__":
     print(json.dumps(conv.c_dict, indent=2, default=str))
     print(json.dumps(conv.conversion.model_dump(), indent=2, default=str))
     asyncio.run(conv.get_quote(use_cache=False))
+    print(f"Fetch date: {conv.fetch_date}")
     print(f"Fetch date: {conv.fetch_date}")

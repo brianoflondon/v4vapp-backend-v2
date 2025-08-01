@@ -528,7 +528,6 @@ async def lightning_payment_sent(
     )
 
 
-
 async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: Payment) -> Amount:
     """
     Calculate the change amount to return to the user after a Hive to Lightning transfer.
@@ -643,7 +642,9 @@ async def convert_hive_to_keepsats(
         net_sats, keepsats_balance_before = await keepsats_balance_printout(
             cust_id=hive_transfer.from_account
         )
-        ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(hive_transfer)
+        ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(
+            hive_transfer, msats_to_deposit=0
+        )
 
         net_sats_after, keepsats_balance_after = await keepsats_balance_printout(
             cust_id=hive_transfer.from_account, previous_sats=net_sats
@@ -672,7 +673,6 @@ async def convert_hive_to_keepsats(
             )
             raise HiveToLightningError("Failed to create transaction during conversion")
 
-        return None
     except Exception as e:
         logger.exception(f"Failed to convert Hive to Keepsats: {e}")
         return None
