@@ -653,7 +653,7 @@ async def convert_hive_to_keepsats(
             f"Keepsats balance for {hive_transfer.from_account}: {net_sats_after:,.0f} sats "
             f"change: {net_sats_after - net_sats:,.0f} sats"
         )
-
+        # This needs to be replacec with sweep
         trx = await send_notification_hive_transfer(
             tracked_op=hive_transfer,
             reason=reason,
