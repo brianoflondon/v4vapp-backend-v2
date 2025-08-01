@@ -107,6 +107,7 @@ class AssetAccount(LedgerAccount):
         "Escrow Hive",
         "Treasury Hive",
         "Treasury Lightning",
+        "Treasury Keepsats",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
         "Converted Hive Offset",

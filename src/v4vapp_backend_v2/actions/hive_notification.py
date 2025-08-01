@@ -25,6 +25,23 @@ MEMO_FOOTER = " | Thank you for using v4v.app"
 
 
 async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False) -> Dict[str, str]:
+    """
+    Processes a Hive return or notification based on the provided details.
+
+    Depending on the action specified in `details`, this function either sends a Hive transfer or a custom JSON notification.
+    It verifies the recipient's Hive account, constructs the memo, executes the transfer or notification, updates conversion
+    information, and attaches a reply to the original tracked operation.
+
+    Args:
+        details (HiveReturnDetails): The details of the Hive return or notification, including recipient, amount, reason, and tracked operation.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcast to the Hive network. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The transaction result dictionary, containing information such as transaction ID and operation details.
+
+    Raises:
+        HiveTransferError: If the recipient customer ID is not a valid Hive account.
+    """
     if not CustID(details.pay_to_cust_id).is_hive:
         logger.error(
             "Tracked operation customer ID is not a valid Hive account.",
@@ -46,33 +63,52 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     memo += f" | § {details.tracked_op.short_id}{MEMO_FOOTER}"
 
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
-    trx: Dict[str, Any] = await send_transfer(
-        hive_client=hive_client,
-        from_account=server_account_name,
-        to_account=details.pay_to_cust_id,  # Repay to the original sender
-        amount=amount,
-        memo=memo,
-    )
-    try:
-        return_amount = Amount(trx["operations"][0][1]["amount"])
-    except (KeyError, IndexError):
-        return_amount = Amount("0.001 HIVE")
-    if not return_amount:
-        return_amount = Amount("0.001 HIVE")
-    await TransferBase.update_quote()
-    details.tracked_op.change_conv = CryptoConversion(
-        conv_from=return_amount.symbol,
-        amount=return_amount,
-        quote=TransferBase.last_quote,
-    ).conversion
-    return_amount_msat = details.tracked_op.change_conv.msats
+    if details.action != ReturnAction.CUSTOM_JSON:
+        trx: Dict[str, Any] = await send_transfer(
+            hive_client=hive_client,
+            from_account=server_account_name,
+            to_account=details.pay_to_cust_id,  # Repay to the original sender
+            amount=amount,
+            memo=memo,
+        )
+        try:
+            return_amount = Amount(trx["operations"][0][1]["amount"])
+        except (KeyError, IndexError):
+            return_amount = Amount("0.001 HIVE")
+        if not return_amount:
+            return_amount = Amount("0.001 HIVE")
+        await TransferBase.update_quote()
+        details.tracked_op.change_conv = CryptoConversion(
+            conv_from=return_amount.symbol,
+            amount=return_amount,
+            quote=TransferBase.last_quote,
+        ).conversion
+        return_amount_msat = details.tracked_op.change_conv.msats
+
+    else:
+        notification = KeepsatsTransfer(
+            from_account=server_account_name,
+            memo=memo,
+            to_account=details.pay_to_cust_id,
+            invoice_message=details.original_memo,
+            parent_id=details.tracked_op.group_id,
+        )
+        trx = await send_custom_json(
+            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+            send_account=server_account_name,
+            active=True,
+            id="v4vapp_dev_notification",
+            hive_client=hive_client,
+        )
+        return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+
     # Now add the Hive reply to the original Hive transfer operation
     reason = (
-        f"Return transaction for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+        f"Return notification for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
     )
     details.tracked_op.add_reply(
         reply_id=trx.get("trx_id", ""),
-        reply_type="transfer",
+        reply_type=details.tracked_op.op_type,
         reply_msat=return_amount_msat,
         reply_error=None,
         reply_message=reason,
@@ -80,10 +116,6 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     await details.tracked_op.save()
 
     return trx
-
-    # MARK: Process the return reason and memo
-
-    return {}
 
 
 async def send_notification_hive_transfer(

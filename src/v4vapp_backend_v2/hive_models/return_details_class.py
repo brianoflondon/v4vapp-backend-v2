@@ -10,6 +10,7 @@ from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 class ReturnAction(StrEnum):
     IN_PROGRESS = "in_progress"
     REFUND = "refund"
+    CUSTOM_JSON = "custom_json"
     HOLD = "hold"
 
 
@@ -41,7 +42,7 @@ class HiveReturnDetails(BaseModel):
     original_memo: str
     reason_str: str
     action: ReturnAction
-    amount: AmountPyd
+    amount: AmountPyd | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
 

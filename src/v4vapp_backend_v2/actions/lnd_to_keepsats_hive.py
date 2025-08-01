@@ -10,8 +10,8 @@ from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_t
 from v4vapp_backend_v2.actions.lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
 
 
@@ -37,17 +37,16 @@ async def process_lightning_to_hive_or_keepsats(
         # MARK: Sats in to Keepsats
         if invoice.recv_currency == Currency.SATS:
             logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")
+            # This line here bypasses the Hive Return logic.
             ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
                 invoice, nobroadcast
             )
-            # This line here bypasses the Hive Return logic.
-            # return ledger_entries
         # MARK: Sats to Hive or HBD
         elif invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
             logger.info(
                 f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}"
             )
-            ledger_entries, message, return_amount = await lightning_to_hive_convert(
+            ledger_entries, message, return_amount = await process_lightning_to_hive(
                 invoice, nobroadcast
             )
         else:
@@ -64,6 +63,15 @@ async def process_lightning_to_hive_or_keepsats(
             return ledger_entries
 
         if return_amount:
+            return_details = HiveReturnDetails(
+                tracked_op=invoice,
+                original_memo=invoice.memo,
+                reason_str=message,
+                action=ReturnAction.REFUND,
+                amount=return_amount,
+                pay_to_cust_id=invoice.cust_id,
+                nobroadcast=nobroadcast,
+            )
             logger.info(f"Return amount to customer: {return_amount}")
             try:
                 await send_notification_hive_transfer(
@@ -153,11 +161,7 @@ async def lightning_to_keepsats_deposit(
     ledger_entries_list.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
 
-    if is_clean_memo(invoice.memo):
-        # If the memo is clean, we can pass it on directly in the reply.
-        message = process_clean_memo(invoice.memo)
-    else:
-        message = f"Deposit of {msats_received / 1000:,.0f} sats - {invoice.memo}"
+    message = f"Deposit of {msats_received / 1000:,.0f} sats - {invoice.memo}"
 
     return (
         ledger_entries_list,

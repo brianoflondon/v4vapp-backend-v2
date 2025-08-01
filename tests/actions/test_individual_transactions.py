@@ -7,6 +7,7 @@ import pytest
 from tests.actions.test_full_stack import (
     clear_and_reset,
     close_all_db_connections,
+    get_all_ledger_entries,
     get_ledger_count,
     get_lightning_invoice,
     send_hive_customer_to_server,
@@ -21,6 +22,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_all_currencies_printout,
     generate_balance_sheet_mongodb,
 )
+from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
@@ -175,6 +177,9 @@ async def test_complete_balance_sheet_accounts_ledger():
             line_items=True,
         )
         complete_printout += "\n" + printout
+    for ledger_entry_dict in await get_all_ledger_entries():
+        ledger_entry = LedgerEntry.model_validate(ledger_entry_dict)
+        complete_printout += f"{ledger_entry}\n"
     print(complete_printout)
     text_to_rtf(
         input_text=complete_printout,

@@ -20,7 +20,7 @@ from v4vapp_backend_v2.actions.custom_json_to_lnd import (
     custom_json_internal_transfer,
     process_custom_json_to_lightning,
 )
-from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning
 from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
@@ -40,6 +40,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
@@ -291,21 +292,16 @@ async def process_lightning_payment(
                     # MARK: Record Failed payment and make a refund
                     # No Journal entry necessary because the Hive Refund will automatically create one
                     failure_reason = from_snake_case(payment.failure_reason.lower())
-                    return_hive_message = (
-                        f"Lightning payment failed {failure_reason} | § {hive_transfer.short_id} |"
+                    return_hive_message = f"Lightning payment failed {failure_reason}"
+                    return_details = HiveReturnDetails(
+                        tracked_op=hive_transfer,
+                        original_memo=hive_transfer.memo,
+                        reason_str=return_hive_message,
+                        action=ReturnAction.REFUND,
+                        pay_to_cust_id=hive_transfer.cust_id,
+                        nobroadcast=nobroadcast,
                     )
-                    try:
-                        await send_notification_hive_transfer(
-                            tracked_op=hive_transfer,
-                            reason=return_hive_message,
-                            nobroadcast=nobroadcast,
-                        )
-                    except Exception as e:
-                        logger.exception(
-                            f"Error processing return_hive_transfer: {e}",
-                            extra={"notification": False, **hive_transfer.log_extra},
-                        )
-                        raise e
+                    trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
                     return []
                 else:
                     logger.warning(
@@ -609,12 +605,6 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
-        # This is a transfer operation, we need to process it as such
-        if not custom_json.conv or custom_json.conv.is_unset():
-            await custom_json.update_conv()
-            if custom_json.conv.is_unset():
-                raise LedgerEntryCreationException("Conversion not set in CustomJson operation.")
-
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         # MARK: CustomJson Transfer user to user
         if (
@@ -631,6 +621,16 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
         # If this has a memo that should contain the invoice and the instructions like "#clean"
         # invoice_message we will use to send on if we generate an invoice form a lightning address
         elif keepsats_transfer.memo and not keepsats_transfer.to_account:
+            # This is a transfer operation, we need to process it as such
+            if not keepsats_transfer.sats:
+                keepsats_transfer.sats = 100  # Default to 100 msats if not specified
+
+            if not custom_json.conv or custom_json.conv.is_unset():
+                await custom_json.update_conv()
+                if custom_json.conv.is_unset():
+                    raise LedgerEntryCreationException(
+                        "Conversion not set in CustomJson operation."
+                    )
             try:
                 ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
                 custom_json_ledger_entry = LedgerEntry(

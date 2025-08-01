@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pytest
@@ -11,8 +12,13 @@ from tests.actions.test_full_stack import (
 )
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.hive.hive_extras import get_verified_hive_client_for_accounts, send_custom_json, send_transfer
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_verified_hive_client_for_accounts,
+    send_custom_json,
+    send_transfer,
+)
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -95,7 +101,7 @@ async def test_hive_paywithsats_keepsats_failure_not_enough_keepsats():
     6. Attempts to send a small amount of HIVE from the customer to the server, expecting failure due to insufficient Keepsats balance.
     7. Asserts that the transaction was sent (trx_id exists).
     8. Waits for the ledger to reflect two new entries.
-    9. Checks that the last ledger entry's description contains the expected failure reason: "Not enough Keepsats balance".
+    9. Checks that the last ledger entry's description contains the expected failure reason: "Insufficient Keepsats balance".
     """
     ledger_count_before = await get_ledger_count()
     invoice = await get_lightning_invoice(
@@ -121,7 +127,7 @@ async def test_hive_paywithsats_keepsats_failure_not_enough_keepsats():
     ledger_entries = await watch_for_ledger_count(ledger_count_before + 2, timeout=30)
 
     description = ledger_entries[-1].description
-    assert "Not enough Keepsats balance" in description, (
+    assert "Insufficient Keepsats balance" in description, (
         f"Expected failure reason not found in description: {description}"
     )
     logger.info(f"Test passed: {description}")
@@ -140,7 +146,7 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     6. Attempts to send a small amount of HIVE from the customer to the server, expecting failure due to insufficient Keepsats balance.
     7. Asserts that the transaction was sent (trx_id exists).
     8. Waits for the ledger to reflect two new entries.
-    9. Checks that the last ledger entry's description contains the expected failure reason: "Not enough Keepsats balance".
+    9. Checks that the last ledger entry's description contains the expected failure reason: "Insufficient Keepsats balance".
     """
     ledger_count_before = await get_ledger_count()
     invoice = await get_lightning_invoice(
@@ -153,11 +159,8 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
         memo=invoice.payment_request,
     )
 
-
     customer = "v4vapp-test"
     hive_client = await get_verified_hive_client_for_accounts([customer])
-    hive_config = InternalConfig().config.hive
-    server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
     trx = await send_custom_json(
         json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
         send_account=transfer.from_account,
@@ -167,11 +170,15 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     )
 
     assert trx.get("trx_id"), "Transaction failed to send"
-    # There will not be hold and release entries so 2 entries
-    ledger_entries = await watch_for_ledger_count(ledger_count_before + 2, timeout=3000)
+    # There will only be a dummy ledger for the receipt of the custom_json
+    ledger_entries = await watch_for_ledger_count(ledger_count_before + 1, timeout=30)
 
-    description = ledger_entries[-1].description
-    assert "Not enough Keepsats balance" in description, (
-        f"Expected failure reason not found in description: {description}"
+    await asyncio.sleep(5)
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "custom_json", "id": "v4vapp_dev_notification"}, sort=[("timestamp", -1)]
     )
-    logger.info(f"Test passed: {description}")
+    custom_json = CustomJson.model_validate(last_hive_op)
+    assert "Insufficient Keepsats balance" in custom_json.json_data.memo, (
+        f"Expected failure reason not found in description: {custom_json.json_data.memo}"
+    )
+    logger.info(f"Test passed: {custom_json.json_data.memo}")

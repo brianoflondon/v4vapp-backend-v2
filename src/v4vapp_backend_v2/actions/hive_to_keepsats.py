@@ -105,8 +105,8 @@ async def hive_to_keepsats_deposit(
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Convert {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(
-            name="Treasury Lightning",
-            sub="keepsats",  # This is the Customer Keepsats Lightning balance
+            name="Treasury Keepsats",
+            sub=server_id,  # This is the Asset account for the server, where keepsats are held
         ),
         debit_unit=Currency.MSATS,
         debit_amount=amount_to_deposit_before_fee_conv.msats,
@@ -182,6 +182,8 @@ async def hive_to_keepsats_deposit(
     ledger_entries_list.append(fee_ledger_entry)
     await fee_ledger_entry.save()
 
+    # TODO: INSTEAD of this transaction, this should be a custom_json and that will transfer from `server_id` to `cust_id`
+
     # MARK: 5 Deposit Keepsats
     ledger_type = LedgerType.DEPOSIT_KEEPSATS
     deposit_ledger_entry = LedgerEntry(
@@ -193,9 +195,9 @@ async def hive_to_keepsats_deposit(
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="Customer Liability",
-            sub=cust_id,  # This is the CUSTOMER
+        debit=AssetAccount(
+            name="Treasury Keepsats",
+            sub=server_id,  # This is the asset account for the server, where keepsats are held
         ),
         debit_unit=hive_transfer.unit,
         debit_amount=hive_deposit_value,

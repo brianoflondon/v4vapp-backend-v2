@@ -2,13 +2,14 @@ from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_print
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
-from v4vapp_backend_v2.actions.hive_notification import send_notification_custom_json
+from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentError,
@@ -28,6 +29,15 @@ async def process_custom_json_to_lightning(
     lnd_client = LNDClient(connection_name=lnd_config.default)
     return_hive_message = ""
     release_hold = True
+    cust_id = custom_json.cust_id or keepsats_transfer.from_account
+    return_details = HiveReturnDetails(
+        tracked_op=custom_json,
+        original_memo=keepsats_transfer.memo,
+        reason_str="",
+        action=ReturnAction.IN_PROGRESS,
+        pay_to_cust_id=cust_id,
+        nobroadcast=nobroadcast,
+    )
     try:
         zero_amount_invoice = keepsats_transfer.sats * 1000 if keepsats_transfer.sats else 0
         pay_req = await decode_any_lightning_string(
@@ -39,9 +49,7 @@ async def process_custom_json_to_lightning(
         if not pay_req:
             raise CustomJsonToLightningError("Failed to decode Lightning payment request.")
 
-        net_sats, keepsats_balance = await keepsats_balance_printout(
-            cust_id=keepsats_transfer.from_account
-        )
+        net_sats, keepsats_balance = await keepsats_balance_printout(cust_id=cust_id)
 
         if keepsats_balance is None or net_sats is None:
             raise CustomJsonToLightningError("Failed to retrieve Keepsats balance or net sats.")
@@ -56,11 +64,9 @@ async def process_custom_json_to_lightning(
             cust_id=custom_json.cust_id,
             tracked_op=custom_json,
         )
-        logger.info(
-            f"Hold placed for {pay_req.value_msat + pay_req.fee_estimate} msats {keepsats_transfer.from_account}"
-        )
+        logger.info(f"Hold placed for {pay_req.value_msat + pay_req.fee_estimate} msats {cust_id}")
         net_sats_after, keepsats_balance = await keepsats_balance_printout(
-            cust_id=keepsats_transfer.from_account, previous_sats=net_sats
+            cust_id=cust_id, previous_sats=net_sats
         )
 
         amount_msats = min(zero_amount_invoice, pay_req.amount_msat, int(net_sats_after * 1000))
@@ -89,29 +95,34 @@ async def process_custom_json_to_lightning(
         return
 
     except CustomJsonToLightningError as e:
-        return_hive_message = f"Error processing Hive to Lightning operation: {e}"
+        return_details.action = ReturnAction.CUSTOM_JSON
+        return_details.reason_str = f"Error processing Hive to Lightning operation: {e}"
         logger.warning(
-            return_hive_message,
+            return_details.reason_str,
             extra={"notification": False, **custom_json.log_extra},
         )
 
     except LNDPaymentExpired as e:
-        return_hive_message = f"Lightning payment expired: {e}"
+        return_details.action = ReturnAction.CUSTOM_JSON
+        return_details.reason_str = f"Lightning payment expired: {e}"
         logger.warning(
-            return_hive_message,
+            return_details.reason_str,
             extra={"notification": False, **custom_json.log_extra},
         )
 
     except LNDPaymentError as e:
-        return_hive_message = f"Lightning payment error: {e}"
+        return_details.action = ReturnAction.CUSTOM_JSON
+        return_details.reason_str = f"Lightning payment error: {e}"
         logger.error(
-            return_hive_message,
+            return_details.reason_str,
             extra={"notification": False, **custom_json.log_extra},
         )
 
-    except Exception:
+    except Exception as e:
+        return_details.action = ReturnAction.CUSTOM_JSON
+        return_details.reason_str = f"Unexpected error occurred: {e}"
         logger.exception(
-            "Unexpected error during Hive to Lightning processing",
+            return_details.reason_str,
             extra={"notification": False, **custom_json.log_extra},
         )
         # we don't release a keepsats hold if an unknown error occurred
@@ -120,23 +131,47 @@ async def process_custom_json_to_lightning(
     finally:
         if release_hold:
             await release_keepsats(tracked_op=custom_json)
-            logger.info(f"Hold released for {keepsats_transfer.from_account}")
+            logger.info(f"Hold released for {cust_id}")
 
-        notification = KeepsatsTransfer(
-            from_account=InternalConfig().config.hive.server_account.name,
-            to_account=keepsats_transfer.from_account,
-            memo=return_hive_message or keepsats_transfer.log_str,
-            notification=True,
-            invoice_message=keepsats_transfer.invoice_message,
-            parent_id=custom_json.group_id,
-        )
-        trx = await send_notification_custom_json(
-            tracked_op=custom_json, notification=notification
-        )
-        logger.info(
-            f"Notification transaction created for operation {custom_json.group_id}",
-            extra={"notification": False, "trx": trx, **custom_json.log_extra},
-        )
+        if return_details.reason_str:
+            try:
+                # Arriving here we are usually returning the full amount sent.
+                trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+
+                logger.info(
+                    "Reply with Hive transfer successful",
+                    extra={
+                        "notification": False,
+                        "trx": trx,
+                        **custom_json.log_extra,
+                        **return_details.log_extra,
+                    },
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error sending custom_json: {e}",
+                    extra={
+                        "notification": False,
+                        "reason": return_hive_message,
+                        **custom_json.log_extra,
+                    },
+                )
+
+        # notification = KeepsatsTransfer(
+        #     from_account=InternalConfig().config.hive.server_account.name,
+        #     to_account=cust_id,
+        #     memo=return_hive_message or keepsats_transfer.log_str,
+        #     notification=True,
+        #     invoice_message=keepsats_transfer.invoice_message,
+        #     parent_id=custom_json.group_id,
+        # )
+        # trx = await send_notification_custom_json(
+        #     tracked_op=custom_json, notification=notification
+        # )
+        # logger.info(
+        #     f"Notification transaction created for operation {custom_json.group_id}",
+        #     extra={"notification": False, "trx": trx, **custom_json.log_extra},
+        # )
 
 
 async def custom_json_internal_transfer(
@@ -168,9 +203,9 @@ async def custom_json_internal_transfer(
 
     user_memo = (
         keepsats_transfer.user_memo
-        or f"You received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+        or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
     )
-
+    description = f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,
@@ -178,7 +213,7 @@ async def custom_json_internal_transfer(
         group_id=f"{custom_json.group_id}-{ledger_type.value}",
         user_memo=user_memo,
         timestamp=custom_json.timestamp,
-        description=f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats",
+        description=description,
         op_type=custom_json.op_type,
         debit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.from_account),
         debit_conv=custom_json.conv,
@@ -192,18 +227,20 @@ async def custom_json_internal_transfer(
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
 
-    notification = KeepsatsTransfer(
-        from_account=InternalConfig().config.hive.server_account.name,
-        to_account=keepsats_transfer.from_account,
-        memo=keepsats_transfer.log_str,
-        notification=True,
-        invoice_message=keepsats_transfer.invoice_message,
-        parent_id=custom_json.group_id,
+    return_details = HiveReturnDetails(
+        tracked_op=custom_json,
+        original_memo=keepsats_transfer.memo,
+        reason_str=description,
+        action=ReturnAction.CUSTOM_JSON,
+        pay_to_cust_id=keepsats_transfer.to_account,
+        nobroadcast=nobroadcast,
     )
-    trx = await send_notification_custom_json(tracked_op=custom_json, notification=notification)
+    trx = await reply_with_hive(
+        details=return_details,
+        nobroadcast=nobroadcast,
+    )
+
     return transfer_ledger_entry
 
 
-# Last line of the file
-# Last line of the file
 # Last line of the file

@@ -6,7 +6,7 @@ def text_to_rtf(
     output_file: str = "output.rtf",
     max_lines_per_page: int = 60,
     font_name: str = "ArnoldMono",
-    font_size: int = 9,
+    font_size: int = 8,
 ):
     """
     Converts plain text to RTF format with monospace font, landscape orientation,
@@ -42,12 +42,12 @@ def text_to_rtf(
 
         # Check if this is a separator line (full of =, -, or similar repeated chars)
         if (
-            re.fullmatch(r"([=~]+)", line.strip()) and len(line.strip()) > 50
+            re.fullmatch(r"([=~]+)", line.strip()) and len(line.strip()) > 40
         ):  # Arbitrary min length for separator
             # If the previous section (including this separator) is too long, insert page break before next section
             if current_section_lines > max_lines_per_page:
                 rtf_body.append(r"\page")
-            current_section_lines = 0  # Reset for next section
+                current_section_lines = 0  # Reset for next section
 
     # Combine everything
     rtf_content = rtf_header + "\n".join(rtf_body) + "\n" + rtf_footer

@@ -309,7 +309,7 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     # TODO: Need to account for routing fees in Keepsats payments
     if net_sats < pay_req.value:
         raise HiveToLightningError(
-            f"Not enough Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+            f"Insufficient Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
         )
     return ""
 
@@ -527,10 +527,6 @@ async def lightning_payment_sent(
         extra={"notification": True, "trx": trx, **hive_transfer.log_extra, **payment.log_extra},
     )
 
-    # if trx:
-    #     original_ledger_entry, ans = await update_ledger_entry_op(
-    #         group_id=hive_transfer.group_id_p, op=hive_transfer
-    #     )
 
 
 async def calculate_hive_return_change(hive_transfer: TrackedTransfer, payment: Payment) -> Amount:
