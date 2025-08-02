@@ -587,8 +587,7 @@ async def send_transfer_bulk(
             f"UnhandledRPCError during send_transfer: {ex}",
             extra={
                 "notification": False,
-                "to_account": to_account,
-                "from_account": from_account,
+                "transfer_list": transfer_list,
             },
         )
         raise HiveSomeOtherRPCException(f"{ex}")
@@ -792,6 +791,8 @@ async def get_verified_hive_client_for_accounts(
 ) -> Hive:
     """
     Asynchronously obtains a verified Hive client instance for a list of accounts using server account credentials from the internal configuration.
+    This function checks the provided accounts against the internal Hive configuration and initializes a Hive client with the necessary keys.
+    If no keys are found for the provided accounts, it defaults to using the server account's memo and active keys.
 
     Args:
         accounts (List[str]): A list of Hive account names to verify.
@@ -813,6 +814,11 @@ async def get_verified_hive_client_for_accounts(
             all_keys = hive_account.keys
             if all_keys:
                 keys.extend(all_keys)
+    if not keys and hive_config.server_account:
+        keys = [
+            hive_config.server_account.memo_key,
+            hive_config.server_account.active_key,
+        ]
 
     hive_client = get_hive_client(
         keys=keys,

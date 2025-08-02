@@ -65,6 +65,14 @@ class KeepsatsTransfer(BaseModel):
         None,
         description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
     )
+    msats: int | None = Field(
+        None,
+        description=(
+            "The amount of millisatoshis being transferred. "
+            "Used for more precise amounts, especially in invoices. "
+            "Mutually exclusive with sats, if both are present, msats will decide the value."
+        ),
+    )
     memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
     notification: bool = Field(
@@ -85,6 +93,14 @@ class KeepsatsTransfer(BaseModel):
     def __init__(self, **data: Any):
         if data.get("memo", None) is None:
             data["memo"] = ""
+        if data.get("msats") is not None and data.get("sats") is None:
+            # If both sats and msats are provided, use msats for the amount
+            data["sats"] = data["msats"] // 1000
+        if data.get("sats") is None and data.get("msats") is None:
+            data["sats"] = 0
+            data["msats"] = 0
+        if data.get("sats") is not None and data.get("msats") is None:
+            data["msats"] = data["sats"] * 1000
         super().__init__(**data)
 
     @property

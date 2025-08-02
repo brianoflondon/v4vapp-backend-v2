@@ -15,7 +15,7 @@ from v4vapp_backend_v2.actions.custom_json_to_lnd import (
     process_custom_json_to_lightning,
 )
 from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -302,7 +302,7 @@ async def process_create_fill_order_op(
 
 
 # MARK: CustomJson Operations
-async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
+async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
     """
     Processes a CustomJson operation and creates a ledger entry if applicable.
 
@@ -319,12 +319,23 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
         if (
             keepsats_transfer.from_account
             and keepsats_transfer.to_account
-            and keepsats_transfer.sats
+            and keepsats_transfer.msats
             and keepsats_transfer.from_account != keepsats_transfer.to_account
         ):
             ledger_entry = await custom_json_internal_transfer(
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer
             )
+            # Check for a parent id to see if this is a reply transaction
+            if keepsats_transfer.parent_id:
+                # This is a reply transaction, we need to process it as such
+                parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
+                if parent_op:
+                    parent_op.add_reply(
+                        reply_id=custom_json.group_id_p,
+                        reply_type=custom_json.op_type,
+                        reply_msat=keepsats_transfer.msats,
+                        reply_message="Reply to transfer",
+                    )
             return ledger_entry
         # MARK: CustomJson Pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
@@ -379,6 +390,10 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry:
                 raise LedgerEntryCreationException(
                     f"Failed to process CustomJson to Lightning: {e}"
                 ) from e
+
+    if custom_json.cj_id in ["v4vapp_dev_notification"]:
+        logger.info(f"Notification CustomJson: {custom_json.json_data.memo}")
+        return None
 
     logger.error(
         f"CustomJson operation not implemented for v4vapp_group_id: {custom_json.group_id}.",

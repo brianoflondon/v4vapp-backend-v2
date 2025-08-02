@@ -90,8 +90,8 @@ class CustomJson(OpBase):
                             and hasattr(self.json_data, "sats")
                         ):
                             self.conv = CryptoConversion(
-                                value=getattr(self.json_data, "sats", 0),
-                                conv_from=Currency.SATS,
+                                value=getattr(self.json_data, "msats", 0),
+                                conv_from=Currency.MSATS,
                                 quote=TrackedBaseModel.last_quote,
                             ).conversion
         except Exception as e:

@@ -10,6 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
+from v4vapp_backend_v2.actions.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -225,41 +226,45 @@ async def hive_to_keepsats_deposit(
     # TODO: INSTEAD of this transaction, this should be a custom_json and that will transfer from `server_id` to `cust_id`
     # Want a two step process.... first deposit to the server then the customer.
 
+    # MARK: 6  Deposit to Customer
+
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
-        sats=amount_to_deposit_msats // 1000,  # Convert msats to sats
-        memo=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+        msats=amount_to_deposit_msats,
+        memo=f"Deposit {hive_transfer.amount_str} to Keepsats {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+        parent_id=hive_transfer.group_id,  # This is the group_id of the original transfer
     )
+    transfer.memo += f" | § {hive_transfer.short_id}"
+    trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
 
-    # MARK: 6  Deposit Keepsats to Customer
-    ledger_type = LedgerType.DEPOSIT_KEEPSATS
-    deposit_ledger_entry = LedgerEntry(
-        short_id=hive_transfer.short_id,
-        op_type=hive_transfer.op_type,
-        user_memo=hive_transfer.user_memo,
-        cust_id=cust_id,
-        ledger_type=ledger_type,
-        group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="Customer Liability",
-            sub=server_id,  # This is the Customer Keepsats Lightning balance
-        ),
-        debit_unit=Currency.MSATS,
-        debit_amount=amount_to_deposit_msats,
-        debit_conv=amount_to_deposit_conv,
-        credit=LiabilityAccount(
-            name="Customer Liability",
-            sub=cust_id,  # This is the asset account for the server, where keepsats are held
-        ),
-        credit_unit=Currency.MSATS,
-        credit_amount=amount_to_deposit_msats,
-        credit_conv=amount_to_deposit_conv,
-    )
-    ledger_entries_list.append(deposit_ledger_entry)
-    await deposit_ledger_entry.save()
+    # ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    # deposit_ledger_entry = LedgerEntry(
+    #     short_id=hive_transfer.short_id,
+    #     op_type=hive_transfer.op_type,
+    #     user_memo=hive_transfer.user_memo,
+    #     cust_id=cust_id,
+    #     ledger_type=ledger_type,
+    #     group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
+    #     timestamp=datetime.now(tz=timezone.utc),
+    #     description=f"Deposit Keepsats {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+    #     debit=LiabilityAccount(
+    #         name="Customer Liability",
+    #         sub=server_id,  # This is the Customer Keepsats Lightning balance
+    #     ),
+    #     debit_unit=Currency.MSATS,
+    #     debit_amount=amount_to_deposit_msats,
+    #     debit_conv=amount_to_deposit_conv,
+    #     credit=LiabilityAccount(
+    #         name="Customer Liability",
+    #         sub=cust_id,  # This is the asset account for the server, where keepsats are held
+    #     ),
+    #     credit_unit=Currency.MSATS,
+    #     credit_amount=amount_to_deposit_msats,
+    #     credit_conv=amount_to_deposit_conv,
+    # )
+    # ledger_entries_list.append(deposit_ledger_entry)
+    # await deposit_ledger_entry.save()
 
     reason = f"Keepsats deposit of {hive_transfer.amount_str} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}"
 

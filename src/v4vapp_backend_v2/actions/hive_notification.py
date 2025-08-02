@@ -308,3 +308,34 @@ async def send_notification_custom_json(
             extra={"notification": False, **notification.log_extra},
         )
         return {}
+
+
+async def send_transfer_custom_json(
+    transfer: KeepsatsTransfer,
+    nobroadcast: bool = False,
+) -> Dict[str, str]:
+    """
+    Sends a custom JSON transfer on the Hive blockchain.
+    The get_verified_hive_client function will handle the account verification and use Server keys if
+    this is a customer to customer or customer to server transfer.
+
+    Args:
+        from_account (str): The Hive account sending the transfer.
+        to_account (str): The Hive account receiving the transfer.
+        amount (Amount): The amount to be transferred.
+        memo (str, optional): The memo for the transfer. Defaults to an empty string.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+    """
+
+    hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+    trx = await send_custom_json(
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=transfer.from_account,
+        active=True,
+        id="v4vapp_dev_transfer",
+        hive_client=hive_client,
+    )
+    return trx

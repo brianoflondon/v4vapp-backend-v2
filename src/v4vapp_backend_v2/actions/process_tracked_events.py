@@ -3,7 +3,6 @@ from timeit import default_timer as timer
 from typing import List
 from uuid import uuid4
 
-from v4vapp_backend_v2.actions.payment_success_v2 import process_payment_success
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
@@ -21,6 +20,7 @@ from v4vapp_backend_v2.actions.payment_success import (
     hive_to_lightning_payment_success,
     keepsats_to_lightning_payment_success,
 )
+from v4vapp_backend_v2.actions.payment_success_v2 import process_payment_success
 from v4vapp_backend_v2.actions.process_hive import process_hive_op
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -60,6 +60,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             extra={"notification": False, **tracked_op.log_extra},
         )
         return []
+
+    if isinstance(tracked_op, CustomJson):
+        # CustomJson is a special case, it will be processed by the CustomJson watcher.
+        if tracked_op.cj_id in ["v4vapp_dev_notification", "v4vapp_notification"]:
+            logger.info(f"Notification CustomJson: {tracked_op.log_str}")
+            return []
 
     unknown_cust_id = uuid4()
     cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
