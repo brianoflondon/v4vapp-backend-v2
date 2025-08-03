@@ -111,10 +111,10 @@ async def main():
 
     # Transfer from test to qrc
     transfer = KeepsatsTransfer(
-        from_account="v4vapp-test",
-        to_account="v4vapp.qrc",
-        sats=55,
-        memo="Thank you for putting in this message",
+        to_account="v4vapp-test",
+        from_account="v4vapp.qrc",
+        msats=5500113,
+        memo="back atcha",
     )
     # hive_config = InternalConfig().config.hive
     hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])

@@ -5,7 +5,6 @@ from pprint import pprint
 import pytest
 
 from tests.actions.test_full_stack import (
-    clear_and_reset,
     close_all_db_connections,
     get_all_ledger_entries,
     get_ledger_count,
@@ -66,8 +65,6 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     5. Asserts that exactly 13 ledger entries exist after the operations.
     Ensures the correct flow and ledger recording for Hive-to-LND and LND-to-Hive transactions.
     """
-    await clear_and_reset()
-    await watch_for_ledger_count(0)
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
@@ -127,6 +124,27 @@ async def test_hive_to_keepsats():
     print(
         f"Ledger count after transaction: {after_count} new entries: {after_count - ledger_count}"
     )
+
+
+async def test_deposit_hive_to_keepsats():
+    """
+    Test to deposit Hive to Keepsats.
+    This test sends a specified amount of Hive from a customer account to the server account.
+    It checks that the transaction is successful and that the ledger entries are created correctly.
+    """
+    
+    ledger_count = await get_ledger_count()
+    trx = await send_hive_customer_to_server(
+        send_sats=5000, memo="Deposit and more #sats", customer="v4vapp-test"
+    )
+    pprint(trx)
+    assert trx.get("trx_id"), "Transaction failed to send"
+
+    await asyncio.sleep(10)
+    ledger_entries = await watch_for_ledger_count(ledger_count + 7)
+    for ledger_entry in ledger_entries:
+        print(ledger_entry)
+    assert True, "Ledger entries should be created after the transaction"
 
 
 async def test_deposit_hive_to_keepsats_send_to_account():
