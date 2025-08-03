@@ -203,7 +203,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 )
             return
         except ValueError as e:
-            logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
+            logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
             return
         except NotImplementedError:
             logger.warning(
