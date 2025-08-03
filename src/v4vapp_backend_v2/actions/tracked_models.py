@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
 from typing import Any, ClassVar, Dict, List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
@@ -54,7 +54,7 @@ class ReplyModel(BaseModel):
         self.reply_error = data.get("reply_error", None)
         self.reply_message = data.get("reply_message", None)
 
-    model_config = ConfigDict(use_enum_values=True)
+    # model_config = ConfigDict(use_enum_values=True)
 
 
 class TrackedBaseModel(BaseModel):

@@ -46,7 +46,7 @@ class HiveReturnDetails(BaseModel):
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
 
-    model_config = ConfigDict(use_enum_values=True)
+    # model_config = ConfigDict(use_enum_values=True)
 
     @property
     def log_extra(self) -> dict:

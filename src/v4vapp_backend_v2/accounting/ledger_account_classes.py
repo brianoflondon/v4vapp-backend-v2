@@ -32,7 +32,7 @@ class LedgerAccount(BaseModel):
         False, description="Indicates if this is a contra account (default: False) Contra"
     )
 
-    model_config = ConfigDict(use_enum_values=True)
+    # model_config = ConfigDict(use_enum_values=True)
 
     def __repr__(self) -> str:
         contra_str = " (Contra)" if self.contra else ""
