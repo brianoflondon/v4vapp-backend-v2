@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion

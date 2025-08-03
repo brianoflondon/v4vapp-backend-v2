@@ -8,7 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     LiabilityAccount,
     RevenueAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer

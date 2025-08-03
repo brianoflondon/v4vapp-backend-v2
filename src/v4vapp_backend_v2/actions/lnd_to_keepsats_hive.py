@@ -3,7 +3,7 @@ from typing import List, Tuple
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import KeepsatsDepositNotificationError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )

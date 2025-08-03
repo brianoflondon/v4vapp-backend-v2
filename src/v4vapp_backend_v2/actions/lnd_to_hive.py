@@ -8,7 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     LiabilityAccount,
     RevenueAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import LightningToHiveError
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger

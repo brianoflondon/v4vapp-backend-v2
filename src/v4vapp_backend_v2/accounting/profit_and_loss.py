@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import profit_loss_pipeline
 
 

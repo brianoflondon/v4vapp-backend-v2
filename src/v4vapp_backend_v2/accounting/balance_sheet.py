@@ -3,7 +3,7 @@ from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_check_pipeline,
     balance_sheet_pipeline,

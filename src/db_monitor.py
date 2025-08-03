@@ -15,7 +15,7 @@ from pymongo.errors import (
 )
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event

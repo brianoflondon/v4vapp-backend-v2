@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Union
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import (
+from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntry,
     LedgerEntryCreationException,
     LedgerEntryDuplicateException,

@@ -6,7 +6,7 @@ from uuid import uuid4
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import (
+from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntry,
     LedgerEntryCreationException,
     LedgerEntryDuplicateException,

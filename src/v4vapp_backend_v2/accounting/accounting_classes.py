@@ -7,7 +7,7 @@ from pydantic.dataclasses import dataclass
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 

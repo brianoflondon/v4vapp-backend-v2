@@ -6,7 +6,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     ExpenseAccount,
     LiabilityAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object

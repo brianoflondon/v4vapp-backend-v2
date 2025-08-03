@@ -17,7 +17,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     LedgerAccount,
     LiabilityAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
 )

@@ -11,7 +11,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     check_balance_sheet_mongodb,
     generate_balance_sheet_mongodb,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
@@ -90,4 +90,3 @@ async def test_generate_profit_and_loss_report():
 
     pl_printout = await profit_and_loss_printout(pl_report=pl_report)
     print(pl_printout)
-

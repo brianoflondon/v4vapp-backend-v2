@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerType
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 
 
 def filter_by_account_as_of_date_query(
