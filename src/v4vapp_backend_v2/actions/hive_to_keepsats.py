@@ -76,10 +76,10 @@ async def hive_to_keepsats_deposit(
 
     if not msats_to_deposit or msats_to_deposit <= 0:
         # If no msats_to_deposit is provided, use the full amount of the transfer
-        amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
+        hive_amount_to_deposit_before_fee = hive_transfer.amount.beam - return_hive_amount
         amount_to_deposit_before_fee_conv = CryptoConversion(
             conv_from=hive_transfer.amount.unit,
-            value=amount_to_deposit_before_fee.amount,
+            value=hive_amount_to_deposit_before_fee.amount,
             quote=quote,
         ).conversion
         msats_to_deposit = hive_transfer.conv.msats
@@ -89,7 +89,12 @@ async def hive_to_keepsats_deposit(
             value=msats_to_deposit,
             quote=quote,
         ).conversion
-        amount_to_deposit_before_fee = amount_to_deposit_before_fee_conv.amount
+
+        hive_amount_to_deposit_before_fee = (
+            amount_to_deposit_before_fee_conv.amount_hive
+            if hive_transfer.unit == Currency.HIVE
+            else amount_to_deposit_before_fee_conv.amount_hbd
+        )
 
     amount_to_deposit_msats = (
         amount_to_deposit_before_fee_conv.msats - amount_to_deposit_before_fee_conv.msats_fee
@@ -130,7 +135,7 @@ async def hive_to_keepsats_deposit(
             sub=server_id,  # This is the Server
         ),
         credit_unit=hive_transfer.unit,
-        credit_amount=amount_to_deposit_before_fee.amount,
+        credit_amount=hive_amount_to_deposit_before_fee.amount,
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(conversion_ledger_entry)
@@ -145,10 +150,10 @@ async def hive_to_keepsats_deposit(
         ledger_type=ledger_type,
         group_id=f"{hive_transfer.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra asset for Keepsats {amount_to_deposit_before_fee_conv.amount} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Contra asset for Keepsats {hive_amount_to_deposit_before_fee} deposit to {amount_to_deposit_msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=hive_transfer.unit,
-        debit_amount=amount_to_deposit_before_fee.amount,
+        debit_amount=hive_amount_to_deposit_before_fee.amount,
         debit_conv=amount_to_deposit_before_fee_conv,
         credit=AssetAccount(
             name="Converted Keepsats Offset",
@@ -156,7 +161,7 @@ async def hive_to_keepsats_deposit(
             contra=True,
         ),
         credit_unit=hive_transfer.unit,
-        credit_amount=amount_to_deposit_before_fee,
+        credit_amount=hive_amount_to_deposit_before_fee.amount,
         credit_conv=amount_to_deposit_before_fee_conv,
     )
     ledger_entries_list.append(contra_ledger_entry)
