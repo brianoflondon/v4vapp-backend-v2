@@ -121,7 +121,6 @@ class LedgerType(StrEnum):
     LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
     LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
 
-
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
 
@@ -346,7 +345,7 @@ class LedgerEntry(BaseModel):
     def is_completed(self) -> bool:
         if not self.debit and not self.credit:
             return False
-        if not self.debit_amount and not self.credit_amount:
+        if self.debit_amount is None or self.credit_amount is None:
             return False
         if message := self.credit_debit_balance_str:
             logger.error(message, extra={"notification": False, **self.log_extra})

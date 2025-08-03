@@ -342,8 +342,6 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
         # invoice_message we will use to send on if we generate an invoice form a lightning address
         elif keepsats_transfer.memo and not keepsats_transfer.to_account:
             # This is a transfer operation, we need to process it as such
-            if not keepsats_transfer.sats:
-                keepsats_transfer.sats = 100  # Default to 100 msats if not specified
 
             if not custom_json.conv or custom_json.conv.is_unset():
                 await custom_json.update_conv()
@@ -358,7 +356,7 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
                     short_id=custom_json.short_id,
                     ledger_type=ledger_type,
                     group_id=f"{custom_json.group_id}",  # The inital recording of an inbound Hive transaction does not have ledger_type
-                    timestamp=custom_json.timestamp,
+                    timestamp=datetime.now(tz=timezone.utc),
                     description=keepsats_transfer.description,
                     user_memo=keepsats_transfer.user_memo,
                     op_type=custom_json.op_type,
