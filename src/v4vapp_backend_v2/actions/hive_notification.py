@@ -92,6 +92,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             to_account=details.pay_to_cust_id,
             invoice_message=details.original_memo,
             parent_id=details.tracked_op.group_id,
+            notification=True,
+            msats=0,  # Custom JSON does not have a sats amount
         )
         trx = await send_custom_json(
             json_data=notification.model_dump(exclude_none=True, exclude_unset=True),

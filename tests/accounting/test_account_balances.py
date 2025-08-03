@@ -103,7 +103,7 @@ async def test_all_account_balances():
     assert isinstance(balances, AccountBalances)
 
     for item in balances.root:
-        print(item)
+        print(item.balances_printout())
         for currency, lines in item.balances.items():
             last_running_total = lines[-1].amount_running_total
             print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")

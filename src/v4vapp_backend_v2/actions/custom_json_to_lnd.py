@@ -136,6 +136,7 @@ async def process_custom_json_to_lightning(
         if return_details.reason_str:
             try:
                 # Arriving here we are usually returning the full amount sent.
+                return_details.action = ReturnAction.CUSTOM_JSON
                 trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
 
                 logger.info(

@@ -132,7 +132,7 @@ async def test_deposit_hive_to_keepsats():
     This test sends a specified amount of Hive from a customer account to the server account.
     It checks that the transaction is successful and that the ledger entries are created correctly.
     """
-    
+
     ledger_count = await get_ledger_count()
     trx = await send_hive_customer_to_server(
         send_sats=5000, memo="Deposit and more #sats", customer="v4vapp-test"
@@ -140,9 +140,10 @@ async def test_deposit_hive_to_keepsats():
     pprint(trx)
     assert trx.get("trx_id"), "Transaction failed to send"
 
-    await asyncio.sleep(10)
     ledger_entries = await watch_for_ledger_count(ledger_count + 7)
-    for ledger_entry in ledger_entries:
+    await asyncio.sleep(10)
+    for i, ledger_entry in enumerate(ledger_entries[ledger_count + 1 :], 1):
+        print(f"-------------------------------- Entry {i} --------------------------------")
         print(ledger_entry)
     assert True, "Ledger entries should be created after the transaction"
 
@@ -206,9 +207,6 @@ async def test_complete_balance_sheet_accounts_ledger():
         font_name="AndaleMono",
         font_size=10,
     )
-
-
-# Last line of the file
 
 
 # Last line of the file
