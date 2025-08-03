@@ -83,7 +83,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         group_id=f"{payment.group_id}-{ledger_type.value}",
         op_type=payment.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Allocate outgoing Lightning {cost_of_payment_msat} {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
+        description=f"Allocate outgoing Lightning {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
             name="Customer Liability",
             sub=cust_id,  # This is the CUSTOMER
