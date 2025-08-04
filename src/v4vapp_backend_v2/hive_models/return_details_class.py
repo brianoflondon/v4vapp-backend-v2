@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
@@ -10,6 +10,7 @@ from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 class ReturnAction(StrEnum):
     IN_PROGRESS = "in_progress"
     REFUND = "refund"
+    CHANGE = "change"
     CUSTOM_JSON = "custom_json"
     HOLD = "hold"
 
@@ -45,8 +46,6 @@ class HiveReturnDetails(BaseModel):
     amount: AmountPyd | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
-
-    # model_config = ConfigDict(use_enum_values=True)
 
     @property
     def log_extra(self) -> dict:

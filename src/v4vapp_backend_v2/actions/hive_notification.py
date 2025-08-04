@@ -2,6 +2,7 @@ from typing import Any, Dict
 
 from nectar.amount import Amount
 
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.actions.actions_errors import (
     HiveToLightningError,
     KeepsatsDepositNotificationError,
@@ -53,17 +54,26 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         f"Processing return/change for: {details.tracked_op.group_id}",
         extra={"notification": False, **details.tracked_op.log_extra},
     )
-    # This is where we will deal with the inbound memo.
+    # This is where we will deal with the inbound memo for # clean need to do this.
 
     amount = Amount("0.001 HIVE")
     if details.action == ReturnAction.REFUND:
         amount = details.amount.beam
 
+    account_details = await one_account_balance(account=details.pay_to_cust_id)
+    logger.info(
+        f"\n{account_details}",
+        extra={"notification": False},
+    )
+
     memo = details.reason_str if details.reason_str else "No reason provided"
     memo += f" | § {details.tracked_op.short_id}{MEMO_FOOTER}"
 
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
-    if details.action != ReturnAction.CUSTOM_JSON:
+
+    # NORMALLY we send Hive transfers back but if this was initiated by a custom JSON, we send
+    # a custom JSON back to the original sender.
+    if details.tracked_op.op_type != "custom_json":
         trx: Dict[str, Any] = await send_transfer(
             hive_client=hive_client,
             from_account=server_account_name,
@@ -84,7 +94,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             quote=TransferBase.last_quote,
         ).conversion
         return_amount_msat = details.tracked_op.change_conv.msats
-
+    # Custom JSONs are used for notifications and do not have a sats amount
     else:
         notification = KeepsatsTransfer(
             from_account=server_account_name,
@@ -93,7 +103,6 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             invoice_message=details.original_memo,
             parent_id=details.tracked_op.group_id,
             notification=True,
-            msats=0,  # Custom JSON does not have a sats amount
         )
         trx = await send_custom_json(
             json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
@@ -104,7 +113,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         )
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
 
-    # Now add the Hive reply to the original Hive transfer operation
+    # Now add the Hive reply to the original Hive operation
     reason = (
         f"Return notification for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
     )

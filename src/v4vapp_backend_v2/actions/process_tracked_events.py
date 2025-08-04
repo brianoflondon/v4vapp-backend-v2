@@ -14,13 +14,8 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
-from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
-from v4vapp_backend_v2.actions.payment_success import (
-    hive_to_lightning_payment_success,
-    keepsats_to_lightning_payment_success,
-)
-from v4vapp_backend_v2.actions.payment_success_v2 import process_payment_success
+from v4vapp_backend_v2.actions.payment_success import process_payment_success
 from v4vapp_backend_v2.actions.process_hive import process_hive_op
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -230,32 +225,12 @@ async def process_lightning_payment(
         )
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
-            initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
             ledger_entries_list = await process_payment_success(
                 payment=payment,
                 old_ledger_entry=old_ledger_entry,
                 nobroadcast=nobroadcast,
             )
             return ledger_entries_list
-
-            if isinstance(initiating_op, TransferBase | CustomJson):
-                if getattr(initiating_op, "paywithsats", None) or isinstance(
-                    initiating_op, CustomJson
-                ):
-                    ledger_entries_list = await keepsats_to_lightning_payment_success(
-                        payment=payment,
-                        old_ledger_entry=old_ledger_entry,
-                        nobroadcast=nobroadcast,
-                    )
-                    if ledger_entries_list:
-                        # We can now safely release the hold on the Keepsats
-                        await release_keepsats(tracked_op=initiating_op)
-                else:
-                    ledger_entries_list = await hive_to_lightning_payment_success(
-                        payment=payment, old_ledger_entry=old_ledger_entry, nobroadcast=nobroadcast
-                    )
-                return ledger_entries_list
-            # elif isinstance(initiating_op, CustomJson):
 
         message = f"Not implemented yet {v4vapp_group_id} {keysend_message}"
         logger.error(message)

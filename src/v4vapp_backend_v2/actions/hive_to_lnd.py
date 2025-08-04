@@ -8,10 +8,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.actions.hive_notification import (
-    reply_with_hive,
-    send_notification_hive_transfer,
-)
+from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
@@ -504,26 +501,20 @@ async def lightning_payment_sent(
     # MARK: 4. Fee costs and change
     change_amount = hive_transfer.change_amount.beam
     message = f"Lightning payment {payment.value_sat:,} hive: {hive_transfer.short_id} hash: {payment.short_id} {payment.route_str} change: {change_amount}"
-
     reason = f"Lightning {payment.value_sat:,} sats has been paid, returning change (hash: {payment.short_id} )"
-    logger.info(
-        f"{message}",
-        extra={
-            "notification": False,
-            "change_amount": change_amount,
-            "reason": reason,
-            **hive_transfer.log_extra,
-            **payment.log_extra,
-        },
-    )
-    trx = await send_notification_hive_transfer(
+
+    return_details = HiveReturnDetails(
         tracked_op=hive_transfer,
-        reason=reason,
-        amount=change_amount,
+        original_memo=hive_transfer.d_memo,
+        reason_str=reason,
+        action=ReturnAction.CHANGE,
+        amount=AmountPyd(amount=change_amount),
+        pay_to_cust_id=hive_transfer.cust_id,
         nobroadcast=nobroadcast,
     )
+    trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
     logger.info(
-        f"Change transaction created for operation {hive_transfer.group_id_p}: {change_amount}",
+        f"Change transaction created for operation {hive_transfer.group_id_p}: {change_amount} {message}",
         extra={"notification": True, "trx": trx, **hive_transfer.log_extra, **payment.log_extra},
     )
 
@@ -638,14 +629,12 @@ async def convert_hive_to_keepsats(
         Amount | None: The converted amount in Keepsats, or None if conversion fails.
     """
     try:
-        # Perform the conversion logic here
         net_sats, keepsats_balance_before = await keepsats_balance_printout(
             cust_id=hive_transfer.from_account
         )
         ledger_entries, reason, amount_to_return = await hive_to_keepsats_deposit(
             hive_transfer, msats_to_deposit=0
         )
-
         net_sats_after, keepsats_balance_after = await keepsats_balance_printout(
             cust_id=hive_transfer.from_account, previous_sats=net_sats
         )
@@ -653,13 +642,16 @@ async def convert_hive_to_keepsats(
             f"Keepsats balance for {hive_transfer.from_account}: {net_sats_after:,.0f} sats "
             f"change: {net_sats_after - net_sats:,.0f} sats"
         )
-        # This needs to be replacec with sweep
-        trx = await send_notification_hive_transfer(
+        return_details = HiveReturnDetails(
             tracked_op=hive_transfer,
-            reason=reason,
-            amount=amount_to_return,
+            original_memo=hive_transfer.d_memo,
+            reason_str=reason,
+            action=ReturnAction.CHANGE,
+            amount=AmountPyd(amount=amount_to_return),
+            pay_to_cust_id=hive_transfer.cust_id,
             nobroadcast=nobroadcast,
         )
+        trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
         if trx:
             logger.info(
                 f"Successfully converted Hive to Keepsats: {hive_transfer.log_str}",

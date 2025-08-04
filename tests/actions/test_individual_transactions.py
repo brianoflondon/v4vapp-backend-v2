@@ -5,6 +5,7 @@ from pprint import pprint
 import pytest
 
 from tests.actions.test_full_stack import (
+    clear_and_reset,
     close_all_db_connections,
     get_all_ledger_entries,
     get_ledger_count,
@@ -50,8 +51,36 @@ async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     db_conn = DBConn()
     await db_conn.setup_database()
+    await clear_and_reset()
     yield
     await close_all_db_connections()
+
+
+async def test_hive_to_lnd_only():
+    """
+
+    """
+    ledger_count = await get_ledger_count()
+    limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+
+    invoice_value_sat = 2_218
+
+    invoice = await get_lightning_invoice(
+        value_sat=invoice_value_sat, memo="Simply a bare test invoice"
+    )
+    assert invoice.payment_request, "Invoice payment request is empty"
+    trx = await send_hive_customer_to_server(
+        send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+    )
+    assert trx.get("trx_id"), "Transaction failed to send"
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 12)
+
+    await asyncio.sleep(1)
+    assert len(all_ledger_entries) == 12, "Expected 12 ledger entries"
+    limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    limit_used = limits_after[0].total_sats - limits_before[0].total_sats
+    logger.info(f"Limit used: {limit_used} sats")
+    assert limit_used == invoice_value_sat, "Total sats should increase after the transaction"
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():
@@ -68,12 +97,14 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
+    invoice_value_sat = 1_234
+
     invoice = await get_lightning_invoice(
-        value_sat=1_000, memo="v4vapp.qrc | Your message goes here | #v4vapp"
+        value_sat=invoice_value_sat, memo="v4vapp.qrc | Your message goes here | #v4vapp"
     )
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
-        send_sats=1_000, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+        send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 12)
@@ -81,9 +112,9 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     await asyncio.sleep(1)
     assert len(all_ledger_entries) == 12, "Expected 12 ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
-    limit_increase = limits_after[0].total_sats - limits_before[0].total_sats
-    logger.info(f"Limit increase: {limit_increase} sats")
-    assert limit_increase > 0, "Total sats should increase after the transaction"
+    limit_used = limits_after[0].total_sats - limits_before[0].total_sats
+    logger.info(f"Limit used: {limit_used} sats")
+    assert limit_used == invoice_value_sat, "Total sats should increase after the transaction"
 
 
 async def test_check_conversion_limits():
