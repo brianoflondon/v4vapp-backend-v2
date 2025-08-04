@@ -174,6 +174,13 @@ class LedgerAccountDetails(LedgerAccount):
                 self.balances_totals[currency] = ConvertedSummary()
                 self.balances_net[currency] = 0
 
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the account name.
+        This is used for logging and display purposes.
+        """
+        return self.balances_printout()
+
     def balances_printout(self) -> str:
         """
         Returns a formatted string representation of the account details for Keepsats.
@@ -188,9 +195,9 @@ class LedgerAccountDetails(LedgerAccount):
         lines = [separator]
 
         # Add account name row with value (truncate if too long)
-        account_name = str(self)
-        if len(account_name) > col1_width:
-            account_name = account_name[: col1_width - 3] + "..."
+        account_name_str = LedgerAccount.__str__(self)
+        if len(account_name_str) > col1_width:
+            account_name_str = account_name_str[: col1_width - 3] + "..."
 
         # Get the main value to display on account line
         main_value = ""
@@ -202,7 +209,7 @@ class LedgerAccountDetails(LedgerAccount):
             sats_value = int(conv_summary.sats) if conv_summary.sats else 0
             main_value = f"{sats_value:,}"
 
-        lines.append(f"| {account_name:<{col1_width}} | {main_value:>{col2_width}} |")
+        lines.append(f"| {account_name_str:<{col1_width}} | {main_value:>{col2_width}} |")
 
         # Add currency data for additional currencies
         for currency, conv_summary in self.balances_totals.items():
