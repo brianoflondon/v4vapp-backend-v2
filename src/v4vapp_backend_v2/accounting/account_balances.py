@@ -54,10 +54,16 @@ async def all_account_balances(
 
 # @async_time_stats_decorator()
 async def one_account_balance(
-    account: LedgerAccount,
+    account: LedgerAccount | str,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
+    if isinstance(account, str):
+        account = LiabilityAccount(
+            name="Customer Liability",
+            sub=account,
+        )
+
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -461,7 +467,7 @@ async def get_keepsats_balance(
         as_of_date=as_of_date + timedelta(days=1),
     )
 
-    net_msats = account_balance.conv_total.msats
+    net_msats = account_balance.balances_net.get(Currency.MSATS, 0)
     net_sats = net_msats // 1000 if net_msats else 0.0
     return net_sats, account_balance
 
