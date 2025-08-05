@@ -271,8 +271,7 @@ class CryptoConv(BaseModel):
         """
         return Amount(f"{self.hbd:.3f} HBD")
 
-    @property
-    def amount(self) -> Amount:
+    def amount(self, currency: Currency) -> Amount:
         """
         Returns the conversion value in the original currency as an Amount object.
 
@@ -283,8 +282,12 @@ class CryptoConv(BaseModel):
             return self.amount_hive
         elif self.conv_from == Currency.HBD:
             return self.amount_hbd
-        else:
-            raise ValueError(f"Unsupported conversion from {self.conv_from}")
+        elif currency == Currency.HIVE:
+            return self.amount_hive
+        elif currency == Currency.HBD:
+            return self.amount_hbd
+
+        return self.amount_hive
 
 
 class CryptoConversion(BaseModel):

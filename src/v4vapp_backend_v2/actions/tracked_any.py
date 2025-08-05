@@ -89,7 +89,8 @@ TrackedAny = Annotated[
 TrackedTransfer = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
-    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")],
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
+    | Annotated[CustomJson, Tag("custom_json")],
     Discriminator(get_tracked_any_type),
 ]
 

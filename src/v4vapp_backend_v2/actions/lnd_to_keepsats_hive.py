@@ -6,7 +6,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import KeepsatsDepositNotificationError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.actions.hive_notification import send_notification_hive_transfer
+from v4vapp_backend_v2.actions.hive_notification import depreciated_send_notification_hive_transfer
 from v4vapp_backend_v2.actions.lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -74,7 +74,7 @@ async def process_lightning_to_hive_or_keepsats(
             )
             logger.info(f"Return amount to customer: {return_amount}")
             try:
-                await send_notification_hive_transfer(
+                await depreciated_send_notification_hive_transfer(
                     tracked_op=invoice,
                     reason=message,
                     nobroadcast=nobroadcast,
