@@ -73,6 +73,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
 
     # NORMALLY we send Hive transfers back but if this was initiated by a custom JSON, we send
     # a custom JSON back to the original sender.
+    # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     if details.tracked_op.op_type != "custom_json":
         trx: Dict[str, Any] = await send_transfer(
             hive_client=hive_client,
@@ -129,7 +130,106 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     return trx
 
 
-async def send_notification_hive_transfer(
+
+async def send_notification_custom_json(
+    tracked_op: TrackedAny,
+    notification: KeepsatsTransfer,
+) -> Dict[str, str]:
+    """
+    Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
+
+    Args:
+        notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
+
+    Returns:
+        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+
+    Raises:
+        Exception: Logs and handles any exceptions that occur during the notification process.
+    """
+    try:
+        logger.info(
+            f"Sending custom_json notification for Keepsats transfer: {notification.log_str}",
+            extra={"notification": True, **notification.log_extra},
+        )
+        hive_client = await get_verified_hive_client_for_accounts([notification.from_account])
+        trx = await send_custom_json(
+            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+            send_account=notification.from_account,
+            active=True,
+            id="v4vapp_dev_notification",
+            hive_client=hive_client,
+        )
+        reason = f"Custom Json reply for operation {tracked_op.group_id}: {trx.get('trx_id', '')}"
+        tracked_op.add_reply(
+            reply_id=trx.get("trx_id", ""),
+            reply_type="custom_json",
+            reply_msat=0,
+            reply_error=None,
+            reply_message=reason,
+        )
+        await tracked_op.save()
+        logger.info(
+            f"Updated tracked_op with reply: {tracked_op.replies[-1]}",
+            extra={"notification": False, **tracked_op.log_extra},
+        )
+        return trx
+        # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
+    except Exception as e:
+        logger.error(
+            f"Error sending custom_json notification: {e}",
+            extra={"notification": False, **notification.log_extra},
+        )
+        return {}
+
+
+async def send_transfer_custom_json(
+    transfer: KeepsatsTransfer,
+    nobroadcast: bool = False,
+) -> Dict[str, str]:
+    """
+    Sends a custom JSON transfer on the Hive blockchain.
+    The get_verified_hive_client function will handle the account verification and use Server keys if
+    this is a customer to customer or customer to server transfer.
+
+    Args:
+        from_account (str): The Hive account sending the transfer.
+        to_account (str): The Hive account receiving the transfer.
+        amount (Amount): The amount to be transferred.
+        memo (str, optional): The memo for the transfer. Defaults to an empty string.
+        nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
+
+    Returns:
+        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
+    """
+    try:
+        logger.info(
+            f"Sending custom_json transfer: {transfer.log_str}",
+            extra={"notification": True, **transfer.log_extra},
+        )
+        hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+        trx = await send_custom_json(
+            json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+            send_account=transfer.from_account,
+            active=True,
+            id="v4vapp_dev_transfer",
+            hive_client=hive_client,
+            nobroadcast=nobroadcast,
+        )
+        return trx
+    # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
+    except Exception as e:
+        logger.exception(
+            f"Error sending custom_json transfer: {e}",
+            extra={"notification": False, **transfer.log_extra},
+        )
+        return {}
+
+
+
+
+
+async def depreciated_send_notification_hive_transfer(
     tracked_op: TrackedAny,
     reason: str,
     clean: bool = False,
@@ -268,85 +368,3 @@ async def send_notification_hive_transfer(
             extra={"notification": False, **tracked_op.log_extra},
         )
         raise HiveToLightningError(message)
-
-
-async def send_notification_custom_json(
-    tracked_op: TrackedAny,
-    notification: KeepsatsTransfer,
-) -> Dict[str, str]:
-    """
-    Sends a custom JSON notification for a Keepsats transfer using the Hive blockchain.
-
-    Args:
-        notification (KeepsatsTransfer): The Keepsats transfer notification data to be sent.
-
-    Returns:
-        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
-
-    Raises:
-        Exception: Logs and handles any exceptions that occur during the notification process.
-    """
-    try:
-        logger.info(
-            f"Sending custom_json notification for Keepsats transfer: {notification.log_str}",
-            extra={"notification": True, **notification.log_extra},
-        )
-        hive_client = await get_verified_hive_client_for_accounts([notification.from_account])
-        trx = await send_custom_json(
-            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
-            send_account=notification.from_account,
-            active=True,
-            id="v4vapp_dev_notification",
-            hive_client=hive_client,
-        )
-        reason = f"Custom Json reply for operation {tracked_op.group_id}: {trx.get('trx_id', '')}"
-        tracked_op.add_reply(
-            reply_id=trx.get("trx_id", ""),
-            reply_type="custom_json",
-            reply_msat=0,
-            reply_error=None,
-            reply_message=reason,
-        )
-        await tracked_op.save()
-        logger.info(
-            f"Updated tracked_op with reply: {tracked_op.replies[-1]}",
-            extra={"notification": False, **tracked_op.log_extra},
-        )
-        return trx
-    except Exception as e:
-        logger.error(
-            f"Error sending custom_json notification: {e}",
-            extra={"notification": False, **notification.log_extra},
-        )
-        return {}
-
-
-async def send_transfer_custom_json(
-    transfer: KeepsatsTransfer,
-    nobroadcast: bool = False,
-) -> Dict[str, str]:
-    """
-    Sends a custom JSON transfer on the Hive blockchain.
-    The get_verified_hive_client function will handle the account verification and use Server keys if
-    this is a customer to customer or customer to server transfer.
-
-    Args:
-        from_account (str): The Hive account sending the transfer.
-        to_account (str): The Hive account receiving the transfer.
-        amount (Amount): The amount to be transferred.
-        memo (str, optional): The memo for the transfer. Defaults to an empty string.
-        nobroadcast (bool, optional): If True, the transaction will not be broadcasted. Defaults to False.
-
-    Returns:
-        Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
-    """
-
-    hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
-    trx = await send_custom_json(
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
-        send_account=transfer.from_account,
-        active=True,
-        id="v4vapp_dev_transfer",
-        hive_client=hive_client,
-    )
-    return trx
