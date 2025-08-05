@@ -9,6 +9,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_paywithsats
+from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
     custom_json_test_data,
@@ -67,12 +68,8 @@ class CustomJson(OpBase):
         # Only if the from is the required auth account OR the server can we send sats around
         # The customer is the from account.
         try:
-            if (
-                self.json_data
-                and (
-                    hasattr(self.json_data, "from_account")
-                    or hasattr(self.json_data, "to_account")
-                )
+            if self.json_data and (
+                hasattr(self.json_data, "from_account") or hasattr(self.json_data, "to_account")
             ):
                 if self.required_auths and self.required_auths[0]:
                     if (
@@ -132,6 +129,41 @@ class CustomJson(OpBase):
             bool: True if the memo indicates a paywithsats operation, False otherwise.
         """
         return detect_paywithsats(self.json_data.memo)
+
+    @property
+    def memo(self) -> str:
+        """
+        Returns the memo associated with the transfer.
+
+        Returns:
+            str: The memo string.
+        """
+        if hasattr(self.json_data, "memo"):
+            return self.json_data.memo
+        return ""
+
+    @property
+    def d_memo(self) -> str:
+        """
+        Returns the decoded memo associated with the transfer.
+        CustomJsonData doesn't have encoded memo, so just return the memo.
+
+        Returns:
+            str: The decoded memo string.
+        """
+        return self.memo
+
+    @property
+    def user_memo(self) -> str:
+        """
+        Returns the user memo, which is the decoded memo if available,
+        otherwise returns the original memo.
+
+        Returns:
+            str: The user memo.
+        """
+        # this is where #clean needs to be evaluated
+        return process_user_memo(self.memo)
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

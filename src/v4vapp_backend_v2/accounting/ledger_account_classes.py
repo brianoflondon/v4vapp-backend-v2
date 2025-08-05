@@ -152,6 +152,7 @@ class LiabilityAccount(LedgerAccount):
     name: Literal[
         "Customer Liability",
         "Keepsats Hold",
+        "VSC Liability",
         "Owner Loan Payable (funding)",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
