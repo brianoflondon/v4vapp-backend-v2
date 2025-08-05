@@ -17,7 +17,6 @@ class AccountWitnessVote(OpBase):
         account (str): The name of the account performing the vote.
         approve (bool): Indicates whether the vote is to approve (True)
             or unapprove (False) the witness.
-        timestamp (datetime): The timestamp of the vote operation.
         voter_details (VoterDetails | None): Optional details about the voter,
             such as voting power and total value.
         witness (str): The name of the witness being voted for or unvoted.
@@ -36,7 +35,6 @@ class AccountWitnessVote(OpBase):
 
     account: AccNameType = Field(description="Voting account")
     approve: bool
-    timestamp: datetime
     voter_details: VoterDetails | None = None
     witness: str
 
@@ -77,11 +75,7 @@ class AccountWitnessVote(OpBase):
             total_value = self.voter_details.total_value
         else:
             total_value = 0
-        return (
-            f"👁️ {self.account} "
-            f"{voted_for} {self.witness} "
-            f"with {total_value:,.0f} HP"
-        )
+        return f"👁️ {self.account} {voted_for} {self.witness} with {total_value:,.0f} HP"
 
     @property
     def log_str(self) -> str:
