@@ -89,6 +89,13 @@ TrackedAny = Annotated[
 TrackedTransfer = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")],
+    Discriminator(get_tracked_any_type),
+]
+
+TrackedTransferWithCustomJson = Annotated[
+    Annotated[Transfer, Tag("transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[CustomJson, Tag("custom_json")],
     Discriminator(get_tracked_any_type),
@@ -182,26 +189,26 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
         ) from e
 
 
-def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
-    """
-    Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
+# def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
+#     """
+#     Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
 
-    Removes the '_id' field from the input dictionary if present, then attempts to validate
-    the object using the TrackedTransfer model. If validation is successful, returns
-    the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
+#     Removes the '_id' field from the input dictionary if present, then attempts to validate
+#     the object using the TrackedTransfer model. If validation is successful, returns
+#     the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
 
-    Args:
-        tracked (dict[str, Any]): The tracked object to validate and filter.
+#     Args:
+#         tracked (dict[str, Any]): The tracked object to validate and filter.
 
-    Returns:
-        TrackedTransfer: The validated tracked object of type TrackedTransfer.
+#     Returns:
+#         TrackedTransfer: The validated tracked object of type TrackedTransfer.
 
-    Raises:
-        ValueError: If the object cannot be validated as a TrackedTransfer.
-    """
-    tracked_any = tracked_any_filter(tracked)
-    if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
-        return tracked_any
-    raise ValueError(
-        f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
-    )
+#     Raises:
+#         ValueError: If the object cannot be validated as a TrackedTransfer.
+#     """
+#     tracked_any = tracked_any_filter(tracked)
+#     if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
+#         return tracked_any
+#     raise ValueError(
+#         f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
+#     )

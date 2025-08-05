@@ -23,7 +23,7 @@ from v4vapp_backend_v2.actions.hive_to_lnd import (
     process_hive_to_lightning,
     return_hive_transfer,
 )
-from v4vapp_backend_v2.actions.process_tracked_events import (
+from v4vapp_backend_v2.process.process_tracked_events import (
     TrackedAny,
     process_tracked_event,
     tracked_any_filter,

@@ -16,7 +16,7 @@ from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.payment_success import process_payment_success
-from v4vapp_backend_v2.actions.process_hive import process_hive_op
+from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -56,11 +56,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         )
         return []
 
-    if isinstance(tracked_op, CustomJson):
-        # CustomJson is a special case, it will be processed by the CustomJson watcher.
-        if tracked_op.cj_id in ["v4vapp_dev_notification", "v4vapp_notification"]:
-            logger.info(f"Notification CustomJson: {tracked_op.log_str}")
-            return []
+    if isinstance(tracked_op, CustomJson) and "notification" in tracked_op.cj_id:
+        # CustomJson notification is a special case.
+        logger.info(f"Notification CustomJson: {tracked_op.log_str}")
+        return []
 
     unknown_cust_id = uuid4()
     cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))

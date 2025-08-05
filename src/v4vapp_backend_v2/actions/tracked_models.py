@@ -1,7 +1,5 @@
-import asyncio
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
-from timeit import default_timer as timer
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
@@ -80,7 +78,7 @@ class TrackedBaseModel(BaseModel):
     process_time: float = Field(0, description="Time in (s) it took to process this transaction")
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 
-    def __init__(self, **data):
+    def __init__(self, **data: Dict[str, Any]) -> None:
         """
         Initialize the TrackedBaseModel with the provided data.
 
@@ -98,59 +96,41 @@ class TrackedBaseModel(BaseModel):
         """
         return {"group_id": {"$regex": f"^{short_id}"}}  # Match the full short_id
 
-    async def __aenter__(self) -> "TrackedBaseModel":
-        """
-        Acquires an async lock and returns the current instance.
+    # async def __aenter__(self) -> "TrackedBaseModel":
+    #     """
+    #     Acquires an async lock and returns the current instance.
 
-        This method is intended to be used as part of an async context manager
-        protocol. Upon entering the context, it ensures that the necessary lock is
-        acquired before proceeding, waiting up to 10 seconds for the lock.
+    #     This method is intended to be used as part of an async context manager
+    #     protocol. Upon entering the context, it ensures that the necessary lock is
+    #     acquired before proceeding, waiting up to 10 seconds for the lock.
 
-        Returns:
-            TrackedBaseModel: The current instance with the lock acquired.
-        """
-        start = timer()
-        # stack = inspect.stack()
-        # logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
-        # if await self.locked:
-        #     logger.warning(
-        #         f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
-        #         extra={"notification": False},
-        #     )
-        #     print(stack[1].function, stack[1].filename, stack[1].lineno)
-        #     unlocked = await self.wait_for_lock(timeout=60)
-        #     if not unlocked:
-        #         logger.warning(
-        #             f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
-        #             extra={"notification": False},
-        #         )
-        #         await self.unlock_op()
-        #         print(stack[1].function, stack[1].filename, stack[1].lineno)
-        #         raise TimeoutError("Timeout waiting for lock to be released.")
-        # await self.lock_op()
-        logger.info(
-            f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
-            extra={"notification": False},
-        )
-        return self
+    #     Returns:
+    #         TrackedBaseModel: The current instance with the lock acquired.
+    #     """
+    #     start = timer()
+    #     logger.info(
+    #         f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
+    #         extra={"notification": False},
+    #     )
+    #     return self
 
-    async def __aexit__(
-        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
-    ) -> None:
-        """
-        Async context manager exit method.
-        This method is called when exiting the context. It ensures that any necessary cleanup is performed,
-        such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
-        was raised within the context.
-        Args:
-            exc_type (type[BaseException] | None): The type of exception raised, if any.
-            exc_val (BaseException | None): The exception instance raised, if any.
-            exc_tb (Any): The traceback object associated with the exception, if any.
-        Returns:
-            None
-        """
-        logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
-        # await self.unlock_op()
+    # async def __aexit__(
+    #     self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
+    # ) -> None:
+    #     """
+    #     Async context manager exit method.
+    #     This method is called when exiting the context. It ensures that any necessary cleanup is performed,
+    #     such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
+    #     was raised within the context.
+    #     Args:
+    #         exc_type (type[BaseException] | None): The type of exception raised, if any.
+    #         exc_val (BaseException | None): The exception instance raised, if any.
+    #         exc_tb (Any): The traceback object associated with the exception, if any.
+    #     Returns:
+    #         None
+    #     """
+    #     logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
+    #     # await self.unlock_op()
 
     # MARK: Reply Management
 
@@ -290,84 +270,84 @@ class TrackedBaseModel(BaseModel):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    # MARK: Lock Management
+    # # MARK: Lock Management
 
-    async def wait_for_lock(self, timeout: int = 2) -> bool:
-        """
-        Waits for the operation to be unlocked within a specified timeout.
+    # async def wait_for_lock(self, timeout: int = 2) -> bool:
+    #     """
+    #     Waits for the operation to be unlocked within a specified timeout.
 
-        This method checks if the operation is locked and waits until it is
-        unlocked or the timeout is reached.
+    #     This method checks if the operation is locked and waits until it is
+    #     unlocked or the timeout is reached.
 
-        Args:
-            timeout (int): The maximum time to wait for the lock to be released, in seconds.
+    #     Args:
+    #         timeout (int): The maximum time to wait for the lock to be released, in seconds.
 
-        Returns:
-            bool: True if the operation was unlocked, False if the timeout was reached.
-        """
-        # TODO: #113 Make this much more efficient in the way it handles the db
-        start_time = timer()
-        while await self.locked:
-            if (timer() - start_time) > timeout:
-                return False
-            await asyncio.sleep(0.5)
-        return True
+    #     Returns:
+    #         bool: True if the operation was unlocked, False if the timeout was reached.
+    #     """
+    #     # TODO: #113 Make this much more efficient in the way it handles the db
+    #     start_time = timer()
+    #     while await self.locked:
+    #         if (timer() - start_time) > timeout:
+    #             return False
+    #         await asyncio.sleep(0.5)
+    #     return True
 
-    @property
-    async def locked(self) -> bool:
-        """
-        Returns the locked status of the operation.
+    # @property
+    # async def locked(self) -> bool:
+    #     """
+    #     Returns the locked status of the operation.
 
-        This method checks if the operation is currently locked, which
-        indicates that it is being processed and should not be modified
-        or accessed by other threads or processes.
+    #     This method checks if the operation is currently locked, which
+    #     indicates that it is being processed and should not be modified
+    #     or accessed by other threads or processes.
 
-        Returns:
-            bool: True if the operation is locked, False otherwise.
-        """
-        result: dict[str, Any] | None = await InternalConfig.db[self.collection_name].find_one(
-            filter=self.group_id_query,
-            projection={"locked": True},
-        )
-        if result:
-            return result.get("locked", False)
-        return False
+    #     Returns:
+    #         bool: True if the operation is locked, False otherwise.
+    #     """
+    #     result: dict[str, Any] | None = await InternalConfig.db[self.collection_name].find_one(
+    #         filter=self.group_id_query,
+    #         projection={"locked": True},
+    #     )
+    #     if result:
+    #         return result.get("locked", False)
+    #     return False
 
-    async def lock_op(self) -> UpdateResult:
-        """
-        Locks the operation to prevent concurrent processing.
+    # async def lock_op(self) -> UpdateResult:
+    #     """
+    #     Locks the operation to prevent concurrent processing.
 
-        This method sets the `locked` attribute to True, indicating that
-        the operation is currently being processed and should not be
-        modified or accessed by other threads or processes.
+    #     This method sets the `locked` attribute to True, indicating that
+    #     the operation is currently being processed and should not be
+    #     modified or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update={"$set": {"locked": True}},
-        )
-        return ans
+    #     Returns:
+    #         None
+    #     """
+    #     ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
+    #         filter=self.group_id_query,
+    #         update={"$set": {"locked": True}},
+    #     )
+    #     return ans
 
-    async def unlock_op(self) -> UpdateResult:
-        """
-        Unlocks the operation to allow concurrent processing.
+    # async def unlock_op(self) -> UpdateResult:
+    #     """
+    #     Unlocks the operation to allow concurrent processing.
 
-        This method sets the `locked` attribute to False, indicating that
-        the operation is no longer being processed and can be modified
-        or accessed by other threads or processes.
+    #     This method sets the `locked` attribute to False, indicating that
+    #     the operation is no longer being processed and can be modified
+    #     or accessed by other threads or processes.
 
-        Returns:
-            None
-        """
-        # Remember my update_one already has the $set
-        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update={"$unset": {"locked": ""}},
-            upsert=True,
-        )
-        return ans
+    #     Returns:
+    #         None
+    #     """
+    #     # Remember my update_one already has the $set
+    #     ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
+    #         filter=self.group_id_query,
+    #         update={"$unset": {"locked": ""}},
+    #         upsert=True,
+    #     )
+    #     return ans
 
     async def save(
         self, exclude_unset: bool = False, exclude_none: bool = True, **kwargs: Any

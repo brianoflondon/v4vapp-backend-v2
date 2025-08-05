@@ -8,7 +8,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_paywithsats
+from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_keepsats
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
@@ -120,15 +120,28 @@ class CustomJson(OpBase):
                     return True
         return False
 
+    # MARK: Methods to surface CustomJsonData if it exists
     @property
     def paywithsats(self) -> bool:
         """
         Checks if the transfer memo indicates a paywithsats operation.
 
         Returns:
-            bool: True if the memo indicates a paywithsats operation, False otherwise.
+            bool: True if there is a memo, custom_json operations are always paywithsats.
         """
-        return detect_paywithsats(self.json_data.memo)
+        return True if self.memo else False
+
+    def max_send_amount_msats(self) -> int:
+        """
+        Returns the maximum amount in msats that can be sent.
+
+        Returns:
+            int: The maximum amount in msats.
+        """
+        msats = getattr(self.json_data, "msats", None)
+        if self.json_data and msats is not None:
+            return msats
+        return 0
 
     @property
     def memo(self) -> str:
@@ -164,6 +177,40 @@ class CustomJson(OpBase):
         """
         # this is where #clean needs to be evaluated
         return process_user_memo(self.memo)
+
+    @property
+    def to_account(self) -> str:
+        """
+        Returns the account to which the transfer is made.
+
+        Returns:
+            str: The account to which the transfer is made.
+        """
+        if hasattr(self.json_data, "to_account"):
+            return self.json_data.to_account
+        return ""
+
+    @property
+    def from_account(self) -> str:
+        """
+        Returns the account from which the transfer is made.
+
+        Returns:
+            str: The account from which the transfer is made.
+        """
+        if hasattr(self.json_data, "from_account"):
+            return self.json_data.from_account
+        return ""
+
+    @property
+    def keepsats(self) -> bool:
+        """
+        Checks if the transfer memo indicates a keepsats operation.
+
+        Returns:
+            bool: True if the memo indicates a keepsats operation, False otherwise.
+        """
+        return detect_keepsats(self.memo)
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

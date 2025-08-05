@@ -56,7 +56,7 @@ def convert_timestamp_to_datetime(timestamp: int | float) -> datetime:
 
 def convert_datetime_fields(
     item: dict[str, Any] | List[dict[str, Any]],
-) -> dict | List[dict[str, Any]]:
+) -> dict[str, Any] | List[dict[str, Any]]:
     """
     Converts timestamp fields in an item dictionary to datetime objects.
 

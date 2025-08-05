@@ -4,7 +4,7 @@ import os
 import pytest
 from nectar.amount import Amount
 
-from tests.actions.test_full_stack import (
+from tests.utils import (
     close_all_db_connections,
     get_ledger_count,
     get_lightning_invoice,

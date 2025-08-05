@@ -19,7 +19,7 @@ from v4vapp_backend_v2.actions.hive_to_lnd import (
     HiveToLightningError,
     process_hive_to_lightning,
 )
-from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defaults

@@ -4,7 +4,7 @@ from pprint import pprint
 
 import pytest
 
-from tests.actions.test_full_stack import (
+from tests.utils import (
     clear_and_reset,
     close_all_db_connections,
     get_all_ledger_entries,
@@ -57,9 +57,7 @@ async def config_file():
 
 
 async def test_hive_to_lnd_only():
-    """
-
-    """
+    """ """
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 

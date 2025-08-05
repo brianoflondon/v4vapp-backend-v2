@@ -14,7 +14,6 @@ from v4vapp_backend_v2.actions.custom_json_to_lnd import (
     custom_json_internal_transfer,
     process_custom_json_to_lightning,
 )
-from v4vapp_backend_v2.actions.hive_to_lnd import process_hive_to_lightning
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -26,6 +25,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 # MARK: Hive Transaction Processing
 
@@ -69,7 +69,6 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(limit_fill_order=op)
         elif isinstance(op, CustomJson):
-            # CustomJson operations are not yet implemented
             ledger_entry = await process_custom_json(custom_json=op)
         return [ledger_entry] if ledger_entry else []
 
@@ -118,8 +117,30 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
     ledger_entry.cust_id = hive_transfer.cust_id
 
+    # MARK: Server to customer account withdrawal
+    if hive_transfer.from_account == server_account:
+        customer = hive_transfer.to_account
+        server = hive_transfer.from_account
+        ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.description = f"Withdrawal: {base_description}"
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
+        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
+
+    # MARK: Customer account to server account deposit
+    elif hive_transfer.to_account == server_account:
+        customer = hive_transfer.from_account
+        server = hive_transfer.to_account
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
+        ledger_entry.description = f"Deposit: {base_description}"
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
+        # Now we need to see if we can take action for this invoice
+        # This will be handled in a separate task
+        follow_on_task = follow_on_transfer(tracked_op=hive_transfer)
+
     # MARK: Server to Treasury
-    if (
+    elif (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
@@ -182,27 +203,6 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
     ):
         # TODO: #110 Implement the system for expense accounts
         raise NotImplementedError("External expense accounts not implemented yet")
-    # MARK: Server to customer account withdrawal
-    elif hive_transfer.from_account == server_account:
-        customer = hive_transfer.to_account
-        server = hive_transfer.from_account
-        ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
-        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.description = f"Withdrawal: {base_description}"
-        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
-
-    # MARK: Customer account to server account deposit
-    elif hive_transfer.to_account == server_account:
-        customer = hive_transfer.from_account
-        server = hive_transfer.to_account
-        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
-        ledger_entry.description = f"Deposit: {base_description}"
-        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
-        # Now we need to see if we can take action for this invoice
-        # This will be handled in a separate task
-        follow_on_task = process_hive_to_lightning(hive_transfer=hive_transfer)
     else:
         logger.info(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
@@ -317,10 +317,10 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         # MARK: CustomJson Transfer user to user
         if (
-            keepsats_transfer.from_account
-            and keepsats_transfer.to_account
+            custom_json.from_account
+            and custom_json.to_account
             and keepsats_transfer.msats
-            and keepsats_transfer.from_account != keepsats_transfer.to_account
+            and custom_json.from_account != custom_json.to_account
         ):
             ledger_entry = await custom_json_internal_transfer(
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer

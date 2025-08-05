@@ -251,7 +251,7 @@ async def send_lightning_to_pay_req(
         ValidationError: If the payment response cannot be validated.
 
     Returns:
-        None
+        Payment: The payment object containing details of the sent payment.
     """
     if not lnd_client:
         raise ValueError("LNDClient instance is required")

@@ -50,7 +50,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.hive_notification import send_transfer_custom_json
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -73,7 +73,7 @@ class WrongCurrencyError(HiveToKeepsatsConversionError):
 async def conversion_hive_to_keepsats(
     server_id: str,
     cust_id: str,
-    tracked_op: TrackedTransfer,
+    tracked_op: TrackedTransferWithCustomJson,
     convert_amount: Amount,
     nobroadcast: bool = False,
 ) -> None:
@@ -229,4 +229,3 @@ async def conversion_hive_to_keepsats(
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-    
