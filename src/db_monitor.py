@@ -246,7 +246,7 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-
+    error_code = ""
     collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
@@ -266,15 +266,16 @@ async def subscribe_stream(
             unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
             # The second argument (increment) is usually 0 for new watches
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
+            logger.warning(f"{ICON} {collection_name} stream started from 60s ago.")
 
         async with await collection.watch(**watch_kwargs) as stream:
             if error_count > 0:
                 logger.info(
                     f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
-                    extra={"error_code_clear": "stream_error"},
+                    extra={"error_code_clear": f"db_monitor {collection_name}"},
                 )
-                error_code = 0
             async for change in stream:
+                error_code = ""
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
                 if ignore_changes(change):
@@ -308,9 +309,11 @@ async def subscribe_stream(
         raise e
 
     except OperationFailure as e:
+        error_code = f"db_monitor {collection_name}"
+        error_count += 1
         logger.error(
             f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
-            extra={"error": e, "notification": False},
+            extra={"error_code": error_code, "notification": False},
         )
         if "resume" in str(e):
             logger.warning(
@@ -319,7 +322,9 @@ async def subscribe_stream(
             )
             resume.delete_token()
             asyncio.create_task(
-                subscribe_stream(collection_name=collection_name, pipeline=pipeline)
+                subscribe_stream(
+                    collection_name=collection_name, pipeline=pipeline, error_count=error_count
+                )
             )
             return
 

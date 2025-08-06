@@ -241,6 +241,14 @@ def db_monitor_pipelines(
                 "fullDocument.custom_records.v4vapp_group_id": {"$ne": None},
                 "fullDocument.status": {"$in": ["FAILED", "SUCCEEDED"]},
                 "fullDocument.creation_date": date_query,
+                # Only process completion updates
+                "$or": [
+                    {"operationType": {"$ne": "update"}},
+                    {
+                        "operationType": "update",
+                        "updateDescription.updatedFields.status": {"$exists": True}
+                    }
+                ]
             }
         },
         ignore_updates_match,
