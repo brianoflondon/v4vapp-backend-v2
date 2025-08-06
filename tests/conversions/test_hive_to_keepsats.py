@@ -35,6 +35,8 @@ def mock_hive_to_keepsats_deps():
             "v4vapp_backend_v2.conversion.hive_to_keepsats.send_transfer_custom_json"
         ) as mock_transfer,
         patch.object(LedgerEntry, "save", new_callable=AsyncMock) as mock_save,
+        patch.object(TrackedBaseModel, "save", new_callable=AsyncMock) as mock_tracked_save,
+        patch.object(TrackedBaseModel, "update_conv", new_callable=AsyncMock) as mock_update_conv,
     ):
         mock_transfer.return_value = {
             "trx_id": "abc123def456",
@@ -43,21 +45,22 @@ def mock_hive_to_keepsats_deps():
             "status": "success",
         }
         mock_save.return_value = None
-
+        mock_tracked_save.return_value = None
+        mock_update_conv.return_value = None
         yield {"send_transfer": mock_transfer, "ledger_save": mock_save}
 
 
 async def test_conversion_hive_to_keepsats(mock_hive_to_keepsats_deps):
     # Example test case for conversion_hive_to_keepsats
     TrackedBaseModel.last_quote = last_quote()
-    convert_amount = Amount("10.000 HIVE")
+    original_amount = Amount("10.000 HIVE")
     server_account = "v4vapp_server"
     customer_account = "customer123"
 
     tracked_op = Transfer(
         from_account=server_account,
         to_account=customer_account,
-        amount=convert_amount,
+        amount=original_amount,
         memo="Deposit #sats",
         timestamp=datetime.now(timezone.utc),
         trx_id="fake_trx_id",
@@ -65,6 +68,7 @@ async def test_conversion_hive_to_keepsats(mock_hive_to_keepsats_deps):
         block_num=123456,
     )
 
+    convert_amount = Amount("9.000 HIVE")  # Example conversion amount
     # Test with valid conversion amount
     await conversion_hive_to_keepsats(
         server_id=server_account,
@@ -81,16 +85,17 @@ async def test_conversion_hive_to_keepsats(mock_hive_to_keepsats_deps):
 async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
     # Example test case for conversion_hive_to_keepsats
     TrackedBaseModel.last_quote = last_quote()
-    convert_amount = Amount("10.000 HIVE")
+    convert_amount = Amount("13.456 HIVE")
     server_account = "v4vapp_server"
     customer_account = "customer123"
-    msats = 1_234_000
+    msats = 2_244_000
 
     tracked_op = Transfer(
         from_account=server_account,
         to_account=customer_account,
-        amount=convert_amount,
         memo="Deposit #sats",
+        amount=convert_amount,
+        convert_amount=convert_amount,
         timestamp=datetime.now(timezone.utc),
         trx_id="fake_trx_id",
         op_type="transfer",

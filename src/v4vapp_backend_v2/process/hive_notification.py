@@ -60,7 +60,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # This is where we will deal with the inbound memo for # clean need to do this.
 
     amount = Amount("0.001 HIVE")
-    if details.action == ReturnAction.REFUND:
+    if details.action in [ReturnAction.REFUND, ReturnAction.CHANGE]:
         amount = details.amount.beam
 
     account_details = await one_account_balance(account=details.pay_to_cust_id)
@@ -119,7 +119,9 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
 
     # Now add the Hive reply to the original Hive operation
-    reason = f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+    reason = (
+        f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+    )
     details.tracked_op.add_reply(
         reply_id=trx.get("trx_id", ""),
         reply_type=details.tracked_op.op_type,

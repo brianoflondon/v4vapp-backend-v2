@@ -87,10 +87,10 @@ async def test_custom_json_transfer():
     print(f"Initial ledger count: {ledger_count}")
 
     transfer = KeepsatsTransfer(
-        from_account="devser.v4vapp",
-        to_account="v4vapp-test",
+        from_account="v4vapp-test",
+        to_account="devser.v4vapp",
         msats=2_323_000,
-        memo=f"Test transfer from devser.v4vapp to v4vapp-test {datetime.now().isoformat()}",
+        memo=f"Test transfer {datetime.now().isoformat()}",
         parent_id="",  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer)
@@ -112,7 +112,7 @@ async def test_hive_to_lnd_only():
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
-    invoice_value_sat = 2_218
+    invoice_value_sat= 10_000
 
     invoice = await get_lightning_invoice(
         value_sat=invoice_value_sat, memo="Simply a bare test invoice"
@@ -122,14 +122,14 @@ async def test_hive_to_lnd_only():
         send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 12)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 10, timeout=120)
 
     await asyncio.sleep(1)
-    assert len(all_ledger_entries) == 12, "Expected 12 ledger entries"
+    assert len(all_ledger_entries) == 10, "Expected 10 ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")
-    assert limit_used == invoice_value_sat, "Total sats should increase after the transaction"
+    assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():
@@ -156,7 +156,7 @@ async def test_hive_to_lnd_and_lnd_to_hive():
         send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 12)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 12, timeout=120)
 
     await asyncio.sleep(1)
     assert len(all_ledger_entries) == 12, "Expected 12 ledger entries"

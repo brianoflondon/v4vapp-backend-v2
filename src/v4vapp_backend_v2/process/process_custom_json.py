@@ -1,6 +1,7 @@
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
+from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
@@ -17,6 +18,8 @@ async def custom_json_internal_transfer(
     This asynchronous function handles the transfer of Keepsats between two accounts,
     records the transaction in the ledger, and sends a notification to the recipient if the transfer amount
     exceeds the minimum invoice payment threshold.
+
+    If the original transaction is a Hive transfer, it will perform the return operation.
     Args:
         custom_json (CustomJson): The custom JSON object containing operation details.
         keepsats_transfer (KeepsatsTransfer): The transfer details including source, destination, amount, and memo.
@@ -32,7 +35,7 @@ async def custom_json_internal_transfer(
         f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     )
     ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
-    if not keepsats_transfer.sats:
+    if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
     debit_credit_amount = keepsats_transfer.sats * 1_000
 
@@ -61,18 +64,41 @@ async def custom_json_internal_transfer(
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
+    if keepsats_transfer.parent_id:
+        parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
+        if (
+            getattr(parent_op, "cust_id", None)
+            and parent_op
+            and parent_op.op_type
+            in [
+                "transfer",
+                "recurrent_transfer",
+                "fill_recurrent_transfer",
+            ]
+        ):
+            return_details = HiveReturnDetails(
+                tracked_op=parent_op,
+                original_memo=keepsats_transfer.memo,
+                reason_str=description,
+                action=ReturnAction.CHANGE,
+                pay_to_cust_id=parent_op.cust_id,
+                amount=parent_op.change_amount,
+                nobroadcast=nobroadcast,
+            )
+    else:
+        return_details = HiveReturnDetails(
+            tracked_op=custom_json,
+            original_memo=keepsats_transfer.memo,
+            reason_str=description,
+            action=ReturnAction.CUSTOM_JSON,
+            pay_to_cust_id=keepsats_transfer.to_account,
+            nobroadcast=nobroadcast,
+        )
 
-    return_details = HiveReturnDetails(
-        tracked_op=custom_json,
-        original_memo=keepsats_transfer.memo,
-        reason_str=description,
-        action=ReturnAction.CUSTOM_JSON,
-        pay_to_cust_id=keepsats_transfer.to_account,
-        nobroadcast=nobroadcast,
-    )
-    trx = await reply_with_hive(
-        details=return_details,
-        nobroadcast=nobroadcast,
-    )
+    if return_details:
+        trx = await reply_with_hive(
+            details=return_details,
+            nobroadcast=nobroadcast,
+        )
 
     return transfer_ledger_entry

@@ -9,7 +9,11 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     ExpenseAccount,
     LiabilityAccount,
 )
-from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import (
+    LedgerEntry,
+    LedgerEntryDuplicateException,
+    LedgerType,
+)
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -45,7 +49,7 @@ async def process_payment_success(
 
     """
     logger.info(
-        f"Processing payment: {payment.group_id} with old ledger entry: {old_ledger_entry}",
+        f"Processing payment: {payment.short_id} {payment.value_msat / 1000:,.0f} sats, fee: {payment.fee_msat / 1000:,.0f} sats",
         extra={"notification": False},
     )
     initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
@@ -60,7 +64,10 @@ async def process_payment_success(
         .to_list()
     )
     if existing_ledger_entries:
-        raise HiveToLightningError(
+        logger.warning(
+            f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
+        )
+        raise LedgerEntryDuplicateException(
             f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
         )
 

@@ -38,9 +38,7 @@ Then Send custom_json Transfer from Server to Customer:
 
 """
 
-import asyncio
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import List
 
 from nectar.amount import Amount
@@ -51,12 +49,13 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     RevenueAccount,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 
@@ -75,7 +74,7 @@ class WrongCurrencyError(HiveToKeepsatsConversionError):
 async def conversion_hive_to_keepsats(
     server_id: str,
     cust_id: str,
-    tracked_op: TrackedTransferWithCustomJson,
+    tracked_op: TransferBase,
     convert_amount: Amount,
     msats: int = 0,
     nobroadcast: bool = False,
@@ -129,15 +128,32 @@ async def conversion_hive_to_keepsats(
     ).conversion
     hive_hbd_fee = msats_fee_conv.amount(from_currency)
 
+    # Calculate change amount
+    change_amount = tracked_op.amount.beam - convert_amount - hive_hbd_fee
+    if change_amount < 0:
+        raise HiveToKeepsatsConversionError(
+            f"Change amount {change_amount} is negative, cannot convert."
+        )
+    if change_amount == 0:
+        # Recalculate the amount to deposit to ensure it's not zero
+        change_amount = Amount(
+            f"0.001 {convert_amount.symbol}"
+        )  # Ensure change amount is not zero
+        convert_amount = convert_amount - change_amount
+        amount_to_deposit_conv = CryptoConversion(amount=convert_amount, quote=quote).conversion
+
     amount_to_deposit_before_fee = amount_to_deposit_conv.amount(from_currency) - hive_hbd_fee
     amount_to_deposit_before_fee_conv = CryptoConversion(
         amount=amount_to_deposit_before_fee, quote=quote
     ).conversion
 
+    tracked_op.change_amount = AmountPyd(amount=change_amount)
+
     logger.info(f"{convert_amount=}")
     logger.info(f"{amount_to_deposit_before_fee=}")
     logger.info(f"{msats_fee=}")
-    logger.info(f"{hive_hbd_fee}")
+    logger.info(f"{hive_hbd_fee=}")
+    logger.info(f"{change_amount=}")
 
     ledger_entries: List[LedgerEntry] = []
 
@@ -264,7 +280,13 @@ async def conversion_hive_to_keepsats(
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-    await asyncio.sleep(1)  # Allow time for the transaction to be processed
-    # Check if the transaction was successful
-    ledger_entry_raw = await LedgerEntry.collection().find_one({"short_id": trx["id"]})
-    pprint(ledger_entry_raw)
+
+    tracked_op.add_reply(
+        reply_id=trx["trx_id"],
+        reply_type="custom_json",
+        reply_msat=amount_to_deposit_conv.msats,
+        reply_message=memo,
+    )
+
+    await tracked_op.update_conv(quote=quote)
+    await tracked_op.save()
