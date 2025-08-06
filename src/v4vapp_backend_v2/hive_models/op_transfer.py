@@ -114,7 +114,12 @@ class TransferBase(OpBase):
 
     @property
     def unit(self) -> Currency:
-        """Get the unit of the amount"""
+        """
+        Returns the currency unit associated with the transfer amount.
+        Returns:
+            Currency: The currency unit of the transfer amount.
+        """
+        
         return self.amount.unit
 
     @property

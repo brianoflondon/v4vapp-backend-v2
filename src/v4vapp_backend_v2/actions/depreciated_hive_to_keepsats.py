@@ -10,7 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
-from v4vapp_backend_v2.actions.hive_notification import send_transfer_custom_json
+from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger

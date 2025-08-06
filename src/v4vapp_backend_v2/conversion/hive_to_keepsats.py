@@ -49,7 +49,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     RevenueAccount,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.hive_notification import send_transfer_custom_json
+from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -75,8 +75,35 @@ async def conversion_hive_to_keepsats(
     cust_id: str,
     tracked_op: TrackedTransferWithCustomJson,
     convert_amount: Amount,
+    msats: int = 0,
     nobroadcast: bool = False,
 ) -> None:
+    """
+    Converts a HIVE or HBD deposit to Keepsats (Lightning msats) and records the corresponding ledger entries.
+    This function performs the following steps:
+    1. Determines the appropriate conversion quote based on the timestamp of the tracked operation.
+    2. Validates the currency for conversion (must be HIVE or HBD).
+    3. Calculates the converted amount and associated fee in msats.
+    4. Creates and saves ledger entries for:
+        - The conversion transaction.
+        - The contra asset entry.
+        - The fee income.
+        - The deposit of Keepsats.
+    5. Initiates a Keepsats transfer from the server to the customer.
+    Args:
+         server_id (str): The identifier for the server handling the conversion.
+         cust_id (str): The customer identifier receiving the Keepsats deposit.
+         tracked_op (TrackedTransferWithCustomJson): The tracked transfer operation containing metadata and timestamp.
+         convert_amount (Amount): The amount of HIVE or HBD to convert.
+         msats (int, optional): The amount in millisatoshis (msats) for the conversion. Defaults to 0. If given
+            it will override the convert_amount (but uses the Hive currency symbol from convert_amount)
+         nobroadcast (bool, optional): If True, the transfer will not be broadcasted. Defaults to False.
+    Raises:
+         WrongCurrencyError: If the currency for conversion is not HIVE or HBD.
+    Returns:
+         None
+    """
+
     if datetime.now(tz=timezone.utc) - tracked_op.timestamp > timedelta(minutes=5):
         quote = await TrackedBaseModel.nearest_quote(tracked_op.timestamp)
     else:
@@ -86,7 +113,13 @@ async def conversion_hive_to_keepsats(
         raise WrongCurrencyError("Invalid currency for conversion")
 
     from_currency = Currency(convert_amount.symbol.lower())
-    amount_to_deposit_conv = CryptoConversion(amount=convert_amount, quote=quote).conversion
+    if msats == 0:
+        amount_to_deposit_conv = CryptoConversion(amount=convert_amount, quote=quote).conversion
+    else:
+        amount_to_deposit_conv = CryptoConversion(
+            value=msats, conv_from=Currency.MSATS, quote=quote
+        ).conversion
+        convert_amount = amount_to_deposit_conv.amount(from_currency)
 
     msats_fee = amount_to_deposit_conv.msats_fee
     msats_fee_conv = CryptoConversion(
@@ -94,7 +127,7 @@ async def conversion_hive_to_keepsats(
     ).conversion
     hive_hbd_fee = msats_fee_conv.amount(from_currency)
 
-    amount_to_deposit_before_fee = convert_amount - hive_hbd_fee
+    amount_to_deposit_before_fee = amount_to_deposit_conv.amount(from_currency) - hive_hbd_fee
     amount_to_deposit_before_fee_conv = CryptoConversion(
         amount=amount_to_deposit_before_fee, quote=quote
     ).conversion

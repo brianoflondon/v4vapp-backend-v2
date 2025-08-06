@@ -4,11 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from urllib.parse import quote_plus
 
-from pymongo import AsyncMongoClient, MongoClient, WriteConcern, timeout
+from pymongo import AsyncMongoClient, MongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
 from pymongo.errors import CollectionInvalid, OperationFailure
-from pymongo.read_concern import ReadConcern
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
 
@@ -45,8 +44,8 @@ class DBConn:
         client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
             self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
             tz_aware=True,  # Enables timezone-aware datetime objects
-            connectTimeoutMS=10000,  # Timeout for establishing a connection (10 seconds)
-            serverSelectionTimeoutMS=10000,  # Timeout for selecting a server (10 seconds)
+            connectTimeoutMS=120_000,  # Timeout for establishing a connection (120 seconds)
+            serverSelectionTimeoutMS=120_000,  # Timeout for selecting a server (120 seconds)
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads

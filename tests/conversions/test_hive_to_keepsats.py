@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from nectar.amount import Amount
@@ -9,8 +10,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
-from unittest.mock import AsyncMock, patch
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +26,7 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
     )  # Resetting InternalConfig instance
+
 
 @pytest.fixture
 def mock_hive_to_keepsats_deps():
@@ -71,6 +71,39 @@ async def test_conversion_hive_to_keepsats(mock_hive_to_keepsats_deps):
         cust_id=customer_account,
         tracked_op=tracked_op,
         convert_amount=convert_amount,
+    )
+    assert True
+    # Assert the mocks were called
+    assert mock_hive_to_keepsats_deps["send_transfer"].called
+    assert mock_hive_to_keepsats_deps["ledger_save"].call_count == 4  # 4 ledger entries saved
+
+
+async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
+    # Example test case for conversion_hive_to_keepsats
+    TrackedBaseModel.last_quote = last_quote()
+    convert_amount = Amount("10.000 HIVE")
+    server_account = "v4vapp_server"
+    customer_account = "customer123"
+    msats = 1_234_000
+
+    tracked_op = Transfer(
+        from_account=server_account,
+        to_account=customer_account,
+        amount=convert_amount,
+        memo="Deposit #sats",
+        timestamp=datetime.now(timezone.utc),
+        trx_id="fake_trx_id",
+        op_type="transfer",
+        block_num=123456,
+    )
+
+    # Test with valid conversion amount
+    await conversion_hive_to_keepsats(
+        server_id=server_account,
+        cust_id=customer_account,
+        tracked_op=tracked_op,
+        convert_amount=convert_amount,
+        msats=msats,
     )
     assert True
     # Assert the mocks were called

@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     ExpenseAccount,
@@ -9,12 +8,14 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.depreciated_hive_to_keepsats import hive_to_keepsats_deposit
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.payment_models import Payment
 
 
@@ -64,6 +65,15 @@ async def process_payment_success(
                 nobroadcast=nobroadcast,
             )
             ledger_entries_list.extend(conv_ledger_entries)
+            if return_hive_amount:
+                details = HiveReturnDetails(
+                    tracked_op=initiating_op,
+                    original_memo=initiating_op.memo,
+                    reason_str=conv_reason,
+                    action=ReturnAction.CHANGE,
+                    pay_to_cust_id=cust_id,
+                )
+                trx = await reply_with_hive(details=details, nobroadcast=nobroadcast)
         except HiveToLightningError as e:
             logger.error(
                 f"Failed to convert Hive to Keepsats: {e}",
@@ -71,10 +81,8 @@ async def process_payment_success(
             )
             raise e
 
-
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)
     ledger_entries_list.extend(payment_ledger_entries)
-    # Check if there is still Hive or HBE left in the account, initiate sweep.
 
 
     return ledger_entries_list

@@ -1,3 +1,4 @@
+from pprint import pprint
 from typing import Any, Dict
 
 from nectar.amount import Amount
@@ -43,6 +44,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     Raises:
         HiveTransferError: If the recipient customer ID is not a valid Hive account.
     """
+    logger.exception(f"Replying with Hive details: {details}", extra={"notification": False})
+    pprint(details)
     if not CustID(details.pay_to_cust_id).is_hive:
         logger.error(
             "Tracked operation customer ID is not a valid Hive account.",
@@ -128,7 +131,6 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     await details.tracked_op.save()
 
     return trx
-
 
 
 async def send_notification_custom_json(
@@ -224,9 +226,6 @@ async def send_transfer_custom_json(
             extra={"notification": False, **transfer.log_extra},
         )
         return {}
-
-
-
 
 
 async def depreciated_send_notification_hive_transfer(

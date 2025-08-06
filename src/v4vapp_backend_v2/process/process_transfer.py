@@ -4,7 +4,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.actions.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
@@ -282,7 +282,7 @@ async def decode_incoming_and_checks(
             input=tracked_op.d_memo,
             lnd_client=lnd_client,
             zero_amount_invoice_send_msats=max_send_msats,
-            comment=tracked_op,
+            comment=tracked_op.log_str,  # TODO: THIS NEEDS TO BE TAKEN FROM THE MEMO
         )
         if not pay_req:
             raise HiveTransferError("Failed to decode Lightning invoice")
@@ -294,11 +294,11 @@ async def decode_incoming_and_checks(
         raise HiveTransferError(f"Error decoding Lightning invoice: {e}")
 
     # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
-    if tracked_op.paywithsats:
+    if tracked_op.paywithsats:  # Custom Json operations are always paywithsats
         # get the sats balance for the sending account
         result = await check_keepsats_balance(tracked_op.cust_id, pay_req)
     else:  # both these tests are for conversions not paywithsats
-        result = await check_amount_sent(tracked_op.cust_id, pay_req)
+        result = await check_amount_sent(tracked_op, pay_req)  # type: ignore[assignment]
         if not result:
             result = await check_user_limits(pay_req.value, tracked_op.cust_id)
 
@@ -308,7 +308,7 @@ async def decode_incoming_and_checks(
     return pay_req
 
 
-async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> str:
+async def check_amount_sent(tracked_op: TrackedTransfer, pay_req: PayReq) -> str:
     """
     Asynchronously checks whether a payment attempt can be made for a given payment request.
 
@@ -327,20 +327,20 @@ async def check_amount_sent(hive_transfer: TrackedTransfer, pay_req: PayReq) -> 
         AssertionError: If the database client is not initialized.
     """
     if pay_req.is_zero_value:
-        if hive_transfer.conv.in_limits():
+        if tracked_op.conv.in_limits():
             return ""
         else:
             return "Payment request has zero value, but conversion limits exceeded."
 
-    surplus_msats = hive_transfer.max_send_amount_msats() - pay_req.value_msat
+    surplus_msats = tracked_op.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
-        if hive_transfer.unit == Currency.HIVE:
-            surplus_hive = abs(round(surplus_msats / 1_000 / hive_transfer.conv.sats_hive, 3))
+        if tracked_op.unit == Currency.HIVE:
+            surplus_hive = abs(round(surplus_msats / 1_000 / tracked_op.conv.sats_hive, 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hive:,.3f} HIVE"
             )
-        elif hive_transfer.unit == Currency.HBD:
-            surplus_hbd = abs(round(surplus_msats / 1_000 / hive_transfer.conv.sats_hbd, 3))
+        elif tracked_op.unit == Currency.HBD:
+            surplus_hbd = abs(round(surplus_msats / 1_000 / tracked_op.conv.sats_hbd, 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hbd:,.3f} HBD"
             )

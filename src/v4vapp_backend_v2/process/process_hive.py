@@ -10,7 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
-from v4vapp_backend_v2.actions.custom_json_to_lnd import (
+from v4vapp_backend_v2.actions.depreciated_custom_json_to_lnd import (
     custom_json_internal_transfer,
     process_custom_json_to_lightning,
 )
@@ -336,6 +336,8 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
                         reply_msat=keepsats_transfer.msats,
                         reply_message="Reply to transfer",
                     )
+
+
             return ledger_entry
         # MARK: CustomJson Pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
