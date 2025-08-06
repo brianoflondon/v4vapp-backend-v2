@@ -1,0 +1,78 @@
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
+from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
+from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+
+
+async def custom_json_internal_transfer(
+    custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
+) -> LedgerEntry:
+    """
+    Processes an internal transfer operation based on custom JSON input.
+    This asynchronous function handles the transfer of Keepsats between two accounts,
+    records the transaction in the ledger, and sends a notification to the recipient if the transfer amount
+    exceeds the minimum invoice payment threshold.
+    Args:
+        custom_json (CustomJson): The custom JSON object containing operation details.
+        keepsats_transfer (KeepsatsTransfer): The transfer details including source, destination, amount, and memo.
+        nobroadcast (bool, optional): If True, suppresses broadcasting the notification. Defaults to False.
+    Returns:
+        LedgerEntry: The ledger entry representing the transfer transaction.
+    Notes:
+        - If the transfer amount is below the minimum notification threshold, no notification is sent.
+        - The function saves the ledger entry and optionally sends a notification to the recipient.
+    """
+    # This is a transfer between two accounts
+    logger.info(
+        f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+    )
+    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    if not keepsats_transfer.sats:
+        raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
+    debit_credit_amount = keepsats_transfer.sats * 1_000
+
+    user_memo = (
+        keepsats_transfer.user_memo
+        or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+    )
+    description = f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+    transfer_ledger_entry = LedgerEntry(
+        cust_id=custom_json.cust_id,
+        short_id=custom_json.short_id,
+        ledger_type=ledger_type,
+        group_id=f"{custom_json.group_id}-{ledger_type.value}",
+        user_memo=user_memo,
+        timestamp=custom_json.timestamp,
+        description=description,
+        op_type=custom_json.op_type,
+        debit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.from_account),
+        debit_conv=custom_json.conv,
+        debit_amount=debit_credit_amount,
+        debit_unit=Currency.MSATS,
+        credit=LiabilityAccount(name="Customer Liability", sub=keepsats_transfer.to_account),
+        credit_conv=custom_json.conv,
+        credit_unit=Currency.MSATS,
+        credit_amount=debit_credit_amount,
+    )
+    # TODO: #144 need to look into where else `user_memo` needs to be used
+    await transfer_ledger_entry.save()
+
+    return_details = HiveReturnDetails(
+        tracked_op=custom_json,
+        original_memo=keepsats_transfer.memo,
+        reason_str=description,
+        action=ReturnAction.CUSTOM_JSON,
+        pay_to_cust_id=keepsats_transfer.to_account,
+        nobroadcast=nobroadcast,
+    )
+    trx = await reply_with_hive(
+        details=return_details,
+        nobroadcast=nobroadcast,
+    )
+
+    return transfer_ledger_entry

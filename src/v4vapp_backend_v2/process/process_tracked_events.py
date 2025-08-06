@@ -13,7 +13,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -27,6 +26,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_payment import process_payment_success
 
@@ -48,6 +48,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+    logger.info(f"{'=*=' * 20}")
+    logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
+    logger.info(f"{tracked_op.log_str}")
+    logger.info(f"{'=*=' * 20}")
     if isinstance(tracked_op, BlockMarker):
         # This shouldn't be arrived at.
         logger.warning(

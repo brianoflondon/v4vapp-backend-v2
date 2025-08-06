@@ -111,6 +111,7 @@ async def clear_and_reset():
         await watch_for_ledger_count(ledger_count + 1)
 
     await clear_database()
+    await watch_for_ledger_count(0)
     logger.info("Clearing Database.")
 
 

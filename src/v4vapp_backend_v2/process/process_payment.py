@@ -3,6 +3,7 @@ from typing import List
 
 from nectar.amount import Amount
 
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     ExpenseAccount,
@@ -43,7 +44,7 @@ async def process_payment_success(
         HiveToLightningError: If the initiating operation cannot be loaded or Hive to Keepsats conversion fails.
 
     """
-    logger.warning(
+    logger.info(
         f"Processing payment: {payment.group_id} with old ledger entry: {old_ledger_entry}",
         extra={"notification": False},
     )
@@ -71,6 +72,10 @@ async def process_payment_success(
     if payment.conv is None or payment.conv.is_unset():
         await payment.update_conv(quote=quote)
 
+    net_sats, details = await keepsats_balance_printout(
+        cust_id=cust_id,
+    )
+
     if isinstance(initiating_op, TransferBase) and not initiating_op.paywithsats:
         # First we must convert the correct amount of Hive to Keepsats
         cost_of_payment_msat = payment.value_msat + payment.fee_msat
@@ -85,6 +90,10 @@ async def process_payment_success(
             )
         except Exception as e:
             raise HiveToLightningError(f"Failed to convert Hive to Keepsats for payment: {e}")
+
+    net_sats, details = await keepsats_balance_printout(
+        cust_id=cust_id,
+    )
 
     # At this point we can record the payment using Keepsats
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)

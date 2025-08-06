@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 from pprint import pprint
 
 import pytest
@@ -31,6 +32,9 @@ from v4vapp_backend_v2.hive.hive_extras import (
     send_custom_json,
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -54,6 +58,53 @@ async def config_file():
     await clear_and_reset()
     yield
     await close_all_db_connections()
+
+
+async def test_just_clear():
+    """
+    Test to clear the database and reset the environment.
+    This test clears the database and resets the environment to ensure a clean state for subsequent tests.
+    """
+    await clear_and_reset()
+    print("Database cleared and reset.")
+
+
+async def test_custom_json_transfer():
+    """
+    Test the process of sending a custom JSON transfer from a Hive customer to the server.
+    This test performs the following steps:
+    1. Retrieves the current ledger entry count.
+    2. Sends a transaction from a Hive customer to the server with a specified amount and memo.
+    3. Asserts that the transaction was successfully sent by checking for a transaction ID.
+    4. Waits for the ledger to reflect the expected number of new entries.
+    5. Checks that the transaction is recorded in the ledger and prints the details.
+    6. Asserts that the transaction has replies in the custom JSON transfer (indicating successful processing).
+
+    Raises:
+        AssertionError: If the transaction fails to send (missing transaction ID).
+    """
+    ledger_count = await get_ledger_count()
+    print(f"Initial ledger count: {ledger_count}")
+
+    transfer = KeepsatsTransfer(
+        from_account="devser.v4vapp",
+        to_account="v4vapp-test",
+        msats=2_323_000,
+        memo=f"Test transfer from devser.v4vapp to v4vapp-test {datetime.now().isoformat()}",
+        parent_id="",  # This is the group_id of the original transfer
+    )
+    trx = await send_transfer_custom_json(transfer)
+    await watch_for_ledger_count(ledger_count + 1)
+    while True:
+        transactions = await TransferBase.collection().find({"trx_id": trx["trx_id"]}).to_list()
+        result = CustomJson.model_validate(transactions[0])
+        if result.replies:
+            print(f"Custom JSON transfer replies: {result.replies}")
+            break
+        await asyncio.sleep(0.5)
+
+    assert transactions, "No transactions found for the transfer"
+    assert result.replies, "No replies found in the custom JSON transfer"
 
 
 async def test_hive_to_lnd_only():

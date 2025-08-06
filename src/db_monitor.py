@@ -18,10 +18,10 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
 app = typer.Typer()
@@ -150,18 +150,24 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
 
-    # Check if "locked" is in either updatedFields or removedFields
-    if "locked" in updated_fields or "locked" in removed_fields:
-        return True
-    if "process_time" in updated_fields or "process_time" in removed_fields:
-        # If process_time is present ignore the change
-        return True
-    if (
-        "change_conv" in updated_fields
-        or "fee_conv" in updated_fields
-        or "replies" in updated_fields
-    ):
-        return True
+    # Filter out custom_json sent purely for notifications
+    # if "json" in updated_fields:
+    #     if "notification" in updated_fields["json"]:
+    #         if updated_fields["json"]["notification"] is True:
+    #             return True
+
+    # # Check if "locked" is in either updatedFields or removedFields
+    # if "locked" in updated_fields or "locked" in removed_fields:
+    #     return True
+    # if "process_time" in updated_fields or "process_time" in removed_fields:
+    #     # If process_time is present ignore the change
+    #     return True
+    # if (
+    #     "change_conv" in updated_fields
+    #     or "fee_conv" in updated_fields
+    #     or "replies" in updated_fields
+    # ):
+    #     return True
     return False
 
 

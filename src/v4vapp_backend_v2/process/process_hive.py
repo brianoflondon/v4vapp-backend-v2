@@ -11,7 +11,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 )
 from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.depreciated_custom_json_to_lnd import (
-    custom_json_internal_transfer,
     process_custom_json_to_lightning,
 )
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
@@ -25,6 +24,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 # MARK: Hive Transaction Processing
@@ -44,7 +44,7 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     # Check if a ledger entry with the same group_id already exists
-    existing_entry = await LedgerEntry.collection().find_one(filter={"group_id": op.group_id})
+    existing_entry = await LedgerEntry.collection().find_one(filter=op.group_id_query)
     if existing_entry:
         logger.info(f"Ledger entry for group_id {op.group_id} already exists. Skipping.")
         try:
@@ -336,7 +336,6 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
                         reply_msat=keepsats_transfer.msats,
                         reply_message="Reply to transfer",
                     )
-
 
             return ledger_entry
         # MARK: CustomJson Pay a lightning invoice

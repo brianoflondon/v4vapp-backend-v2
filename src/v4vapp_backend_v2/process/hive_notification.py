@@ -1,4 +1,3 @@
-from pprint import pprint
 from typing import Any, Dict
 
 from nectar.amount import Amount
@@ -44,8 +43,9 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     Raises:
         HiveTransferError: If the recipient customer ID is not a valid Hive account.
     """
-    logger.exception(f"Replying with Hive details: {details}", extra={"notification": False})
-    pprint(details)
+    logger.info(
+        f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
+    )
     if not CustID(details.pay_to_cust_id).is_hive:
         logger.error(
             "Tracked operation customer ID is not a valid Hive account.",
@@ -65,7 +65,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
 
     account_details = await one_account_balance(account=details.pay_to_cust_id)
     logger.info(
-        f"\n{account_details}",
+        f"Account Details for {details.pay_to_cust_id}\n{account_details}\n",
         extra={"notification": False},
     )
 
@@ -98,6 +98,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             quote=TransferBase.last_quote,
         ).conversion
         return_amount_msat = details.tracked_op.change_conv.msats
+
     # Custom JSONs are used for notifications and do not have a sats amount
     else:
         notification = KeepsatsTransfer(
@@ -118,9 +119,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
 
     # Now add the Hive reply to the original Hive operation
-    reason = (
-        f"Return notification for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
-    )
+    reason = f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
     details.tracked_op.add_reply(
         reply_id=trx.get("trx_id", ""),
         reply_type=details.tracked_op.op_type,

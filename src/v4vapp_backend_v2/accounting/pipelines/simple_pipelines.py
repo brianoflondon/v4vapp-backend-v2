@@ -221,6 +221,7 @@ def db_monitor_pipelines(
                                             "locked",
                                             "extensions",
                                             "fee_conv",
+                                            "json",
                                         ],
                                     ]
                                 }
