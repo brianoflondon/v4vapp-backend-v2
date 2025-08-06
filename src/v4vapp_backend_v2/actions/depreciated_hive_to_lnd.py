@@ -6,7 +6,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
+from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.actions.depreciated_hive_to_keepsats import hive_to_keepsats_deposit
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive

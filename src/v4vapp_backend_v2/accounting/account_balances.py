@@ -440,7 +440,7 @@ async def get_keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     line_items: bool = False,
-) -> Tuple[float, LedgerAccountDetails]:
+) -> Tuple[int, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -453,7 +453,7 @@ async def get_keepsats_balance(
 
     Returns:
         Tuple:
-        net_sats (float): The net balance of Keepsats in satoshis.
+        net_msats (int): The net balance of Keepsats in msatoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(
@@ -467,36 +467,35 @@ async def get_keepsats_balance(
         as_of_date=as_of_date + timedelta(days=1),
     )
 
-    net_msats = account_balance.balances_net.get(Currency.MSATS, 0)
-    net_sats = net_msats // 1000 if net_msats else 0.0
-    return net_sats, account_balance
+    net_msats = int(account_balance.balances_net.get(Currency.MSATS, 0))
+    return net_msats, account_balance
 
 
 async def keepsats_balance_printout(
-    cust_id: str, previous_sats: float | None = None, line_items: bool = False
-) -> Tuple[float, LedgerAccountDetails]:
+    cust_id: str, previous_msats: int | None = None, line_items: bool = False
+) -> Tuple[int, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
 
     Args:
         cust_id (str): The customer ID for which to retrieve the Keepsats balance.
-        previous_sats (float, optional): The previous balance in sats to compare against. Defaults to 0.
+        previous_msats (int, optional): The previous balance in msats to compare against. Defaults to 0.
 
     Returns:
-        Tuple[float, LedgerAccountDetails]: A tuple containing the net Keepsats balance in sats and the account balance details.
+        Tuple[int, LedgerAccountDetails]: A tuple containing the net Keepsats balance in sats and the account balance details.
 
     Logs:
         - Customer ID and Keepsats balance information.
         - Net balance, previous balance (if provided), and the delta between balances.
     """
-    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
+    net_msats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
 
     logger.info("_" * 50)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")
-    logger.info(f"  Net balance:      {net_sats:,.0f} sats")
-    if previous_sats is not None:
-        logger.info(f"  Previous balance: {previous_sats:,.0f} sats")
-        logger.info(f"  Delta:           {net_sats - previous_sats:,.0f} sats")
+    logger.info(f"  Net balance:      {net_msats // 1000:,.0f} sats")
+    if previous_msats is not None:
+        logger.info(f"  Previous balance: {previous_msats // 1000:,.0f} sats")
+        logger.info(f"  Delta:           {net_msats - previous_msats:,.0f} sats")
     logger.info("_" * 50)
 
-    return net_sats, account_balance
+    return net_msats, account_balance

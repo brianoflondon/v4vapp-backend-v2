@@ -15,7 +15,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_pandas_from_accounts,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, get_ledger_entry
-from v4vapp_backend_v2.actions.hive_to_lnd import (
+from v4vapp_backend_v2.actions.depreciated_hive_to_lnd import (
     HiveToLightningError,
     process_hive_to_lightning,
 )

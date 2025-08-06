@@ -1,19 +1,28 @@
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hive_notification import (
+    reply_with_hive,
+    send_notification_custom_json,
+)
+from v4vapp_backend_v2.process.process_errors import (
+    CustomJsonToLightningError,
+    InsufficientBalanceError,
+)
 
 
 async def custom_json_internal_transfer(
     custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
 ) -> LedgerEntry:
     """
+    Must perform balance check before processing the transfer.
+
     Processes an internal transfer operation based on custom JSON input.
     This asynchronous function handles the transfer of Keepsats between two accounts,
     records the transaction in the ledger, and sends a notification to the recipient if the transfer amount
@@ -34,9 +43,32 @@ async def custom_json_internal_transfer(
     logger.info(
         f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     )
-    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
     if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
+
+    net_msats, account_balance = await keepsats_balance_printout(
+        cust_id=keepsats_transfer.from_account
+    )
+    keepsats_transfer.msats = (
+        keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
+    )
+    if net_msats < keepsats_transfer.msats:
+        message = f"Insufficient balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+        logger.error(message)
+        notification = KeepsatsTransfer(
+            to_account=keepsats_transfer.from_account,
+            from_account=keepsats_transfer.to_account,
+            memo=message,
+            invoice_message=custom_json.memo,
+            parent_id=custom_json.group_id,
+            notification=True,
+        )
+        await send_notification_custom_json(
+            tracked_op=custom_json,
+            notification=notification,
+        )
+        raise InsufficientBalanceError(message)
+
     debit_credit_amount = keepsats_transfer.sats * 1_000
 
     user_memo = (
@@ -44,6 +76,7 @@ async def custom_json_internal_transfer(
         or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
     )
     description = f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,

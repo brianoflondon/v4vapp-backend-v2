@@ -18,7 +18,7 @@ from nectarapi.exceptions import UnhandledRPCError
 from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.actions.actions_errors import HiveToLightningError
+from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 

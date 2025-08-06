@@ -3,10 +3,6 @@ from typing import Any, Dict
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
-from v4vapp_backend_v2.actions.actions_errors import (
-    HiveToLightningError,
-    KeepsatsDepositNotificationError,
-)
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
@@ -21,6 +17,10 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.process.process_errors import (
+    HiveToLightningError,
+    KeepsatsDepositNotificationError,
+)
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
 

@@ -41,3 +41,12 @@ class CustomJsonToLightningError(HiveLightningError):
     """
 
     pass
+
+
+class InsufficientBalanceError(HiveLightningError):
+    """
+    Custom exception for errors related to insufficient balance.
+    This can be used to handle specific cases where an account does not have enough funds for a transfer.
+    """
+
+    pass

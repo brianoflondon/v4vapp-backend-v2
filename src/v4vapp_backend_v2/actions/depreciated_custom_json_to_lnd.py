@@ -1,7 +1,7 @@
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
+from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string

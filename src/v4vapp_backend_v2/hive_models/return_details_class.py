@@ -12,6 +12,7 @@ class ReturnAction(StrEnum):
     REFUND = "refund"
     CHANGE = "change"
     CUSTOM_JSON = "custom_json"
+    ERROR = "error"
     HOLD = "hold"
 
 

@@ -9,7 +9,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.actions_errors import CustomJsonToLightningError
 from v4vapp_backend_v2.actions.depreciated_custom_json_to_lnd import (
     process_custom_json_to_lightning,
 )
@@ -25,6 +24,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
+from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError, HiveLightningError
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 # MARK: Hive Transaction Processing
@@ -74,7 +74,12 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
 
     except LedgerEntryException as e:
         logger.error(f"Error processing transfer operation: {e}")
-        raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
+        return []
+        # raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
+
+    except HiveLightningError as e:
+        logger.error(f"Hive to Lightning error: {e}")
+        return []
 
 
 async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
