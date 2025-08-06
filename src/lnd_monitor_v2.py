@@ -2,7 +2,6 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import Annotated, Any, List
 
 import typer
@@ -217,7 +216,7 @@ async def db_store_invoice(
         logger.warning(e)
         return
     query = {"r_hash": invoice_pyd.r_hash}
-    invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True, exclude={"conv"})
+    invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
     update = {"$set": invoice_dict}
     ans = await Invoice.collection().update_one(filter=query, update=update, upsert=True)
     logger.debug(
@@ -256,9 +255,7 @@ async def db_store_payment(
             f"{payment_pyd.route_str}"
         )
         query = {"payment_hash": payment_pyd.payment_hash}
-        payment_dict = payment_pyd.model_dump(
-            exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
-        )
+        payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
         update = {"$set": payment_dict}
         ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
         logger.info(
