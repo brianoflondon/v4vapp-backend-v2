@@ -94,6 +94,11 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    if not hive_transfer.conv or hive_transfer.conv.is_unset():
+        await hive_transfer.update_conv()
+        if hive_transfer.conv.is_unset():
+            raise LedgerEntryCreationException("Conversion not set in operation.")
+
     ledger_entry = LedgerEntry(
         group_id=hive_transfer.group_id,
         short_id=hive_transfer.short_id,

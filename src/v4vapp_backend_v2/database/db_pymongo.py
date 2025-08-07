@@ -217,11 +217,12 @@ class DBConn:
         Returns:
             MongoClient: An instance of MongoClient connected to the database.
         """
+        timeout_ms = 600_000 if InternalConfig().config.development.enabled else 10_000
         return MongoClient(
             self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
             tz_aware=True,  # Enables timezone-aware datetime objects
-            connectTimeoutMS=10000,  # Timeout for establishing a connection (10 seconds)
-            serverSelectionTimeoutMS=10000,  # Timeout for selecting a server (10 seconds)
+            connectTimeoutMS=timeout_ms,  # Timeout for establishing a connection
+            serverSelectionTimeoutMS=timeout_ms,  # Timeout for selecting a server
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads

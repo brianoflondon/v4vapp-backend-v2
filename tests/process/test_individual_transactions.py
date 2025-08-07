@@ -4,6 +4,7 @@ from datetime import datetime
 from pprint import pprint
 
 import pytest
+from nectar.amount import Amount
 
 from tests.utils import (
     clear_and_reset,
@@ -55,7 +56,6 @@ async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     db_conn = DBConn()
     await db_conn.setup_database()
-    await clear_and_reset()
     yield
     await close_all_db_connections()
 
@@ -83,6 +83,7 @@ async def test_custom_json_transfer():
     Raises:
         AssertionError: If the transaction fails to send (missing transaction ID).
     """
+
     ledger_count = await get_ledger_count()
     print(f"Initial ledger count: {ledger_count}")
 
@@ -109,17 +110,19 @@ async def test_custom_json_transfer():
 
 async def test_hive_to_lnd_only():
     """ """
+    await clear_and_reset()
+
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
-    invoice_value_sat= 10_000
+    invoice_value_sat = 10_000
 
     invoice = await get_lightning_invoice(
         value_sat=invoice_value_sat, memo="Simply a bare test invoice"
     )
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
-        send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
+        amount=Amount("12.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 10, timeout=120)

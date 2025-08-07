@@ -52,12 +52,13 @@ async def custom_json_internal_transfer(
     keepsats_transfer.msats = (
         keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
     )
-    if net_msats < keepsats_transfer.msats:
+    # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
+    if net_msats + 1_000 < keepsats_transfer.msats:
         message = f"Insufficient balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
         logger.error(message)
         notification = KeepsatsTransfer(
-            to_account=keepsats_transfer.from_account,
             from_account=keepsats_transfer.to_account,
+            to_account=keepsats_transfer.from_account,
             memo=message,
             invoice_message=custom_json.memo,
             parent_id=custom_json.group_id,
@@ -97,6 +98,7 @@ async def custom_json_internal_transfer(
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
+    return_details = None
     if keepsats_transfer.parent_id:
         parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
         if (

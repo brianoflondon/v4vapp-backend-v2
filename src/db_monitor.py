@@ -21,6 +21,7 @@ from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
@@ -129,7 +130,7 @@ class ResumeToken(BaseModel):
                 return None
         except Exception as e:
             logger.error(f"Error retrieving resume token for collection '{self.collection}': {e}")
-            raise e
+            return None
 
 
 def ignore_changes(change: Mapping[str, Any]) -> bool:
@@ -213,10 +214,9 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             return
         except NotImplementedError:
             logger.warning(
-                f"{ICON} Operation not implemented for {op.op_type} {op.group_id}",
+                f"{ICON} Ignoring: {op.op_type} {op.short_id} {truncate_text(op.log_str, 40)}",
                 extra={"notification": False},
             )
-            logger.warning(f"{ICON} {op.log_str}", extra={"notification": False})
             return
         except LedgerEntryException as e:
             logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
@@ -269,12 +269,13 @@ async def subscribe_stream(
             logger.warning(f"{ICON} {collection_name} stream started from 60s ago.")
 
         async with await collection.watch(**watch_kwargs) as stream:
-            if error_count > 0:
-                logger.info(
-                    f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
-                    extra={"error_code_clear": f"db_monitor {collection_name}"},
-                )
+            error_code = f"db_monitor_{collection_name}"
             async for change in stream:
+                if error_count > 0:
+                    logger.info(
+                        f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
+                        extra={"error_code_clear": error_code},
+                    )
                 error_code = ""
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
@@ -309,17 +310,13 @@ async def subscribe_stream(
         raise e
 
     except OperationFailure as e:
-        error_code = f"db_monitor {collection_name}"
+        error_code = f"db_monitor_{collection_name}"
         error_count += 1
-        logger.error(
+        logger.warning(
             f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
             extra={"error_code": error_code, "notification": False},
         )
         if "resume" in str(e):
-            logger.warning(
-                f"{ICON} {collection_name} Resume token error in stream subscription: {e}",
-                extra={"error": e, "notification": False},
-            )
             resume.delete_token()
             asyncio.create_task(
                 subscribe_stream(
@@ -334,9 +331,10 @@ async def subscribe_stream(
         ConnectionFailure,
     ) as e:
         error_count += 1
+        error_code = f"db_monitor_{collection_name}"
         logger.error(
             f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {e}",
-            extra={"error_code": f"mongodb_stream_error_{collection_name}", "notification": True},
+            extra={"error_code": error_code, "notification": True},
         )
         # Wait before attempting to reconnect
         await asyncio.sleep(max(30 * error_count, 180))
@@ -505,15 +503,4 @@ if __name__ == "__main__":
         logger.exception(e)
         sys.exit(1)
 
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
-        sys.exit(0)
-
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
-
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
+# --- IGNORE ---
