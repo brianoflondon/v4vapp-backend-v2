@@ -71,5 +71,40 @@ class AmountPyd(BaseModel):
         return self.beam.symbol
 
     @property
+    def symbol_lower(self) -> str:
+        """
+        Returns the symbol in lowercase.
+        This is useful for comparisons or when a lowercase symbol is required.
+        """
+        return self.beam.symbol.lower()
+
+    @property
+    def symbol_upper(self) -> str:
+        """
+        Returns the symbol in uppercase.
+        This is useful for comparisons or when an uppercase symbol is required.
+        """
+        return self.beam.symbol.upper()
+
+    @property
     def unit(self) -> Currency:
         return Currency(self.beam.symbol.lower())
+
+    @property
+    def minus_minimum(self) -> Amount:
+        """
+        Returns the amount minus a small buffer to avoid rounding issues.
+        This is useful for operations where you want to ensure you don't exceed
+        the available amount.
+
+        Buffer is set to 1 by default, but can be adjusted if needed but this removes
+        0.001 Hive or HBD from the amount.
+        """
+        buffer = 1
+        return Amount(
+            {
+                "amount": str(float(self.amount) - buffer),
+                "nai": self.nai,
+                "precision": self.precision,
+            }
+        )

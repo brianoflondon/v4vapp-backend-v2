@@ -30,7 +30,7 @@ from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 # MARK: Hive Transaction Processing
 
 
-async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
+async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[LedgerEntry]:
     """
     Processes the transfer operation and creates a ledger entry if applicable.
     Returns a list of entries even though this is likely to be only one.
@@ -39,6 +39,10 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
     treasury account, funding account, exchange account, and customer accounts. It ensures that
     appropriate debit and credit accounts are assigned based on the transfer type. If a ledger
     entry with the same group_id already exists, the operation is skipped.
+
+    Args:
+        op (TrackedAny): The operation to process, which can be a transfer, limit order, fill order, or custom JSON.
+        nobroadcast (bool): If True, suppresses broadcasting used mostly for testing purposes.
 
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
@@ -65,11 +69,13 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
     try:
         ledger_entry: LedgerEntry | None = None
         if isinstance(op, TransferBase):
-            ledger_entry = await process_transfer_op(hive_transfer=op)
+            ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
-            ledger_entry = await process_create_fill_order_op(limit_fill_order=op)
+            ledger_entry = await process_create_fill_order_op(
+                limit_fill_order=op, nobroadcast=nobroadcast
+            )
         elif isinstance(op, CustomJson):
-            ledger_entry = await process_custom_json(custom_json=op)
+            ledger_entry = await process_custom_json(custom_json=op, nobroadcast=nobroadcast)
         return [ledger_entry] if ledger_entry else []
 
     except LedgerEntryException as e:
@@ -82,7 +88,9 @@ async def process_hive_op(op: TrackedAny) -> List[LedgerEntry]:
         return []
 
 
-async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
+async def process_transfer_op(
+    hive_transfer: TrackedTransfer, nobroadcast: bool = False
+) -> LedgerEntry:
     """
     Processes a Hive transfer operation and creates a ledger entry if applicable.
 
@@ -147,7 +155,7 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
-        follow_on_task = follow_on_transfer(tracked_op=hive_transfer)
+        follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
 
     # MARK: Server to Treasury
     elif (
@@ -231,7 +239,7 @@ async def process_transfer_op(hive_transfer: TrackedTransfer) -> LedgerEntry:
 
 
 async def process_create_fill_order_op(
-    limit_fill_order: Union[LimitOrderCreate, FillOrder],
+    limit_fill_order: Union[LimitOrderCreate, FillOrder], nobroadcast: bool = False
 ) -> LedgerEntry:
     """
     Processes the create or fill order operation and creates a ledger entry if applicable.
@@ -312,7 +320,9 @@ async def process_create_fill_order_op(
 
 
 # MARK: CustomJson Operations
-async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
+async def process_custom_json(
+    custom_json: CustomJson, nobroadcast: bool = False
+) -> LedgerEntry | None:
     """
     Processes a CustomJson operation and creates a ledger entry if applicable.
 
@@ -385,6 +395,7 @@ async def process_custom_json(custom_json: CustomJson) -> LedgerEntry | None:
                 await process_custom_json_to_lightning(
                     custom_json=custom_json,
                     keepsats_transfer=keepsats_transfer,
+                    nobroadcast=nobroadcast,
                 )
                 return custom_json_ledger_entry
 

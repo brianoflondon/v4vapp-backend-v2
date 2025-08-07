@@ -2,6 +2,7 @@ import asyncio
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, List
+from uuid import uuid4
 
 from google.protobuf.json_format import MessageToDict
 from nectar.account import Account
@@ -14,13 +15,41 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
+    get_hive_client,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
     send_transfer,
 )
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
-# MARK: Helper functions
+# MARK: Hive Helper functions
+
+
+def fake_trx_id() -> str:
+    """
+    Generates a fake transaction ID for testing purposes.
+    This function is used to create a unique identifier for transactions in tests.
+    Returns:
+        str: A fake transaction ID.
+    """
+    return uuid4().hex
+
+
+def latest_block_num() -> int:
+    """
+    Retrieves the latest block number from the Hive blockchain.
+    This function is useful for testing purposes to ensure that the latest block number is available.
+    Returns:
+        int: The latest block number.
+    """
+    hive_client = get_hive_client()
+    dynamic_global_properties = hive_client.get_dynamic_global_properties()
+    if not dynamic_global_properties:
+        raise ValueError("Dynamic global properties not available.")
+    return dynamic_global_properties["head_block_number"]
+
+
+# MARK: DB Helper functions
 
 
 async def all_ledger_entries() -> List[LedgerEntry]:
@@ -206,4 +235,5 @@ async def get_lightning_invoice(
             f"Invoice generated: {memo} {value_msat // 1000:,} sats",
             extra={"add_invoice_response_dict": add_invoice_response_dict},
         )
+        return response
         return response

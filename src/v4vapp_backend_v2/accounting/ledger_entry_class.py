@@ -246,8 +246,8 @@ class LedgerEntry(BaseModel):
         Returns:
             str: The string representation of the ledger type.
         """
-        ans = "".join(word.capitalize() for word in self.ledger_type.name.split("_"))
-        ans = f"{ans} ({self.ledger_type.value})"
+        ans = " ".join(word.capitalize() for word in self.ledger_type.name.split("_"))
+        ans = f"{ans} ({self.ledger_type.name} {self.ledger_type.value})"
         return ans
 
     @property
@@ -635,28 +635,28 @@ class LedgerEntry(BaseModel):
 
         if debit_display_unit.upper() == "SATS" and (debit_amount / debit_conversion_factor) < 5:
             formatted_debit_amount = (
-                f"{debit_amount / debit_conversion_factor:,.3f} {debit_display_unit}"
+                f"{debit_amount / debit_conversion_factor:,.3f} {debit_display_unit.upper()}"
             )
         elif debit_conversion_factor == 1000:
             formatted_debit_amount = (
-                f"{debit_amount / debit_conversion_factor:,.0f} {debit_display_unit}"
+                f"{debit_amount / debit_conversion_factor:,.0f} {debit_display_unit.upper()}"
             )
         else:
-            formatted_debit_amount = f"{debit_amount:,.3f} {debit_display_unit}"
+            formatted_debit_amount = f"{debit_amount:,.3f} {debit_display_unit.upper()}"
 
         if (
             credit_display_unit.upper() == "SATS"
             and (credit_amount / credit_conversion_factor) < 5
         ):
             formatted_credit_amount = (
-                f"{credit_amount / credit_conversion_factor:,.3f} {credit_display_unit}"
+                f"{credit_amount / credit_conversion_factor:,.3f} {credit_display_unit.upper()}"
             )
         elif credit_conversion_factor == 1000:
             formatted_credit_amount = (
-                f"{credit_amount / credit_conversion_factor:,.0f} {credit_display_unit}"
+                f"{credit_amount / credit_conversion_factor:,.0f} {credit_display_unit.upper()}"
             )
         else:
-            formatted_credit_amount = f"{credit_amount:,.3f} {credit_display_unit}"
+            formatted_credit_amount = f"{credit_amount:,.3f} {credit_display_unit.upper()}"
 
         formatted_credit_amount = f"{credit_contra_str} {formatted_credit_amount}"
         formatted_debit_amount = f"{debit_contra_str} {formatted_debit_amount}"
@@ -673,10 +673,10 @@ class LedgerEntry(BaseModel):
         if self.debit_conv and self.credit_conv:
             conversion_line = (
                 f"Converted   "
-                f"{self.debit_conv.hive:>12,.3f} HIVE "
-                f"{self.debit_conv.hbd:>12,.3f} HBD "
-                f"{self.debit_conv.usd:>12,.3f} USD "
-                f"{self.debit_conv.sats:>15,.0f} SATS "
+                f"{self.debit_conv.hive:>11,.3f} HIVE "
+                f"{self.debit_conv.hbd:>11,.3f} HBD "
+                f"{self.debit_conv.usd:>11,.3f} USD "
+                f"{self.debit_conv.msats / 1000:>18,.3f} SATS "
             )
         else:
             conversion_line = "Converted              N/A"

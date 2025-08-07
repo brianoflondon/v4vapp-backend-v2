@@ -50,3 +50,16 @@ class InsufficientBalanceError(HiveLightningError):
     """
 
     pass
+
+
+
+class HiveToKeepsatsConversionError(Exception):
+    """Custom exception for Hive to Keepsats conversion errors."""
+
+    pass
+
+
+class WrongCurrencyError(HiveToKeepsatsConversionError):
+    """Custom exception for wrong currency errors."""
+
+    pass

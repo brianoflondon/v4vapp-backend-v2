@@ -4,14 +4,15 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
-from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
+from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
@@ -20,6 +21,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     send_lightning_to_pay_req,
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 
 
 class HiveTransferError(Exception):
@@ -97,6 +99,24 @@ async def follow_on_transfer(
         return
     cust_id = tracked_op.cust_id
     amount = Amount("0.001 HIVE")
+
+    if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
+        # This is a conversion of Hive/HBD into Lightning Keepsats
+        logger.info(
+            f"Detected keepsats operation in memo: {tracked_op.d_memo}",
+            extra={"notification": False, **tracked_op.log_extra},
+        )
+        user_limits_text = await check_user_limits(tracked_op.conv.sats, tracked_op.cust_id)
+        if user_limits_text:
+            raise HiveTransferError(f"{user_limits_text}")
+        await conversion_hive_to_keepsats(
+            server_id=server_id,
+            cust_id=cust_id,
+            tracked_op=tracked_op,
+            convert_amount=tracked_op.amount.beam,
+            nobroadcast=nobroadcast,
+        )
+        return
 
     return_details = HiveReturnDetails(
         tracked_op=tracked_op,
@@ -286,12 +306,21 @@ async def decode_incoming_and_checks(
         )
         if not pay_req:
             raise HiveTransferError("Failed to decode Lightning invoice")
-    except Exception as e:
-        logger.exception(
-            f"Error decoding Lightning invoice: {e}",
+    except LnurlException as e:
+        message = f"Lightning decode error: {e}"
+        logger.error(
+            f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
         )
-        raise HiveTransferError(f"Error decoding Lightning invoice: {e}")
+        raise HiveTransferError(message)
+
+    except Exception as e:
+        message = f"Unexpected error decoding Lightning invoice: {e}"
+        logger.exception(
+            f"{message}",
+            extra={"notification": False, **tracked_op.log_extra},
+        )
+        raise HiveTransferError(message)
 
     # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
     if tracked_op.paywithsats:  # Custom Json operations are always paywithsats

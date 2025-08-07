@@ -271,6 +271,33 @@ class CryptoConv(BaseModel):
         """
         return Amount(f"{self.hbd:.3f} HBD")
 
+    def value_in(self, currency: Currency) -> float | int:
+        """
+        Returns the conversion value in the specified currency.
+        This is useful when creating LedgerEntries with more decimal places than
+        Amount for hive and hbd.
+
+        Args:
+            currency (Currency): The currency to convert to.
+
+        Returns:
+            float: The conversion value in the specified currency.
+        """
+        if currency == Currency.HIVE:
+            return self.hive
+        elif currency == Currency.HBD:
+            return self.hbd
+        elif currency == Currency.MSATS:
+            return self.msats
+        elif currency == Currency.SATS:
+            return self.sats
+        elif currency == Currency.USD:
+            return self.usd
+        elif currency == Currency.BTC:
+            return self.btc
+
+        return self.hive
+
     def amount(self, currency: Currency) -> Amount:
         """
         Returns the conversion value in the original currency as an Amount object.
