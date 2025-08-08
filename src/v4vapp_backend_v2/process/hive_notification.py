@@ -61,7 +61,13 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
 
     amount = Amount("0.001 HIVE")
     if details.action in [ReturnAction.REFUND, ReturnAction.CHANGE]:
-        amount = details.amount.beam
+        if details.tracked_op.change_amount:
+            amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
+        else:
+            logger.warning(
+                "No change amount found in tracked operation, using default amount.",
+                extra={"notification": False, **details.tracked_op.log_extra},
+            )
 
     account_details = await one_account_balance(account=details.pay_to_cust_id)
     logger.info(

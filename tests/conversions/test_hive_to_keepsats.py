@@ -83,9 +83,9 @@ async def test_conversion_hive_to_keepsats_with_change(mock_hive_to_keepsats_dep
     )
 
     assert True
-    # # Assert the mocks were called
-    # assert mock_hive_to_keepsats_deps["send_transfer"].called
-    # assert mock_hive_to_keepsats_deps["ledger_save"].call_count == 4  # 4 ledger entries saved
+    # Assert the mocks were called
+    assert mock_hive_to_keepsats_deps["send_transfer"].called
+    assert mock_hive_to_keepsats_deps["ledger_save"].call_count == 4  # 4 ledger entries saved
 
 
 async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
@@ -113,6 +113,7 @@ async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
         cust_id=customer_account,
         tracked_op=tracked_op,
         msats=msats,
+        quote=last_quote(),
     )
     assert True
     # Assert the mocks were called

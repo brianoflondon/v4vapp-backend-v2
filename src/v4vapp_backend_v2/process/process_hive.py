@@ -139,7 +139,7 @@ async def process_transfer_op(
     if hive_transfer.from_account == server_account:
         customer = hive_transfer.to_account
         server = hive_transfer.from_account
-        ledger_entry.debit = LiabilityAccount("Customer Liability", sub=customer)
+        ledger_entry.debit = LiabilityAccount("VSC Liability", sub=customer)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
@@ -150,7 +150,7 @@ async def process_transfer_op(
         customer = hive_transfer.from_account
         server = hive_transfer.to_account
         ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.credit = LiabilityAccount("Customer Liability", sub=customer)
+        ledger_entry.credit = LiabilityAccount("VSC Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
         # Now we need to see if we can take action for this invoice
@@ -381,11 +381,11 @@ async def process_custom_json(
                     description=keepsats_transfer.description,
                     user_memo=keepsats_transfer.user_memo,
                     op_type=custom_json.op_type,
-                    debit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    debit=LiabilityAccount(name="VSC Liability", sub=custom_json.cust_id),
                     debit_conv=custom_json.conv,
                     debit_unit=Currency.MSATS,
                     debit_amount=custom_json.conv.msats,
-                    credit=LiabilityAccount(name="Customer Liability", sub=custom_json.cust_id),
+                    credit=LiabilityAccount(name="VSC Liability", sub=custom_json.cust_id),
                     credit_conv=custom_json.conv,
                     credit_unit=Currency.MSATS,
                     credit_amount=custom_json.conv.msats,

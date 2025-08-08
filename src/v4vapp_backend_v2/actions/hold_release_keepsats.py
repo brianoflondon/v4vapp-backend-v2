@@ -36,7 +36,7 @@ async def hold_keepsats(
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=cust_id,  # This is the CUSTOMER
         ),
         debit_unit=Currency.MSATS,
@@ -80,7 +80,7 @@ async def release_keepsats(tracked_op: TrackedTransfer | CustomJson) -> LedgerEn
         debit_amount=existing_entry.debit_amount,
         debit_conv=existing_entry.debit_conv,
         credit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=existing_entry.cust_id,  # This is the CUSTOMER
         ),
         credit_unit=Currency.MSATS,

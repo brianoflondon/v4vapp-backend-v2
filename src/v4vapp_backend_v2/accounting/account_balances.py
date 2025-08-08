@@ -60,7 +60,7 @@ async def one_account_balance(
 ) -> LedgerAccountDetails:
     if isinstance(account, str):
         account = LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=account,
         )
 
@@ -99,7 +99,7 @@ async def account_balance_printout(
 
     Args:
         account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
-        a str is passed, we assume this is a `Customer Liability` account for customer `account`.
+        a str is passed, we assume this is a `VSC Liability` account for customer `account`.
         df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
         full_history (bool, optional): If True, shows the full transaction history with running balances.
                                        If False, shows only the closing balance. Defaults to False.
@@ -111,7 +111,7 @@ async def account_balance_printout(
     """
     if isinstance(account, str):
         account = LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=account,
         )
 
@@ -124,7 +124,7 @@ async def account_balance_printout(
     )
     units = set(ledger_account_details.balances.keys())
 
-    title_line = f"Balance for {account}"
+    title_line = f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC"
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
@@ -457,7 +457,7 @@ async def get_keepsats_balance(
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(
-        name="Customer Liability",
+        name="VSC Liability",
         sub=cust_id,
         contra=False,
     )

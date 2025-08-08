@@ -51,13 +51,11 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import hive_to_keepsats
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
-from v4vapp_backend_v2.process.process_errors import HiveToKeepsatsConversionError
 
 
 async def conversion_hive_to_keepsats(
@@ -93,40 +91,11 @@ async def conversion_hive_to_keepsats(
     Returns:
          None
     """
-    conversion = await hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
-    logger.info(f"{conversion}")
-
-    from_currency = conversion.from_currency
-
-    msats_fee = amount_to_deposit_conv.msats_fee
-    msats_fee_conv = CryptoConversion(
-        value=msats_fee, conv_from=Currency.MSATS, quote=quote
-    ).conversion
-    hive_hbd_fee = msats_fee_conv.amount(from_currency)
-
-    # Calculate change amount
-    change_amount = tracked_op.amount.beam - convert_amount - hive_hbd_fee
-    if change_amount < 0:
-        raise HiveToKeepsatsConversionError(
-            f"Change amount {change_amount} is negative, cannot convert."
-        )
-    if change_amount == 0:
-        # Recalculate the amount to deposit to ensure it's not zero
-        change_amount = Amount(
-            f"0.001 {convert_amount.symbol}"
-        )  # Ensure change amount is not zero
-        convert_amount = convert_amount - change_amount
-        amount_to_deposit_conv = CryptoConversion(amount=convert_amount, quote=quote).conversion
-
-    amount_to_deposit_before_fee = amount_to_deposit_conv.amount(from_currency) - hive_hbd_fee
-    amount_to_deposit_before_fee_conv = CryptoConversion(
-        amount=amount_to_deposit_before_fee, quote=quote
-    ).conversion
-
-    tracked_op.change_amount = AmountPyd(amount=change_amount)
+    conv_result = await hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
+    from_currency = conv_result.from_currency
+    logger.info(f"{conv_result}")
 
     ledger_entries: List[LedgerEntry] = []
-
     # MARK: 2. Convert
     ledger_type = LedgerType.CONV_HIVE_TO_KEEPSATS
     conversion_ledger_entry = LedgerEntry(
@@ -136,21 +105,24 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Convert {amount_to_deposit_conv.amount(from_currency)} deposit to {amount_to_deposit_conv.msats / 1000:,.0f} sats for {cust_id} after fee {amount_to_deposit_conv.msats_fee / 1000:,.0f} sats",
+        description=(
+            f"Convert {conv_result.to_convert_conv.value_in(from_currency)} "
+            f"into {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id}"
+        ),
         debit=AssetAccount(
             name="Treasury Lightning",
             sub="keepsats",  # This is the Customer Keepsats Lightning balance
         ),
         debit_unit=Currency.MSATS,
-        debit_amount=amount_to_deposit_before_fee_conv.msats,
-        debit_conv=amount_to_deposit_before_fee_conv,
+        debit_amount=conv_result.to_convert_conv.msats,
+        debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(
             name="Customer Deposits Hive",
             sub=server_id,  # This is the Server
         ),
         credit_unit=from_currency,
-        credit_amount=amount_to_deposit_before_fee.amount,
-        credit_conv=amount_to_deposit_before_fee_conv,
+        credit_amount=conv_result.to_convert_conv.value_in(from_currency),
+        credit_conv=conv_result.to_convert_conv,
     )
     ledger_entries.append(conversion_ledger_entry)
     await conversion_ledger_entry.save()
@@ -164,24 +136,24 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra asset for Keepsats {amount_to_deposit_conv.amount(from_currency)} deposit to {amount_to_deposit_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Contra asset for Keepsats Conversion: {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id}",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=from_currency,
-        debit_amount=amount_to_deposit_before_fee.amount,
-        debit_conv=amount_to_deposit_before_fee_conv,
+        debit_amount=conv_result.to_convert_conv.value_in(from_currency),
+        debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(
             name="Converted Keepsats Offset",
             sub=server_id,  # This is the Server
             contra=True,
         ),
         credit_unit=from_currency,
-        credit_amount=amount_to_deposit_before_fee.amount,
-        credit_conv=amount_to_deposit_before_fee_conv,
+        credit_amount=conv_result.to_convert_conv.value_in(from_currency),
+        credit_conv=conv_result.to_convert_conv,
     )
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
 
-    # MARK: 4 Fee Income
+    # MARK: 4 Fee Income From Customer
     ledger_type = LedgerType.FEE_INCOME
     fee_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
@@ -190,26 +162,26 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Fee for Keepsats deposit {amount_to_deposit_conv.amount(from_currency)} to {amount_to_deposit_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=cust_id,  # This is the Customer Keepsats Lightning balance
         ),
         debit_unit=from_currency,
-        debit_amount=hive_hbd_fee.amount,
-        debit_conv=msats_fee_conv,
+        debit_amount=conv_result.fee_conv.value_in(from_currency),
+        debit_conv=conv_result.fee_conv,
         credit=RevenueAccount(
             name="Fee Income Keepsats",
             sub="keepsats",  # This is the Server
         ),
         credit_unit=Currency.MSATS,
-        credit_amount=msats_fee,
-        credit_conv=msats_fee_conv,
+        credit_amount=conv_result.fee_conv.msats,
+        credit_conv=conv_result.fee_conv,
     )
     ledger_entries.append(fee_ledger_entry)
     await fee_ledger_entry.save()
 
-    # MARK: 5 Deposit Keepsats
+    # MARK: 5 Hive to Keepsats Customer Deposit
     ledger_type = LedgerType.WITHDRAW_HIVE
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
@@ -218,21 +190,21 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Deposit Keepsats {amount_to_deposit_conv.amount(from_currency)} to {amount_to_deposit_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Move Hive to Keepsats {conv_result.net_to_receive_conv.amount(from_currency)} to {conv_result.net_to_receive_conv.msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=cust_id,
         ),
         debit_unit=from_currency,
-        debit_amount=convert_amount.amount,
-        debit_conv=amount_to_deposit_conv,
+        debit_amount=conv_result.net_to_receive_conv.value_in(from_currency),
+        debit_conv=conv_result.net_to_receive_conv,
         credit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=server_id,  # This is the asset account for the server, where keepsats are held
         ),
         credit_unit=Currency.MSATS,
-        credit_amount=amount_to_deposit_conv.msats,
-        credit_conv=amount_to_deposit_conv,
+        credit_amount=conv_result.net_to_receive_conv.msats,
+        credit_conv=conv_result.net_to_receive_conv,
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
@@ -240,12 +212,16 @@ async def conversion_hive_to_keepsats(
     if tracked_op.d_memo:
         memo = tracked_op.d_memo
     else:
-        memo = f"Deposit Keepsats {amount_to_deposit_conv.amount(from_currency)} to {amount_to_deposit_conv.msats / 1000:,.0f} sats for {cust_id}"
+        memo = (
+            f"Deposit Keepsats {conv_result.to_convert_conv.value_in(from_currency)} to "
+            f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
+            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
+        )
 
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
-        msats=amount_to_deposit_conv.msats,
+        msats=conv_result.net_to_receive_conv.msats,
         memo=memo,
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
@@ -254,12 +230,18 @@ async def conversion_hive_to_keepsats(
     tracked_op.add_reply(
         reply_id=trx["trx_id"],
         reply_type="custom_json",
-        reply_msat=amount_to_deposit_conv.msats,
+        reply_msat=conv_result.net_to_receive_conv.msats,
         reply_message=memo,
     )
 
     await tracked_op.update_conv(quote=quote)
+    tracked_op.change_amount = AmountPyd(
+        amount=Amount(amount=f"{conv_result.change:.3f} {from_currency.upper()}")
+    )
+    tracked_op.change_conv = conv_result.change_conv
     await tracked_op.save()
 
+
+# Last line
 
 # Last line

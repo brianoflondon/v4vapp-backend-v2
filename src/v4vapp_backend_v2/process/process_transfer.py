@@ -101,7 +101,8 @@ async def follow_on_transfer(
     amount = Amount("0.001 HIVE")
 
     if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
-        # This is a conversion of Hive/HBD into Lightning Keepsats
+        # This is a conversion of Hive/HBD and deposit Lightning Keepsats
+        # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
         logger.info(
             f"Detected keepsats operation in memo: {tracked_op.d_memo}",
             extra={"notification": False, **tracked_op.log_extra},
@@ -113,7 +114,7 @@ async def follow_on_transfer(
             server_id=server_id,
             cust_id=cust_id,
             tracked_op=tracked_op,
-            convert_amount=tracked_op.amount.beam,
+            msats=0,
             nobroadcast=nobroadcast,
         )
         return

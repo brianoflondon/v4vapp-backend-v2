@@ -39,8 +39,6 @@ async def test_hive_deposit():
     """
     Test the loading of a Hive deposit transaction.
 
-    Args:
-        mock_ledger_entry_save: Mock for the ledger entry save method.
     """
     transfer = load_hive_deposit({})
 

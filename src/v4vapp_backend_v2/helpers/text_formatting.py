@@ -107,10 +107,8 @@ def text_to_rtf(
         # Add all lines in this section
         for j in range(start_idx, end_idx + 1):
             if j < len(lines):  # Safety check
-                # Escape special RTF characters
-                escaped_line = (
-                    lines[j].replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
-                )
+                # Escape the line for RTF (handles Unicode/emojis)
+                escaped_line = escape_rtf_text(lines[j])
                 rtf_body.append(escaped_line + r"\par")
                 current_page_lines += 1
 
@@ -135,7 +133,30 @@ def is_separator_line(line: str) -> bool:
     :return: True if it's a separator line, False otherwise.
     """
     stripped_line = line.strip()
-    return len(stripped_line) > 0 and all(c in "=~-" for c in stripped_line)
+    return len(stripped_line) > 0 and all(c in "=" for c in stripped_line)
+
+def escape_rtf_text(text: str) -> str:
+    """
+    Escape text for RTF format, handling Unicode characters including emojis.
+
+    :param text: The text to escape.
+    :return: RTF-escaped text.
+    """
+    # First handle basic RTF special characters
+    text = text.replace("\\", "\\\\")  # Backslash must be first
+    text = text.replace("{", "\\{")
+    text = text.replace("}", "\\}")
+
+    # Handle Unicode characters (including emojis)
+    result = []
+    for char in text:
+        if ord(char) > 127:  # Non-ASCII character
+            # Convert to RTF Unicode escape sequence
+            result.append(f"\\u{ord(char)}?")
+        else:
+            result.append(char)
+
+    return "".join(result)
 
 
 # Example usage:

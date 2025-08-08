@@ -50,7 +50,6 @@ This must be run after the three watchers are running, as it relies on the watch
 
 """
 
-
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
@@ -122,7 +121,7 @@ async def test_hive_to_lnd_only():
     )
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
-        amount=Amount("12.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
+        amount=Amount("14.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 10, timeout=120)
@@ -277,6 +276,7 @@ async def test_complete_balance_sheet_accounts_ledger():
         printout, details = await account_balance_printout(
             account=account,
             line_items=True,
+            user_memos=False,
         )
         complete_printout += "\n" + printout
     for ledger_entry_dict in await get_all_ledger_entries():

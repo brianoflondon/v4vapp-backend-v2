@@ -76,7 +76,7 @@ async def test_account_details_pipeline():
     """
     Test the account details pipeline.
     """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp.dev")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp.dev")
     pipeline = all_account_balances_pipeline(account)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -111,7 +111,7 @@ async def test_all_account_balances():
 
 async def test_one_account_balances():
     """Test to get all account balances."""
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     balance = await one_account_balance(account=account)
     assert isinstance(balance, LedgerAccountDetails)
 
@@ -135,7 +135,7 @@ async def test_one_account_balances():
 
 
 async def test_get_account_balance_printout():
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     result, details = await account_balance_printout(account, line_items=True)
     print(result)
     result, details = await account_balance_printout(account, line_items=False)

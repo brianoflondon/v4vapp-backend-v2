@@ -7,7 +7,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.process.process_errors import KeepsatsDepositNotificationError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
 from v4vapp_backend_v2.process.hive_notification import depreciated_send_notification_hive_transfer
-from v4vapp_backend_v2.actions.lnd_to_hive import process_lightning_to_hive
+from v4vapp_backend_v2.actions.depreciated_lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig

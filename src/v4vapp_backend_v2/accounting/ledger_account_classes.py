@@ -2,7 +2,7 @@ import re
 from enum import StrEnum
 from typing import Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 # Define Account Types as a StrEnum for validation
@@ -260,7 +260,7 @@ LedgerAccountAny = Union[
 if __name__ == "__main__":
     # Example usage
     asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
-    liability_account = LiabilityAccount(name="Customer Liability", sub="Sub-account 2")
+    liability_account = LiabilityAccount(name="VSC Liability", sub="Sub-account 2")
     equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
     revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
     expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")

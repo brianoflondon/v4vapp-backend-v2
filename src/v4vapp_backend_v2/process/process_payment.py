@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 from typing import List
 
-from nectar.amount import Amount
-
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
@@ -14,7 +12,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerType,
 )
-from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -23,6 +20,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 
 async def process_payment_success(
@@ -91,7 +89,6 @@ async def process_payment_success(
                 server_id=initiating_op.to_account,
                 cust_id=cust_id,
                 tracked_op=initiating_op,
-                convert_amount=Amount(f"{initiating_op.amount}"),
                 msats=cost_of_payment_msat,
                 nobroadcast=nobroadcast,
             )
@@ -139,7 +136,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Allocate outgoing Lightning {cost_of_payment_msat / 1000:,.0f} sats to {payment.destination}",
         debit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=cust_id,  # This is the CUSTOMER
         ),
         debit_unit=Currency.MSATS,

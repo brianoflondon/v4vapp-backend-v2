@@ -34,6 +34,11 @@ class ConversionResult(BaseModel):
     def __str__(self) -> str:
         conversion_data = [
             ["to_convert", f"{self.to_convert:>50,.6f}", str(self.from_currency)],
+            [
+                "to_convert",
+                f"{self.to_convert_conv.value_in(self.to_currency):>50,.3f}",
+                str(self.to_currency),
+            ],
             ["net_to_receive", f"{self.net_to_receive:>50,.6f}", str(self.from_currency)],
             [
                 "net_to_receive",
@@ -70,14 +75,12 @@ async def hive_to_keepsats(
         - If a quote is provided, it is overridden by the latest quote.
         - The conversion can be based either on the original Hive/HBD amount or a specified msats value.
     """
-    if not quote:
+    if quote is None:
         if datetime.now(tz=timezone.utc) - tracked_op.timestamp > timedelta(minutes=5):
             quote = await TrackedBaseModel.nearest_quote(tracked_op.timestamp)
         else:
+            await TrackedBaseModel.update_quote()
             quote = TrackedBaseModel.last_quote
-
-    else:
-        quote = TrackedBaseModel.last_quote
 
     from_currency = Currency(tracked_op.amount.symbol_lower)
     to_currency = Currency.MSATS
@@ -162,7 +165,8 @@ async def keepsats_to_hive(
 ) -> ConversionResult:
     # First deduct the notification minimum from the msats IF the value is > notification minimum:
 
-    if not quote:
+    if quote is None:
+        await TrackedBaseModel.update_quote()
         quote = TrackedBaseModel.last_quote
 
     from_currency = Currency.MSATS

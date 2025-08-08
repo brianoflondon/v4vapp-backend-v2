@@ -35,7 +35,7 @@ async def get_limits():
     limit_ok = all(limit.limit_ok for limit in limits)
     print("All limits OK:", limit_ok)
 
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     balance = await one_account_balance(account=account)
     pprint(balance)
 
@@ -62,7 +62,7 @@ async def main():
 
     cust_id = "v4vapp-test"
     # account_printout_str, account_details = await get_account_balance_printout(
-    #     account=LiabilityAccount(name="Customer Liability", sub=cust_id), line_items=False
+    #     account=LiabilityAccount(name="VSC Liability", sub=cust_id), line_items=False
     # )
 
     # print(account_printout_str)
@@ -75,8 +75,6 @@ async def main():
     logger.info(InternalConfig.db)
     print(f"Net: sats for account {cust_id}: {net_sats}")
 
-
-    
     # pprint(account_balance.model_dump())
     # ans, tolerance = await check_balance_sheet_mongodb()
     # print("Balance Sheet Check Result:", ans)
