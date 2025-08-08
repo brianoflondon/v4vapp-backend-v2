@@ -395,7 +395,7 @@ def sanitize_markdown_v2(text: str) -> str:
         str: The sanitized text ready for MarkdownV2 parsing.
     """
     # MarkdownV2 reserved characters that need escaping
-    reserved_chars = r"([_*[\]()~`#+-.!|{}>])"
+    reserved_chars = r"([_*[\]()~`#+=-.!|{}>])"
 
     # Step 1: Extract and preserve URLs in [text](url) links
     link_pattern = r"\[([^\]]*)\]\(([^)]+)\)"
