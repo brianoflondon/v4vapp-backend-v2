@@ -52,12 +52,10 @@ def get_op_type(value: Any) -> str:
                 return value.op_type
             else:
                 return "op_base"
-            return value.type
-    raise ValueError("Invalid operation type")
     return "op_base"  # Fallback to OpBase for unknown types
+    raise ValueError("Invalid operation type")
 
 
-# Define the discriminated union type using Annotated and Tag for each class
 # Define the discriminated union type using Annotated and Tag for each class
 OpAny = Annotated[
     Annotated[CustomJson, Tag("custom_json")]
