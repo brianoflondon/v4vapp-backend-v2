@@ -50,6 +50,7 @@ This must be run after the three watchers are running, as it relies on the watch
 
 """
 
+
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
@@ -114,20 +115,20 @@ async def test_hive_to_lnd_only():
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
+    # invoice_value_sat = invoice_value_sat
     invoice_value_sat = 10_000
-
     invoice = await get_lightning_invoice(
-        value_sat=invoice_value_sat, memo="Simply a bare test invoice"
+        value_sat=invoice_value_sat, memo=f"Simply a bare test invoice {invoice_value_sat}"
     )
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
         amount=Amount("14.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 10, timeout=120)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 9, timeout=120)
 
     await asyncio.sleep(1)
-    assert len(all_ledger_entries) == 10, "Expected 10 ledger entries"
+    assert len(all_ledger_entries) == 9, "Expected 9 ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")

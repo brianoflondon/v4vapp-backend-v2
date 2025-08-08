@@ -150,31 +150,31 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
-    # MARK: 6 Send Lightning Payment
-    ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
-    external_payment_ledger_entry = LedgerEntry(
-        cust_id=cust_id,
-        short_id=payment.short_id,
-        ledger_type=ledger_type,
-        group_id=f"{payment.group_id}-{ledger_type.value}",
-        op_type=payment.op_type,
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
-        debit=AssetAccount(
-            name="External Lightning Payments",
-            sub=node_name,
-            contra=True,  # This is FROM the External Lightning Payments account
-        ),
-        debit_unit=Currency.MSATS,
-        debit_amount=cost_of_payment_msat,
-        debit_conv=payment.conv,
-        credit=AssetAccount(name="Treasury Lightning", sub=node_name, contra=False),
-        credit_unit=Currency.MSATS,
-        credit_amount=cost_of_payment_msat,
-        credit_conv=payment.conv,
-    )
-    await external_payment_ledger_entry.save()
-    ledger_entries_list.append(external_payment_ledger_entry)
+    # # MARK: 6 Send Lightning Payment
+    # ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
+    # external_payment_ledger_entry = LedgerEntry(
+    #     cust_id=cust_id,
+    #     short_id=payment.short_id,
+    #     ledger_type=ledger_type,
+    #     group_id=f"{payment.group_id}-{ledger_type.value}",
+    #     op_type=payment.op_type,
+    #     timestamp=datetime.now(tz=timezone.utc),
+    #     description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
+    #     debit=AssetAccount(
+    #         name="External Lightning Payments",
+    #         sub=node_name,
+    #         contra=True,  # This is FROM the External Lightning Payments account
+    #     ),
+    #     debit_unit=Currency.MSATS,
+    #     debit_amount=cost_of_payment_msat,
+    #     debit_conv=payment.conv,
+    #     credit=AssetAccount(name="Treasury Lightning", sub=node_name, contra=False),
+    #     credit_unit=Currency.MSATS,
+    #     credit_amount=cost_of_payment_msat,
+    #     credit_conv=payment.conv,
+    # )
+    # await external_payment_ledger_entry.save()
+    # ledger_entries_list.append(external_payment_ledger_entry)
 
     # MARK: 7: Lightning Network Fee
     # Only record the Lightning fee if it is greater than 0 msats
