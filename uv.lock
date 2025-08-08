@@ -2990,7 +2990,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "0.4.6"
+version = "0.4.7"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
