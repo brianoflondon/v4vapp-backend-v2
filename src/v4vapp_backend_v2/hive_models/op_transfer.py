@@ -119,7 +119,7 @@ class TransferBase(OpBase):
         Returns:
             Currency: The currency unit of the transfer amount.
         """
-        
+
         return self.amount.unit
 
     @property
@@ -319,9 +319,13 @@ class TransferBase(OpBase):
             "{to_account}:{from_account}".
         """
         hive_config = InternalConfig().config.hive
-        server_account, treasury_account, funding_account, exchange_account = (
-            hive_config.all_account_names
-        )
+        account_names = hive_config.all_account_names
+
+        # Defensive check - ensure we have exactly 4 account names
+        if not account_names or len(account_names) != 4:
+            return f"{self.to_account}->{self.from_account}"
+
+        server_account, treasury_account, funding_account, exchange_account = account_names
         expense_accounts = ["privex"]  # Hardcoded as in the original code
 
         from_acc = self.from_account
