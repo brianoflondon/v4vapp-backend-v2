@@ -368,7 +368,7 @@ class HiveConfig(BaseConfig):
     @property
     def all_account_names(self) -> List[str]:
         """
-        Retrieve the names of all accounts.
+        Retrieve the names of all accounts. All names must be set in order to receive any.
 
         Returns:
             List[str]: A list containing the names of all accounts.
@@ -973,6 +973,19 @@ class InternalConfig:
         if hasattr(InternalConfig, "db_client") and InternalConfig.db_client:
             await InternalConfig.db_client.close()
             logger.info("Closed asynchronous database client.")
+
+    # MARK: Special Properties
+    @property
+    def server_id(self) -> str:
+        """
+        Retrieve the server ID from the configuration.
+
+        Returns:
+            str: The server ID, which is the name of the server account.
+        """
+        if self.config.hive.server_account:
+            return self.config.hive.server_account.name
+        return ""
 
 
 """

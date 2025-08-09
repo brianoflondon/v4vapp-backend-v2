@@ -88,7 +88,7 @@ async def follow_on_transfer(
         logger.warning(return_hive_message, extra={"notification": False})
         raise HiveTransferError(return_hive_message)
 
-    server_id = hive_config.server_account.name
+    server_id = InternalConfig.server_id
 
     # Only process if the operation is directed to the server account
     if tracked_op.to_account != server_id:

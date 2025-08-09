@@ -88,8 +88,8 @@ async def test_custom_json_transfer():
     print(f"Initial ledger count: {ledger_count}")
 
     transfer = KeepsatsTransfer(
-        from_account="v4vapp-test",
-        to_account="devser.v4vapp",
+        from_account="devser.v4vapp",
+        to_account="v4vapp-test",
         msats=2_323_000,
         memo=f"Test transfer {datetime.now().isoformat()}",
         parent_id="",  # This is the group_id of the original transfer

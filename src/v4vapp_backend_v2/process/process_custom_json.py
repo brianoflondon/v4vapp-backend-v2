@@ -2,7 +2,7 @@ from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_print
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -52,22 +52,29 @@ async def custom_json_internal_transfer(
     keepsats_transfer.msats = (
         keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
     )
-    # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
-    if net_msats + 1_000 < keepsats_transfer.msats:
-        message = f"Insufficient balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
-        logger.error(message)
-        notification = KeepsatsTransfer(
-            from_account=keepsats_transfer.to_account,
-            to_account=keepsats_transfer.from_account,
-            memo=message,
-            invoice_message=custom_json.memo,
-            parent_id=custom_json.group_id,
-            notification=True,
-        )
-        await send_notification_custom_json(
-            tracked_op=custom_json,
-            notification=notification,
-        )
+
+    if keepsats_transfer.from_account == InternalConfig().server_id:
+        if net_msats < keepsats_transfer.msats:
+            logger.warning(
+                f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats."
+            )
+    else:
+        # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
+        if net_msats + 1_000 < keepsats_transfer.msats:
+            message = f"Insufficient balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+            logger.error(message)
+            notification = KeepsatsTransfer(
+                from_account=keepsats_transfer.to_account,
+                to_account=keepsats_transfer.from_account,
+                memo=message,
+                invoice_message=custom_json.memo,
+                parent_id=custom_json.group_id,
+                notification=True,
+            )
+            await send_notification_custom_json(
+                tracked_op=custom_json,
+                notification=notification,
+            )
         raise InsufficientBalanceError(message)
 
     debit_credit_amount = keepsats_transfer.sats * 1_000
