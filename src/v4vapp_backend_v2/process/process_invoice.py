@@ -5,7 +5,6 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
@@ -181,13 +180,7 @@ async def process_lightning_receipt_stage_2(
         logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")
         # This line here bypasses the Hive Return logic.
 
-        conv_result = await keepsats_to_hive(server_id = )
-
-
-
-
-
-
+        # conv_result = await keepsats_to_hive(server_id = )
 
         ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
             invoice, nobroadcast
