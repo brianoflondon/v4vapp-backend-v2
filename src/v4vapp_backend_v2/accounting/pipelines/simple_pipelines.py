@@ -173,6 +173,26 @@ def filter_sum_credit_debit_pipeline(
     return pipeline
 
 
+# Fields that, when updated (and ONLY these), should cause the change stream event to be ignored
+IGNORED_UPDATE_FIELDS = [
+    "replies",
+    "change_conv",
+    "process_time",
+    "change_amount",
+    "locked",
+    "extensions",
+    "fee_conv",
+    "json",
+    # Add newly observed benign fields:
+    "conv",  # main conversion recalculation
+    "description_hash",  # memo hash / dedupe
+    "fallback_addr",  # LN invoice fallback
+    "features",  # LN invoice feature bits
+    "is_amp",
+    "is_keysend",
+]
+
+
 def db_monitor_pipelines(
     start_date: datetime | None = None,
 ) -> Dict[str, Sequence[Mapping[str, Any]]]:
@@ -200,6 +220,7 @@ def db_monitor_pipelines(
                 {
                     "operationType": "update",
                     "$expr": {
+                        # Keep ONLY updates that changed at least one field outside the ignore list
                         "$gt": [
                             {
                                 "$size": {
@@ -213,16 +234,7 @@ def db_monitor_pipelines(
                                                 "in": "$$field.k",
                                             }
                                         },
-                                        [
-                                            "replies",
-                                            "change_conv",
-                                            "process_time",
-                                            "change_amount",
-                                            "locked",
-                                            "extensions",
-                                            "fee_conv",
-                                            "json",
-                                        ],
+                                        IGNORED_UPDATE_FIELDS,
                                     ]
                                 }
                             },
@@ -246,9 +258,9 @@ def db_monitor_pipelines(
                     {"operationType": {"$ne": "update"}},
                     {
                         "operationType": "update",
-                        "updateDescription.updatedFields.status": {"$exists": True}
-                    }
-                ]
+                        "updateDescription.updatedFields.status": {"$exists": True},
+                    },
+                ],
             }
         },
         ignore_updates_match,

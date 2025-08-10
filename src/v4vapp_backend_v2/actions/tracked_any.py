@@ -132,7 +132,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
         else:
-            collections = [Invoice.collection_name, Payment.collection_name]
+            collections = [Invoice().collection_name, Payment().collection_name]
             for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
                 result = await db[collection_name].find_one(filter=query)

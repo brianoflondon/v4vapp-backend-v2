@@ -586,8 +586,6 @@ class LedgerEntry(BaseModel):
                 f"{'=' * max_width}\n"
             )
 
-        formatted_date = f"{self.timestamp:%b %d, %Y %H:%M}  "  # Add extra space for formatting
-
         # Prepare the account names with type in parentheses
         debit_account = self.debit.name if self.debit else "N/A"
         debit_type = (
@@ -682,17 +680,27 @@ class LedgerEntry(BaseModel):
             conversion_line = "Converted              N/A"
 
         entry = (
-            f"\n"
-            f"J/E NUMBER  : {self.group_id or '#####'}\n"
-            f"LEDGER TYPE : {self.ledger_type_str:<40} CUSTOMER_ID : {self.cust_id:<20}\n"
-            f"{formatted_date}\n\n"
+            f"J/E NUMBER  : {self.group_id or '#####'}\nLEDGER TYPE : {self.ledger_type_str:<40}\n"
+        )
+        # Build combined CUSTOMER_ID + right-aligned date line
+        line_width = 100  # matches separator width below
+
+        formatted_date = f"{self.timestamp:%b %d, %Y %H:%M:%S}"
+        customer_left = f"CUSTOMER_ID : {self.cust_id:<20}"
+        if len(customer_left) + len(formatted_date) + 1 > line_width:
+            customer_line = f"{customer_left} {formatted_date}"
+        else:
+            customer_line = f"{customer_left}{formatted_date:>{line_width - len(customer_left)}}"
+
+        entry += (
+            f"{customer_line}\n\n"
             f"{'ACCOUNT':<40} {' ' * 20} {'DEBIT':>15} {'CREDIT':>15}\n"
-            f"{'-' * 100}\n"
+            f"{'-' * line_width}\n"
             f"{debit_account_with_type:<40} {self.debit.sub:>20} {formatted_debit_amount:>15} {'':>15}\n"
             f"{' ' * 4}{credit_account_with_type:<40} {self.credit.sub:>20} {'':>15} {formatted_credit_amount:>15}\n\n"
             f"{conversion_line}\n"
             f"DESCRIPTION\n{description or 'N/A'}"
-            f"\n{'=' * 100}\n"
+            f"\n{'=' * line_width}\n"
         )
         return entry
 

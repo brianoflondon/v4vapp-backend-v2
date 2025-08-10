@@ -1,7 +1,7 @@
 import asyncio
 from pprint import pprint
 from timeit import default_timer as timeit
-from typing import Any, List
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from google.protobuf.json_format import MessageToDict
@@ -18,8 +18,10 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_client,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
+    send_custom_json,
     send_transfer,
 )
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 # MARK: Hive Helper functions
@@ -97,7 +99,7 @@ async def watch_for_ledger_count(count: int, timeout: int = 30) -> List[LedgerEn
         if (count > 0 and ledger_count >= count) or (count == 0 and ledger_count == 0):
             logger.info(f"Count {count} found")
             return await all_ledger_entries()
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)
     logger.warning(
         f"⏰ Timeout after {timeout}s waiting for ledger entries count {count} {len(raw_entries)} found"
     )
@@ -130,6 +132,18 @@ async def send_server_balance_to_test() -> dict[str, Any]:
             pprint(f"Transfer transaction: {trx}")
             return trx
     return {}
+
+
+async def send_test_custom_json(transfer: KeepsatsTransfer) -> Dict[str, Any]:
+    hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+    trx = await send_custom_json(
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=transfer.from_account,
+        active=True,
+        id="v4vapp_dev_transfer",
+        hive_client=hive_client,
+    )
+    return trx
 
 
 async def clear_and_reset():

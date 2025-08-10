@@ -228,8 +228,24 @@ async def process_transfer_op(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
         )
         raise LedgerEntryCreationException("Transfer between untracked accounts.")
-    await ledger_entry.save()
-
+    try:
+        await ledger_entry.save()
+    except LedgerEntryException as e:
+        message = f"Error saving ledger entry: {e}"
+        reply_id = f"{hive_transfer.group_id}_ledger_error"
+        try:
+            hive_transfer.add_reply(
+                reply_id=reply_id, reply_type="ledger_error", reply_error=message
+            )
+            await hive_transfer.save()
+        except ValueError as e:
+            # Catching this value error means we will only try to processes a given object twice, not more
+            message = f"Repeat error processing {hive_transfer.group_id}: {e}"
+            logger.error(
+                message,
+                extra={"notification": False, **hive_transfer.log_extra, **ledger_entry.log_extra},
+            )
+            raise LedgerEntryException(message)
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
         try:

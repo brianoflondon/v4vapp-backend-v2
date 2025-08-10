@@ -276,7 +276,7 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                 f"{total.get('hbd', 0):>12,.3f} "
                 f"{total.get('usd', 0):>12,.3f}"
             )
-            output.append(f"{'_' * max_width}")
+            output.append(f"{'-' * max_width}")
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
         output.append(
@@ -287,12 +287,12 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             f"{total.get('hbd', 0):>12,.3f} "
             f"{total.get('usd', 0):>12,.3f}"
         )
-        output.append("-" * max_width)
+        output.append("=" * max_width)
 
     total = balance_sheet["Total Liabilities and Equity"]
     output.append("-" * max_width)
     output.append(
-        f"{'Total Liab. & Equity':<40} "
+        f"{'Total Liabilities & Equity':<40} "
         f"{'':<17} "
         f"{total.get('sats', 0):>10,.0f} "
         f"{total.get('hive', 0):>12,.3f} "

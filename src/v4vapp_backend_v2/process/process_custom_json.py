@@ -75,9 +75,9 @@ async def custom_json_internal_transfer(
                 tracked_op=custom_json,
                 notification=notification,
             )
-        raise InsufficientBalanceError(message)
+            raise InsufficientBalanceError(message)
 
-    debit_credit_amount = keepsats_transfer.sats * 1_000
+    debit_credit_amount = keepsats_transfer.msats
 
     user_memo = (
         keepsats_transfer.user_memo
@@ -128,6 +128,7 @@ async def custom_json_internal_transfer(
                 nobroadcast=nobroadcast,
             )
     else:
+        # If there is no parent_id, we assume this is a new transfer
         return_details = HiveReturnDetails(
             tracked_op=custom_json,
             original_memo=keepsats_transfer.memo,

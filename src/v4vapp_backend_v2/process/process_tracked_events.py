@@ -86,8 +86,6 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             else:
                 raise ValueError("Invalid tracked object")
 
-            if not ledger_entries:
-                raise LedgerEntryCreationException("Ledger entry cannot be created.")
             for ledger_entry in ledger_entries:
                 try:
                     # DEBUG section

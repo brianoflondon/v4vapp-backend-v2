@@ -138,88 +138,86 @@ async def account_balance_printout(
     total_usd = 0.0
     total_sats = 0.0
 
+    COL_TS = 12
+    COL_DESC = 54
+    COL_DEBIT = 11
+    COL_CREDIT = 11
+    COL_BAL = 11
+    COL_SHORT_ID = 15
+    COL_LEDGER_TYPE = 11
+
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
-        final_balance = 0
+        final_balance = 0 if unit == Currency.MSATS else 0.0
+
         if unit not in units:
             continue
-        # Determine display unit: if MSATS, display as SATS
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
-        conversion_factor = 1000 if unit.upper() == "MSATS" else 1  # Convert MSATS to SATS
+        conversion_factor = 1000 if unit.upper() == "MSATS" else 1
 
-        # Format output for this unit
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
-            # Group transactions by date
-            transactions_by_date = {}
+            transactions_by_date: dict[str, list] = {}
             for row in all_rows:
-                if row.timestamp:
-                    date_str = f"{row.timestamp:%Y-%m-%d}"
-                    if date_str not in transactions_by_date:
-                        transactions_by_date[date_str] = []
-                    transactions_by_date[date_str].append(row)
-                else:
-                    # Handle entries with no timestamp
-                    if "No Date" not in transactions_by_date:
-                        transactions_by_date["No Date"] = []
-                    transactions_by_date["No Date"].append(row)
+                date_str = f"{row.timestamp:%Y-%m-%d}" if row.timestamp else "No Date"
+                transactions_by_date.setdefault(date_str, []).append(row)
 
-            # Display transactions grouped by date
             for date_str, rows in sorted(transactions_by_date.items()):
-                # Add date header with a distinctive format
                 output.append(f"\n=== {date_str} ===")
-
                 for row in rows:
                     contra_str = "-c-" if row.contra else "   "
-                    # Only show time part since date is in the header
-                    timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:12] if row.timestamp else "N/A"
-                    description = truncate_text(row.description, 45)
+                    timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:10] if row.timestamp else "N/A"
+                    description = truncate_text(row.description, 50)
                     ledger_type = row.ledger_type
-                    debit = row.amount if row.side == "debit" and row.unit == unit else 0.0
-                    credit = row.amount if row.side == "credit" and row.unit == unit else 0.0
-                    balance = row.amount_running_total
-                    short_id = row.short_id
+                    # Raw numeric values
+                    debit_val = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                    credit_val = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                    balance_val = row.amount_running_total
                     if unit.upper() == "MSATS":
-                        debit = debit / conversion_factor
-                        credit = credit / conversion_factor
-                        balance = balance / conversion_factor
-                    debit_str = f"{debit:,.0f}" if unit.upper() == "MSATS" else f"{debit:>12,.3f}"
-                    credit_str = (
-                        f"{credit:,.0f}" if unit.upper() == "MSATS" else f"{credit:>12,.3f}"
-                    )
-                    balance_str = (
-                        f"{balance:,.0f}" if unit.upper() == "MSATS" else f"{balance:>12,.3f}"
-                    )
+                        debit_val /= conversion_factor
+                        credit_val /= conversion_factor
+                        balance_val /= conversion_factor
+
+                    # Number formats
+                    if unit.upper() == "MSATS":
+                        debit_fmt = f"{debit_val:,.0f}"
+                        credit_fmt = f"{credit_val:,.0f}"
+                        balance_fmt = f"{balance_val:,.0f}"
+                    else:
+                        debit_fmt = f"{debit_val:,.3f}"
+                        credit_fmt = f"{credit_val:,.3f}"
+                        balance_fmt = f"{balance_val:,.3f}"
+
                     line = (
-                        f"{timestamp:<14} "  # Shorter timestamp field (time only)
-                        f"{description:<49} "
+                        f"{timestamp:<{COL_TS}} "
+                        f"{description:<{COL_DESC}} "
                         f"{contra_str} "
-                        f"{debit_str:>12} "
-                        f"{credit_str:>12} "
-                        f"{balance_str:>12} "
-                        f"{short_id:>15} "
-                        f"{ledger_type:>11}"
+                        f"{debit_fmt:>{COL_DEBIT}} "
+                        f"{credit_fmt:>{COL_CREDIT}} "
+                        f"{balance_fmt:>{COL_BAL}} "
+                        f"{row.short_id:>{COL_SHORT_ID}} "
+                        f"{ledger_type:>{COL_LEDGER_TYPE}}"
                     )
                     if line_items:
                         output.append(line)
                     if user_memos and row.user_memo:
                         memo = truncate_text(lightning_memo(row.user_memo), 60)
-                        output.append(f"{' ' * 14} {memo}")  # Adjusted padding for memo
+                        output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
             final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
             final_conv_balance = (
                 all_rows[-1].conv_running_total if all_rows else ConvertedSummary()
             )
-            total_hive = final_conv_balance.hive if final_conv_balance else 0.0
-            total_hbd = final_conv_balance.hbd if final_conv_balance else 0.0
-            total_usd_for_unit = final_conv_balance.usd if final_conv_balance else 0
-            total_sats_for_unit = final_conv_balance.sats if final_conv_balance else 0
-            total_msats = final_conv_balance.msats if final_conv_balance else 0
+            total_hive = final_conv_balance.hive or 0.0
+            total_hbd = final_conv_balance.hbd or 0.0
+            total_usd_for_unit = final_conv_balance.usd or 0.0
+            total_sats_for_unit = final_conv_balance.sats or 0.0
+            total_msats = final_conv_balance.msats or 0
 
             output.append("-" * max_width)
             output.append(
-                f"{'Converted    ':<10} "
+                f"{'Converted':<10} "
                 f"{total_hive:>15,.3f} HIVE "
                 f"{total_hbd:>12,.3f} HBD "
                 f"{total_usd_for_unit:>12,.3f} USD "
@@ -231,16 +229,14 @@ async def account_balance_printout(
             total_sats_for_unit = 0.0
 
         output.append("-" * max_width)
-        # Display final balance in SATS if unit is MSATS
         display_balance = (
             final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
         )
-        balance_str = (
-            f"{display_balance:,.0f}" if unit.upper() == "MSATS" else f"{display_balance:>10,.3f}"
-        )
-        output.append(
-            f"{'Final Balance ' + f'{display_unit}':<18} {balance_str:>10} {display_unit:<5}"
-        )
+        if unit.upper() == "MSATS":
+            balance_fmt = f"{display_balance:,.0f}"
+        else:
+            balance_fmt = f"{display_balance:,.3f}"
+        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
 
         total_usd += total_usd_for_unit
         total_sats += total_sats_for_unit
@@ -453,7 +449,7 @@ async def get_keepsats_balance(
 
     Returns:
         Tuple:
-        net_msats (int): The net balance of Keepsats in msatoshis.
+        net_msats (int): The net balance of Keepsats in milisatoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
     account = LiabilityAccount(

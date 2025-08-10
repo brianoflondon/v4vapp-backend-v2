@@ -40,6 +40,9 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     Returns:
         Dict[str, str]: The transaction result dictionary, containing information such as transaction ID and operation details.
 
+    Side Effect:
+        Adds a reply to the original transaction
+
     Raises:
         HiveTransferError: If the recipient customer ID is not a valid Hive account.
     """
@@ -92,7 +95,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             memo=memo,
         )
         try:
-            return_amount = Amount(trx["operations"][0][1]["amount"])
+            op_dict = trx["operations"][0][1]  # type: dict
+            return_amount = Amount(op_dict["amount"])
         except (KeyError, IndexError):
             return_amount = Amount("0.001 HIVE")
         if not return_amount:

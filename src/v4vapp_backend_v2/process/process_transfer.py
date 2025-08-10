@@ -62,12 +62,15 @@ async def follow_on_transfer(
     # If it does, we skip processing
     reply_messages = []
     for reply in tracked_op.replies:
-        message = f"Operation has a {reply.reply_type} reply, skipping processing."
-        logger.info(
-            message,
-            extra={"notification": False, **tracked_op.log_extra},
-        )
-        reply_messages.append(message)
+        if reply.reply_type != "ledger_error":
+            message = f"Operation has a {reply.reply_type} reply, skipping processing."
+            logger.info(
+                message,
+                extra={"notification": False, **tracked_op.log_extra},
+            )
+            reply_messages.append(message)
+        else:
+            logger.info(f"Ignoring {reply.reply_type} {reply.reply_id}.")
     if reply_messages:
         raise HiveTransferError(f"Operation already has replies: {', '.join(reply_messages)}")
 
@@ -88,7 +91,7 @@ async def follow_on_transfer(
         logger.warning(return_hive_message, extra={"notification": False})
         raise HiveTransferError(return_hive_message)
 
-    server_id = InternalConfig.server_id
+    server_id = InternalConfig().server_id
 
     # Only process if the operation is directed to the server account
     if tracked_op.to_account != server_id:

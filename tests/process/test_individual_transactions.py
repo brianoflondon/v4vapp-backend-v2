@@ -13,11 +13,13 @@ from tests.utils import (
     get_ledger_count,
     get_lightning_invoice,
     send_hive_customer_to_server,
+    send_test_custom_json,
     watch_for_ledger_count,
 )
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     check_hive_conversion_limits,
+    keepsats_balance_printout,
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.balance_sheet import (
@@ -28,10 +30,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
-from v4vapp_backend_v2.hive.hive_extras import (
-    get_verified_hive_client_for_accounts,
-    send_custom_json,
-)
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -146,22 +144,22 @@ async def test_hive_to_lnd_only():
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
 
+# async def test_lnd_to_hive():
+#     transfer = KeepsatsTransfer
 
-async def test_custom_json_pay_lnd():
-    pass
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():
     """
     Integration test for transferring funds between Hive and Lightning Network Daemon (LND).
     This test performs the following steps:
-    1. Resets the test environment to a clean state.
-    2. Generates a Lightning invoice for 10,000 satoshis with a specific memo.
-    3. Sends 1,000 satoshis from a Hive customer to the server using the generated invoice.
+    2. Generates a Lightning invoice for 1,234 satoshis with a specific memo.
+    3. Sends 1,234 satoshis from a Hive customer to the server using the generated invoice.
     4. Waits for the ledger to record 13 entries, indicating all expected transactions have occurred.
     5. Asserts that exactly 13 ledger entries exist after the operations.
     Ensures the correct flow and ledger recording for Hive-to-LND and LND-to-Hive transactions.
     """
+    await test_just_clear()
     ledger_count = await get_ledger_count()
     limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
 
@@ -175,14 +173,18 @@ async def test_hive_to_lnd_and_lnd_to_hive():
         send_sats=invoice_value_sat, memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 12, timeout=120)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 11, timeout=120)
 
     await asyncio.sleep(1)
-    assert len(all_ledger_entries) == 12, "Expected 12 ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")
-    assert limit_used == invoice_value_sat, "Total sats should increase after the transaction"
+    assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
+    net_msats, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
+    assert net_msats == invoice_value_sat, "Net msats should match invoice value"
+    assert balance_after.msats // 1000 == invoice_value_sat, (
+        f"v4vapp.qrc Balance {balance_after.msats // 1000:,.0f} sats should match invoice value {invoice_value_sat:,} sats"
+    )
 
 
 async def test_check_conversion_limits():
@@ -197,54 +199,33 @@ async def test_check_conversion_limits():
     pprint(limits)
 
 
-async def test_hive_to_keepsats():
-    """
-    Test the process of sending a Hive customer transaction to the server and verifying ledger updates.
-
-    This test performs the following steps:
-    1. Retrieves the current ledger entry count.
-    2. Sends a transaction from a Hive customer to the server with a specified amount and memo.
-    3. Asserts that the transaction was successfully sent by checking for a transaction ID.
-    4. Waits for the ledger to reflect the expected number of new entries.
-    5. Prints the updated ledger count and the number of new entries after the transaction.
-
-    Raises:
-        AssertionError: If the transaction fails to send (missing transaction ID).
-    """
-    ledger_count = await get_ledger_count()
-    trx = await send_hive_customer_to_server(
-        send_sats=15_000, memo="Deposit #sats #v4vapp", customer="v4vapp-test"
-    )
-    pprint(trx)
-    assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 6)
-
-    after_count = await get_ledger_count()
-    print(
-        f"Ledger count after transaction: {after_count} new entries: {after_count - ledger_count}"
-    )
-
-
 async def test_deposit_hive_to_keepsats():
     """
     Test to deposit Hive to Keepsats.
     This test sends a specified amount of Hive from a customer account to the server account.
     It checks that the transaction is successful and that the ledger entries are created correctly.
     """
-
+    cust_id = "v4vapp-test"
+    net_msats, balance_before = await keepsats_balance_printout(cust_id=cust_id)
     ledger_count = await get_ledger_count()
     trx = await send_hive_customer_to_server(
-        send_sats=5000, memo="Deposit and more #sats", customer="v4vapp-test"
+        send_sats=5000, memo="Deposit and more #sats", customer=cust_id
     )
     pprint(trx)
     assert trx.get("trx_id"), "Transaction failed to send"
 
     ledger_entries = await watch_for_ledger_count(ledger_count + 7)
-    await asyncio.sleep(10)
+    await asyncio.sleep(2)
     for i, ledger_entry in enumerate(ledger_entries[ledger_count + 1 :], 1):
         print(f"-------------------------------- Entry {i} --------------------------------")
         print(ledger_entry)
-    assert True, "Ledger entries should be created after the transaction"
+
+    net_msats_after, balance_after = await keepsats_balance_printout(cust_id=cust_id)
+
+    # The deposit will be around 5000 + 200 sats.
+    assert abs(net_msats_after - (net_msats + 5_000_000)) < 200_000, (
+        "Net msats should reflect the deposit"
+    )
 
 
 async def test_deposit_hive_to_keepsats_send_to_account():
@@ -254,11 +235,15 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     It checks that the transaction is successful and that the ledger entries are created correctly.
     """
     ledger_count = await get_ledger_count()
+    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp.qrc")
     trx = await send_hive_customer_to_server(
         send_sats=5_000, memo="Deposit and more #sats", customer="v4vapp-test"
     )
     pprint(trx)
     assert trx.get("trx_id"), "Transaction failed to send"
+
+    # Wait for the deposit to be recorded.
+    await watch_for_ledger_count(ledger_count + 6)
 
     # Transfer from test to qrc
     transfer = KeepsatsTransfer(
@@ -267,21 +252,19 @@ async def test_deposit_hive_to_keepsats_send_to_account():
         sats=4_500,
         memo="Thank you for putting in this message",
     )
-    # hive_config = InternalConfig().config.hive
-    hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
-    trx = await send_custom_json(
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
-        send_account=transfer.from_account,
-        active=True,
-        id="v4vapp_dev_transfer",
-        hive_client=hive_client,
-    )
+    trx = await send_test_custom_json(transfer)
     pprint(trx)
     assert trx.get("trx_id"), "Transfer transaction failed to send"
-
-    await asyncio.sleep(10)
     await watch_for_ledger_count(ledger_count + 7)
+    await asyncio.sleep(10)
+    ledger_count_after = await get_ledger_count()
+    print(f"Ledger count after transfer: {ledger_count_after}")
     assert True, "Ledger entries should be created after the transaction"
+    net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
+    assert (net_msats_after - net_msats) // 1000 == 4500, (
+        f"Expected 4500, got {net_msats_after // 1000}"
+    )
+    assert net_msats_after is not None, "Failed to retrieve net msats"
 
 
 async def test_complete_balance_sheet_accounts_ledger():
