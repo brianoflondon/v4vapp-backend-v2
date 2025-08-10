@@ -499,8 +499,13 @@ class ListInvoiceResponse(BaseModel):
         if lnrpc_list_invoice_response and isinstance(
             lnrpc_list_invoice_response, lnrpc.ListInvoiceResponse
         ):
+            # always_print_fields_with_no_presence=True: forces serialization of fields that lack
+            # presence (repeated, maps, scalars) so missing lists become [] instead of absent
+            # (solves missing "invoices").
             list_invoice_dict = MessageToDict(
-                lnrpc_list_invoice_response, preserving_proto_field_name=True
+                lnrpc_list_invoice_response,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
             )
             list_invoice_dict["invoices"] = [
                 Invoice.model_validate(invoice) for invoice in list_invoice_dict["invoices"]

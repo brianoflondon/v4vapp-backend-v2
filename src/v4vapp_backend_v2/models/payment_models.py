@@ -441,10 +441,14 @@ class ListPaymentsResponse(BaseModel):
         if lnrpc_list_payments_response and isinstance(
             lnrpc_list_payments_response, lnrpc.ListPaymentsResponse
         ):
+            # always_print_fields_with_no_presence=True: forces serialization of fields that lack
+            # presence (repeated, maps, scalars) so missing lists become [] instead of absent
+            # (solves missing "invoices").
             list_payments_dict = MessageToDict(
-                lnrpc_list_payments_response, preserving_proto_field_name=True
+                lnrpc_list_payments_response, preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
             )
-            list_payments_dict["invoices"] = [
+            list_payments_dict["payments"] = [
                 Payment.model_validate(payment) for payment in list_payments_dict["payments"]
             ]
             super().__init__(**list_payments_dict)

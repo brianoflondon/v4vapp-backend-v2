@@ -124,7 +124,14 @@ class LNDClient:
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
                 lnrpc.GetInfoRequest()
             )
-            get_info_dict = MessageToDict(self.get_info, preserving_proto_field_name=True)
+            # always_print_fields_with_no_presence=True: forces serialization of fields that lack
+            # presence (repeated, maps, scalars) so missing lists become [] instead of absent
+            # (solves missing "invoices").
+            get_info_dict = MessageToDict(
+                self.get_info,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
+            )
             logger.info(
                 f"{self.icon} Calling get_info {self.connection.name}",
                 extra={"get_info": get_info_dict},
