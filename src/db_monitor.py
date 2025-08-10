@@ -2,6 +2,7 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
+from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
@@ -150,6 +151,13 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
+
+    print("update_descriptions")
+    pprint(update_description)
+    print("updated_fields")
+    pprint(updated_fields)
+    print("removed_fields")
+    pprint(removed_fields)
 
     # Filter out custom_json sent purely for notifications
     # if "json" in updated_fields:

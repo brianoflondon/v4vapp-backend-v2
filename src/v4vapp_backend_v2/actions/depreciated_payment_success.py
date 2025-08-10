@@ -103,7 +103,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     """
 
     ledger_entries_list = []
-    node_name = InternalConfig().config.lnd_config.default
+    node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
 
     # MARK: 5 Withdraw Lightning

@@ -40,6 +40,8 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
+    DEPOSIT_LIGHTNING = "deposit_l"
+    
     LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
     LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
 

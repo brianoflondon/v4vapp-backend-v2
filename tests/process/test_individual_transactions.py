@@ -109,7 +109,19 @@ async def test_custom_json_transfer():
 
 
 async def test_hive_to_lnd_only():
-    """ """
+    """
+    Test the process of sending a transfer from a Hive customer to the Lightning Network Daemon (LND).
+    This test performs the following steps:
+    1. Retrieves the current ledger entry count.
+    2. Sends a transaction from a Hive customer to LND with a specified amount and memo.
+    3. Asserts that the transaction was successfully sent by checking for a transaction ID.
+    4. Waits for the ledger to reflect the expected number of new entries.
+    5. Checks that the transaction is recorded in the ledger and prints the details.
+    6. Asserts that the transaction has replies in the custom JSON transfer (indicating successful processing).
+
+    Raises:
+        AssertionError: If the transaction fails to send (missing transaction ID).
+    """
     await clear_and_reset()
 
     ledger_count = await get_ledger_count()
@@ -133,6 +145,10 @@ async def test_hive_to_lnd_only():
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
+
+
+async def test_custom_json_pay_lnd():
+    pass
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():

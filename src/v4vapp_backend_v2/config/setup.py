@@ -987,6 +987,18 @@ class InternalConfig:
             return self.config.hive.server_account.name
         return ""
 
+    @property
+    def node_name(self) -> str:
+        """
+        Retrieve the node name from the configuration.
+
+        Returns:
+            str: The node name, which is the name of the LND node.
+        """
+        if self.config.lnd_config.default:
+            return self.config.lnd_config.default
+        return ""
+
 
 """
 General purpose functions

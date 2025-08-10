@@ -13,7 +13,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.lnd_to_keepsats_hive import process_lightning_to_hive_or_keepsats
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -28,6 +27,7 @@ from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.process_hive import process_hive_op
+from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
 
 
@@ -135,7 +135,9 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
 # MARK: Invoice (inbound Lightning)
 
 
-async def process_lightning_invoice(invoice: Invoice) -> List[LedgerEntry]:
+async def process_lightning_invoice(
+    invoice: Invoice, nobroadcast: bool = False
+) -> List[LedgerEntry]:
     """
     Processes a Lightning Network invoice and updates the corresponding ledger entry.
 
@@ -159,7 +161,7 @@ async def process_lightning_invoice(invoice: Invoice) -> List[LedgerEntry]:
     """
     # Invoice means we are receiving sats from external.
     # Invoice is locked by outer process.
-    node_name = InternalConfig().config.lnd_config.default
+    node_name = InternalConfig().node_name
     # MARK: Funding
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
@@ -183,7 +185,7 @@ async def process_lightning_invoice(invoice: Invoice) -> List[LedgerEntry]:
         return [ledger_entry]
     # MARK: Regular Invoice LND to Hive or Keepsats
     if invoice.is_lndtohive:
-        ledger_entries = await process_lightning_to_hive_or_keepsats(invoice=invoice)
+        ledger_entries = await process_lightning_receipt(invoice=invoice)
         return ledger_entries
     elif "Exchange" in invoice.memo:
         raise NotImplementedError("Exchange invoice processing is not implemented yet.")

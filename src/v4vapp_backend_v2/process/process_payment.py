@@ -62,12 +62,9 @@ async def process_payment_success(
         .to_list()
     )
     if existing_ledger_entries:
-        logger.warning(
-            f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
-        )
-        raise LedgerEntryDuplicateException(
-            f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
-        )
+        message = f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
+        logger.warning(message)
+        raise LedgerEntryDuplicateException(message)
 
     cust_id = payment.cust_id or ""
     ledger_entries_list: list[LedgerEntry] = []
@@ -107,23 +104,55 @@ async def process_payment_success(
 
 async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerEntry]:
     """
-    Records the ledger entries for a successful Lightning payment.
-    This function creates and saves ledger entries for the following actions:
-    1. Withdraw Lightning: Allocates outgoing Lightning payment from the customer's liability account to the external Lightning payments account.
-    2. Send Lightning Payment: Records the external Lightning payment from the external Lightning payments account to the treasury Lightning account.
-    3. Lightning Network Fee (if applicable): Records the Lightning network fee as an expense from the node's fee expenses account to the treasury Lightning account.
+    Lightning payment settlement flow (customer spends sats via node).
+
+    Operates by moving value from the Customer Liability (owed to user) out through the
+    node’s external payment channel, recording any network fee as an expense.
+
+        Context (earlier steps handled elsewhere):
+            - Customer previously acquired sats (liability created).
+            - This function applies the spend and (optionally) the network fee.
+
+    Step 1 (Withdraw Lightning)  LedgerType.WITHDRAW_LIGHTNING
+        Reclassify the customer's balance to an external payment in flight.
+            Debit: Liability VSC Liability (customer) - MSATS  (reduce what we owe user)
+            Credit: Asset External Lightning Payments (node / contra) - MSATS (allocate outbound)
+        Net effect: Decreases Liabilities, decreases (contra) Asset bucket → value leaves platform control.
+        Amount: payment.value_msat + payment.fee_msat (principal + expected fee)
+
+    Step 2 (Lightning Network Fee, optional)  LedgerType.FEE_EXPENSE (only if fee_msat > 0)
+        Recognize the actual network routing fee as an expense.
+            Debit: Expense Fee Expenses Lightning (node) - MSATS
+            Credit: Asset Treasury Lightning (server) - MSATS
+        Net effect: Increases Expenses, reduces Treasury Lightning Asset (economic outflow).
+        Amount: payment.fee_msat
+
+    Notes:
+        - If fee_msat is zero, only the withdrawal entry is recorded.
+        - The principal portion (value_msat) is implicitly consumed by the external payment path.
+        - Conversion object (payment.conv) supplies fiat or cross-asset valuation.
+        - MSATS used for precision; display may convert to SATS (÷1000).
+
     Args:
-        payment (Payment): The payment object containing details of the Lightning payment.
-        quote (QuoteResponse): The quote response object used for currency conversion.
+        payment: Lightning payment domain object (includes value_msat, fee_msat, cust_id, conv, destination).
+        quote: QuoteResponse used to build conversion for fee entry (if present).
+
     Returns:
-        list[LedgerEntry]: A list of saved ledger entries corresponding to the payment actions.
+        list[LedgerEntry]: Persisted ledger entries (1 or 2 items).
+
+    Accounting Summary:
+        - Customer liability reduced by (value_msat + fee_msat).
+        - External payment allocated (principal + fee expectation).
+        - Actual fee recognized as expense (if > 0).
+        - Economic impact: Expense increases by fee; equity decreases accordingly.
+
     """
 
     ledger_entries_list = []
-    node_name = InternalConfig().config.lnd_config.default
+    node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
 
-    # MARK: 5 Withdraw Lightning
+    # MARK: 1 Withdraw Lightning
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     cost_of_payment_msat = payment.value_msat + payment.fee_msat
     outgoing_conv = payment.conv
@@ -150,33 +179,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
-    # # MARK: 6 Send Lightning Payment
-    # ledger_type = LedgerType.LIGHTNING_EXTERNAL_SEND
-    # external_payment_ledger_entry = LedgerEntry(
-    #     cust_id=cust_id,
-    #     short_id=payment.short_id,
-    #     ledger_type=ledger_type,
-    #     group_id=f"{payment.group_id}-{ledger_type.value}",
-    #     op_type=payment.op_type,
-    #     timestamp=datetime.now(tz=timezone.utc),
-    #     description=f"External Lightning payment {cost_of_payment_msat / 1000:,.0f} SATS to {payment.destination}",
-    #     debit=AssetAccount(
-    #         name="External Lightning Payments",
-    #         sub=node_name,
-    #         contra=True,  # This is FROM the External Lightning Payments account
-    #     ),
-    #     debit_unit=Currency.MSATS,
-    #     debit_amount=cost_of_payment_msat,
-    #     debit_conv=payment.conv,
-    #     credit=AssetAccount(name="Treasury Lightning", sub=node_name, contra=False),
-    #     credit_unit=Currency.MSATS,
-    #     credit_amount=cost_of_payment_msat,
-    #     credit_conv=payment.conv,
-    # )
-    # await external_payment_ledger_entry.save()
-    # ledger_entries_list.append(external_payment_ledger_entry)
-
-    # MARK: 7: Lightning Network Fee
+    # MARK: 2: Lightning Network Fee
     # Only record the Lightning fee if it is greater than 0 msats
     if payment.fee_msat > 0:
         lightning_fee_conv = CryptoConversion(

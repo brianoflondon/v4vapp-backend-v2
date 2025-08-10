@@ -1,8 +1,6 @@
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -16,13 +14,17 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     LNDPaymentExpired,
     send_lightning_to_pay_req,
 )
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
 
 
-async def process_custom_json_to_lightning(
+async def depreciated_process_custom_json_to_lightning(
     custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
 ) -> None:
     """ """
     # is this a lightning invoice?
+    # this function to be replaced by using the same payment code as if it was a hive transfer
+    # and paywithsats
     if not keepsats_transfer.memo:
         raise CustomJsonToLightningError("Keepsats transfer does not have an invoice message.")
     lnd_config = InternalConfig().config.lnd_config

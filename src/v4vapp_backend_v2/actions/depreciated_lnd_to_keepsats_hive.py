@@ -4,15 +4,15 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.process.process_errors import KeepsatsDepositNotificationError
 from v4vapp_backend_v2.actions.cust_id_class import CustID
-from v4vapp_backend_v2.process.hive_notification import depreciated_send_notification_hive_transfer
 from v4vapp_backend_v2.actions.depreciated_lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
+from v4vapp_backend_v2.process.hive_notification import depreciated_send_notification_hive_transfer
+from v4vapp_backend_v2.process.process_errors import KeepsatsDepositNotificationError
 
 
 async def process_lightning_to_hive_or_keepsats(
@@ -151,7 +151,7 @@ async def lightning_to_keepsats_deposit(
         debit_amount=msats_received,
         debit_conv=invoice.conv,
         credit=LiabilityAccount(
-            name="Customer Liability",
+            name="VSC Liability",
             sub=cust_id,
         ),
         credit_unit=Currency.MSATS,

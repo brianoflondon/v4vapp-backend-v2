@@ -10,7 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.depreciated_custom_json_to_lnd import (
-    process_custom_json_to_lightning,
+    depreciated_process_custom_json_to_lightning,
 )
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -23,8 +23,10 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
 from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError, HiveLightningError
+from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 # MARK: Hive Transaction Processing
@@ -333,13 +335,22 @@ async def process_custom_json(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    server_id = InternalConfig().server_id
+    if custom_json.cj_id in ["v4vapp_notification", "v4vapp_dev_notification"]:
+        logger.info(f"Notification CustomJson: {custom_json.json_data.memo}")
+        return None
     if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
+        keepsats_transfer.msats = (
+            (keepsats_transfer.sats * 1000)
+            if keepsats_transfer.sats and not keepsats_transfer.msats
+            else keepsats_transfer.msats
+        )
         # MARK: CustomJson Transfer user to user
         if (
             custom_json.from_account
             and custom_json.to_account
-            and keepsats_transfer.msats
+            and (keepsats_transfer.msats)
             and custom_json.from_account != custom_json.to_account
         ):
             ledger_entry = await custom_json_internal_transfer(
@@ -356,9 +367,21 @@ async def process_custom_json(
                         reply_msat=keepsats_transfer.msats,
                         reply_message="Reply to transfer",
                     )
+                    await parent_op.save()
+                    # Now we may need to process if the parent op is an Invoice we need to send the keepsats
+                    # to the correct destination.
+                    if isinstance(parent_op, Invoice) and custom_json.from_account == server_id:
+                        await process_lightning_receipt_stage_2(
+                            invoice=parent_op, nobroadcast=nobroadcast
+                        )
+                        return ledger_entry
+            if custom_json.to_account == server_id:
+                # Process this as if it were an inbound Hive transfer with a memo.
+                await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
 
-            return ledger_entry
-        # MARK: CustomJson Pay a lightning invoice
+            return
+
+        # MARK: CustomJson to pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
         # invoice_message we will use to send on if we generate an invoice form a lightning address
         elif keepsats_transfer.memo and not keepsats_transfer.to_account:
@@ -392,7 +415,7 @@ async def process_custom_json(
                 )
                 await custom_json_ledger_entry.save()
 
-                await process_custom_json_to_lightning(
+                await depreciated_process_custom_json_to_lightning(
                     custom_json=custom_json,
                     keepsats_transfer=keepsats_transfer,
                     nobroadcast=nobroadcast,
@@ -411,13 +434,9 @@ async def process_custom_json(
                     f"Failed to process CustomJson to Lightning: {e}"
                 ) from e
 
-    if custom_json.cj_id in ["v4vapp_dev_notification"]:
-        logger.info(f"Notification CustomJson: {custom_json.json_data.memo}")
-        return None
-
     logger.error(
         f"CustomJson operation not implemented for v4vapp_group_id: {custom_json.group_id}.",
-        extra={"notification": False},
+        extra={"notification": False, **custom_json.log_extra},
     )
     raise NotImplementedError(
         f"Some other custom_json functionality which hasn't been implemented yet {custom_json.group_id}."
