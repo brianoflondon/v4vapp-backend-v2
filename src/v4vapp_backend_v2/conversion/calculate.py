@@ -4,6 +4,7 @@ from nectar.amount import Amount
 from pydantic import BaseModel
 from tabulate import tabulate
 
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
@@ -32,25 +33,48 @@ class ConversionResult(BaseModel):
     balance: float = 0.0
 
     def __str__(self) -> str:
+        def fmt(value: float, currency: Currency) -> str:
+            # MSATS are stored as msats internally; display as sats (÷1000) with 3 decimals
+            if currency == Currency.MSATS:
+                return f"{value / 1000:>50,.3f}"
+            return f"{value:>50,.3f}"
+
+        def unit_label(currency: Currency) -> str:
+            if currency == Currency.MSATS:
+                return "sats"
+            return str(currency)
+
         conversion_data = [
-            ["to_convert", f"{self.to_convert:>50,.6f}", str(self.from_currency)],
             [
                 "to_convert",
-                f"{self.to_convert_conv.value_in(self.to_currency):>50,.3f}",
-                str(self.to_currency),
+                fmt(self.to_convert, self.from_currency),
+                unit_label(self.from_currency),
             ],
-            ["net_to_receive", f"{self.net_to_receive:>50,.6f}", str(self.from_currency)],
+            [
+                "to_convert",
+                fmt(self.to_convert_conv.value_in(self.to_currency), self.to_currency),
+                unit_label(self.to_currency),
+            ],
             [
                 "net_to_receive",
-                f"{self.net_to_receive_conv.value_in(self.to_currency):>50,.3f}",
-                str(self.to_currency),
+                fmt(self.net_to_receive, self.from_currency),
+                unit_label(self.from_currency),
             ],
-            ["fee", f"{self.fee:>50,.6f}", str(self.from_currency)],
-            ["fee", f"{self.fee_conv.value_in(self.to_currency):>50,.3f}", str(self.to_currency)],
-            ["change", f"{self.change:>50,.6f}", str(self.from_currency)],
-            ["balance", f"{self.balance:>50,.6f}", str(self.from_currency)],
-            ["from_currency", str(self.from_currency), ""],
-            ["to_currency", str(self.to_currency), ""],
+            [
+                "net_to_receive",
+                fmt(self.net_to_receive_conv.value_in(self.to_currency), self.to_currency),
+                unit_label(self.to_currency),
+            ],
+            ["fee", fmt(self.fee, self.from_currency), unit_label(self.from_currency)],
+            [
+                "fee",
+                fmt(self.fee_conv.value_in(self.to_currency), self.to_currency),
+                unit_label(self.to_currency),
+            ],
+            ["change", fmt(self.change, self.from_currency), unit_label(self.from_currency)],
+            ["balance", fmt(self.balance, self.from_currency), unit_label(self.from_currency)],
+            ["from_currency", unit_label(self.from_currency), ""],
+            ["to_currency", unit_label(self.to_currency), ""],
         ]
 
         return f"Conversion Details:\n{tabulate(conversion_data, headers=['Parameter', 'Value', 'Unit'], tablefmt='fancy_grid')}"
@@ -159,22 +183,147 @@ async def hive_to_keepsats(
 
 
 async def keepsats_to_hive(
-    msats: int,
-    quote: QuoteResponse | None = None,
+    tracked_op: TrackedTransferWithCustomJson,
+    msats: int | None = None,
     to_currency: Currency = Currency.HIVE,
+    amount: Amount | None = None,
+    quote: QuoteResponse | None = None,
 ) -> ConversionResult:
-    # First deduct the notification minimum from the msats IF the value is > notification minimum:
+    """
+    Convert Keepsats (msats) to Hive/HBD OR (if a target Amount is supplied) compute the
+    msats required so the user receives exactly that Hive/HBD amount net of fees
+    (and notification fee if applicable).
 
+    Modes:
+        1. msats -> Hive/HBD (current behavior, when 'amount' is None)
+           - Apply notification fee (fixed 0.001 target unit) if initial msats > threshold.
+           - Apply conversion fee.
+           - net_to_receive (msats) = msats_after_notification - conversion_fee_msats.
+
+        2. target Amount -> required msats (when 'amount' provided)
+           - 'amount' (Hive or HBD) is the desired NET amount after all fees.
+           - Invert fee logic iteratively to find required msats (before notification fee).
+           - Apply notification fee rule (adds fixed msats before conversion if threshold hit).
+           - Ensures net_to_receive_conv.value_in(to_currency) == amount.amount_decimal (±1 unit of precision).
+
+    Returned fields:
+        net_to_receive: always expressed in FROM currency (msats).
+        net_to_receive_conv: conversion object representing the target currency net amount.
+        to_convert: msats actually passed into conversion AFTER notification fee is removed.
+        change / balance: remain consistent with existing semantics.
+    """
     if quote is None:
-        await TrackedBaseModel.update_quote()
-        quote = TrackedBaseModel.last_quote
+        if datetime.now(tz=timezone.utc) - tracked_op.timestamp > timedelta(minutes=5):
+            quote = await TrackedBaseModel.nearest_quote(tracked_op.timestamp)
+        else:
+            await TrackedBaseModel.update_quote()
+            quote = TrackedBaseModel.last_quote
 
     from_currency = Currency.MSATS
+
+    # If a target amount is supplied, override to_currency from it
+    if amount is not None:
+        to_currency = Currency(amount.symbol.lower())
+
+    # Threshold (msats) for applying notification fee
+    notification_threshold_msats = V4VConfig().data.minimum_invoice_payment_sats * 1_000
+
+    # ------------------------------------------------------------------
+    # Mode 2: Target Amount (Hive/HBD) provided -> solve for msats needed
+    # ------------------------------------------------------------------
+    if amount is not None:
+        target_amount = amount  # Amount in Hive/HBD the user must receive NET
+        # Convert target (net) amount to msats (net target msats after all conversion fees)
+        target_net_conv = CryptoConversion(
+            amount=target_amount, conv_from=to_currency, quote=quote
+        ).conversion
+        target_net_msats = (
+            target_net_conv.msats
+        )  # Net msats needed after conversion fee & notif deduction
+
+        # Iteratively add back conversion fee to find msats AFTER notification fee deduction
+        # Start with an initial guess (net)
+        msats_after_notification = target_net_msats
+        for _ in range(8):  # usually converges in 1-3 iterations
+            conv_guess = CryptoConversion(
+                value=msats_after_notification, conv_from=from_currency, quote=quote
+            ).conversion
+            fee_guess = conv_guess.msats_fee
+            required = target_net_msats + fee_guess
+            if abs(required - msats_after_notification) <= 1:
+                msats_after_notification = required
+                break
+            msats_after_notification = required
+
+        # Notification fee (fixed 0.001 target unit) in msats
+        notification_fee_msats = 0
+        notif_amount = Amount(f"0.001 {to_currency.value.upper()}")
+        notif_conv = CryptoConversion(
+            amount=notif_amount, conv_from=to_currency, quote=quote
+        ).conversion
+        potential_notification_fee = notif_conv.msats
+
+        # Compute initial msats BEFORE notification deduction
+        # If initial msats exceeds threshold, we must add the notification fee back
+        msats_initial = msats_after_notification
+        if msats_initial > notification_threshold_msats:
+            msats_initial += potential_notification_fee
+            notification_fee_msats = potential_notification_fee
+
+        # Now recompute forward using the derived msats_after_notification to build standard objects
+        # (This ensures consistency with regular forward mode)
+        to_convert_conv = CryptoConversion(
+            value=msats_after_notification, conv_from=from_currency, quote=quote
+        ).conversion
+        to_convert = to_convert_conv.value_in(from_currency)  # msats_after_notification
+
+        msats_fee = to_convert_conv.msats_fee
+        fee_conv = CryptoConversion(
+            value=msats_fee, conv_from=from_currency, quote=quote
+        ).conversion
+        fee = fee_conv.value_in(from_currency)  # msats
+
+        net_to_receive = to_convert - fee  # should equal target_net_msats
+        net_to_receive_conv = CryptoConversion(
+            value=net_to_receive, conv_from=from_currency, quote=quote
+        ).conversion  # convert net msats to Hive/HBD for reporting
+
+        # Sanity clamp if tiny rounding differences
+        # (If conversion drift causes > small difference, you could re-iterate with refined guess)
+        # change / balance semantics:
+        original_msats = msats_initial
+        change = original_msats - (to_convert + notification_fee_msats)
+        change_conv = CryptoConversion(
+            value=change, conv_from=from_currency, quote=quote
+        ).conversion
+        balance = change + fee + net_to_receive + notification_fee_msats
+
+        return ConversionResult(
+            quote=quote,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            to_convert=to_convert,
+            to_convert_conv=to_convert_conv,
+            net_to_receive=net_to_receive,
+            net_to_receive_conv=net_to_receive_conv,  # contains the requested Hive/HBD amount
+            fee=fee,
+            fee_conv=fee_conv,
+            change=change,
+            change_conv=change_conv,
+            balance=balance,
+        )
+
+    # ------------------------------------------------------------------
+    # Mode 1: Original forward conversion (msats provided)
+    # ------------------------------------------------------------------
+    if msats is None:
+        raise HiveToKeepsatsConversionError("msats must be provided if amount is not supplied.")
+
     original_msats = msats
 
     # Deduct notification fee if above minimum threshold
     notification_fee = 0
-    if msats > V4VConfig().data.minimum_invoice_payment_sats * 1_000:
+    if msats > notification_threshold_msats:
         notification_amount = Amount(f"0.001 {to_currency.value.upper()}")
         notification_amount_conv = CryptoConversion(
             amount=notification_amount, conv_from=to_currency, quote=quote
@@ -193,7 +342,7 @@ async def keepsats_to_hive(
     fee_conv = CryptoConversion(value=msats_fee, conv_from=from_currency, quote=quote).conversion
     fee = fee_conv.value_in(from_currency)
 
-    # Calculate net amount to receive in target currency
+    # Net (msats) after conversion fee
     net_to_receive = to_convert - fee
     if net_to_receive < 0:
         raise HiveToKeepsatsConversionError(
@@ -207,10 +356,9 @@ async def keepsats_to_hive(
     change = original_msats - (to_convert + notification_fee)
     change_conv = CryptoConversion(value=change, conv_from=from_currency, quote=quote).conversion
 
-    # Balance check
     balance = change + fee + net_to_receive + notification_fee
 
-    answer = ConversionResult(
+    return ConversionResult(
         quote=quote,
         from_currency=from_currency,
         to_currency=to_currency,
@@ -224,4 +372,3 @@ async def keepsats_to_hive(
         change_conv=change_conv,
         balance=balance,
     )
-    return answer

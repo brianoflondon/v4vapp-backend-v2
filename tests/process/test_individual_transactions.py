@@ -144,9 +144,9 @@ async def test_hive_to_lnd_only():
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
 
+
 # async def test_lnd_to_hive():
 #     transfer = KeepsatsTransfer
-
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():
@@ -199,17 +199,32 @@ async def test_check_conversion_limits():
     pprint(limits)
 
 
-async def test_deposit_hive_to_keepsats():
+async def test_deposit_hive_to_keepsats(test_amount: int = 5_000):
     """
+    Asynchronously tests the process of depositing Hive to Keepsats for a customer account.
+
+    This test performs the following steps:
+    1. Retrieves the initial Keepsats balance and ledger entry count for a specified customer.
+    2. Initiates a deposit transaction by sending a specified amount of Hive from the customer to the server.
+    3. Asserts that the transaction was successfully created.
+    4. Waits for the expected number of new ledger entries and prints their details.
+    5. Retrieves the Keepsats balance after the transaction.
+    6. Asserts that the net balance reflects the deposited amount within an acceptable margin.
+
+    Raises:
+        AssertionError: If the transaction fails to send or if the net msats after deposit does not match the expected value.
     Test to deposit Hive to Keepsats.
     This test sends a specified amount of Hive from a customer account to the server account.
     It checks that the transaction is successful and that the ledger entries are created correctly.
+
     """
     cust_id = "v4vapp-test"
     net_msats, balance_before = await keepsats_balance_printout(cust_id=cust_id)
     ledger_count = await get_ledger_count()
     trx = await send_hive_customer_to_server(
-        send_sats=5000, memo="Deposit and more #sats", customer=cust_id
+        send_sats=test_amount,
+        memo="Your message with a deposit of #sats",
+        customer=cust_id,
     )
     pprint(trx)
     assert trx.get("trx_id"), "Transaction failed to send"
@@ -223,7 +238,7 @@ async def test_deposit_hive_to_keepsats():
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id=cust_id)
 
     # The deposit will be around 5000 + 200 sats.
-    assert abs(net_msats_after - (net_msats + 5_000_000)) < 200_000, (
+    assert abs(net_msats_after - (net_msats + test_amount * 1_000)) < 200_000, (
         "Net msats should reflect the deposit"
     )
 
@@ -265,6 +280,20 @@ async def test_deposit_hive_to_keepsats_send_to_account():
         f"Expected 4500, got {net_msats_after // 1000}"
     )
     assert net_msats_after is not None, "Failed to retrieve net msats"
+
+
+async def test_conversion_keepsats_to_hive():
+    # await clear_and_reset()
+    # await test_deposit_hive_to_keepsats(5_000)
+    # ledger_count = await get_ledger_count()
+    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+    transfer = KeepsatsTransfer(
+        from_account="v4vapp-test",
+        to_account="devser.v4vapp",
+        msats=4_000_000,
+        memo=f"Convert to #HIVE {datetime.now().isoformat()}",
+    )
+    trx = await send_transfer_custom_json(transfer)
 
 
 async def test_complete_balance_sheet_accounts_ledger():

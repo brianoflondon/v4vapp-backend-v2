@@ -177,8 +177,9 @@ def filter_sum_credit_debit_pipeline(
 IGNORED_UPDATE_FIELDS = [
     "replies",
     "change_conv",
-    "process_time",
+    "change_memo",
     "change_amount",
+    "process_time",
     "locked",
     "extensions",
     "fee_conv",

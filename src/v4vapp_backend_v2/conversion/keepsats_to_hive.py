@@ -2,38 +2,38 @@
 Internal conversions of Hive or HBD to Keepsats.
 Operates by moving funds between the Server and VSC Liability accounts:
 
-    Net value received into Assets (Debit Asset and Credit Liability).
-->  pre performed Step 1: Receive Hive or HBD:
+->  pre performed Step 1: Customer's balance debited of sats
+        Debit: Liability VSC Liability (customer) - SATS
+        Credit: Liability VSC Liability (server) - SATS
+
+    No net value change
+    LedgerType.CONV_KEEPSATS_TO_HIVE k_conv_h
+Step 2: Convert the keepsats into Hive or HBD Server's Asset account.
         Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
+        Credit: Asset Treasury Lightning (server) - SATS
 
     No net value change
-    LedgerType.CONV_HIVE_TO_KEEPSATS h_conv_k
-Step 2: Convert the received Hive or HBD to Keepsats in the Server's Asset account.
-        Debit: Asset Treasury Lightning (server) - SATS
-        Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
-
-    No net value change
-    LedgerType.CONTRA_HIVE_TO_KEEPSATS h_contra_k
+    LedgerType.CONTRA_KEEPSATS_TO_HIVE k_contra_h
 Step 3: Contra entry to keep Asset Customer Deposits Hive (server) balanced:
-        Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD
+        Debit: Asset Converted Keepsats Offset (server) - HIVE/HBD
+        Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
 
     Net income change no change to DEA = LER
     LedgerType.FEE_INCOME fee_inc
 Step 4: Fee Income
-        Debit: Liability VSC Liability (customer) - HIVE/HBD
+        Debit: Liability VSC Liability (customer) - SATS
         Credit: Revenue Fee Income Keepsats (keepsats) - SATS
 
     No net value change (conversion to Keepsats on VSC)
-Step 5: Deposit Keepsats into SERVER's Liability account:
-        Debit: Liability VSC Liability (customer) - HIVE/HBD
-        Credit: Liability VSC Liability (server) - SATS
+    LedgerType.WITHDRAW_KEEPSATS withdraw_k
+Step 5: Deposit Hive into SERVER's Liability account:
+        Debit: Liability VSC Liability (server) - HIVE/HBD
+        Credit: Liability VSC Liability (customer) - HIVE/HBD
 
     No net value change but net sats owned to customer
-Then Send custom_json Transfer from Server to Customer:
-        Debit: Liability VSC Liability (server) - SATS
-        Credit: Liability VSC Liability (customer) - SATS
+Then Send hive Transfer from Server to Customer:
+        Debit: Liability VSC Liability (server) - HIVE/HBD
+        Credit: Liability VSC Liability (customer) - HIVE/HBD
 
 
 """
@@ -49,20 +49,22 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     RevenueAccount,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.conversion.calculate import hive_to_keepsats
+from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
-from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 
-async def conversion_hive_to_keepsats(
+async def conversion_keepsats_to_hive(
     server_id: str,
     cust_id: str,
-    tracked_op: TransferBase,
-    msats: int = 0,
+    tracked_op: TrackedTransferWithCustomJson,
+    msats: int | None = None,
+    amount: Amount | None = None,
+    to_currency: Currency = Currency.HIVE,
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
 ) -> None:
@@ -91,7 +93,10 @@ async def conversion_hive_to_keepsats(
     Returns:
          None
     """
-    conv_result = await hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
+
+    conv_result = await keepsats_to_hive(
+        tracked_op=tracked_op, msats=msats, amount=amount, quote=quote, to_currency=to_currency
+    )
     from_currency = conv_result.from_currency
     logger.info(f"{conv_result}")
 
@@ -226,13 +231,7 @@ async def conversion_hive_to_keepsats(
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-
-    tracked_op.add_reply(
-        reply_id=trx["trx_id"],
-        reply_type="custom_json",
-        reply_msat=conv_result.net_to_receive_conv.msats,
-        reply_message=memo,
-    )
+    logger.info(f"Sent custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer.log_extra})
 
     await tracked_op.update_conv(quote=quote)
     tracked_op.change_amount = AmountPyd(

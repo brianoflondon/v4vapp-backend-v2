@@ -375,6 +375,7 @@ async def process_custom_json(
             # Check for a parent id to see if this is a reply transaction
             if keepsats_transfer.parent_id:
                 # This is a reply transaction, we need to process it as such
+
                 parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
                 if parent_op:
                     parent_op.add_reply(
@@ -391,6 +392,13 @@ async def process_custom_json(
                             invoice=parent_op, nobroadcast=nobroadcast
                         )
                         return ledger_entry
+                    if isinstance(parent_op, CustomJson) and custom_json.to_account == server_id:
+                        # Process this as if it were a request to convert Keepsats to Hive/HBD
+                        logger.info(
+                            f"Processing Keepsats to Hive conversion: {custom_json.json_data.memo}"
+                        )
+                        # await conversion_keepsats_to_hive(server_id= server_id, cust_id=tracked_op=custom_json, nobroadcast=nobroadcast)
+
             if custom_json.to_account == server_id:
                 # Process this as if it were an inbound Hive transfer with a memo.
                 await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)

@@ -81,8 +81,14 @@ class KeepsatsTransfer(BaseModel):
     parent_id: str | None = Field(
         None, description="The short ID of the parent transaction, if applicable"
     )
-    HIVE: float | None = None
-    HBD: float | None = None
+    hive: float | None = Field(
+        default=None,
+        description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
+    )
+    hbd: float | None = Field(
+        default=None,
+        description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
+    )
     invoice_message: str | None = Field(
         None,
         description="Used specifically for invoice messages, when requesting an invoice from a foreign service, this comment will be sent",
@@ -133,8 +139,8 @@ class KeepsatsTransfer(BaseModel):
             "sats": self.sats,
             "memo": self.memo,
             "invoice_message": self.invoice_message,
-            "HIVE": self.HIVE,
-            "HBD": self.HBD,
+            "HIVE": self.hive,
+            "HBD": self.hbd,
             "parent_id": self.parent_id,
             "pay_result": self.pay_result.model_dump(exclude_none=True, exclude_unset=True)
             if self.pay_result

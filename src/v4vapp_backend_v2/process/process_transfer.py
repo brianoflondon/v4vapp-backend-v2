@@ -12,6 +12,7 @@ from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_kee
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -139,35 +140,54 @@ async def follow_on_transfer(
         pay_req = await decode_incoming_and_checks(tracked_op=tracked_op, lnd_client=lnd_client)
         # Important: we ignore Keepsats status for now, first we check amounts and try to pay a lightning invoice.
         # If there is no invoice we will skip to just depositing all the Hive.
-        assert pay_req and isinstance(pay_req, PayReq), "PayReq should be an instance of PayReq"
 
-        if tracked_op.paywithsats:
-            await hold_keepsats(
-                amount_msats=pay_req.value_msat + pay_req.fee_estimate,
+        if (
+            not pay_req
+            and isinstance(tracked_op, CustomJson)
+            and isinstance(tracked_op.json_data, KeepsatsTransfer)
+        ):
+            # This is a keepsats to Hive conversion.
+            await conversion_hive_to_keepsats(
+                server_id=server_id,
                 cust_id=cust_id,
                 tracked_op=tracked_op,
+                nobroadcast=nobroadcast,
+                msats=tracked_op.json_data.msats,
             )
-        chat_message = f"Sending sats from v4v.app | § {tracked_op.short_id} |"
-        payment = await send_lightning_to_pay_req(
-            pay_req=pay_req,
-            lnd_client=lnd_client,
-            chat_message=chat_message,
-            group_id=tracked_op.group_id_p,
-            cust_id=tracked_op.cust_id,
-            paywithsats=tracked_op.paywithsats,
-            amount_msat=tracked_op.conv.msats - tracked_op.conv.msats_fee,
-            fee_limit_ppm=lnd_config.lightning_fee_limit_ppm,
-        )
-        logger.info(
-            f"Lightning payment sent for § {tracked_op.short_id} Payment: {payment.short_id}",
-            extra={
-                "notification": True,
-                **tracked_op.log_extra,
-                **payment.log_extra,
-            },
-        )
-        release_hold = False
-        return
+            release_hold = False  #   There is no hold to release
+
+        else:
+            assert pay_req and isinstance(pay_req, PayReq), (
+                "PayReq should be an instance of PayReq"
+            )
+
+            if tracked_op.paywithsats:
+                await hold_keepsats(
+                    amount_msats=pay_req.value_msat + pay_req.fee_estimate,
+                    cust_id=cust_id,
+                    tracked_op=tracked_op,
+                )
+            chat_message = f"Sending sats from v4v.app | § {tracked_op.short_id} |"
+            payment = await send_lightning_to_pay_req(
+                pay_req=pay_req,
+                lnd_client=lnd_client,
+                chat_message=chat_message,
+                group_id=tracked_op.group_id_p,
+                cust_id=tracked_op.cust_id,
+                paywithsats=tracked_op.paywithsats,
+                amount_msat=tracked_op.conv.msats - tracked_op.conv.msats_fee,
+                fee_limit_ppm=lnd_config.lightning_fee_limit_ppm,
+            )
+            logger.info(
+                f"Lightning payment sent for § {tracked_op.short_id} Payment: {payment.short_id}",
+                extra={
+                    "notification": True,
+                    **tracked_op.log_extra,
+                    **payment.log_extra,
+                },
+            )
+            release_hold = False
+            return
 
     except HiveTransferError as e:
         # Various problems with Hive or Keepsats. Send it all back.
@@ -257,7 +277,7 @@ async def follow_on_transfer(
 
 async def decode_incoming_and_checks(
     tracked_op: TrackedTransferWithCustomJson, lnd_client: LNDClient
-) -> PayReq:
+) -> PayReq | None:
     """
     This asynchronous function processes a Lightning payment request contained in the `d_memo` field of a `TrackedTransfer` object.
     It performs the following steps:
@@ -306,17 +326,23 @@ async def decode_incoming_and_checks(
             input=tracked_op.d_memo,
             lnd_client=lnd_client,
             zero_amount_invoice_send_msats=max_send_msats,
-            comment=tracked_op.log_str,  # TODO: THIS NEEDS TO BE TAKEN FROM THE MEMO
+            comment=tracked_op.log_str,
+            # TODO: THIS NEEDS TO BE TAKEN FROM THE MEMO
         )
-        if not pay_req:
+        if not pay_req and isinstance(tracked_op, CustomJson):
+            # If we don't have a pay_req handle the case of a custom_json which has a conversion
+            pass
+        else:
             raise HiveTransferError("Failed to decode Lightning invoice")
     except LnurlException as e:
         message = f"Lightning decode error: {e}"
-        logger.error(
+        logger.info(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
         )
-        raise HiveTransferError(message)
+        # Here we process as a keepsats to Hive/HBD conversion
+        logger.info("Lightning Invoice not found, processing as a Keepsats withdrawal")
+        return None
 
     except Exception as e:
         message = f"Unexpected error decoding Lightning invoice: {e}"
@@ -327,11 +353,13 @@ async def decode_incoming_and_checks(
         raise HiveTransferError(message)
 
     # NOTE: this will not use the limit tests (maybe that is OK?) this is not a conversion operation
-    if tracked_op.paywithsats:  # Custom Json operations are always paywithsats
+    if (
+        tracked_op.paywithsats
+    ):  # Custom Json operations are always paywithsats if they have a memo.
         # get the sats balance for the sending account
-        result = await check_keepsats_balance(tracked_op.cust_id, pay_req)
+        result = await check_keepsats_balance(pay_req.value, tracked_op.cust_id)
     else:  # both these tests are for conversions not paywithsats
-        result = await check_amount_sent(tracked_op, pay_req)  # type: ignore[assignment]
+        result = await check_amount_sent(pay_req=pay_req, tracked_op=tracked_op)  # type: ignore[assignment]
         if not result:
             result = await check_user_limits(pay_req.value, tracked_op.cust_id)
 
@@ -341,7 +369,10 @@ async def decode_incoming_and_checks(
     return pay_req
 
 
-async def check_amount_sent(tracked_op: TrackedTransfer, pay_req: PayReq) -> str:
+async def check_amount_sent(
+    pay_req: PayReq,
+    tracked_op: TrackedTransfer,
+) -> str:
     """
     Asynchronously checks whether a payment attempt can be made for a given payment request.
 
@@ -404,7 +435,7 @@ async def check_user_limits(extra_spend_sats: int, cust_id: str) -> str:
     return ""
 
 
-async def check_keepsats_balance(cust_id: str, pay_req: PayReq) -> str:
+async def check_keepsats_balance(extra_spend_sats: int, cust_id: str) -> str:
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
@@ -412,8 +443,8 @@ async def check_keepsats_balance(cust_id: str, pay_req: PayReq) -> str:
     if not keepsats_balance.balances.get(Currency.MSATS):
         raise HiveTransferError("Pay with sats operation detected, but no Keepsats balance found.")
     # TODO: Need to account for routing fees in Keepsats payments
-    if net_sats < pay_req.value:
+    if net_sats < extra_spend_sats:
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+            f"Insufficient Keepsats balance ({net_sats:,.0f}) to cover payment request: {extra_spend_sats:,.0f} sats"
         )
     return ""

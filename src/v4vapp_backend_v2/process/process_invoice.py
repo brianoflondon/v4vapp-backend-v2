@@ -80,13 +80,8 @@ async def process_lightning_receipt(
             parent_id=invoice.group_id,  # This is the group_id of the original transfer
         )
         trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-        invoice.add_reply(
-            reply_id=trx["trx_id"],
-            reply_type="custom_json",
-            reply_msat=invoice.value_msat,
-            reply_message=invoice.memo,
-        )
-        await invoice.save()
+        logger.info(f"Sent custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer.log_extra})
+
         return ledger_entries_list
 
         #     logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")

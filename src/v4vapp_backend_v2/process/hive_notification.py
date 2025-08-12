@@ -78,7 +78,11 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         extra={"notification": False},
     )
 
-    memo = details.reason_str if details.reason_str else "No reason provided"
+    if details.tracked_op.change_memo:
+        memo = details.tracked_op.change_memo
+    else:
+        memo = details.reason_str if details.reason_str else "No reason provided"
+
     memo += f" | § {details.tracked_op.short_id}{MEMO_FOOTER}"
 
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
@@ -128,18 +132,18 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         )
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
 
-    # Now add the Hive reply to the original Hive operation
-    reason = (
-        f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
-    )
-    details.tracked_op.add_reply(
-        reply_id=trx.get("trx_id", ""),
-        reply_type=details.tracked_op.op_type,
-        reply_msat=return_amount_msat,
-        reply_error=None,
-        reply_message=reason,
-    )
-    await details.tracked_op.save()
+    # # Now add the Hive reply to the original Hive operation
+    # reason = (
+    #     f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+    # )
+    # details.tracked_op.add_reply(
+    #     reply_id=trx.get("trx_id", ""),
+    #     reply_type=details.tracked_op.op_type,
+    #     reply_msat=return_amount_msat,
+    #     reply_error=None,
+    #     reply_message=reason,
+    # )
+    # await details.tracked_op.save()
 
     return trx
 

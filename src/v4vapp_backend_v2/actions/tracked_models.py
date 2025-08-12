@@ -75,6 +75,10 @@ class TrackedBaseModel(BaseModel):
         CryptoConv(),
         description="Conversion object for any returned change associated with this transaction if any",
     )
+    change_memo: str | None = Field(
+        None,
+        description="Message associated with any change in this transaction if any",
+    )
     process_time: float = Field(0, description="Time in (s) it took to process this transaction")
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
 

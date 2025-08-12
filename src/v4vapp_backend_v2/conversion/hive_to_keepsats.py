@@ -26,6 +26,7 @@ Step 4: Fee Income
         Credit: Revenue Fee Income Keepsats (keepsats) - SATS
 
     No net value change (conversion to Keepsats on VSC)
+    LedgerType.WITHDRAW_HIVE withdraw_h
 Step 5: Deposit Keepsats into SERVER's Liability account:
         Debit: Liability VSC Liability (customer) - HIVE/HBD
         Credit: Liability VSC Liability (server) - SATS
@@ -52,6 +53,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import hive_to_keepsats
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -209,30 +211,13 @@ async def conversion_hive_to_keepsats(
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
 
-    if tracked_op.d_memo:
-        memo = tracked_op.d_memo
-    else:
-        memo = (
-            f"Deposit Keepsats {conv_result.to_convert_conv.value_in(from_currency)} to "
+    tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
+    if not is_clean_memo(tracked_op.memo):
+        tracked_op.change_memo += (
+            f"| Deposit Keepsats {conv_result.to_convert_conv.value_in(from_currency)} to "
             f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
             f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
         )
-
-    transfer = KeepsatsTransfer(
-        from_account=server_id,
-        to_account=cust_id,
-        msats=conv_result.net_to_receive_conv.msats,
-        memo=memo,
-        parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
-    )
-    trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-
-    tracked_op.add_reply(
-        reply_id=trx["trx_id"],
-        reply_type="custom_json",
-        reply_msat=conv_result.net_to_receive_conv.msats,
-        reply_message=memo,
-    )
 
     await tracked_op.update_conv(quote=quote)
     tracked_op.change_amount = AmountPyd(
@@ -240,6 +225,17 @@ async def conversion_hive_to_keepsats(
     )
     tracked_op.change_conv = conv_result.change_conv
     await tracked_op.save()
+
+    transfer = KeepsatsTransfer(
+        from_account=server_id,
+        to_account=cust_id,
+        msats=conv_result.net_to_receive_conv.msats,
+        memo=tracked_op.d_memo,
+        parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
+    )
+    trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
+
+    logger.info(f"Sent custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer.log_extra})
 
 
 # Last line

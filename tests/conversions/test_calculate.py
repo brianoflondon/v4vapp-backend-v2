@@ -30,7 +30,7 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
     )  # Resetting InternalConfig instance
 
 
-async def test_keepsats_to_hive():
+async def test_keepsats_to_hive_convert_from_msats():
     TrackedBaseModel.last_quote = last_quote()
     for sats in [500, 4_000, 50_234, 201_000]:
         for currency in [Currency.HIVE, Currency.HBD]:
@@ -42,6 +42,27 @@ async def test_keepsats_to_hive():
             assert isclose(conversion_result.balance, msats, abs_tol=0.001), (
                 "Conversion result is not as expected"
             )
+            assert conversion_result.to_currency == currency, (
+                f"Expected to_currency {currency}, got {conversion_result.to_currency}"
+            )
+
+
+async def test_keepsats_to_hive_convert_from_hive():
+    TrackedBaseModel.last_quote = last_quote()
+    for amount_value in [1.0, 3.0, 55.5, 102.0]:
+        for currency in [Currency.HIVE, Currency.HBD]:
+            amount = Amount(f"{amount_value} {currency.upper()}")
+
+            conversion_result = await keepsats_to_hive(
+                amount=amount,
+                quote=last_quote(),
+            )
+            print(conversion_result)
+            assert isclose(
+                conversion_result.net_to_receive_conv.value_in(currency),
+                amount.amount,
+                abs_tol=0.001,
+            ), "Conversion result is not as expected"
             assert conversion_result.to_currency == currency, (
                 f"Expected to_currency {currency}, got {conversion_result.to_currency}"
             )

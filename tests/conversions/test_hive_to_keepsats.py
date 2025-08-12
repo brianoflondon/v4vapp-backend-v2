@@ -11,6 +11,8 @@ from tests.utils import fake_trx_id, latest_block_num
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
+from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 
 
@@ -41,8 +43,8 @@ def mock_hive_to_keepsats_deps():
         patch.object(TrackedBaseModel, "update_conv", new_callable=AsyncMock) as mock_update_conv,
     ):
         mock_transfer.return_value = {
-            "trx_id": "abc123def456",
-            "block_num": 12345,
+            "trx_id": fake_trx_id(),
+            "block_num": latest_block_num(),
             "trx_num": 1,
             "status": "success",
         }
@@ -109,6 +111,41 @@ async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
 
     # Test with valid conversion amount
     await conversion_hive_to_keepsats(
+        server_id=server_account,
+        cust_id=customer_account,
+        tracked_op=tracked_op,
+        msats=msats,
+        quote=last_quote(),
+    )
+    assert True
+    # Assert the mocks were called
+    assert mock_hive_to_keepsats_deps["send_transfer"].called
+    assert mock_hive_to_keepsats_deps["ledger_save"].call_count == 4  # 4 ledger entries saved
+
+
+async def test_keepsats_to_hive(mock_hive_to_keepsats_deps):
+    # Example test case for keepsats_to_hive
+    pytest.skip("Skipping")
+    TrackedBaseModel.last_quote = last_quote()
+    convert_amount = Amount("13.456 HIVE")
+    server_account = "v4vapp_server"
+    customer_account = "customer123"
+    msats = 0
+
+    tracked_op = CustomJson(
+        op_type="custom_json",
+        cj_id="v4vapp_dev_transfer",
+        from_account=server_account,
+        to_account=customer_account,
+        memo="Deposit #sats",
+        amount=convert_amount,
+        timestamp=datetime.now(timezone.utc),
+        trx_id=fake_trx_id(),
+        block_num=latest_block_num(),
+    )
+
+    # Test with valid conversion amount
+    await conversion_keepsats_to_hive(
         server_id=server_account,
         cust_id=customer_account,
         tracked_op=tracked_op,

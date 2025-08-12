@@ -19,7 +19,7 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase
 
 
 class CustomJson(OpBase):
-    type: str
+    cj_type: str = Field(alias="type")
     cj_id: str = Field(alias="id")
     json_data: CustomJsonData = Field(alias="json")
     required_auths: List[str]

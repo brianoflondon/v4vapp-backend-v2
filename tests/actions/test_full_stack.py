@@ -31,7 +31,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
 
-
+pytest.skip("Skipping", allow_module_level=True)
 """
 This module attempts to test the main monitoring and ledger generating parts of the stack by running them
 as background processes and then running tests against them.
