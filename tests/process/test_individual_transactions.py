@@ -28,7 +28,9 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -130,9 +132,14 @@ async def test_hive_to_lnd_only():
     invoice = await get_lightning_invoice(
         value_sat=invoice_value_sat, memo=f"Simply a bare test invoice {invoice_value_sat}"
     )
+
+    conversion_result = await keepsats_to_hive(
+        msats=invoice_value_sat * 1_000, to_currency=Currency.HBD
+    )
+
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
-        amount=Amount("14.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
+        amount=Amount("20.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 9, timeout=120)
@@ -196,7 +203,8 @@ async def test_check_conversion_limits():
 
     limits = await check_hive_conversion_limits(hive_accname="v4vapp-test")
     assert limits, "Conversion limits should not be empty"
-    pprint(limits)
+    for limit in limits:
+        print(limit.output_text)
 
 
 async def test_deposit_hive_to_keepsats(test_amount: int = 5_000):
@@ -245,10 +253,19 @@ async def test_deposit_hive_to_keepsats(test_amount: int = 5_000):
 
 async def test_deposit_hive_to_keepsats_send_to_account():
     """
-    Test to deposit Hive to Keepsats.
-    This test sends a specified amount of Hive from a customer account to the server account.
-    It checks that the transaction is successful and that the ledger entries are created correctly.
+    Test the process of depositing sats from a Hive customer to the Keepsats server and then sending those sats to another account.
+
+    Steps performed:
+    1. Retrieve the initial ledger count and Keepsats balance for the target customer.
+    2. Simulate a deposit from a Hive customer to the Keepsats server.
+    3. Wait for the ledger to reflect the deposit.
+    4. Transfer a portion of the deposited sats from the test account to the target account.
+    5. Wait for the ledger to reflect the transfer.
+    6. Verify that the ledger count has increased as expected.
+    7. Check that the Keepsats balance for the target account has increased by the transferred amount.
+    8. Assert that all transactions were successful and the balances are updated accordingly.
     """
+
     ledger_count = await get_ledger_count()
     net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp.qrc")
     trx = await send_hive_customer_to_server(
