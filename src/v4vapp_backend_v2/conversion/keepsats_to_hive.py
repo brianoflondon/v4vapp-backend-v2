@@ -95,7 +95,11 @@ async def conversion_keepsats_to_hive(
     """
 
     conv_result = await keepsats_to_hive(
-        tracked_op=tracked_op, msats=msats, amount=amount, quote=quote, to_currency=to_currency
+        timestamp=tracked_op.timestamp,
+        msats=msats,
+        amount=amount,
+        quote=quote,
+        to_currency=to_currency,
     )
     from_currency = conv_result.from_currency
     logger.info(f"{conv_result}")
