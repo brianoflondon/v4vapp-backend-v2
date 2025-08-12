@@ -2,7 +2,6 @@ from typing import Any, Dict
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
@@ -63,7 +62,9 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # This is where we will deal with the inbound memo for # clean need to do this.
 
     amount = Amount("0.001 HIVE")
+
     if details.action in [ReturnAction.REFUND, ReturnAction.CHANGE]:
+        amount = Amount(str(details.amount)) or Amount("0.001 HIVE")
         if details.tracked_op.change_amount:
             amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
         else:
@@ -72,11 +73,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
                 extra={"notification": False, **details.tracked_op.log_extra},
             )
 
-    account_details = await one_account_balance(account=details.pay_to_cust_id)
-    logger.info(
-        f"Account Details for {details.pay_to_cust_id}\n{account_details}\n",
-        extra={"notification": False},
-    )
+    if details.action == ReturnAction.CONVERSION:
+        amount = Amount(str(details.amount))
 
     if details.tracked_op.change_memo:
         memo = details.tracked_op.change_memo
@@ -90,7 +88,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # NORMALLY we send Hive transfers back but if this was initiated by a custom JSON, we send
     # a custom JSON back to the original sender.
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
-    if details.tracked_op.op_type != "custom_json":
+    # We Override for conversions because those will be set off by custom_json
+    if details.action == ReturnAction.CONVERSION or details.tracked_op.op_type != "custom_json":
         trx: Dict[str, Any] = await send_transfer(
             hive_client=hive_client,
             from_account=server_account_name,

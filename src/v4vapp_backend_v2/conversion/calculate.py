@@ -45,38 +45,88 @@ class ConversionResult(BaseModel):
 
         conversion_data = [
             [
-                "to_convert",
+                "to_convert (from_currency)",
                 fmt(self.to_convert, self.from_currency),
                 unit_label(self.from_currency),
             ],
             [
-                "to_convert",
+                "to_convert (to_currency)",
                 fmt(self.to_convert_conv.value_in(self.to_currency), self.to_currency),
                 unit_label(self.to_currency),
             ],
             [
-                "net_to_receive",
+                "net_to_receive (from_currency)",
                 fmt(self.net_to_receive, self.from_currency),
                 unit_label(self.from_currency),
             ],
             [
-                "net_to_receive",
+                "net_to_receive (to_currency)",
                 fmt(self.net_to_receive_conv.value_in(self.to_currency), self.to_currency),
                 unit_label(self.to_currency),
             ],
-            ["fee", fmt(self.fee, self.from_currency), unit_label(self.from_currency)],
             [
-                "fee",
+                "fee (from_currency)",
+                fmt(self.fee, self.from_currency),
+                unit_label(self.from_currency),
+            ],
+            [
+                "fee (to_currency)",
                 fmt(self.fee_conv.value_in(self.to_currency), self.to_currency),
                 unit_label(self.to_currency),
             ],
-            ["change", fmt(self.change, self.from_currency), unit_label(self.from_currency)],
-            ["balance", fmt(self.balance, self.from_currency), unit_label(self.from_currency)],
+            [
+                "change (from_currency)",
+                fmt(self.change, self.from_currency),
+                unit_label(self.from_currency),
+            ],
+            [
+                "balance (from_currency)",
+                fmt(self.balance, self.from_currency),
+                unit_label(self.from_currency),
+            ],
             ["from_currency", unit_label(self.from_currency), ""],
             ["to_currency", unit_label(self.to_currency), ""],
+             ["to_convert", str(self.to_convert_amount), ""],
+            ["net_to_receive", str(self.net_to_receive_amount), ""],
         ]
-
         return f"Conversion Details:\n{tabulate(conversion_data, headers=['Parameter', 'Value', 'Unit'], tablefmt='fancy_grid')}"
+
+    @property
+    def hive_or_hbd(self) -> Currency:
+        """
+        Determines whether the conversion involves HIVE or HBD currency.
+
+        Returns:
+            Currency: Returns `to_currency` if it is HIVE or HBD, otherwise returns `from_currency` if it is HIVE or HBD.
+                      If neither is HIVE or HBD, defaults to returning `Currency.HIVE`.
+        """
+        if self.to_currency in [Currency.HIVE, Currency.HBD]:
+            return self.to_currency
+        if self.from_currency in [Currency.HIVE, Currency.HBD]:
+            return self.from_currency
+        return Currency.HIVE
+
+    @property
+    def net_to_receive_amount(self) -> Amount | None:
+        """
+        Calculates and returns the net amount to be received in the target currency if the target is Hive/HBD
+        Returns:
+            Amount: An Amount object representing the net amount to receive, denominated in the target currency.
+        """
+        return Amount(
+            f"{self.net_to_receive_conv.value_in(self.hive_or_hbd)} {self.hive_or_hbd.value.upper()}"
+        )
+
+    @property
+    def to_convert_amount(self) -> Amount | None:
+        """
+        Calculates and returns the amount to be converted in the target currency if the target is Hive/HBD
+        Returns:
+            Amount: An Amount object representing the amount to convert, denominated in the target currency.
+        """
+        return Amount(
+            f"{self.to_convert_conv.value_in(self.hive_or_hbd)} {self.hive_or_hbd.value.upper()}"
+        )
 
 
 async def hive_to_keepsats(

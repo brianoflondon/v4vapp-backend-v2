@@ -151,7 +151,9 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
-
+    logger.info("Change detected Operation type:")
+    pprint(change.get("operationType", ""))
+    pprint(change.get("ns", {}))
     print("update_descriptions")
     pprint(update_description)
     print("updated_fields")
@@ -287,19 +289,14 @@ async def subscribe_stream(
                 error_code = ""
                 full_document = change.get("fullDocument") or {}
                 group_id = full_document.get("group_id", None) or ""
+                logger.info(
+                    f"{ICON}✳️ Change detected in {collection_name} {group_id}",
+                    extra={"notification": False, "change": change},
+                )
                 if ignore_changes(change):
-                    # If the change is a lock, we want to resume the stream
-                    # and not process the operation silently
-                    logger.debug(
-                        f"{ICON}🔒 Change detected in {collection_name} {group_id}",
-                        extra={"notification": False, "change": change},
-                    )
+                    pass
                 else:
                     # Process the change if it is not a lock/unlock
-                    logger.info(
-                        f"{ICON}✳️ Change detected in {collection_name} {group_id}",
-                        extra={"notification": False, "change": change},
-                    )
                     asyncio.create_task(process_op(change=change, collection=collection_name))
                 resume.set_token(change.get("_id", {}))
                 if shutdown_event.is_set():

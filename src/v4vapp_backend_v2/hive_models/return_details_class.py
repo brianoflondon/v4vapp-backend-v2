@@ -11,6 +11,7 @@ class ReturnAction(StrEnum):
     IN_PROGRESS = "in_progress"
     REFUND = "refund"
     CHANGE = "change"
+    CONVERSION = "conversion"
     CUSTOM_JSON = "custom_json"
     ERROR = "error"
     HOLD = "hold"

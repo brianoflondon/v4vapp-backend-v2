@@ -27,6 +27,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_mongodb,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -136,13 +137,14 @@ async def test_hive_to_lnd_only():
     conversion_result = await keepsats_to_hive(
         msats=invoice_value_sat * 1_000, to_currency=Currency.HBD
     )
+    print(conversion_result)
 
     assert invoice.payment_request, "Invoice payment request is empty"
     trx = await send_hive_customer_to_server(
         amount=Amount("20.000 HBD"), memo=f"{invoice.payment_request}", customer="v4vapp-test"
     )
     assert trx.get("trx_id"), "Transaction failed to send"
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 9, timeout=120)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 9, timeout=12000)
 
     await asyncio.sleep(1)
     assert len(all_ledger_entries) == 9, "Expected 9 ledger entries"
@@ -207,7 +209,7 @@ async def test_check_conversion_limits():
         print(limit.output_text)
 
 
-async def test_deposit_hive_to_keepsats(test_amount: int = 5_000):
+async def test_deposit_hive_to_keepsats(test_amount: int = 5_000, timeout: int = 120):
     """
     Asynchronously tests the process of depositing Hive to Keepsats for a customer account.
 
@@ -237,7 +239,7 @@ async def test_deposit_hive_to_keepsats(test_amount: int = 5_000):
     pprint(trx)
     assert trx.get("trx_id"), "Transaction failed to send"
 
-    ledger_entries = await watch_for_ledger_count(ledger_count + 7)
+    ledger_entries = await watch_for_ledger_count(ledger_count + 7, timeout=timeout)
     await asyncio.sleep(2)
     for i, ledger_entry in enumerate(ledger_entries[ledger_count + 1 :], 1):
         print(f"-------------------------------- Entry {i} --------------------------------")
@@ -301,13 +303,14 @@ async def test_deposit_hive_to_keepsats_send_to_account():
 
 async def test_conversion_keepsats_to_hive():
     # await clear_and_reset()
-    # await test_deposit_hive_to_keepsats(5_000)
-    # ledger_count = await get_ledger_count()
+    await test_deposit_hive_to_keepsats(5_000, timeout=120)
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
     net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
-        msats=4_000_000,
+        msats=5_000_000,
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
@@ -317,6 +320,8 @@ async def test_complete_balance_sheet_accounts_ledger():
     balance_sheet = await generate_balance_sheet_mongodb()
     balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)
     complete_printout = f"{balance_sheet_currencies_str}\n"
+    profit_and_loss = await profit_and_loss_printout()
+    complete_printout += f"{profit_and_loss}\n"
     all_accounts = await list_all_accounts()
     for account in all_accounts:
         printout, details = await account_balance_printout(

@@ -113,7 +113,7 @@ async def conversion_hive_to_keepsats(
         ),
         debit=AssetAccount(
             name="Treasury Lightning",
-            sub="keepsats",  # This is the Customer Keepsats Lightning balance
+            sub="to_keepsats",
         ),
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.to_convert_conv.msats,
@@ -145,7 +145,7 @@ async def conversion_hive_to_keepsats(
         debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(
             name="Converted Keepsats Offset",
-            sub=server_id,  # This is the Server
+            sub="to_keepsats",  # This is the Server
             contra=True,
         ),
         credit_unit=from_currency,
@@ -167,14 +167,14 @@ async def conversion_hive_to_keepsats(
         description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
-            sub=cust_id,  # This is the Customer Keepsats Lightning balance
+            sub=cust_id,
         ),
         debit_unit=from_currency,
         debit_amount=conv_result.fee_conv.value_in(from_currency),
         debit_conv=conv_result.fee_conv,
         credit=RevenueAccount(
             name="Fee Income Keepsats",
-            sub="keepsats",  # This is the Server
+            sub="to_keepsats",
         ),
         credit_unit=Currency.MSATS,
         credit_amount=conv_result.fee_conv.msats,

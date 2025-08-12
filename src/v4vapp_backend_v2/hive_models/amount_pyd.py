@@ -91,6 +91,20 @@ class AmountPyd(BaseModel):
         return Currency(self.beam.symbol.lower())
 
     @property
+    def minimum(self) -> Amount:
+        """
+        Returns an Amount object representing the minimum possible value (1 unit) for the current currency,
+        using the instance's nai and precision attributes.
+        """
+        return Amount(
+            {
+                "amount": "1",
+                "nai": self.nai,
+                "precision": self.precision,
+            }
+        )
+
+    @property
     def minus_minimum(self) -> Amount:
         """
         Returns the amount minus a small buffer to avoid rounding issues.

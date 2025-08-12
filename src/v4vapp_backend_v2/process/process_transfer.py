@@ -9,6 +9,7 @@ from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_li
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
+from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -147,7 +148,7 @@ async def follow_on_transfer(
             and isinstance(tracked_op.json_data, KeepsatsTransfer)
         ):
             # This is a keepsats to Hive conversion.
-            await conversion_hive_to_keepsats(
+            await conversion_keepsats_to_hive(
                 server_id=server_id,
                 cust_id=cust_id,
                 tracked_op=tracked_op,
@@ -322,18 +323,25 @@ async def decode_incoming_and_checks(
 
     try:
         max_send_msats = tracked_op.max_send_amount_msats()
+
+        if isinstance(tracked_op, CustomJson):
+            invoice_comment = getattr(tracked_op.json_data, "invoice_message", "")
+        else:
+            invoice_comment = ""
+
         pay_req = await decode_any_lightning_string(
             input=tracked_op.d_memo,
             lnd_client=lnd_client,
             zero_amount_invoice_send_msats=max_send_msats,
-            comment=tracked_op.log_str,
+            comment=invoice_comment,
             # TODO: THIS NEEDS TO BE TAKEN FROM THE MEMO
         )
-        if not pay_req and isinstance(tracked_op, CustomJson):
-            # If we don't have a pay_req handle the case of a custom_json which has a conversion
-            pass
-        else:
-            raise HiveTransferError("Failed to decode Lightning invoice")
+        if not pay_req:
+            if isinstance(tracked_op, CustomJson):
+                # If we don't have a pay_req handle the case of a custom_json which has a conversion
+                return None
+            else:
+                raise HiveTransferError("Failed to decode Lightning invoice")
     except LnurlException as e:
         message = f"Lightning decode error: {e}"
         logger.info(

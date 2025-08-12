@@ -31,7 +31,8 @@ class LedgerType(StrEnum):
 
     DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
     WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
-    WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's account
+    DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
+    WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
 
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
@@ -41,14 +42,15 @@ class LedgerType(StrEnum):
 
     WITHDRAW_LIGHTNING = "withdraw_l"
     DEPOSIT_LIGHTNING = "deposit_l"
-    
+
     LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
     LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
 
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
-    CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
-
     CONTRA_LIGHTNING_TO_HIVE = "l_contra_h"  # Contra entry for Lightning to Hive conversion
+
+    CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
+    CONTRA_KEEPSATS_TO_HIVE = "k_contra_h"  # Contra entry for Keepsats to Hive conversion
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
