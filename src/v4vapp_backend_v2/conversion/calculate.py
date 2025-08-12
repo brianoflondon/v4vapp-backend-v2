@@ -4,7 +4,6 @@ from nectar.amount import Amount
 from pydantic import BaseModel
 from tabulate import tabulate
 
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
@@ -111,9 +110,27 @@ async def hive_to_keepsats(
 
     original = tracked_op.amount.amount_decimal
 
+    return hive_to_keepsats_calc(
+        msats=msats,
+        amount_minus_minimum=tracked_op.amount.minus_minimum,
+        quote=quote,
+        from_currency=from_currency,
+        to_currency=to_currency,
+        original=original,
+    )
+
+
+def hive_to_keepsats_calc(
+    msats: int,
+    amount_minus_minimum: Amount,
+    quote: QuoteResponse,
+    from_currency: Currency,
+    to_currency: Currency,
+    original: float,
+) -> ConversionResult:
     if msats == 0:
         # Base transfer amount on the inbound Hive/HBD transfer amount
-        hive_to_convert_amount = tracked_op.amount.minus_minimum
+        hive_to_convert_amount = amount_minus_minimum
         to_convert_conv = CryptoConversion(
             amount=hive_to_convert_amount, quote=quote, conv_from=from_currency
         ).conversion
@@ -183,7 +200,7 @@ async def hive_to_keepsats(
 
 
 async def keepsats_to_hive(
-    tracked_op: TrackedTransferWithCustomJson,
+    timestamp: datetime = datetime.now(tz=timezone.utc),
     msats: int | None = None,
     to_currency: Currency = Currency.HIVE,
     amount: Amount | None = None,
@@ -213,8 +230,8 @@ async def keepsats_to_hive(
         change / balance: remain consistent with existing semantics.
     """
     if quote is None:
-        if datetime.now(tz=timezone.utc) - tracked_op.timestamp > timedelta(minutes=5):
-            quote = await TrackedBaseModel.nearest_quote(tracked_op.timestamp)
+        if datetime.now(tz=timezone.utc) - timestamp > timedelta(minutes=5):
+            quote = await TrackedBaseModel.nearest_quote(timestamp)
         else:
             await TrackedBaseModel.update_quote()
             quote = TrackedBaseModel.last_quote
