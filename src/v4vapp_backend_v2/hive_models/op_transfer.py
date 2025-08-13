@@ -4,7 +4,7 @@ from typing import Any, override
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.actions.cust_id_class import CustIDType
+from v4vapp_backend_v2.process.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion

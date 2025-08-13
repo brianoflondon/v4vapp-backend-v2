@@ -2,7 +2,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.actions.cust_id_class import CustIDType
+from v4vapp_backend_v2.process.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 

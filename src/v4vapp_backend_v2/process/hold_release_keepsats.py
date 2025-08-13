@@ -2,16 +2,13 @@ from datetime import datetime, timezone
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 
 
-async def hold_keepsats(
-    amount_msats: int, cust_id: str, tracked_op: TrackedAny
-) -> LedgerEntry:
+async def hold_keepsats(amount_msats: int, cust_id: str, tracked_op: TrackedAny) -> LedgerEntry:
     """
     Creates and saves a ledger entry representing the withdrawal of Keepsats from a customer's liability account to the treasury.
     Args:

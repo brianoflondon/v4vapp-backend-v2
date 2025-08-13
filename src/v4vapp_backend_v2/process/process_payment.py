@@ -12,7 +12,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
+from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger

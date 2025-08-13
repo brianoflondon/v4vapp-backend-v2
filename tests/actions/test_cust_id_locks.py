@@ -5,7 +5,7 @@ from timeit import default_timer as timeit
 
 import pytest
 
-from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 

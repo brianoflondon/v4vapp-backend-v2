@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
+from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion

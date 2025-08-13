@@ -12,7 +12,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerEntryException,
 )
-from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency

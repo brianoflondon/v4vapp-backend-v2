@@ -4,7 +4,7 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.cust_id_class import CustID
+from v4vapp_backend_v2.process.cust_id_class import CustID
 from v4vapp_backend_v2.actions.depreciated_lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency

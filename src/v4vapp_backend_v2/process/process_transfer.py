@@ -4,7 +4,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.actions.hold_release_keepsats import hold_keepsats, release_keepsats
+from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
