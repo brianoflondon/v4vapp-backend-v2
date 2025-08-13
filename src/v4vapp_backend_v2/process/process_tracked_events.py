@@ -13,7 +13,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.depreciated_payment_success import record_payment
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -217,28 +216,23 @@ async def process_lightning_payment(
     Raises:
         NotImplementedError: If the payment memo does not match implemented cases.
     """
-    # The Payment will already have been locked by the outer payment processing function.
     if not payment.conv or payment.conv.is_unset():
         await payment.update_conv()
     v4vapp_group_id = ""
     if payment.succeeded and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""
         keysend_message = payment.custom_records.keysend_message or ""
-        existing_ledger_entry = await LedgerEntry.collection().find_one(
-            filter={"group_id": v4vapp_group_id}
-        )
+        # existing_ledger_entry = await LedgerEntry.collection().find_one(
+        #     filter={"group_id": v4vapp_group_id}
+        # )
+        initiating_op = await load_tracked_object(tracked_obj=v4vapp_group_id)
         # This is the case for a successful payment
-        if existing_ledger_entry:
-            old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
+        if initiating_op:
             ledger_entries_list = await process_payment_success(
                 payment=payment,
-                old_ledger_entry=old_ledger_entry,
+                initiating_op=initiating_op,
                 nobroadcast=nobroadcast,
             )
-            return ledger_entries_list
-        else:
-                # At this point we can record the payment using Keepsats
-            ledger_entries_list = await record_payment(payment=payment)
             return ledger_entries_list
 
     if payment.failed and payment.custom_records:

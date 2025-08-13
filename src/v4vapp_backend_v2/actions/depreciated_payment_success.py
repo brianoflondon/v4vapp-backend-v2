@@ -81,13 +81,15 @@ async def process_payment_success(
             )
             raise e
 
-    payment_ledger_entries = await record_payment(payment=payment, quote=quote)
+    payment_ledger_entries = await depreciated_record_payment(payment=payment, quote=quote)
     ledger_entries_list.extend(payment_ledger_entries)
 
     return ledger_entries_list
 
 
-async def record_payment(payment: Payment, quote: QuoteResponse = None) -> list[LedgerEntry]:
+async def depreciated_record_payment(
+    payment: Payment, quote: QuoteResponse = None
+) -> list[LedgerEntry]:
     """
     Records the ledger entries for a successful Lightning payment.
     This function creates and saves ledger entries for the following actions:

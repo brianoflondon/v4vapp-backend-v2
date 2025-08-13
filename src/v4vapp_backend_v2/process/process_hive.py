@@ -366,7 +366,7 @@ async def process_custom_json(
         if (
             custom_json.from_account
             and custom_json.to_account
-            and (keepsats_transfer.msats)
+            and keepsats_transfer.msats
             and custom_json.from_account != custom_json.to_account
         ):
             ledger_entry = await custom_json_internal_transfer(
@@ -381,7 +381,7 @@ async def process_custom_json(
                     parent_op.add_reply(
                         reply_id=custom_json.group_id_p,
                         reply_type=custom_json.op_type,
-                        reply_msat=keepsats_transfer.msats,
+                        reply_msat=keepsats_transfer.msats if keepsats_transfer.msats else 0,
                         reply_message="Reply to transfer",
                     )
                     await parent_op.save()
@@ -408,7 +408,7 @@ async def process_custom_json(
         # MARK: CustomJson to pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
         # invoice_message we will use to send on if we generate an invoice form a lightning address
-        elif keepsats_transfer.memo and not keepsats_transfer.to_account:
+        elif keepsats_transfer.memo and keepsats_transfer.to_account == server_id:
             # This is a transfer operation, we need to process it as such
 
             if not custom_json.conv or custom_json.conv.is_unset():
@@ -417,6 +417,9 @@ async def process_custom_json(
                     raise LedgerEntryCreationException(
                         "Conversion not set in CustomJson operation."
                     )
+
+            await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
+            return None
             try:
                 ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
                 custom_json_ledger_entry = LedgerEntry(

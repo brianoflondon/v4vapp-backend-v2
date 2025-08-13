@@ -155,8 +155,6 @@ async def test_hive_to_lnd_only():
 
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 18, timeout=60)
 
-    # TODO: need to fix the whole reply system and the text which appears in transfers
-
     await asyncio.sleep(1)
     assert len(all_ledger_entries) - ledger_count == 18, "Expected 18 new ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
@@ -280,29 +278,40 @@ async def test_conversion_keepsats_to_hive():
 
     The test ensures that the conversion and transfer processes function as expected.
     """
-    await clear_and_reset()
+    invoice_sats = 5_000
     await test_deposit_hive_to_keepsats(
-        5_000, timeout=120, message="test_conversion_keepsats_to_hive"
+        invoice_sats, timeout=120, message="test_conversion_keepsats_to_hive"
     )
+    net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp-test")
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
-    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
-    pprint(balance)
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
-        msats=5_000_000,
+        msats=invoice_sats * 1000,
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
 
-    net_msats, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
-
-    pprint(balance_after)
+    net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
+    assert net_msats_after == net_msats_before - invoice_sats * 1000, (
+        f"Expected {net_msats_before - invoice_sats * 1000} got {net_msats_after}"
+    )
 
 
 async def test_deposit_keepsats_spend_hive_custom_json():
-    """ """
+    """
+    Test the process of depositing HIVE to Keepsats, generating a Lightning invoice,
+    checking the Keepsats balance, and sending a transfer using custom JSON.
+    Steps performed:
+    1. Deposit HIVE to Keepsats and verify the operation.
+    2. Log the current ledger count.
+    3. Generate a Lightning invoice for a specified amount.
+    4. Retrieve and log the Keepsats balance for a test customer.
+    5. Create and send a Keepsats transfer using custom JSON, including the Lightning invoice in the memo.
+    This test ensures the integration between HIVE deposits, Keepsats balance management,
+    Lightning invoice generation, and custom JSON transfers.
+    """
     await test_deposit_hive_to_keepsats(
         5_000, timeout=120, message="test_deposit_keepsats_spend_hive_custom_json"
     )
@@ -317,10 +326,30 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
-        msats=5_000_000,
         memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
+    # needs test for reply
+
+
+async def test_failure_spend_custom_json():
+    invoice_value_sat = 500_000
+
+    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo="")
+
+    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+    transfer = KeepsatsTransfer(
+        from_account="v4vapp-test",
+        to_account="devser.v4vapp",
+        # msats=invoice_value_sat * 1000,
+        memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
+    )
+    trx = await send_transfer_custom_json(transfer)
+    # Needs test for reply
+
+
+
+
 
 
 async def test_complete_balance_sheet_accounts_ledger():
@@ -337,10 +366,13 @@ async def test_complete_balance_sheet_accounts_ledger():
             user_memos=False,
         )
         complete_printout += "\n" + printout
+
+    without_ledger_entries_printout = complete_printout
+
     for ledger_entry_dict in await get_all_ledger_entries():
         ledger_entry = LedgerEntry.model_validate(ledger_entry_dict)
         complete_printout += f"{ledger_entry}\n"
-    print(complete_printout)
+
     text_to_rtf(
         input_text=complete_printout,
         output_file="balance_sheet.rtf",
@@ -348,6 +380,6 @@ async def test_complete_balance_sheet_accounts_ledger():
         font_name="AndaleMono",
         font_size=10,
     )
-
+    print(without_ledger_entries_printout)
 
 # Last line of the file

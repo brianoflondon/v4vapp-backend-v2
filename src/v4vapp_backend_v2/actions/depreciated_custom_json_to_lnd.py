@@ -177,7 +177,7 @@ async def depreciated_process_custom_json_to_lightning(
         # )
 
 
-async def custom_json_internal_transfer(
+async def depreciated_custom_json_internal_transfer(
     custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
 ) -> LedgerEntry:
     """

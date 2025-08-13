@@ -150,7 +150,6 @@ class LiabilityAccount(LedgerAccount):
     """
 
     name: Literal[
-        "Customer Liability",
         "Keepsats Hold",
         "VSC Liability",
         "Owner Loan Payable (funding)",

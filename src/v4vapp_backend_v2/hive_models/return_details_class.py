@@ -43,8 +43,8 @@ class HiveReturnDetails(BaseModel):
 
     tracked_op: TrackedAny
     original_memo: str
-    reason_str: str
     action: ReturnAction
+    reason_str: str = ""
     amount: AmountPyd | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False

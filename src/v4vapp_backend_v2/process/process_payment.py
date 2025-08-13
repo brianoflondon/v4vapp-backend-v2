@@ -12,19 +12,24 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
+from v4vapp_backend_v2.actions.hold_release_keepsats import release_keepsats
+from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 
 async def process_payment_success(
-    payment: Payment, old_ledger_entry: LedgerEntry, nobroadcast: bool = False
+    payment: Payment, initiating_op: TrackedAny, nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
     Processes a successful payment by handling both Keepsats and Hive transfers.
@@ -50,11 +55,11 @@ async def process_payment_success(
         f"Processing payment: {payment.short_id} {payment.value_msat / 1000:,.0f} sats, fee: {payment.fee_msat / 1000:,.0f} sats",
         extra={"notification": False},
     )
-    initiating_op = await load_tracked_object(tracked_obj=old_ledger_entry.group_id)
-    if initiating_op is None:
-        raise HiveToLightningError(
-            f"Could not load initiating operation for group_id: {old_ledger_entry.group_id}"
-        )
+
+    # if initiating_op is None:
+    #     raise HiveToLightningError(
+    #         f"Could not load initiating operation for group_id: {old_ledger_entry.group_id}"
+    #     )
     # Find existing ledger entries for this payment
     existing_ledger_entries = (
         await LedgerEntry.collection()
@@ -80,6 +85,7 @@ async def process_payment_success(
 
     if isinstance(initiating_op, TransferBase) and not initiating_op.paywithsats:
         # First we must convert the correct amount of Hive to Keepsats
+        # This will also send the answer reply (either a hive transfer or custom_json)
         cost_of_payment_msat = payment.value_msat + payment.fee_msat
         try:
             await conversion_hive_to_keepsats(
@@ -99,6 +105,28 @@ async def process_payment_success(
     # At this point we can record the payment using Keepsats
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)
     ledger_entries_list.extend(payment_ledger_entries)
+    await release_keepsats(tracked_op=initiating_op)
+
+    if isinstance(initiating_op, CustomJson):
+        initiating_op.change_memo = process_clean_memo(initiating_op.d_memo)
+        end_memo = f" | {initiating_op.lightning_memo}" if initiating_op.lightning_memo else ""
+
+        if not is_clean_memo(initiating_op.lightning_memo):
+            initiating_op.change_memo = f"Paid Invoice with Keepsats{end_memo}"
+        await initiating_op.save()
+
+        reply_details = HiveReturnDetails(
+            tracked_op=initiating_op,
+            original_memo=initiating_op.memo,
+            action=ReturnAction.CUSTOM_JSON,
+            pay_to_cust_id=cust_id,
+        )
+        trx = await reply_with_hive(details=reply_details)
+
+    net_sats, details = await keepsats_balance_printout(
+        cust_id=cust_id,
+    )
+
     return ledger_entries_list
 
 
@@ -106,7 +134,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     """
     Lightning payment settlement flow (customer spends sats via node).
 
-    Operates by moving value from the Customer Liability (owed to user) out through the
+    Operates by moving value from the VSC Liability (owed to user) out through the
     node’s external payment channel, recording any network fee as an expense.
 
         Context (earlier steps handled elsewhere):
@@ -141,7 +169,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         list[LedgerEntry]: Persisted ledger entries (1 or 2 items).
 
     Accounting Summary:
-        - Customer liability reduced by (value_msat + fee_msat).
+        - VSC liability reduced by (value_msat + fee_msat).
         - External payment allocated (principal + fee expectation).
         - Actual fee recognized as expense (if > 0).
         - Economic impact: Expense increases by fee; equity decreases accordingly.
