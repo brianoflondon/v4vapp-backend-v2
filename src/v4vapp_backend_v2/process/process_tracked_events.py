@@ -13,6 +13,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.actions.depreciated_payment_success import record_payment
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
@@ -226,6 +227,7 @@ async def process_lightning_payment(
         existing_ledger_entry = await LedgerEntry.collection().find_one(
             filter={"group_id": v4vapp_group_id}
         )
+        # This is the case for a successful payment
         if existing_ledger_entry:
             old_ledger_entry = LedgerEntry.model_validate(existing_ledger_entry)
             ledger_entries_list = await process_payment_success(
@@ -234,10 +236,10 @@ async def process_lightning_payment(
                 nobroadcast=nobroadcast,
             )
             return ledger_entries_list
-
-        message = f"Not implemented yet {v4vapp_group_id} {keysend_message}"
-        logger.error(message)
-        raise NotImplementedError(message)
+        else:
+                # At this point we can record the payment using Keepsats
+            ledger_entries_list = await record_payment(payment=payment)
+            return ledger_entries_list
 
     if payment.failed and payment.custom_records:
         v4vapp_group_id = payment.custom_records.v4vapp_group_id or ""

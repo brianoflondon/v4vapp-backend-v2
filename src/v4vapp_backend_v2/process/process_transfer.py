@@ -14,6 +14,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -142,9 +143,8 @@ async def follow_on_transfer(
         # Important: we ignore Keepsats status for now, first we check amounts and try to pay a lightning invoice.
         # If there is no invoice we will skip to just depositing all the Hive.
 
-        if (
-            not pay_req
-            and isinstance(tracked_op, CustomJson)
+        if not pay_req and (
+            isinstance(tracked_op, CustomJson)
             and isinstance(tracked_op.json_data, KeepsatsTransfer)
         ):
             # This is a keepsats to Hive conversion.
@@ -156,6 +156,16 @@ async def follow_on_transfer(
                 msats=tracked_op.json_data.msats,
             )
             release_hold = False  #   There is no hold to release
+
+        if not pay_req and isinstance(tracked_op, OpAllTransfers):
+            # Deposit the full amount of Hive as sats
+            await conversion_hive_to_keepsats(
+                server_id=server_id,
+                cust_id=cust_id,
+                tracked_op=tracked_op,
+                nobroadcast=nobroadcast,
+                msats=0,  # Use all the funds sent
+            )
 
         else:
             assert pay_req and isinstance(pay_req, PayReq), (

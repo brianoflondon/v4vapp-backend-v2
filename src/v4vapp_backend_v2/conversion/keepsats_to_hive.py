@@ -53,6 +53,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
@@ -221,10 +222,27 @@ async def conversion_keepsats_to_hive(
         f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
     )
 
+    tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
+    end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
+    if not is_clean_memo(tracked_op.lightning_memo):
+        tracked_op.change_memo = (
+            f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats "
+            f"{conv_result.to_convert_amount} "
+            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
+            f"{end_memo}"
+        )
+
+    await tracked_op.update_conv(quote=quote)
+    tracked_op.change_amount = AmountPyd(
+        amount=AmountPyd(amount=conv_result.net_to_receive_amount),
+    )
+    tracked_op.change_conv = conv_result.change_conv
+    await tracked_op.save()
+
     details = HiveReturnDetails(
         tracked_op=tracked_op,
         original_memo=tracked_op.d_memo,
-        reason_str=reason_str,
+        reason_str=tracked_op.change_memo,
         action=ReturnAction.CONVERSION,
         pay_to_cust_id=cust_id,
         amount=AmountPyd(amount=conv_result.net_to_receive_amount),

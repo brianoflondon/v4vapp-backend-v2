@@ -212,11 +212,14 @@ async def conversion_hive_to_keepsats(
     await deposit_ledger_entry.save()
 
     tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
-    if not is_clean_memo(tracked_op.memo):
-        tracked_op.change_memo += (
-            f"| Deposit Keepsats {conv_result.to_convert_conv.value_in(from_currency)} to "
+    end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
+
+    if not is_clean_memo(tracked_op.lightning_memo):
+        tracked_op.change_memo = (
+            f"Deposit Keepsats {conv_result.to_convert_amount} to "
             f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
             f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
+            f"{end_memo}"
         )
 
     await tracked_op.update_conv(quote=quote)

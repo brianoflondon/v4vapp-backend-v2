@@ -53,6 +53,18 @@ class Currency(StrEnum):
     MSATS = "msats"
     BTC = "btc"
 
+    @property
+    def symbol(self) -> str:
+        """
+        Returns the symbol of the cryptocurrency in uppercase for Nectar Amount.
+
+        Returns:
+            str: The uppercase symbol of the cryptocurrency.
+        """
+        if self in [Currency.HIVE, Currency.HBD]:
+            return self.value.upper()
+        raise ValueError("Invalid currency")
+
 
 class CurrencyPair(StrEnum):
     HIVE_USD = "hive_usd"

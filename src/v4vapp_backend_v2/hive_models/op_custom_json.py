@@ -1,4 +1,5 @@
 import json
+import re
 from typing import List
 
 from pydantic import Field
@@ -177,6 +178,26 @@ class CustomJson(OpBase):
         """
         # this is where #clean needs to be evaluated
         return process_user_memo(self.memo)
+
+    @property
+    def lightning_memo(self) -> str:
+        """
+        Removes and shortens a lightning invoice from a memo for output.
+
+        Returns:
+            str: The shortened memo string.
+        """
+        # Regex pattern to capture 'lnbc' followed by numbers and one letter
+        if not self.d_memo:
+            return ""
+        pattern = r"(lnbc\d+[a-zA-Z])"
+        match = re.search(pattern, self.d_memo)
+        if match:
+            # Replace the entire memo with the matched lnbc pattern
+            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
+        else:
+            memo = f"💬{self.d_memo}"
+        return memo
 
     @property
     def to_account(self) -> str:

@@ -86,7 +86,7 @@ class ConversionResult(BaseModel):
             ],
             ["from_currency", unit_label(self.from_currency), ""],
             ["to_currency", unit_label(self.to_currency), ""],
-             ["to_convert", str(self.to_convert_amount), ""],
+            ["to_convert", str(self.to_convert_amount), ""],
             ["net_to_receive", str(self.net_to_receive_amount), ""],
         ]
         return f"Conversion Details:\n{tabulate(conversion_data, headers=['Parameter', 'Value', 'Unit'], tablefmt='fancy_grid')}"
@@ -107,7 +107,7 @@ class ConversionResult(BaseModel):
         return Currency.HIVE
 
     @property
-    def net_to_receive_amount(self) -> Amount | None:
+    def net_to_receive_amount(self) -> Amount:
         """
         Calculates and returns the net amount to be received in the target currency if the target is Hive/HBD
         Returns:
@@ -118,7 +118,7 @@ class ConversionResult(BaseModel):
         )
 
     @property
-    def to_convert_amount(self) -> Amount | None:
+    def to_convert_amount(self) -> Amount:
         """
         Calculates and returns the amount to be converted in the target currency if the target is Hive/HBD
         Returns:

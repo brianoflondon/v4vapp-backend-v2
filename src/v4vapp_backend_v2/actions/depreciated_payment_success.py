@@ -6,9 +6,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     LiabilityAccount,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 from v4vapp_backend_v2.actions.depreciated_hive_to_keepsats import hive_to_keepsats_deposit
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -17,6 +15,8 @@ from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 
 async def process_payment_success(
@@ -84,11 +84,10 @@ async def process_payment_success(
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)
     ledger_entries_list.extend(payment_ledger_entries)
 
-
     return ledger_entries_list
 
 
-async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerEntry]:
+async def record_payment(payment: Payment, quote: QuoteResponse = None) -> list[LedgerEntry]:
     """
     Records the ledger entries for a successful Lightning payment.
     This function creates and saves ledger entries for the following actions:
@@ -101,7 +100,8 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     Returns:
         list[LedgerEntry]: A list of saved ledger entries corresponding to the payment actions.
     """
-
+    if quote is None:
+        quote = await TrackedBaseModel.nearest_quote(timestamp=payment.timestamp)
     ledger_entries_list = []
     node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
