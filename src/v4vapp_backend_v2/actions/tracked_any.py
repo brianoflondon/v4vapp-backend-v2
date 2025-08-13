@@ -10,7 +10,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
@@ -95,6 +95,15 @@ TrackedTransfer = Annotated[
 
 TrackedTransferWithCustomJson = Annotated[
     Annotated[Transfer, Tag("transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
+    | Annotated[CustomJson, Tag("custom_json")],
+    Discriminator(get_tracked_any_type),
+]
+
+TrackedTransferKeepsatsToHive = Annotated[
+    Annotated[Invoice, Tag("invoice")]
+    | Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[CustomJson, Tag("custom_json")],

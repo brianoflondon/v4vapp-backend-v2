@@ -1,5 +1,6 @@
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
@@ -98,7 +99,7 @@ class TrackedBaseModel(BaseModel):
         :param short_id: The short ID to search for.
         :return: A dictionary representing the query.
         """
-        return {"group_id": {"$regex": f"^{short_id}"}}  # Match the full short_id
+        return {"group_id": {"$regex": f"^{re.escape(short_id)}$"}}
 
     # async def __aenter__(self) -> "TrackedBaseModel":
     #     """

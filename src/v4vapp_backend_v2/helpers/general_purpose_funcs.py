@@ -243,33 +243,48 @@ def process_clean_memo(
     memo: str,
 ) -> str:
     """
-    Cleans and processes a memo string by removing the '#clean' tag and handling special cases.
-    If the memo contains '#clean' (case-insensitive), the function:
-    - Removes the '#clean' tag and trims whitespace.
-    - If `detect_keepsats(memo)` returns True:
-        - Keeps only the part before the first ' | ' separator.
-        - Appends ' | #sats' to the message.
-        - If a transaction code matching 'v4v-<word>' exists, appends it as ' | <transaction_code>'.
-    - If `detect_keepsats(memo)` returns False:
-        - Keeps only the part before the first ' | ' separator.
-        - Removes the '#clean' tag and trims whitespace.
+    Cleans and processes a memo string by performing several transformations:
+    1. Removes the first word (typically a Hive account name).
+    2. Strips specified hashtags (e.g., '#v4vapp') from the message.
+    3. Removes leading '- ' or '| ' if present.
+    4. If the message is identified as a 'clean memo' (via is_clean_memo), further processes:
+        - If detect_keepsats returns True, removes content after ' | ', strips '#clean', appends ' | #sats',
+          and adds a transaction code if detected (e.g., 'v4v-xxxx').
+        - Otherwise, removes content after ' | ' and strips '#clean'.
     Args:
-        memo (str): The input memo string to be cleaned and processed.
+        memo (str): The original memo string to be cleaned and processed.
     Returns:
         str: The cleaned and processed memo string.
     """
+    if memo.startswith("lnbc"):
+        return memo
     message = memo
-    if is_clean_memo(memo):
-        if detect_keepsats(memo):
-            message = memo.split(" | ")[0]
+    # Strip the Hive account name from the message:
+    s = " "
+    message = s.join(message.split()[1:])
+
+    # Remove #tags
+    remove = ["#v4vapp"]
+    for r in remove:
+        message = message.replace(r, "").strip()
+
+    if message.startswith("- ") or message.startswith("| "):
+        message = message[2:]
+
+    if message.endswith(" |"):
+        message = message[:-2]
+
+    if is_clean_memo(message):
+        if detect_keepsats(message):
+            message = message.split(" | ")[0]
             message = message.replace("#clean", "").strip()
             message = f"{message} | #sats"
             # Detect special case of POS v4vapp looking the #
-            transaction_checkCode = re.findall(r"v4v-\w+", memo)
+            transaction_checkCode = re.findall(r"v4v-\w+", message)
             if transaction_checkCode:
                 message = f"{message} | {transaction_checkCode[0]}"
         else:
-            message = memo.split(" | ")[0]
+            message = message.split(" | ")[0]
             message = message.replace("#clean", "").strip()
 
     return message

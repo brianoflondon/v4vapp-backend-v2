@@ -5,6 +5,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
@@ -154,9 +155,7 @@ async def process_lightning_receipt(
     return ledger_entries_list
 
 
-async def process_lightning_receipt_stage_2(
-    invoice: Invoice, nobroadcast: bool = False
-) -> List[LedgerEntry]:
+async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool = False) -> None:
     """
     Process the second part of a Lightning invoice which is inbound.
     This function is called after the initial deposit has been made.
@@ -169,23 +168,26 @@ async def process_lightning_receipt_stage_2(
         List[LedgerEntry]: The ledger entries for the transfer operation.
     """
 
-    if invoice.cust_id and invoice.is_lndtohive:
+    # MARK: Sats to Hive or HBD
+    server_id = InternalConfig().server_id
+    if (
+        invoice.cust_id
+        and invoice.is_lndtohive
+        and invoice.recv_currency in {Currency.HIVE, Currency.HBD}
+    ):
         # For now we will treat any inbound amount as Keepsats.
         # Not sure this is right... need to think about the custom_json use in the LND to Hive loop.
-        logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")
-        # This line here bypasses the Hive Return logic.
-
-        # conv_result = await keepsats_to_hive(server_id = )
-
-        ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
-            invoice, nobroadcast
-        )
-    # MARK: Sats to Hive or HBD
-    elif invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
         logger.info(f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}")
-        ledger_entries, message, return_amount = await process_lightning_to_hive(
-            invoice, nobroadcast
+        # This will send Hive or a custom_json at the end.
+        await conversion_keepsats_to_hive(
+            server_id=server_id,
+            cust_id=invoice.cust_id,
+            tracked_op=invoice,
+            to_currency=invoice.recv_currency,
+            nobroadcast=nobroadcast,
         )
+        return
+
     else:
         logger.error(
             f"Unsupported currency for Lightning to Hive transfer: {invoice.recv_currency}",
@@ -194,43 +196,3 @@ async def process_lightning_receipt_stage_2(
         raise NotImplementedError(
             f"Unsupported currency for Lightning to Hive transfer: {invoice.recv_currency}"
         )
-
-    if invoice.value_msat <= V4VConfig().data.minimum_invoice_payment_sats * 1_000:
-        logger.info(f"Invoice {invoice.short_id} is below the minimum notification threshold.")
-        return ledger_entries
-
-    if return_amount:
-        return_details = HiveReturnDetails(
-            tracked_op=invoice,
-            original_memo=invoice.memo,
-            reason_str=message,
-            action=ReturnAction.REFUND,
-            amount=return_amount,
-            pay_to_cust_id=invoice.cust_id,
-            nobroadcast=nobroadcast,
-        )
-        logger.info(f"Return amount to customer: {return_amount}")
-        try:
-            await depreciated_send_notification_hive_transfer(
-                tracked_op=invoice,
-                reason=message,
-                nobroadcast=nobroadcast,
-                amount=return_amount,
-                pay_to_cust_id=invoice.cust_id,
-            )
-        except KeepsatsDepositNotificationError as e:
-            logger.warning(
-                f"Failed to send notification for invoice, skipped {invoice.short_id}: {e}",
-                extra={"notification": False, **invoice.log_extra},
-            )
-        except Exception as e:
-            logger.exception(
-                f"Error returning Hive transfer: {e}",
-                extra={
-                    "notification": False,
-                    "reason": message,
-                    **invoice.log_extra,
-                },
-            )
-
-    return ledger_entries

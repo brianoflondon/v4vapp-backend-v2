@@ -484,6 +484,17 @@ class Invoice(TrackedBaseModel):
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
         return age_text
 
+    @property
+    def d_memo(self) -> str:
+        """
+        Returns the memo associated with the invoice, or an empty string if no memo is set.
+        Provided for consistency with decoded memos in Hive.
+
+        Returns:
+            str: The memo text, or an empty string if memo is None or empty.
+        """
+        return self.memo if self.memo else ""
+
 
 class ListInvoiceResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

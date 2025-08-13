@@ -49,20 +49,21 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     RevenueAccount,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.actions.tracked_any import TrackedTransferWithCustomJson
+from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 
 
 async def conversion_keepsats_to_hive(
     server_id: str,
     cust_id: str,
-    tracked_op: TrackedTransferWithCustomJson,
+    tracked_op: TrackedTransferKeepsatsToHive,
     msats: int | None = None,
     amount: Amount | None = None,
     to_currency: Currency = Currency.HIVE,
@@ -94,6 +95,10 @@ async def conversion_keepsats_to_hive(
     Returns:
          None
     """
+
+    # Inbound Invoices contain the msats amount
+    if not msats and not amount and isinstance(tracked_op, Invoice):
+        msats = tracked_op.value_msat
 
     conv_result = await keepsats_to_hive(
         timestamp=tracked_op.timestamp,
@@ -216,15 +221,13 @@ async def conversion_keepsats_to_hive(
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
 
-    reason_str = (
-        f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats "
-        f"{conv_result.to_convert_amount} "
-        f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
-    )
+    lightning_memo = getattr(tracked_op, "lightning_memo", "")
+    if not lightning_memo:
+        lightning_memo = tracked_op.d_memo
 
     tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
-    end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
-    if not is_clean_memo(tracked_op.lightning_memo):
+    end_memo = f" | {tracked_op.change_memo}" if tracked_op.change_memo else lightning_memo
+    if not is_clean_memo(lightning_memo):
         tracked_op.change_memo = (
             f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats "
             f"{conv_result.to_convert_amount} "
@@ -234,7 +237,7 @@ async def conversion_keepsats_to_hive(
 
     await tracked_op.update_conv(quote=quote)
     tracked_op.change_amount = AmountPyd(
-        amount=AmountPyd(amount=conv_result.net_to_receive_amount),
+        amount=Amount(amount=conv_result.net_to_receive_amount),
     )
     tracked_op.change_conv = conv_result.change_conv
     await tracked_op.save()

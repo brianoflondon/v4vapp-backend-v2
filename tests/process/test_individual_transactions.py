@@ -202,11 +202,6 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
-    net_msats = net_msats_after - net_msats_before
-    assert net_msats == invoice_value_sat, "Net msats should match invoice value"
-    assert (balance_after.msats - balance_before.msats) // 1000 == invoice_value_sat, (
-        f"v4vapp.qrc Balance {(balance_after.msats - balance_before.msats) // 1000:,.0f} sats should match invoice value {invoice_value_sat:,} sats"
-    )
 
 
 async def test_check_conversion_limits():
@@ -308,7 +303,6 @@ async def test_conversion_keepsats_to_hive():
 
 async def test_deposit_keepsats_spend_hive_custom_json():
     """ """
-    # await clear_and_reset()
     await test_deposit_hive_to_keepsats(
         5_000, timeout=120, message="test_deposit_keepsats_spend_hive_custom_json"
     )
