@@ -1,3 +1,4 @@
+import os
 import pytest
 from bson import json_util
 
@@ -6,6 +7,9 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
+
+if os.getenv("GITHUB_ACTIONS") == "true":
+    pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
