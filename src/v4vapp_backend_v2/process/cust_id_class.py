@@ -11,7 +11,7 @@ from redis.exceptions import LockError, LockNotOwnedError
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
-LOCK_REPORTING_TIME = 5
+LOCK_REPORTING_TIME = 10
 ICON = "🔒"
 
 # In-process tracking of outstanding lock waiters.
@@ -23,7 +23,7 @@ _OUTSTANDING_LOCK = asyncio.Lock()
 _NEXT_ALLOWED_WARN: dict[str, float] = {}
 
 _REPORTER_TASK: asyncio.Task | None = None
-_REPORT_INTERVAL_SEC = 60
+_REPORT_INTERVAL_SEC = 120
 
 
 class CustIDLockException(Exception):
@@ -190,12 +190,8 @@ class CustID(AccName):
                     )
                     if acquired:
                         await _unregister_waiter(str(self), request_id)
-                        logger.info(
-                            f"{ICON} Lock acquired for customer {self}"
-                        )
-                        logger.info(
-                            f"{ICON} {request_details if request_details else ''}"
-                        )
+                        logger.info(f"{ICON} Lock acquired for customer {self}")
+                        logger.info(f"{ICON} {request_details if request_details else ''}")
                         return True
                 except asyncio.TimeoutError:
                     # Per-customer deduped wait warning
