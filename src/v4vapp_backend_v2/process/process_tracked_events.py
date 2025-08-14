@@ -23,8 +23,8 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
-from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
@@ -47,88 +47,86 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+    async with LockStr(tracked_op.group_id_p).locked(
+        timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
+    ):
+        existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
+        if existing_entry:
+            logger.info(f"Tracked operation {tracked_op.short_id} already processed.")
+            return [existing_entry]
 
-    existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
-    if existing_entry:
-        logger.info(f"Tracked operation {tracked_op.short_id} already processed.")
-        return [existing_entry]
-
-    logger.info(f"{'=*=' * 20}")
-    logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
-    logger.info(f"{tracked_op.log_str}")
-    logger.info(f"{'=*=' * 20}")
-    if isinstance(tracked_op, BlockMarker):
-        # This shouldn't be arrived at.
-        logger.warning(
-            "BlockMarker is not a valid operation.",
-            extra={"notification": False, **tracked_op.log_extra},
-        )
-        return []
-
-    if isinstance(tracked_op, CustomJson) and "notification" in tracked_op.cj_id:
-        # CustomJson notification is a special case.
-        logger.info(f"Notification CustomJson: {tracked_op.log_str}")
-        return []
-
-    unknown_cust_id = uuid4()
-    cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
-    cust_id = str(unknown_cust_id) if not cust_id else cust_id
-
-    logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
-    start = timer()
-    try:
-        async with LockStr(cust_id).locked(
-            timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
-        ):
-            if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
-                ledger_entries = await process_hive_op(op=tracked_op)
-            elif isinstance(tracked_op, Invoice):
-                ledger_entries = await process_lightning_invoice(invoice=tracked_op)
-            elif isinstance(tracked_op, Payment):
-                ledger_entries = await process_lightning_payment(payment=tracked_op)
-            else:
-                raise ValueError("Invalid tracked object")
-
-            for ledger_entry in ledger_entries:
-                try:
-                    # DEBUG section
-                    is_balanced, _ = await check_balance_sheet_mongodb()
-                    if not is_balanced:
-                        logger.warning(
-                            f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
-                            extra={"notification": False},
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Error saving ledger entry: {e}",
-                        extra={**ledger_entry.log_extra, "notification": False},
-                    )
-
-            return ledger_entries
-    except LedgerEntryDuplicateException as e:
-        raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
-
-    except LedgerEntryException as e:
-        logger.exception(f"Error processing tracked operation: {e}")
-        raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
-
-    except CustIDLockException as e:
-        logger.error(f"Error acquiring lock for {cust_id}: {e}")
-        await asyncio.sleep(10)
-        raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
-
-    finally:
-        process_time = timer() - start
-        tracked_op.process_time = process_time
-        await tracked_op.save()
-        logger.info(f"{'=' * 50}")
-        logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
+        logger.info(f"{'=*=' * 20}")
+        logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
         logger.info(f"{tracked_op.log_str}")
-        logger.info(f"{'=' * 50}")
-        # if cust_id:
-        #     # Ensure the lock is released even if an error occurs
-        #     logger.info(f"Releasing lock for {cust_id} after processing tracked operation.")
-        #     await CustID.release_lock(cust_id)
+        logger.info(f"{'=*=' * 20}")
+        if isinstance(tracked_op, BlockMarker):
+            # This shouldn't be arrived at.
+            logger.warning(
+                "BlockMarker is not a valid operation.",
+                extra={"notification": False, **tracked_op.log_extra},
+            )
+            return []
+
+        if isinstance(tracked_op, CustomJson) and "notification" in tracked_op.cj_id:
+            # CustomJson notification is a special case.
+            logger.info(f"Notification CustomJson: {tracked_op.log_str}")
+            return []
+
+        unknown_cust_id = uuid4()
+        cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
+        cust_id = str(unknown_cust_id) if not cust_id else cust_id
+
+        logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
+        start = timer()
+        try:
+            async with LockStr(cust_id).locked(
+                timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
+            ):
+                if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
+                    ledger_entries = await process_hive_op(op=tracked_op)
+                elif isinstance(tracked_op, Invoice):
+                    ledger_entries = await process_lightning_invoice(invoice=tracked_op)
+                elif isinstance(tracked_op, Payment):
+                    ledger_entries = await process_lightning_payment(payment=tracked_op)
+                else:
+                    raise ValueError("Invalid tracked object")
+
+                for ledger_entry in ledger_entries:
+                    try:
+                        # DEBUG section
+                        is_balanced, _ = await check_balance_sheet_mongodb()
+                        if not is_balanced:
+                            logger.warning(
+                                f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
+                                extra={"notification": False},
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error saving ledger entry: {e}",
+                            extra={**ledger_entry.log_extra, "notification": False},
+                        )
+
+                return ledger_entries
+        except LedgerEntryDuplicateException as e:
+            raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
+
+        except LedgerEntryException as e:
+            logger.exception(f"Error processing tracked operation: {e}")
+            raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
+
+        except CustIDLockException as e:
+            logger.error(f"Error acquiring lock for {cust_id}: {e}")
+            await asyncio.sleep(10)
+            raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
+
+        finally:
+            process_time = timer() - start
+            tracked_op.process_time = process_time
+            await tracked_op.save()
+            logger.info(f"{'=' * 50}")
+            logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
+            logger.info(f"{tracked_op.log_str}")
+            logger.info(f"{'=' * 50}")
 
 
 # MARK: Lightning Transactions
