@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from typing import List
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     ExpenseAccount,
@@ -12,7 +11,6 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerType,
 )
-from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -25,6 +23,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 
@@ -79,10 +78,6 @@ async def process_payment_success(
     if payment.conv is None or payment.conv.is_unset():
         await payment.update_conv(quote=quote)
 
-    net_sats, details = await keepsats_balance_printout(
-        cust_id=cust_id,
-    )
-
     if isinstance(initiating_op, TransferBase) and not initiating_op.paywithsats:
         # First we must convert the correct amount of Hive to Keepsats
         # This will also send the answer reply (either a hive transfer or custom_json)
@@ -97,10 +92,6 @@ async def process_payment_success(
             )
         except Exception as e:
             raise HiveToLightningError(f"Failed to convert Hive to Keepsats for payment: {e}")
-
-    net_sats, details = await keepsats_balance_printout(
-        cust_id=cust_id,
-    )
 
     # At this point we can record the payment using Keepsats
     payment_ledger_entries = await record_payment(payment=payment, quote=quote)
@@ -122,10 +113,6 @@ async def process_payment_success(
             pay_to_cust_id=cust_id,
         )
         trx = await reply_with_hive(details=reply_details)
-
-    net_sats, details = await keepsats_balance_printout(
-        cust_id=cust_id,
-    )
 
     return ledger_entries_list
 

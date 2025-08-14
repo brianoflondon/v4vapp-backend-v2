@@ -3,7 +3,6 @@ from timeit import default_timer as timer
 from typing import List
 from uuid import uuid4
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import (
@@ -68,7 +67,6 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     unknown_cust_id = uuid4()
     cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
     cust_id = str(unknown_cust_id) if not cust_id else cust_id
-    await keepsats_balance_printout(cust_id=cust_id)
 
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
     start = timer()

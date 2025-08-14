@@ -2,7 +2,6 @@ import asyncio
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
@@ -18,11 +17,11 @@ from pymongo.errors import (
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
+from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
@@ -149,19 +148,19 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         "removedFields" of the change event, otherwise False.
     """
     update_description = change.get("updateDescription", {})
-    updated_fields = update_description.get("updatedFields", {})
-    removed_fields = update_description.get("removedFields", [])
-    logger.info(
+    # updated_fields = update_description.get("updatedFields", {})
+    # removed_fields = update_description.get("removedFields", [])
+    logger.debug(
         f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
     )
 
-    if update_description or updated_fields or removed_fields:
-        print("update_descriptions")
-        pprint(update_description)
-        print("updated_fields")
-        pprint(updated_fields)
-        print("removed_fields")
-        pprint(removed_fields)
+    # if update_description or updated_fields or removed_fields:
+    #     print("update_descriptions")
+    #     pprint(update_description)
+    #     print("updated_fields")
+    #     pprint(updated_fields)
+    #     print("removed_fields")
+    #     pprint(removed_fields)
 
     # Filter out custom_json sent purely for notifications
     # if "json" in updated_fields:

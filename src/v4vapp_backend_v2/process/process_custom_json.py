@@ -56,7 +56,8 @@ async def custom_json_internal_transfer(
     if keepsats_transfer.from_account == InternalConfig().server_id:
         if net_msats < keepsats_transfer.msats:
             logger.warning(
-                f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats."
+                f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats.",
+                extra={"notification": False},
             )
     # From customer -> server
     else:
