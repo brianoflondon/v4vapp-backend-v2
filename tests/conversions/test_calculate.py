@@ -39,6 +39,7 @@ async def test_keepsats_to_hive_convert_from_msats():
                 msats=msats, quote=last_quote(), to_currency=currency
             )
             print(conversion_result)
+            print(conversion_result.log_str)
             assert isclose(conversion_result.balance, msats, abs_tol=0.001), (
                 "Conversion result is not as expected"
             )
