@@ -47,6 +47,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+
+    existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
+    if existing_entry:
+        logger.info(f"Tracked operation {tracked_op.short_id} already processed.")
+        return [existing_entry]
+
     logger.info(f"{'=*=' * 20}")
     logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
     logger.info(f"{tracked_op.log_str}")

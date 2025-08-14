@@ -19,7 +19,7 @@ ICON = "🔒"
 _OUTSTANDING_WAITERS: dict[str, dict[str, dict[str, float | str]]] = {}
 _OUTSTANDING_LOCK = asyncio.Lock()
 
-# Per-customer rate-limit for wait warnings: cust_id -> next_allowed_epoch
+# Per-object rate-limit for wait warnings: cust_id -> next_allowed_epoch
 _NEXT_ALLOWED_WARN: dict[str, float] = {}
 
 _REPORTER_TASK: asyncio.Task | None = None
@@ -136,8 +136,8 @@ class CustID(AccName):
     Customer ID class with simplified locking functionality.
 
     This class provides both context manager and manual methods for acquiring and
-    releasing locks on customer IDs using Redis. It extends str to allow using
-    the customer ID string directly.
+    releasing locks on object IDs using Redis. It extends str to allow using
+    the object ID string directly.
     """
 
     async def acquire_lock(
@@ -147,7 +147,7 @@ class CustID(AccName):
         request_details: str = "",
     ) -> bool:
         """
-        Acquire a lock for this customer ID.
+        Acquire a lock for this object ID.
 
         Args:
             timeout: Maximum life for the lock in seconds (None for no expiry)
@@ -190,16 +190,16 @@ class CustID(AccName):
                     )
                     if acquired:
                         await _unregister_waiter(str(self), request_id)
-                        logger.info(f"{ICON} Lock acquired for customer {self}")
+                        logger.info(f"{ICON} Lock acquired for object {self}")
                         logger.info(f"{ICON} {request_details if request_details else ''}")
                         return True
                 except asyncio.TimeoutError:
-                    # Per-customer deduped wait warning
+                    # Per-object deduped wait warning
                     should_log, preview, oldest = await CustID._should_log_wait(str(self))
                     if should_log:
                         # Header line once
                         logger.warning(
-                            f"{ICON} Still waiting for lock on customer {self} after {oldest}s...",
+                            f"{ICON} Still waiting for lock on object {self} after {oldest}s...",
                             extra={"notification": False},
                         )
                         # Then one line per outstanding request
@@ -236,7 +236,7 @@ class CustID(AccName):
     @staticmethod
     async def release_lock(cust_id: str) -> bool:
         """
-        Release a lock for a customer ID.
+        Release a lock for a object ID.
 
         Args:
             cust_id: Customer ID string
@@ -273,7 +273,7 @@ class CustID(AccName):
     @staticmethod
     async def check_lock_exists(cust_id: str) -> bool:
         """
-        Check if a lock exists for a customer ID.
+        Check if a lock exists for a object ID.
         """
         lock_key = f"cust_id_lock:{cust_id}"
         redis_instance = InternalConfig.redis_async
@@ -294,9 +294,9 @@ class CustID(AccName):
             keys = await redis_instance.keys("cust_id_lock:*")
             if keys:
                 await redis_instance.delete(*keys)
-                logger.info(f"{ICON} All customer ID locks cleared.")
+                logger.info(f"{ICON} All object ID locks cleared.")
             else:
-                logger.info(f"{ICON} No customer ID locks found to clear.")
+                logger.info(f"{ICON} No object ID locks found to clear.")
         except Exception as e:
             logger.error(f"{ICON} Error clearing all locks: {e}")
 
@@ -325,7 +325,7 @@ class CustID(AccName):
     @staticmethod
     async def _should_log_wait(cust_id: str) -> tuple[bool, str, int]:
         """
-        Return (should_log, preview_details, oldest_age_s) for a given customer id,
+        Return (should_log, preview_details, oldest_age_s) for a given object id,
         enforcing a single log per LOCK_REPORTING_TIME across all waiters.
         """
         now = time.time()

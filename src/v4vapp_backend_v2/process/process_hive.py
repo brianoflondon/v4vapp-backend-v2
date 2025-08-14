@@ -250,6 +250,8 @@ async def process_transfer_op(
         # If there is a follow-on task, we need to run it in the background
         try:
             await follow_on_task
+        except LedgerEntryDuplicateException as e:
+            logger.warning(f"Follow-on task duplicate entry: {e}", extra={"notification": False})
         except Exception as e:
             logger.exception(f"Follow-on task failed: {e}", extra={"notification": False})
 
