@@ -103,7 +103,7 @@ class ResumeToken(BaseModel):
         redis_client = InternalConfig.redis
         try:
             redis_client.delete(self.redis_key)
-            logger.info(f"Resume token deleted for collection '{self.collection}'")
+            logger.info(f"{ICON} Resume token deleted for collection '{self.collection}'")
         except Exception as e:
             logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
             raise e
@@ -254,7 +254,7 @@ async def subscribe_stream(
     Returns:
         None
     """
-    logger.info(f"Subscribing to {collection_name} stream...")
+    logger.info(f"{ICON} Subscribing to {collection_name} stream...")
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
