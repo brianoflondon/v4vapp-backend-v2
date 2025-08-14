@@ -52,8 +52,12 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     ):
         existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
         if existing_entry:
-            logger.info(f"Tracked operation {tracked_op.short_id} already processed.")
+            logger.warning(f"Ledger entry for {tracked_op.short_id} already exists.", extra={"notification": False})
             return [existing_entry]
+        existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
+        if existing_op and existing_op.process_time:
+            logger.warning(f"Process time already set for {tracked_op.short_id} already processed.", extra={"notification": False})
+            return []
 
         logger.info(f"{'=*=' * 20}")
         logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
