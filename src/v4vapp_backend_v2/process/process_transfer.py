@@ -156,7 +156,7 @@ async def follow_on_transfer(
                 msats=tracked_op.json_data.msats,
             )
             release_hold = False  #   There is no hold to release
-
+            return
         if not pay_req and isinstance(tracked_op, OpAllTransfers):
             # Deposit the full amount of Hive as sats
             await conversion_hive_to_keepsats(
@@ -166,7 +166,7 @@ async def follow_on_transfer(
                 nobroadcast=nobroadcast,
                 msats=0,  # Use all the funds sent
             )
-
+            return
         else:
             assert pay_req and isinstance(pay_req, PayReq), (
                 "PayReq should be an instance of PayReq"
