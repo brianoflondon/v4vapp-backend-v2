@@ -109,7 +109,7 @@ async def conversion_keepsats_to_hive(
     )
     to_currency = conv_result.to_currency
     logger.debug(f"{conv_result}")
-    logger.info(f"{}")
+    logger.info(f"{conv_result.log_str}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
