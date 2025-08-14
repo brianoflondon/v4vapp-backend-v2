@@ -19,15 +19,15 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
-    i_c = InternalConfig()
+    InternalConfig()
     yield
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
     )  # Resetting InternalConfig instance
 
 
-TEST_BASE_TIME = 5
-TEST_RAND_TIME = 10
+TEST_BASE_TIME = 0.5
+TEST_RAND_TIME = 1
 
 
 # give me a string of 3 random english words:

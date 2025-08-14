@@ -292,6 +292,9 @@ async def test_conversion_keepsats_to_hive():
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
+    await watch_for_ledger_count(ledger_count + 7)
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
 
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
     assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
@@ -318,34 +321,28 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 
-    invoice_value_sat = 5_000
+    invoice_sats = 5_000
 
-    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo="")
+    invoice = await get_lightning_invoice(value_sat=invoice_sats, memo="")
 
-    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+    net_msats_before, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
         memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
+
+    await watch_for_ledger_count(ledger_count + 7)
+    await asyncio.sleep(20)
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
+
+    net_msats_after, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
+        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
+    )
     # needs test for reply
-
-
-async def test_failure_spend_custom_json():
-    invoice_value_sat = 5_000_000
-
-    invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo="")
-
-    net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
-    transfer = KeepsatsTransfer(
-        from_account="v4vapp-test",
-        to_account="devser.v4vapp",
-        # msats=invoice_value_sat * 1000,
-        memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
-    )
-    trx = await send_transfer_custom_json(transfer)
-    # Needs test for reply
 
 
 async def test_complete_balance_sheet_accounts_ledger():
