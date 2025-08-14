@@ -381,7 +381,7 @@ async def get_account_lightning_conv(
 
 
 async def check_hive_conversion_limits(
-    hive_accname: str, extra_spend_sats: int = 0, line_items: bool = False
+    hive_accname: str, extra_spend_msats: int = 0, line_items: bool = False
 ) -> List[LightningLimitSummary]:
     """
     Checks if a Hive account's recent Lightning conversions are within configured rate limits.
@@ -397,7 +397,7 @@ async def check_hive_conversion_limits(
         - If Lightning rate limits are not configured, a warning is logged and an empty list is returned.
         - The function checks conversions for each configured limit window and determines if the account is within limits.
     """
-
+    extra_spend_sats = extra_spend_msats // 1000  # Convert msats to sats
     v4v_config = V4VConfig()
     lightning_rate_limits = v4v_config.data.lightning_rate_limits
     ans = []
@@ -478,7 +478,7 @@ async def keepsats_balance_printout(
         previous_msats (int, optional): The previous balance in msats to compare against. Defaults to 0.
 
     Returns:
-        Tuple[int, LedgerAccountDetails]: A tuple containing the net Keepsats balance in sats and the account balance details.
+        Tuple[int, LedgerAccountDetails]: A tuple containing the net Keepsats balance in msats and the account balance details.
 
     Logs:
         - Customer ID and Keepsats balance information.

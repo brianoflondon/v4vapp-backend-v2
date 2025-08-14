@@ -4,7 +4,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -25,6 +24,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 
 
 class HiveTransferError(Exception):
@@ -375,11 +375,11 @@ async def decode_incoming_and_checks(
         tracked_op.paywithsats
     ):  # Custom Json operations are always paywithsats if they have a memo.
         # get the sats balance for the sending account
-        result = await check_keepsats_balance(pay_req.value, tracked_op.cust_id)
+        result = await check_keepsats_balance(pay_req.value_msat, tracked_op.cust_id)
     else:  # both these tests are for conversions not paywithsats
         result = await check_amount_sent(pay_req=pay_req, tracked_op=tracked_op)  # type: ignore[assignment]
         if not result:
-            result = await check_user_limits(pay_req.value, tracked_op.cust_id)
+            result = await check_user_limits(pay_req.value_msat, tracked_op.cust_id)
 
     if result:
         raise HiveTransferError(result)
@@ -433,7 +433,7 @@ async def check_amount_sent(
     return ""
 
 
-async def check_user_limits(extra_spend_sats: int, cust_id: str) -> str:
+async def check_user_limits(extra_spend_msats: int, cust_id: str) -> str:
     """
     Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
 
@@ -444,7 +444,7 @@ async def check_user_limits(extra_spend_sats: int, cust_id: str) -> str:
 
     """
     limit_check = await check_hive_conversion_limits(
-        hive_accname=cust_id, extra_spend_sats=extra_spend_sats
+        hive_accname=cust_id, extra_spend_msats=extra_spend_msats
     )
     for limit in limit_check:
         if not limit.limit_ok:
@@ -453,16 +453,17 @@ async def check_user_limits(extra_spend_sats: int, cust_id: str) -> str:
     return ""
 
 
-async def check_keepsats_balance(extra_spend_sats: int, cust_id: str) -> str:
+async def check_keepsats_balance(extra_spend_msats: int, cust_id: str) -> str:
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    net_sats, keepsats_balance = await keepsats_balance_printout(cust_id=cust_id)
+    net_msats, keepsats_balance = await keepsats_balance_printout(cust_id=cust_id)
     if not keepsats_balance.balances.get(Currency.MSATS):
-        raise HiveTransferError("Pay with sats operation detected, but no Keepsats balance found.")
-    # TODO: Need to account for routing fees in Keepsats payments
-    if net_sats < extra_spend_sats:
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({net_sats:,.0f}) to cover payment request: {extra_spend_sats:,.0f} sats"
+            f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"
+        )
+    if net_msats < extra_spend_msats:
+        raise HiveTransferError(
+            f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"
         )
     return ""
