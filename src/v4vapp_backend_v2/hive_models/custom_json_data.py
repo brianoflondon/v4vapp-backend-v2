@@ -101,12 +101,13 @@ class KeepsatsTransfer(BaseModel):
             data["memo"] = ""
         if data.get("msats") is not None and data.get("sats") is None:
             # If both sats and msats are provided, use msats for the amount
-            data["sats"] = data["msats"] // 1000
+            data["sats"] = int(data["msats"]) // 1_000
         if data.get("sats") is None and data.get("msats") is None:
             data["sats"] = 0
             data["msats"] = 0
         if data.get("sats") is not None and data.get("msats") is None:
-            data["msats"] = data["sats"] * 1000
+            data["sats"] = int(data["sats"])
+            data["msats"] = data["sats"] * 1_000
         super().__init__(**data)
 
     @property
