@@ -173,7 +173,7 @@ class LockStr(AccName):
                 redis_instance,
                 name=lock_key,
                 timeout=timeout,
-                sleep=0.LOOK_POLLING_SLEEP_TIME,
+                sleep=LOOK_POLLING_SLEEP_TIME,
                 blocking=True,
                 blocking_timeout=blocking_timeout,
             )
