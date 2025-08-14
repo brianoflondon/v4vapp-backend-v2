@@ -31,12 +31,20 @@ class ConversionResult(BaseModel):
     change_conv: CryptoConv
     balance: float = 0.0
 
+    def _fmt_value(self, value: float, currency: Currency, padded: bool = False) -> str:
+        """
+        Format numbers:
+        - MSATS displayed as sats (value/1000) with 3 decimals
+        - HIVE/HBD as 3 decimals
+        """
+        if currency == Currency.MSATS:
+            return f"{value / 1000:>50,.3f}" if padded else f"{value / 1000:,.0f}"
+        return f"{value:>50,.3f}" if padded else f"{value:,.3f}"
+
     def __str__(self) -> str:
         def fmt(value: float, currency: Currency) -> str:
-            # MSATS are stored as msats internally; display as sats (÷1000) with 3 decimals
-            if currency == Currency.MSATS:
-                return f"{value / 1000:>50,.3f}"
-            return f"{value:>50,.3f}"
+            # Reuse class formatter with padding for the table
+            return self._fmt_value(value, currency, padded=True)
 
         def unit_label(currency: Currency) -> str:
             if currency == Currency.MSATS:
@@ -90,6 +98,37 @@ class ConversionResult(BaseModel):
             ["net_to_receive", str(self.net_to_receive_amount), ""],
         ]
         return f"Conversion Details:\n{tabulate(conversion_data, headers=['Parameter', 'Value', 'Unit'], tablefmt='fancy_grid')}"
+
+    @property
+    def log_str(self) -> str:
+        # Compact log: "<from> -> <to> (fee <sats> sats)"
+        # - sats: 0 decimals
+        # - hive/hbd: 3 decimals
+        def unit_for(c: Currency) -> str:
+            return "sats" if c == Currency.MSATS else c.value
+
+        # Left side (from)
+        left_val = self._fmt_value(
+            self.to_convert,
+            Currency.MSATS if self.from_currency == Currency.MSATS else self.from_currency,
+            padded=False,
+        )
+        left_unit = unit_for(self.from_currency)
+
+        # Right side (to) — use net_to_receive in target currency
+        right_amount = self.net_to_receive_conv.value_in(self.to_currency)
+        right_val = self._fmt_value(
+            right_amount,
+            Currency.MSATS if self.to_currency == Currency.MSATS else self.to_currency,
+            padded=False,
+        )
+        right_unit = unit_for(self.to_currency)
+
+        # Fee always in sats, 0 decimals (truncate)
+        fee_msats = self.fee_conv.value_in(Currency.MSATS)
+        fee_sats_int = int(fee_msats / 1000)
+
+        return f"{left_val} {left_unit} -> {right_val} {right_unit} (fee {fee_sats_int} sats)"
 
     @property
     def hive_or_hbd(self) -> Currency:
