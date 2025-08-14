@@ -444,8 +444,8 @@ class LedgerEntry(BaseModel):
             ans = await InternalConfig.db["ledger"].insert_one(
                 document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
             )
-            logger.info(f"Ledger Entry saved: {self.group_id}")
-            logger.info(f"\n{self}", extra={"notification": False, **self.log_extra})
+            logger.debug(f"Ledger Entry saved: {self.group_id}")
+            logger.debug(f"\n{self}", extra={"notification": False, **self.log_extra})
 
             return ans
         except DuplicateKeyError as e:
