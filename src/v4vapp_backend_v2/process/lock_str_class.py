@@ -12,6 +12,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.account_name_type import AccName
 
 LOCK_REPORTING_TIME = 10
+LOOK_POLLING_SLEEP_TIME = 0.5
 ICON = "🔒"
 
 # In-process tracking of outstanding lock waiters.
@@ -172,7 +173,7 @@ class LockStr(AccName):
                 redis_instance,
                 name=lock_key,
                 timeout=timeout,
-                sleep=0.1,
+                sleep=0.LOOK_POLLING_SLEEP_TIME,
                 blocking=True,
                 blocking_timeout=blocking_timeout,
             )
