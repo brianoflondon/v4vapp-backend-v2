@@ -4,7 +4,6 @@ from typing import Any, override
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.process.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -17,9 +16,10 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     seconds_only_time_diff,
 )
 from v4vapp_backend_v2.hive.hive_extras import decode_memo, process_user_memo
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.process.cust_id_class import CustIDType
 
 
 class TransferBase(OpBase):
@@ -237,6 +237,22 @@ class TransferBase(OpBase):
             bool: True if the memo indicates a keepsats operation, False otherwise.
         """
         return detect_keepsats(self.d_memo)
+
+    @property
+    def paywithsats_to(self) -> AccName:
+        """
+        Returns the recipient of the 'paywithsats' operation if present.
+
+        Returns:
+            str: The recipient account name or an empty string.
+        """
+        if not self.d_memo:
+            return AccName("")
+        send_to = self.d_memo.split(" ")[0]
+        cust_id = AccName(send_to)
+        if cust_id.is_hive:
+            return cust_id
+        return AccName("")
 
     @property
     def paywithsats(self) -> bool:

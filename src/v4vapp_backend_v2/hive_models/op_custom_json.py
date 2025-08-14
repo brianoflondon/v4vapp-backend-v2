@@ -4,12 +4,11 @@ from typing import List
 
 from pydantic import Field
 
-from v4vapp_backend_v2.process.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_keepsats
+from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_keepsats, paywithsats_amount
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
@@ -17,6 +16,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import (
     custom_json_test_id,
 )
 from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.process.cust_id_class import CustIDType
 
 
 class CustomJson(OpBase):
@@ -131,6 +131,21 @@ class CustomJson(OpBase):
             bool: True if there is a memo, custom_json operations are always paywithsats.
         """
         return True if self.memo else False
+
+    @property
+    def paywithsats_amount(self) -> int:
+        """
+        Extracts and returns the 'paywithsats' amount from the memo if present.
+        This is in sats, not msats.
+
+        Returns:
+            int: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+
+        Notes:
+            - The memo is expected to be in the format "paywithsats:amount".
+            - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
+        """
+        return paywithsats_amount(self.memo)
 
     def max_send_amount_msats(self) -> int:
         """

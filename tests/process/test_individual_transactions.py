@@ -345,6 +345,24 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     # needs test for reply
 
 
+async def test_send_internal_keepsats_transfer_by_hive_transfer():
+    await test_deposit_hive_to_keepsats(
+        5_000, timeout=120, message="test_send_internal_keepsats_transfer_by_hive_transfer"
+    )
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
+
+    sat_transfer = 4_000
+
+    trx = await send_hive_customer_to_server(
+        amount=Amount("0.001 HIVE"),
+        memo=f"v4vapp.qrc #paywithsats:{sat_transfer} test_send_internal_keepsats_transfer_by_hive_transfer",
+        customer="v4vapp-test",
+    )
+    pprint(trx)
+    
+
+
 async def test_complete_balance_sheet_accounts_ledger():
     balance_sheet = await generate_balance_sheet_mongodb()
     balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)

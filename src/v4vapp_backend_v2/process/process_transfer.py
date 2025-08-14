@@ -23,7 +23,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     send_lightning_to_pay_req,
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 
 
@@ -158,6 +158,18 @@ async def follow_on_transfer(
             release_hold = False  #   There is no hold to release
             return
         if not pay_req and isinstance(tracked_op, OpAllTransfers):
+            # Check if we're giving a transfer instruction
+            if tracked_op.paywithsats_amount and tracked_op.paywithsats_to:
+                # extract the hive name from the start of the memo up to the first space
+                transfer = KeepsatsTransfer(
+                    from_account=tracked_op.from_account,
+                    to_account=tracked_op.paywithsats_to,
+                    sats=tracked_op.paywithsats_amount,
+                    memo=tracked_op.memo,
+                )
+                await send_transfer_custom_json(transfer, nobroadcast=nobroadcast)
+                return
+
             # Deposit the full amount of Hive as sats
             await conversion_hive_to_keepsats(
                 server_id=server_id,
@@ -353,6 +365,9 @@ async def decode_incoming_and_checks(
             else:
                 raise HiveTransferError("Failed to decode Lightning invoice")
     except LnurlException as e:
+        if tracked_op.paywithsats_amount:
+            pass
+
         message = f"Lightning decode error: {e}"
         logger.info(
             f"{message}",
@@ -375,7 +390,11 @@ async def decode_incoming_and_checks(
         tracked_op.paywithsats
     ):  # Custom Json operations are always paywithsats if they have a memo.
         # get the sats balance for the sending account
-        result = await check_keepsats_balance(pay_req.value_msat, tracked_op.cust_id)
+        if not pay_req or not pay_req.value_msat:
+            check_msats = tracked_op.paywithsats_amount
+        else:
+            check_msats = pay_req.value_msat
+        result = await check_keepsats_balance(check_msats, tracked_op.cust_id)
     else:  # both these tests are for conversions not paywithsats
         result = await check_amount_sent(pay_req=pay_req, tracked_op=tracked_op)  # type: ignore[assignment]
         if not result:
