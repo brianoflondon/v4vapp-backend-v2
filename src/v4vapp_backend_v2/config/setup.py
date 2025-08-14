@@ -11,7 +11,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
-import colorlog
 from packaging import version
 from pydantic import BaseModel, model_validator
 from pymongo import AsyncMongoClient, MongoClient
@@ -817,29 +816,63 @@ class InternalConfig:
         if file_json_handler is not None:
             file_json_handler.namer = custom_log_namer
 
-        # Set up the colorlog handler for stdout
-        handler = colorlog.StreamHandler()
-        handler.setFormatter(
-            colorlog.ColoredFormatter(
-                "%(log_color)s" + format_str,
-                datefmt="%Y-%m-%dT%H:%M:%S%z",
-                log_colors={
-                    "DEBUG": "cyan",
-                    "INFO": "blue",
-                    "WARNING": "yellow",
-                    "ERROR": "red",
-                    "CRITICAL": "red,bg_white",
-                },
-                stream=sys.stdout,
-            )
-        )
-        # Add the colorlog handler to the root logger
+        # Helper: does root already have a console stream handler?
+        def _root_has_console_handler() -> bool:
+            root = logging.getLogger()
+            for h in root.handlers:
+                if isinstance(h, logging.StreamHandler):
+                    stream = getattr(h, "stream", None)
+                    if stream in (sys.stdout, sys.stderr):
+                        return True
+            return False
+
         root_logger = logging.getLogger()
-        root_logger.addHandler(handler)
         root_logger.setLevel(self.config.logging.default_log_level)
 
-        # Optional: Add filters if needed
-        handler.addFilter(ConsoleLogFilter())
+        # Idempotent console handler install (avoid duplicates if pytest/live logging already added one)
+        STDOUT_HANDLER_NAME = "stdout_color"
+        force_console = os.getenv("V4VAPP_FORCE_CONSOLE_LOG") == "1"
+
+        already_named = any(
+            getattr(h, "name", "") == STDOUT_HANDLER_NAME for h in root_logger.handlers
+        )
+        if (force_console or not _root_has_console_handler()) and not already_named:
+            try:
+                import colorlog  # ensure available
+
+                handler = colorlog.StreamHandler(stream=sys.stdout)
+                handler.set_name(STDOUT_HANDLER_NAME)
+                handler.setFormatter(
+                    colorlog.ColoredFormatter(
+                        "%(log_color)s" + format_str,
+                        datefmt="%Y-%m-%dT%H:%M:%S%z",
+                        log_colors={
+                            "DEBUG": "cyan",
+                            "INFO": "blue",
+                            "WARNING": "yellow",
+                            "ERROR": "red",
+                            "CRITICAL": "red,bg_white",
+                        },
+                    )
+                )
+            except Exception:
+                # Fallback to plain StreamHandler if colorlog not available
+                handler = logging.StreamHandler(stream=sys.stdout)
+                handler.set_name(STDOUT_HANDLER_NAME)
+                handler.setFormatter(logging.Formatter(format_str, datefmt="%Y-%m-%dT%H:%M:%S%z"))
+
+            # Optional: keep any existing filter behavior
+            try:
+                handler.addFilter(ConsoleLogFilter())
+            except Exception:
+                pass
+
+            root_logger.addHandler(handler)
+
+        # Let app loggers propagate to root; we rely on a single root console handler
+        # (prevents duplicates while keeping debug console output alive)
+        logging.getLogger("v4vapp_backend_v2").propagate = True
+        logging.getLogger().propagate = True
 
     def check_notifications(self):
         """
