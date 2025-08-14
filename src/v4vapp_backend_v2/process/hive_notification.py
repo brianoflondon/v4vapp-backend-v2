@@ -2,7 +2,6 @@ from typing import Any, Dict
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -16,6 +15,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
+from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.process.process_errors import (
     HiveToLightningError,
     KeepsatsDepositNotificationError,
@@ -219,10 +219,6 @@ async def send_transfer_custom_json(
         Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
     try:
-        logger.info(
-            f"Sending custom_json transfer: {transfer.log_str}",
-            extra={"notification": True, **transfer.log_extra},
-        )
         hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
         trx = await send_custom_json(
             json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
@@ -231,6 +227,10 @@ async def send_transfer_custom_json(
             id="v4vapp_dev_transfer",
             hive_client=hive_client,
             nobroadcast=nobroadcast,
+        )
+        logger.info(
+            f"Sent custom_json transfer: {transfer.log_str} {trx.get('trx_id', '')}",
+            extra={"notification": True, **transfer.log_extra},
         )
         return trx
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
