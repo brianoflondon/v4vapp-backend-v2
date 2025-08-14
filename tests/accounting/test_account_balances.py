@@ -20,6 +20,10 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
+"""
+The test data for this module must be up to date with any changes in the accounting models.
+"""
+
 @pytest.fixture(scope="module")
 def module_monkeypatch():
     """MonkeyPatch fixture with module scope."""

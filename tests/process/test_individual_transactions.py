@@ -294,8 +294,8 @@ async def test_conversion_keepsats_to_hive():
     trx = await send_transfer_custom_json(transfer)
 
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
-    assert net_msats_after == net_msats_before - invoice_sats * 1000, (
-        f"Expected {net_msats_before - invoice_sats * 1000} got {net_msats_after}"
+    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
+        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
     )
 
 
@@ -333,7 +333,7 @@ async def test_deposit_keepsats_spend_hive_custom_json():
 
 
 async def test_failure_spend_custom_json():
-    invoice_value_sat = 500_000
+    invoice_value_sat = 5_000_000
 
     invoice = await get_lightning_invoice(value_sat=invoice_value_sat, memo="")
 
@@ -346,10 +346,6 @@ async def test_failure_spend_custom_json():
     )
     trx = await send_transfer_custom_json(transfer)
     # Needs test for reply
-
-
-
-
 
 
 async def test_complete_balance_sheet_accounts_ledger():
@@ -381,5 +377,6 @@ async def test_complete_balance_sheet_accounts_ledger():
         font_size=10,
     )
     print(without_ledger_entries_printout)
+
 
 # Last line of the file

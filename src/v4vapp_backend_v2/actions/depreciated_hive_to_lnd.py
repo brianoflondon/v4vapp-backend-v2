@@ -6,11 +6,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
     keepsats_balance_printout,
 )
-from v4vapp_backend_v2.process.process_errors import HiveToLightningError
-from v4vapp_backend_v2.process.cust_id_class import CustID
 from v4vapp_backend_v2.actions.depreciated_hive_to_keepsats import hive_to_keepsats_deposit
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
-from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.actions.lnurl_decode import decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -30,6 +26,10 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.process.cust_id_class import CustID
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
+from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 
 async def process_hive_to_lightning(
@@ -301,12 +301,12 @@ async def check_keepsats_balance(hive_transfer: TrackedTransfer, pay_req: PayReq
     )
     if not keepsats_balance.balances.get(Currency.MSATS):
         raise HiveToLightningError(
-            "Pay with sats operation detected, but no Keepsats balance found."
+            f"Insufficient Keepsats balance (0 sats) to cover payment request: {pay_req.value:,.0f} sats"
         )
     # TODO: Need to account for routing fees in Keepsats payments
     if net_sats < pay_req.value:
         raise HiveToLightningError(
-            f"Insufficient Keepsats balance ({net_sats:,.0f}) to cover payment request: {pay_req.value:,.0f} sats"
+            f"Insufficient Keepsats balance ({net_sats:,.0f} sats) to cover payment request: {pay_req.value:,.0f} sats"
         )
     return ""
 
