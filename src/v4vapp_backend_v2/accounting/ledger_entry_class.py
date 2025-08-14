@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from math import isclose
 from typing import Any, Dict, Self
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult
@@ -54,6 +54,27 @@ class LedgerEntryNotFoundException(LedgerEntryException):
 
 class LedgerEntry(BaseModel):
     """
+        short_id (str): Short ID for the ledger entry.
+        user_memo (str): A memo which can be shown to users for the ledger entry.
+        debit (LedgerAccountAny): Account to be debited.
+        credit (LedgerAccountAny): Account to be credited.
+
+        __init__(self, **data): Initializes a LedgerEntry instance.
+        debit_amount_signed(self) -> int | float: Returns the debit amount as a signed value.
+        credit_amount_signed(self) -> int | float: Returns the credit amount as a signed value.
+        debit_sign(self) -> int: Returns the sign of the debit amount.
+        credit_sign(self) -> int: Returns the sign of the credit amount.
+        conv_signed(self) -> Dict[str, CryptoConv]: Returns conversion details as signed values.
+        log_str(self) -> str: Returns a string representation for logging purposes.
+        collection_name(cls) -> str: Returns the name of the associated database collection.
+        collection(cls) -> AsyncCollection: Returns the database collection object.
+        save(self) -> InsertOneResult: Asynchronously saves the LedgerEntry to the database.
+
+    Exceptions:
+        LedgerEntryCreationException: Raised if the entry is not completed or errors occur during DB operations.
+        LedgerEntryConfigurationException: Raised if the database client is not configured.
+        LedgerEntryDuplicateException: Raised if a duplicate ledger entry is detected.
+
     LedgerEntry represents a single accounting transaction in the ledger system, encapsulating both debit and credit sides, conversion details, and metadata for database operations.
 
     Attributes:
@@ -409,6 +430,20 @@ class LedgerEntry(BaseModel):
         """
         return InternalConfig.db["ledger"]
 
+    @classmethod
+    async def load(cls, group_id: str) -> "LedgerEntry | None":
+        """
+        Load a single LedgerEntry by group_id or return None if not found.
+        """
+        doc = await cls.collection().find_one(filter={"group_id": group_id})
+        try:
+            return cls.model_validate(doc) if doc else None
+        except ValidationError as e:
+            logger.error(f"Error validating ledger entry: {e}")
+            return None
+
+    # ...existing code...
+
     def db_checks(self) -> None:
         """
         Performs database checks to ensure the LedgerEntry is valid for saving.
@@ -424,7 +459,6 @@ class LedgerEntry(BaseModel):
 
     async def save(self) -> InsertOneResult:
         """
-        WARNING : THIS METHOD SHOULD ONLY BE USED ONCE! To update the LedgerEntry, use the `update_op` method instead.
         Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
         and once. If it is called again, it will raise a duplicate exception.
 
@@ -453,7 +487,6 @@ class LedgerEntry(BaseModel):
                 f"Duplicate ledger entry detected: {e}",
                 extra={"notification": False, **self.log_extra},
             )
-            logger.warning(f"\n{self}")
             raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
 
         except Exception as e:
