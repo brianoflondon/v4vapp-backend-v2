@@ -196,40 +196,45 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     """
     # server_account_names = InternalConfig().config.hive.server_account_names
     full_document = change.get("fullDocument", {})
-    if not full_document:
-        logger.warning(
-            f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
-        )
-        return
-    try:
-        op = tracked_any_filter(full_document)
-    except ValueError as e:
-        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
-        return
-    logger.info(f"{ICON} Processing {op.group_id_query}")
-    while True:
-        try:
-            ledger_entries = await process_tracked_event(op)
-            logger.info(
-                f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
-                extra={"op": op},
-            )
-            return
-        except ValueError as e:
-            logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
-            return
-        except NotImplementedError:
+    o_id = full_document.get("_id")
+    mongo_id = str(o_id) if o_id is not None else "unknown_id"
+    async with CustID(mongo_id).locked(
+        timeout=None, blocking_timeout=None, request_details="db_monitor"
+    ):
+        if not full_document:
             logger.warning(
-                f"{ICON} Ignoring: {op.op_type} {op.short_id} {truncate_text(op.log_str, 40)}",
-                extra={"notification": False},
+                f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
             )
             return
-        except LedgerEntryException as e:
-            logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
+        try:
+            op = tracked_any_filter(full_document)
+        except ValueError as e:
+            logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
             return
-        except CustIDLockException as e:
-            logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
-            await asyncio.sleep(5)
+        logger.info(f"{ICON} Processing {op.group_id_query}")
+        while True:
+            try:
+                ledger_entries = await process_tracked_event(op)
+                logger.info(
+                    f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
+                    extra={"op": op},
+                )
+                return
+            except ValueError as e:
+                logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
+                return
+            except NotImplementedError:
+                logger.warning(
+                    f"{ICON} Ignoring: {op.op_type} {op.short_id} {truncate_text(op.log_str, 40)}",
+                    extra={"notification": False},
+                )
+                return
+            except LedgerEntryException as e:
+                logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
+                return
+            except CustIDLockException as e:
+                logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
+                await asyncio.sleep(5)
 
 
 async def subscribe_stream(
