@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -20,6 +19,7 @@ from v4vapp_backend_v2.models.custom_records import (
     decode_all_custom_records,
 )
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
+from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
 # This is the regex for finding if a given message is an LND invoice to pay.
 # This looks for #v4vapp v4vapp
@@ -390,7 +390,7 @@ class Invoice(TrackedBaseModel):
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
         if extracted_value:
-            self.cust_id = CustID(extracted_value)
+            self.cust_id = LockStr(extracted_value)
             if self.cust_id.startswith("@"):
                 self.cust_id = self.cust_id[1:]
             self.is_lndtohive = True

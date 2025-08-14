@@ -6,7 +6,7 @@ from timeit import default_timer as timeit
 import pytest
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +36,7 @@ def get_random_words() -> str:
     return " ".join(sample(words, 3))
 
 
-async def process_customer(customer_id: CustID, comment: str = "") -> bool:
+async def process_customer(customer_id: LockStr, comment: str = "") -> bool:
     try:
         logger.info(f"Starting processing for customer {customer_id} {comment}")
         start = timeit()
@@ -61,28 +61,28 @@ async def process_customer(customer_id: CustID, comment: str = "") -> bool:
 
 
 @pytest.mark.asyncio
-async def test_cust_id_lock():
+async def test_lock_str_lock():
     customers = [
-        CustID("customer123"),
-        CustID("customer456"),
-        CustID("customer789"),
+        LockStr("customer123"),
+        LockStr("customer456"),
+        LockStr("customer789"),
     ]
     for customer in customers:
         logger.info(f"Unlocking lock for {customer}")
-        await CustID.release_lock(cust_id=str(customer))
+        await LockStr.release_lock(cust_id=str(customer))
 
-    cust = CustID("customer123")
-    cust2 = CustID("customer123")  # Same customer to test lock
+    cust = LockStr("customer123")
+    cust2 = LockStr("customer123")  # Same customer to test lock
     tasks = [
         process_customer(cust, f"First processing {get_random_words()}"),
-        process_customer(CustID("customer456"), f"Only processing {get_random_words()}"),
+        process_customer(LockStr("customer456"), f"Only processing {get_random_words()}"),
         process_customer(
             cust2, f"Second processing {get_random_words()}"
         ),  # Same customer to test lock
         process_customer(
-            CustID("customer789"), f"Another customer processing {get_random_words()}"
+            LockStr("customer789"), f"Another customer processing {get_random_words()}"
         ),
-        process_customer(CustID("customer123"), f"Third processing {get_random_words()}"),
+        process_customer(LockStr("customer123"), f"Third processing {get_random_words()}"),
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -90,12 +90,12 @@ async def test_cust_id_lock():
     assert all(isinstance(result, bool) for result in results), (
         "All tasks should return a boolean result"
     )
-    await CustID.clear_all_locks()
+    await LockStr.clear_all_locks()
     logger.info("All locks cleared after test completion.")
 
 
-def test_cust_id():
-    cust_id = CustID("testaccount")
+def test_lock_str():
+    cust_id = LockStr("testaccount")
     assert isinstance(cust_id, str), "CustID should be a string"
     assert cust_id.link == "https://hivehub.dev/@testaccount", "Link property is incorrect"
     assert cust_id.markdown_link == "[testaccount](https://hivehub.dev/@testaccount)", (
@@ -103,5 +103,5 @@ def test_cust_id():
     )
     assert cust_id.is_hive, "valid_hive_account should return True for valid account"
 
-    cust_id = CustID("0x98689kjhkjhiuh")
+    cust_id = LockStr("0x98689kjhkjhiuh")
     assert not cust_id.is_hive, "valid_hive_account should return False for invalid account"

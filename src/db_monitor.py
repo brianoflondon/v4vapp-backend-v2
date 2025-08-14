@@ -21,7 +21,7 @@ from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
@@ -198,7 +198,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     full_document = change.get("fullDocument", {})
     o_id = full_document.get("_id")
     mongo_id = str(o_id) if o_id is not None else "unknown_id"
-    async with CustID(mongo_id).locked(
+    async with LockStr(mongo_id).locked(
         timeout=None, blocking_timeout=None, request_details="db_monitor"
     ):
         if not full_document:
@@ -386,7 +386,7 @@ async def main_async_start(use_resume: bool = True):
     )
     db_conn = DBConn()
     await db_conn.setup_database()
-    await CustID.clear_all_locks()  # Clear any existing locks before starting
+    await LockStr.clear_all_locks()  # Clear any existing locks before starting
 
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT

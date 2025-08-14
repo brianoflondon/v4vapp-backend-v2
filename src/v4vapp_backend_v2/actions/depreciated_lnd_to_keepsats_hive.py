@@ -4,13 +4,13 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.process.cust_id_class import CustID
 from v4vapp_backend_v2.actions.depreciated_lnd_to_hive import process_lightning_to_hive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
+from v4vapp_backend_v2.process.lock_str_class import LockStr
 from v4vapp_backend_v2.process.hive_notification import depreciated_send_notification_hive_transfer
 from v4vapp_backend_v2.process.process_errors import KeepsatsDepositNotificationError
 
@@ -126,9 +126,9 @@ async def lightning_to_keepsats_deposit(
             "Invoice does not have a customer ID.",
             extra={"notification": False, **invoice.log_extra},
         )
-        cust_id = CustID("keepsats")
+        cust_id = LockStr("keepsats")
     else:
-        cust_id = CustID(invoice.cust_id)
+        cust_id = LockStr(invoice.cust_id)
 
     msats_received = invoice.value_msat
     if invoice.conv is None or invoice.conv.is_unset():

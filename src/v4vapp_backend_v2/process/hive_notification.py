@@ -15,7 +15,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
-from v4vapp_backend_v2.process.cust_id_class import CustID
+from v4vapp_backend_v2.process.lock_str_class import LockStr
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
 
@@ -44,7 +44,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     logger.info(
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
-    if not CustID(details.pay_to_cust_id).is_hive:
+    if not LockStr(details.pay_to_cust_id).is_hive:
         logger.error(
             "Tracked operation customer ID is not a valid Hive account.",
             extra={"notification": False, **details.tracked_op.log_extra},

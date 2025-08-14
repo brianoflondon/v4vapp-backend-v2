@@ -23,7 +23,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
-from v4vapp_backend_v2.process.cust_id_class import CustID, CustIDLockException
+from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
@@ -77,7 +77,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
     start = timer()
     try:
-        async with CustID(cust_id).locked(
+        async with LockStr(cust_id).locked(
             timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
         ):
             if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):

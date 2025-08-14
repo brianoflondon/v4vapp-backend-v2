@@ -16,7 +16,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import (
     custom_json_test_id,
 )
 from v4vapp_backend_v2.hive_models.op_base import OpBase
-from v4vapp_backend_v2.process.cust_id_class import CustIDType
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 
 class CustomJson(OpBase):

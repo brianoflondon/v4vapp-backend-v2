@@ -26,7 +26,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 )
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.models.payment_models import Payment
-from v4vapp_backend_v2.process.cust_id_class import CustID
+from v4vapp_backend_v2.process.lock_str_class import LockStr
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
@@ -110,7 +110,7 @@ async def process_hive_to_lightning(
     server_account = hive_config.server_account.name
     amount = Amount("0.001 HIVE")
     if hive_transfer.to_account == server_account:
-        cust_id = CustID(hive_transfer.from_account)
+        cust_id = LockStr(hive_transfer.from_account)
         return_details = HiveReturnDetails(
             tracked_op=hive_transfer,
             original_memo=hive_transfer.d_memo,

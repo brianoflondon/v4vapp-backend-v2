@@ -131,7 +131,7 @@ def start_lock_reporter() -> None:
         _REPORTER_TASK = loop.create_task(_reporter_loop(), name="custid-lock-reporter")
 
 
-class CustID(AccName):
+class LockStr(AccName):
     """
     Customer ID class with simplified locking functionality.
 
@@ -195,7 +195,7 @@ class CustID(AccName):
                         return True
                 except asyncio.TimeoutError:
                     # Per-object deduped wait warning
-                    should_log, preview, oldest = await CustID._should_log_wait(str(self))
+                    should_log, preview, oldest = await LockStr._should_log_wait(str(self))
                     if should_log:
                         # Header line once
                         logger.warning(
@@ -320,7 +320,7 @@ class CustID(AccName):
             yield
         finally:
             if acquired:
-                await CustID.release_lock(self)
+                await LockStr.release_lock(self)
 
     @staticmethod
     async def _should_log_wait(cust_id: str) -> tuple[bool, str, int]:
@@ -346,4 +346,4 @@ class CustID(AccName):
 
 
 # Annotated type with validator to cast to CustID
-CustIDType = Annotated[str, AfterValidator(lambda x: CustID(x))]
+CustIDType = Annotated[str, AfterValidator(lambda x: LockStr(x))]

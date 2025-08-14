@@ -19,7 +19,7 @@ from v4vapp_backend_v2.hive.hive_extras import decode_memo, process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
-from v4vapp_backend_v2.process.cust_id_class import CustIDType
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 
 class TransferBase(OpBase):
