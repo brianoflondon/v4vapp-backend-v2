@@ -101,41 +101,6 @@ class TrackedBaseModel(BaseModel):
         """
         return {"group_id": {"$regex": f"^{re.escape(short_id)}$"}}
 
-    # async def __aenter__(self) -> "TrackedBaseModel":
-    #     """
-    #     Acquires an async lock and returns the current instance.
-
-    #     This method is intended to be used as part of an async context manager
-    #     protocol. Upon entering the context, it ensures that the necessary lock is
-    #     acquired before proceeding, waiting up to 10 seconds for the lock.
-
-    #     Returns:
-    #         TrackedBaseModel: The current instance with the lock acquired.
-    #     """
-    #     start = timer()
-    #     logger.info(
-    #         f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
-    #         extra={"notification": False},
-    #     )
-    #     return self
-
-    # async def __aexit__(
-    #     self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
-    # ) -> None:
-    #     """
-    #     Async context manager exit method.
-    #     This method is called when exiting the context. It ensures that any necessary cleanup is performed,
-    #     such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
-    #     was raised within the context.
-    #     Args:
-    #         exc_type (type[BaseException] | None): The type of exception raised, if any.
-    #         exc_val (BaseException | None): The exception instance raised, if any.
-    #         exc_tb (Any): The traceback object associated with the exception, if any.
-    #     Returns:
-    #         None
-    #     """
-    #     logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
-    #     # await self.unlock_op()
 
     # MARK: Reply Management
 
