@@ -9,14 +9,10 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
     LedgerType,
 )
-from v4vapp_backend_v2.actions.depreciated_custom_json_to_lnd import (
-    depreciated_process_custom_json_to_lightning,
-)
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -25,7 +21,7 @@ from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
-from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError, HiveLightningError
+from v4vapp_backend_v2.process.process_errors import HiveLightningError
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
 from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
@@ -422,46 +418,6 @@ async def process_custom_json(
 
             await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
             return None
-            try:
-                ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
-                custom_json_ledger_entry = LedgerEntry(
-                    cust_id=custom_json.cust_id,
-                    short_id=custom_json.short_id,
-                    ledger_type=ledger_type,
-                    group_id=f"{custom_json.group_id}",  # The inital recording of an inbound Hive transaction does not have ledger_type
-                    timestamp=datetime.now(tz=timezone.utc),
-                    description=keepsats_transfer.description,
-                    user_memo=keepsats_transfer.user_memo,
-                    op_type=custom_json.op_type,
-                    debit=LiabilityAccount(name="VSC Liability", sub=custom_json.cust_id),
-                    debit_conv=custom_json.conv,
-                    debit_unit=Currency.MSATS,
-                    debit_amount=custom_json.conv.msats,
-                    credit=LiabilityAccount(name="VSC Liability", sub=custom_json.cust_id),
-                    credit_conv=custom_json.conv,
-                    credit_unit=Currency.MSATS,
-                    credit_amount=custom_json.conv.msats,
-                )
-                await custom_json_ledger_entry.save()
-
-                await depreciated_process_custom_json_to_lightning(
-                    custom_json=custom_json,
-                    keepsats_transfer=keepsats_transfer,
-                    nobroadcast=nobroadcast,
-                )
-                return custom_json_ledger_entry
-
-            except CustomJsonToLightningError as e:
-                logger.error(f"Error processing CustomJson to Lightning: {e}")
-                raise LedgerEntryCreationException(
-                    f"Error processing CustomJson to Lightning: {e}"
-                ) from e
-
-            except Exception as e:
-                logger.error(f"Failed to process CustomJson to Lightning: {e}")
-                raise LedgerEntryCreationException(
-                    f"Failed to process CustomJson to Lightning: {e}"
-                ) from e
 
     logger.error(
         f"CustomJson operation not implemented for v4vapp_group_id: {custom_json.group_id}.",
