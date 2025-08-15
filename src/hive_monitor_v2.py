@@ -4,19 +4,14 @@ import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, Dict, List, Tuple
+from typing import Annotated, Dict, List, Tuple
 
 import typer
 from nectar.amount import Amount
 
 # from colorama import Fore, Style
-from pymongo.errors import (
-    ConnectionFailure,
-    DuplicateKeyError,
-    NetworkTimeout,
-    ServerSelectionTimeoutError,
-)
-from pymongo.results import BulkWriteResult, UpdateResult
+from pymongo.errors import DuplicateKeyError
+from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -85,85 +80,36 @@ def handle_shutdown_signal():
 
 async def db_store_op(
     op: OpAny,
-    db_collection: str | None = None,
-    *args: Any,
-    **kwargs: Any,
-) -> List[BulkWriteResult | None] | UpdateResult:
+) -> UpdateResult | None:
     """
-    Stores a Hive transaction in the database.
+    Asynchronously stores a Hive transaction operation in the MongoDB database.
 
-    This function processes a Hive event and stores the corresponding transaction
-    in the MongoDB database. If the event type is a transfer operation, it converts
-    the amount using the provided quote or fetches all quotes if none is provided.
-    It then creates a HiveTransaction instance and updates the database with the
-    transaction details.
+    This function processes a Hive event operation and attempts to save it to the database.
+    It handles duplicate key errors, connection issues, and other exceptions, with automatic
+    retries on connection failures. The operation is upserted into the appropriate collection,
+    and logging is performed for errors and reconnections.
 
-    Args:
-        op (OpAny): The Hive event to process. Can be a
-            Transfer or CustomJson operation.
-        db_collection (str | None): The name of the MongoDB collection to use for
-            storing the transaction. If None, the default collection will be used.
-        *args (Any): Additional positional arguments.
-        **kwargs (Any): Additional keyword arguments.
+    Uses the OpAny Save method which is automatically an upsert.
 
-    Returns:
-        UpdateResult: The result of the database update operation.
+        op (OpAny): The Hive event operation to process and store.
 
-    Raises:
-        DuplicateKeyError: If a duplicate key error occurs during the database update.
-        Exception: For any other exceptions, logs the error with additional context.
+        UpdateResult | None: The result of the database update operation if successful,
+            or None/empty list if an error occurs.
     """
-    global COMMAND_LINE_WATCH_USERS, HIVE_DATABASE_CONNECTION, HIVE_DATABASE, HIVE_DATABASE_USER
-    db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
-    while True:
-        error_count = 0
-        try:
-            collection = OpBase.collection()
-            db_ans = await collection.update_one(
-                filter=op.group_id_query,
-                update={
-                    "$set": op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
-                },
-                upsert=True,
-            )
-            if error_count > 0:
-                logger.info(
-                    f"{icon} Reconnected to MongoDB after {error_count} errors",
-                    extra={"notification": True, "error_code_clear": "mongodb_save_error"},
-                )
-                logger.info(f"{icon} SAVED {op.log_str}")
-                error_count = 0
-            return db_ans
-        except DuplicateKeyError as e:
-            logger.info(
-                f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
-                extra={"notification": False, "error": e, **op.log_extra},
-            )
-            return []
+    try:
+        return await op.save(mongo_kwargs={"upsert": False})
 
-        except (
-            ServerSelectionTimeoutError,
-            NetworkTimeout,
-            ConnectionFailure,
-        ) as e:
-            error_count += 1
-            logger.error(
-                f"{icon} Error {error_count} MongoDB connection error, while trying to save: {e}",
-                extra={"error_code": "mongodb_save_error", "notification": True},
-            )
-            logger.warning(op.log_str, extra={"notification": False, **op.log_extra})
-            # Wait before attempting to reconnect
-            await asyncio.sleep(max(30 * error_count, 300))
-            logger.info(f"{icon} Attempting to reconnect to MongoDb")
+    except DuplicateKeyError as e:
+        logger.info(
+            f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
+            extra={"notification": False, "error": e, **op.log_extra},
+        )
+        return None
 
-        except Exception as e:
-            logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
-            logger.warning(
-                f"{icon} {op.log_str}",
-                extra={"notification": False, "error": e, **op.log_extra},
-            )
-            logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
-            return []
+    except Exception as e:
+        logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
+        logger.warning(f"{icon} {op.log_str}", extra={"notification": False, **op.log_extra})
+        return None
 
 
 async def balance_server_hbd_level(transfer: Transfer) -> None:

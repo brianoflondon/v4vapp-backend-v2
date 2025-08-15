@@ -1,11 +1,17 @@
+import asyncio
+import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
-import re
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
 from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.errors import (
+    ConnectionFailure,
+    DuplicateKeyError,
+    NetworkTimeout,
+    ServerSelectionTimeoutError,
+)
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
@@ -13,6 +19,8 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+
+ICON = "🔄"
 
 
 class ReplyModel(BaseModel):
@@ -101,7 +109,6 @@ class TrackedBaseModel(BaseModel):
         """
         return {"group_id": {"$regex": f"^{re.escape(short_id)}$"}}
 
-
     # MARK: Reply Management
 
     def reply_ids(self) -> List[str]:
@@ -129,7 +136,7 @@ class TrackedBaseModel(BaseModel):
         """
         if reply_id and reply_id in self.reply_ids():
             logger.warning(
-                f"Reply with ID {reply_id} already exists in {self.name()}",
+                f"{ICON} Reply with ID {reply_id} already exists in {self.name()}",
                 extra={"notification": False},
             )
             raise ValueError(f"Reply with ID {reply_id} already exists")
@@ -240,97 +247,38 @@ class TrackedBaseModel(BaseModel):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    # # MARK: Lock Management
-
-    # async def wait_for_lock(self, timeout: int = 2) -> bool:
-    #     """
-    #     Waits for the operation to be unlocked within a specified timeout.
-
-    #     This method checks if the operation is locked and waits until it is
-    #     unlocked or the timeout is reached.
-
-    #     Args:
-    #         timeout (int): The maximum time to wait for the lock to be released, in seconds.
-
-    #     Returns:
-    #         bool: True if the operation was unlocked, False if the timeout was reached.
-    #     """
-    #     # TODO: #113 Make this much more efficient in the way it handles the db
-    #     start_time = timer()
-    #     while await self.locked:
-    #         if (timer() - start_time) > timeout:
-    #             return False
-    #         await asyncio.sleep(0.5)
-    #     return True
-
-    # @property
-    # async def locked(self) -> bool:
-    #     """
-    #     Returns the locked status of the operation.
-
-    #     This method checks if the operation is currently locked, which
-    #     indicates that it is being processed and should not be modified
-    #     or accessed by other threads or processes.
-
-    #     Returns:
-    #         bool: True if the operation is locked, False otherwise.
-    #     """
-    #     result: dict[str, Any] | None = await InternalConfig.db[self.collection_name].find_one(
-    #         filter=self.group_id_query,
-    #         projection={"locked": True},
-    #     )
-    #     if result:
-    #         return result.get("locked", False)
-    #     return False
-
-    # async def lock_op(self) -> UpdateResult:
-    #     """
-    #     Locks the operation to prevent concurrent processing.
-
-    #     This method sets the `locked` attribute to True, indicating that
-    #     the operation is currently being processed and should not be
-    #     modified or accessed by other threads or processes.
-
-    #     Returns:
-    #         None
-    #     """
-    #     ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-    #         filter=self.group_id_query,
-    #         update={"$set": {"locked": True}},
-    #     )
-    #     return ans
-
-    # async def unlock_op(self) -> UpdateResult:
-    #     """
-    #     Unlocks the operation to allow concurrent processing.
-
-    #     This method sets the `locked` attribute to False, indicating that
-    #     the operation is no longer being processed and can be modified
-    #     or accessed by other threads or processes.
-
-    #     Returns:
-    #         None
-    #     """
-    #     # Remember my update_one already has the $set
-    #     ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-    #         filter=self.group_id_query,
-    #         update={"$unset": {"locked": ""}},
-    #         upsert=True,
-    #     )
-    #     return ans
-
     async def save(
-        self, exclude_unset: bool = False, exclude_none: bool = True, **kwargs: Any
+        self,
+        exclude_unset: bool = False,
+        exclude_none: bool = True,
+        mongo_kwargs: dict[str, Any] = {},
+        **kwargs: Any,
     ) -> UpdateResult:
         """
-        Saves the current state of the operation to the database.
+        Asynchronously saves the current state of the model to the MongoDB database.
 
-        This method should be overridden in subclasses to provide the
-        specific saving logic for the operation.
+        This method serializes the model's data and performs an update operation on the
+        corresponding MongoDB collection. It handles connection errors with automatic
+        retries and logs relevant events. Subclasses may override this method to provide
+        custom saving logic.
 
-        Returns:
-            UpdateResult | None: The result of the update operation, or None if no database client is available.
+        Args:
+            exclude_unset (bool, optional): If True, fields that were not explicitly set will be excluded from the update. Defaults to False.
+            exclude_none (bool, optional): If True, fields with value None will be excluded from the update. Defaults to True.
+            mongo_kwargs (dict[str, Any], optional): Additional keyword arguments for the MongoDB update operation. Defaults to {}.
+            **kwargs (Any): Additional keyword arguments passed to the model serialization.
+
+            UpdateResult: The result of the MongoDB update operation.
+
+        Raises:
+            DuplicateKeyError: If a duplicate key error occurs during the update.
+            ServerSelectionTimeoutError: If the MongoDB server cannot be reached.
+            NetworkTimeout: If a network timeout occurs.
+            ConnectionFailure: If the connection to MongoDB fails.
+            Exception: For any other exceptions encountered during the save operation.
         """
+        if not mongo_kwargs:
+            mongo_kwargs = {"upsert": True}
         update = self.model_dump(
             exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
         )
@@ -339,11 +287,43 @@ class TrackedBaseModel(BaseModel):
         update = {
             "$set": update,
         }
-        return await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update=update,
-            upsert=True,
-        )
+        error_count = 0
+        while True:
+            try:
+                db_ans = await InternalConfig.db[self.collection_name].update_one(
+                    filter=self.group_id_query, update=update, **mongo_kwargs
+                )
+                if error_count > 0:
+                    logger.info(
+                        f"{ICON} Reconnected to MongoDB after {error_count} errors",
+                        extra={"notification": True, "error_code_clear": "mongodb_save_error"},
+                    )
+                    logger.info(
+                        f"{ICON} SAVED {self.group_id_p} to {self.collection_name}",
+                    )
+                    error_count = 0
+
+                return db_ans
+
+            except DuplicateKeyError:
+                raise
+            except (
+                ServerSelectionTimeoutError,
+                NetworkTimeout,
+                ConnectionFailure,
+            ) as e:
+                error_count += 1
+                logger.error(
+                    f"{ICON} Error {error_count} MongoDB connection error, while trying to save: {e}",
+                    extra={"error_code": "mongodb_save_error", "notification": True},
+                )
+                # Wait before attempting to reconnect
+                await asyncio.sleep(min(0.5 * error_count, 10))
+                logger.info(f"{ICON} Attempting to reconnect to MongoDb")
+
+            except Exception as e:
+                logger.error(f"{ICON} Error occurred while saving to MongoDB: {e}")
+                raise
 
     def tracked_type(self) -> str:
         """

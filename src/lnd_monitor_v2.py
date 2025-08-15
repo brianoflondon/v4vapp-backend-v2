@@ -210,18 +210,15 @@ async def db_store_invoice(
 
     try:
         invoice_pyd = Invoice(htlc_event)
+        ans = await invoice_pyd.save()
+        logger.info(
+            f"{lnd_client.icon}{DATABASE_ICON} "
+            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+            extra={"db_ans": ans.raw_result, **invoice_pyd.log_extra},
+        )
     except Exception as e:
         logger.warning(e)
         return
-    query = {"r_hash": invoice_pyd.r_hash}
-    invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True)
-    update = {"$set": invoice_dict}
-    ans = await Invoice.collection().update_one(filter=query, update=update, upsert=True)
-    logger.debug(
-        f"{lnd_client.icon}{DATABASE_ICON} "
-        f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
-        extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
-    )
 
 
 async def db_store_payment(
@@ -247,15 +244,17 @@ async def db_store_payment(
             fill_cache=True,
             col_pub_keys="pub_keys",
         )
+        ans = await payment_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
             f"Storing payment: {htlc_event.payment_index} "
-            f"{payment_pyd.route_str}"
+            f"{payment_pyd.route_str}",
+            extra={"db_ans": ans.raw_result, **payment_pyd.log_extra},
         )
-        query = {"payment_hash": payment_pyd.payment_hash}
-        payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
-        update = {"$set": payment_dict}
-        ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
+        # query = {"payment_hash": payment_pyd.payment_hash}
+        # payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        # update = {"$set": payment_dict}
+        # ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
             f"New payment recorded: {payment_pyd.payment_index:>6} "
