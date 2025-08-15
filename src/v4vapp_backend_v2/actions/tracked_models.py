@@ -10,6 +10,7 @@ from pymongo.errors import (
     ConnectionFailure,
     DuplicateKeyError,
     NetworkTimeout,
+    OperationFailure,
     ServerSelectionTimeoutError,
 )
 from pymongo.results import UpdateResult
@@ -311,6 +312,7 @@ class TrackedBaseModel(BaseModel):
                 ServerSelectionTimeoutError,
                 NetworkTimeout,
                 ConnectionFailure,
+                OperationFailure,
             ) as e:
                 error_count += 1
                 logger.error(
