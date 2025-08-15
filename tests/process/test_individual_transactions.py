@@ -360,7 +360,6 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
         customer="v4vapp-test",
     )
     pprint(trx)
-    
 
 
 async def test_complete_balance_sheet_accounts_ledger():
