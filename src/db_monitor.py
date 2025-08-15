@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
@@ -281,29 +282,44 @@ async def subscribe_stream(
 
         async with await collection.watch(**watch_kwargs) as stream:
             error_code = f"db_monitor_{collection_name}"
-            async for change in stream:
-                if error_count > 0:
+
+            # Close the stream immediately when shutdown is requested
+            async def _close_on_shutdown():
+                await shutdown_event.wait()
+                with suppress(Exception):
+                    await stream.close()
+
+            closer = asyncio.create_task(_close_on_shutdown())
+
+            try:
+                async for change in stream:
+                    if shutdown_event.is_set():
+                        logger.info(
+                            f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
+                        )
+                        break
+                    full_document = change.get("fullDocument") or {}
+                    group_id = full_document.get("group_id", None) or ""
                     logger.info(
-                        f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
-                        extra={"error_code_clear": error_code},
+                        f"{ICON}✳️ Change detected in {collection_name} {group_id}",
+                        extra={"notification": False, "change": change},
                     )
-                error_code = ""
-                full_document = change.get("fullDocument") or {}
-                group_id = full_document.get("group_id", None) or ""
-                logger.info(
-                    f"{ICON}✳️ Change detected in {collection_name} {group_id}",
-                    extra={"notification": False, "change": change},
-                )
-                if ignore_changes(change):
-                    pass
-                else:
-                    # Process the change if it is not a lock/unlock
-                    asyncio.create_task(process_op(change=change, collection=collection_name))
-                resume.set_token(change.get("_id", {}))
-                if shutdown_event.is_set():
-                    logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
-                    break
-                continue
+                    if ignore_changes(change):
+                        pass
+                    else:
+                        # Process the change if it is not a lock/unlock
+                        asyncio.create_task(process_op(change=change, collection=collection_name))
+                    resume.set_token(change.get("_id", {}))
+                    if shutdown_event.is_set():
+                        logger.info(
+                            f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
+                        )
+                        break
+                    continue
+            finally:
+                closer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await closer
 
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
@@ -313,7 +329,8 @@ async def subscribe_stream(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
             extra={"notification": True},
         )
-        raise e
+        # Don’t re-raise; let caller’s cancellation proceed cleanly
+        return
 
     except OperationFailure as e:
         error_code = f"db_monitor_{collection_name}"
@@ -324,11 +341,12 @@ async def subscribe_stream(
         )
         if "resume" in str(e):
             resume.delete_token()
-            asyncio.create_task(
-                subscribe_stream(
-                    collection_name=collection_name, pipeline=pipeline, error_count=error_count
+            if not shutdown_event.is_set():
+                asyncio.create_task(
+                    subscribe_stream(
+                        collection_name=collection_name, pipeline=pipeline, error_count=error_count
+                    )
                 )
-            )
             return
 
     except (
@@ -345,11 +363,12 @@ async def subscribe_stream(
         # Wait before attempting to reconnect
         await asyncio.sleep(max(30 * error_count, 180))
         logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
-        asyncio.create_task(
-            subscribe_stream(
-                collection_name=collection_name, pipeline=pipeline, error_count=error_count
+        if not shutdown_event.is_set():
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name=collection_name, pipeline=pipeline, error_count=error_count
+                )
             )
-        )
         return
 
     except Exception as e:
@@ -397,32 +416,34 @@ async def main_async_start(use_resume: bool = True):
     )
     try:
         logger.info(f"{ICON} Database Monitor App started.")
-        # Simulate some work
-        while not shutdown_event.is_set():
-            tasks = [
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="invoices",
-                        pipeline=db_pipelines["invoices"],
-                        use_resume=use_resume,
-                    )
-                ),
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="payments",
-                        pipeline=db_pipelines["payments"],
-                        use_resume=use_resume,
-                    )
-                ),
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="hive_ops",
-                        pipeline=db_pipelines["hive_ops"],
-                        use_resume=use_resume,
-                    )
-                ),
-            ]
-            await asyncio.gather(*tasks)
+        # Start streams once and wait for shutdown_event; then cancel streams
+        tasks = [
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="invoices",
+                    pipeline=db_pipelines["invoices"],
+                    use_resume=use_resume,
+                )
+            ),
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="payments",
+                    pipeline=db_pipelines["payments"],
+                    use_resume=use_resume,
+                )
+            ),
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="hive_ops",
+                    pipeline=db_pipelines["hive_ops"],
+                    use_resume=use_resume,
+                )
+            ),
+        ]
+        await shutdown_event.wait()
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True

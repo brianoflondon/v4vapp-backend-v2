@@ -419,7 +419,7 @@ async def all_ops_loop(
                 extra_bots: List[str] = []
                 db_store = False
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    raise asyncio.CancelledError("Shutdown requested")
                 new_block, marker = block_counter.inc(op.raw_op)
 
                 if watch_witnesses and isinstance(op, AccountWitnessVote):
@@ -496,19 +496,25 @@ async def all_ops_loop(
 
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"{icon} {e}: Stopping event listener.")
-            raise e
-
+            # Exit loop on cancellation
+            return
         except Exception as e:
             logger.exception(f"{icon} {e}", extra={"notification": False})
             raise e
-
         finally:
+            # Do not restart if we’re shutting down
+            if shutdown_event.is_set():
+                logger.info(f"{icon} Shutdown requested; exiting all_ops_loop.")
+                return
             logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url} no_preview",
+                f"{icon} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
                 extra={"notification": False},
             )
-            if hive_client.rpc:
-                hive_client.rpc.next()
+            if getattr(hive_client, "rpc", None):
+                try:
+                    hive_client.rpc.next()
+                except Exception:
+                    pass
             else:
                 logger.error(
                     f"{icon} Hive client not available, re-fetching new hive-client",
@@ -615,13 +621,24 @@ async def main_async_start(
     logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
 
     try:
+        # Create tasks so we can cancel them on shutdown_event
         tasks = [
-            all_ops_loop(
-                watch_witnesses=watch_witnesses, watch_users=watch_users, start_block=start_block
+            asyncio.create_task(
+                all_ops_loop(
+                    watch_witnesses=watch_witnesses,
+                    watch_users=watch_users,
+                    start_block=start_block,
+                ),
+                name="all_ops_loop",
             ),
-            store_rates(),
+            asyncio.create_task(store_rates(), name="store_rates"),
         ]
-        await asyncio.gather(*tasks)
+        # Wait until shutdown is requested
+        await shutdown_event.wait()
+        # Cancel tasks and wait for them to finish
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
         raise e
@@ -630,7 +647,7 @@ async def main_async_start(
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
-        # Cancel all tasks except the current one
+        # Cancel all other tasks and exit cleanly
         current_task = asyncio.current_task()
         tasks = [task for task in asyncio.all_tasks() if task is not current_task]
         for task in tasks:
@@ -639,7 +656,7 @@ async def main_async_start(
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{icon} Clearing notifications")
         await asyncio.sleep(2)
-        InternalConfig().shutdown()  # Ensure proper cleanup after tests
+        InternalConfig().shutdown()
 
 
 @app.command()

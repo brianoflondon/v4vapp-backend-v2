@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
@@ -181,16 +182,13 @@ async def remove_event_group(
 ) -> None:
     """
     Asynchronously removes an event from the specified LndEventsGroup after a delay.
-
-    Args:
-        event (EventItem): The event to be removed from the group.
-        lnd_events_group (LndEventsGroup): The group from which the event will be
-            removed.
-
-    Returns:
-        None
     """
-    await asyncio.sleep(10)
+    # Exit early on shutdown; otherwise delay up to 10s before cleanup
+    try:
+        await asyncio.wait_for(shutdown_event.wait(), timeout=10)
+        return
+    except asyncio.TimeoutError:
+        pass
     lnd_events_group.remove_group(htlc_event)
 
 
@@ -363,7 +361,12 @@ async def invoices_loop(
     else:
         add_index = 0
         settle_index = 0
-        await asyncio.sleep(10)
+        # Don’t block shutdown for 10s if the DB is empty
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=10)
+            return
+        except asyncio.TimeoutError:
+            pass
 
     request_sub = lnrpc.InvoiceSubscription(
         add_index=int(add_index) if add_index is not None else 0,
@@ -377,7 +380,7 @@ async def invoices_loop(
                 call_name="SubscribeInvoices",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 await TrackedBaseModel.update_quote()
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
@@ -400,7 +403,7 @@ async def invoices_loop(
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            raise e
+            return
         except Exception as e:
             logger.exception(e)
             pass
@@ -416,7 +419,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                 call_name="TrackPayments",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 lnrpc_payment: lnrpc.Payment
                 await TrackedBaseModel.update_quote()
                 async_publish(
@@ -439,7 +442,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            raise e
+            return
         except Exception as e:
             logger.exception(e)
             pass
@@ -455,7 +458,7 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
                 call_name="SubscribeHtlcEvents",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
                     event_name=Events.HTLC_EVENT,
@@ -649,6 +652,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         total_invoices = 0
         logger.info(f"{lnd_client.icon} Reading all invoices...")
         while True:
+            if shutdown_event.is_set():
+                return
             request = lnrpc.ListInvoiceRequest(
                 pending_only=False,
                 index_offset=index_offset,
@@ -744,6 +749,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         total_payments = 0
         logger.info(f"{lnd_client.icon} Reading all payments...")
         while True:
+            if shutdown_event.is_set():
+                return
             request = lnrpc.ListPaymentsRequest(
                 include_incomplete=True,
                 index_offset=index_offset,
@@ -934,7 +941,12 @@ async def synchronize_db(
         read_all_invoices(lnd_client),
         read_all_payments(lnd_client),
     ]
-    await asyncio.sleep(delay)
+    # Allow early exit during initial delay
+    try:
+        await asyncio.wait_for(shutdown_event.wait(), timeout=delay)
+        return
+    except asyncio.TimeoutError:
+        pass
     await asyncio.gather(*sync_tasks)
 
 
@@ -948,6 +960,7 @@ async def main_async_start(connection_name: str) -> None:
         None
     """
     lnd_client = None
+    running_tasks: list[asyncio.Task] = []
     try:
         db_conn = DBConn()
         await db_conn.setup_database()
@@ -985,64 +998,92 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
             await TrackedBaseModel.update_quote()
 
-            tasks = [
-                invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+            running_tasks = [
+                asyncio.create_task(
+                    invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="invoices_loop",
+                ),
+                asyncio.create_task(
+                    payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="payments_loop",
+                ),
             ]
 
-            # If we haven't synced for a long time, do the sync first to avoid massive
-            # load on the database
+            # If we haven't synced for a long time, do the sync first to avoid massive DB load
             pause_for_sync = await pause_for_database_sync()
             if pause_for_sync:
+                # Run sync now (blocking) before starting the rest
                 await synchronize_db(lnd_client, delay=0)
             else:
-                tasks.append(synchronize_db(lnd_client, delay=10))
-            tasks += [
-                htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                check_for_shutdown(),
+                # Schedule sync as a cancellable task
+                running_tasks.append(
+                    asyncio.create_task(
+                        synchronize_db(lnd_client, delay=10),
+                        name="synchronize_db",
+                    )
+                )
+
+            running_tasks += [
+                asyncio.create_task(
+                    htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="htlc_events_loop",
+                ),
+                asyncio.create_task(
+                    channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="channel_events_loop",
+                ),
             ]
-            await asyncio.gather(*tasks)
-            InternalConfig().shutdown()
+
+            # Wait for shutdown signal, then cancel streams immediately
+            await shutdown_event.wait()
+            for t in running_tasks:
+                t.cancel()
+            # Don’t hang forever; bound the wait
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*running_tasks, return_exceptions=True), timeout=5
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Timed out waiting for stream tasks to cancel; continuing shutdown."
+                )
+            # REMOVE premature shutdown here (it prevents goodbye notification)
+            # InternalConfig().shutdown()
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("👋 Received signal to stop. Exiting...")
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            logger.error(
-                f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
-                extra={"error": e},
-            )
-            if hasattr(lnd_client, "channel") and lnd_client.channel:
-                await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
             await asyncio.sleep(0.2)
             raise e
 
     finally:
-        # Cancel all tasks except the current one
+        # Ensure channel is closed with a timeout
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
         icon = hasattr(lnd_client, "icon") and lnd_client.icon if lnd_client else ""
         logger.info(
             f"{icon} ✅ LND gRPC client shutting down. "
             f"Monitoring node: {connection_name}. Version: {__version__}",
             extra={"notification": True},
         )
-        InternalConfig.notification_lock = True
-        # Ensure all pending notifications are sent
-        if hasattr(InternalConfig, "notification_loop"):
-            while InternalConfig.notification_lock:
-                logger.info("Waiting for notification loop to complete...")
-                await asyncio.sleep(0.5)  # Allow pending notifications to complete
-        current_task = asyncio.current_task()
-        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Let notifications flush before tearing down logging/redis
+        await asyncio.sleep(1)
+        InternalConfig().shutdown()
+
+
+# helper to bound notification wait
+async def _wait_notifications():
+    while getattr(InternalConfig, "notification_lock", False):
+        await asyncio.sleep(0.2)
 
 
 async def pause_for_database_sync() -> bool:

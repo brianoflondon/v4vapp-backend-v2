@@ -877,21 +877,21 @@ class InternalConfig:
     def check_notifications(self):
         """
         Monitors the state of the notification loop and lock.
-
-        This method continuously checks the status of the `notification_loop` and
-        `notification_lock` attributes, printing their states at regular intervals
-        until the notification loop is no longer running and the lock is released.
-
-        Returns:
-            None
         """
-        if getattr(self, "notification_loop") and self.notification_loop is not None:
-            while self.notification_loop.is_running() or self.notification_lock:
-                print(
-                    f"Notification loop: {self.notification_loop.is_running()} "
-                    f"Notification lock: {self.notification_lock}"
-                )
-                time.sleep(0.5)
+        max_wait_s = 2.0
+        start = time.time()
+        loop = getattr(self, "notification_loop", None)
+        if loop is None:
+            InternalConfig.notification_lock = False
+            return
+        while (loop.is_running() or InternalConfig.notification_lock) and (time.time() - start) < max_wait_s:
+            print(
+                f"Notification loop: {loop.is_running()} "
+                f"Notification lock: {InternalConfig.notification_lock}"
+            )
+            time.sleep(0.2)
+        # Ensure we don't stick on lock forever
+        InternalConfig.notification_lock = False
         return
 
     def shutdown_logging(self):
