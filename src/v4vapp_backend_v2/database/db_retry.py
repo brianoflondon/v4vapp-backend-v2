@@ -81,7 +81,7 @@ async def mongo_call(
 
                 notify_now = True if notify_on_error and error_count == 1 else False
                 logger.warning(
-                    f"{DATABASE_ICON} retry {error_count} error {f' ({context})' if context else ''}",
+                    f"{DATABASE_ICON} retry {error_count} error {str(e)[:20]} {f' ({context})' if context else ''}",
                     extra={"error_code": error_code, "notification": notify_now, "error": e},
                 )
                 if max_retries is not None and error_count > max_retries:

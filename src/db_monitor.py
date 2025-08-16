@@ -1,5 +1,4 @@
 import asyncio
-from pprint import pprint
 import signal
 import sys
 from contextlib import suppress
@@ -358,8 +357,8 @@ async def subscribe_stream(
         error_count += 1
         error_code = f"db_monitor_{collection_name}"
         logger.error(
-            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {e}",
-            extra={"error_code": error_code, "notification": True},
+            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {str(e)[:20]}",
+            extra={"error_code": error_code, "notification": True, "error": e},
         )
         # Wait before attempting to reconnect
         await asyncio.sleep(max(30 * error_count, 180))
