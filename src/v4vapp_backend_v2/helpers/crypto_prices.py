@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -45,6 +49,18 @@ DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
 
 ICON = "💱"
 
+
+def _log_rates_insert_done(t: asyncio.Task) -> None:
+    try:
+        res = t.result()
+        # summarize_write_result is optional; remove if not available
+        try:
+            msg = summarize_write_result(res)
+        except Exception:
+            msg = str(res)
+        logger.debug(f"{ICON} Rates insert completed: {msg}")
+    except Exception as e:
+        logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
 
 class Currency(StrEnum):
     HIVE = "hive"
@@ -457,6 +473,8 @@ class AllQuotes(BaseModel):
         }
 
     # MARK: DB Store Quote
+
+
     async def db_store_quote(self):
         """
         Store cryptocurrency quotes in the database.
@@ -495,9 +513,18 @@ class AllQuotes(BaseModel):
                 sats_hbd=self.quote.sats_hbd_p,
                 hive_hbd=self.quote.hive_hbd,
             )
-            db_ans = await AllQuotes.collection().insert_one(document=record.model_dump())
-            logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
             AllQuotes.db_store_timestamp = self.fetch_date
+            context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
+            task = asyncio.create_task(
+                mongo_call(
+                    lambda: AllQuotes.collection().insert_one(document=record.model_dump()),
+                    error_code="mongodb_rates_insert",
+                    context=context,
+                ),
+                name=f"rates_insert:{self.fetch_date.isoformat()}",
+            )
+            task.add_done_callback(_log_rates_insert_done)
+            # Do not await: runs in background
         except Exception as e:
             logger.warning(
                 f"{ICON} Failed to insert rates into database: {e}",

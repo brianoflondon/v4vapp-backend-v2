@@ -149,20 +149,20 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         bool: True if the "locked" field is found in either the "updatedFields" or
         "removedFields" of the change event, otherwise False.
     """
-    update_description = change.get("updateDescription", {})
-    updated_fields = update_description.get("updatedFields", {})
-    removed_fields = update_description.get("removedFields", [])
-    logger.debug(
-        f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
-    )
+    # update_description = change.get("updateDescription", {})
+    # updated_fields = update_description.get("updatedFields", {})
+    # removed_fields = update_description.get("removedFields", [])
+    # logger.debug(
+    #     f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
+    # )
 
-    if update_description or updated_fields or removed_fields:
-        print("update_descriptions")
-        pprint(update_description)
-        print("updated_fields")
-        pprint(updated_fields)
-        print("removed_fields")
-        pprint(removed_fields)
+    # if update_description or updated_fields or removed_fields:
+    #     print("update_descriptions")
+    #     pprint(update_description)
+    #     print("updated_fields")
+    #     pprint(updated_fields)
+    #     print("removed_fields")
+    #     pprint(removed_fields)
 
     # Filter out custom_json sent purely for notifications
     # if "json" in updated_fields:
