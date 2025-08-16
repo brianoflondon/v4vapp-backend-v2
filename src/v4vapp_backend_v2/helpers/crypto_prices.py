@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -64,6 +65,23 @@ class Currency(StrEnum):
         if self in [Currency.HIVE, Currency.HBD]:
             return self.value.upper()
         raise ValueError("Invalid currency")
+
+
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
 class CurrencyPair(StrEnum):
@@ -463,9 +481,8 @@ class AllQuotes(BaseModel):
             and self.fetch_date - AllQuotes.db_store_timestamp
             < timedelta(seconds=DB_RATES_MIN_INTERVAL)
         ):
-            logger.info(
-                f"{ICON} Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
-            )
+            delta = format_time_delta(datetime.now(tz=timezone.utc) - AllQuotes.db_store_timestamp)
+            logger.info(f"{ICON} Skipping database store, last store was {delta} ago")
             return
         try:
             record = HiveRatesDB(

@@ -250,7 +250,7 @@ class TrackedBaseModel(BaseModel):
 
     async def save(
         self,
-        exclude_unset: bool = False,
+        exclude_unset: bool = True,
         exclude_none: bool = True,
         mongo_kwargs: dict[str, Any] = {},
         **kwargs: Any,
