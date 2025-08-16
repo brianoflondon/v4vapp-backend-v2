@@ -1,4 +1,3 @@
-import asyncio
 import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
@@ -6,16 +5,11 @@ from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
 from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.errors import (
-    ConnectionFailure,
-    DuplicateKeyError,
-    NetworkTimeout,
-    OperationFailure,
-    ServerSelectionTimeoutError,
-)
+from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
+from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
@@ -266,7 +260,7 @@ class TrackedBaseModel(BaseModel):
         self,
         exclude_unset: bool = False,
         exclude_none: bool = True,
-        mongo_kwargs: dict[str, Any] = {},
+        mongo_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> UpdateResult:
         """
@@ -295,7 +289,7 @@ class TrackedBaseModel(BaseModel):
             ConnectionFailure: If the connection to MongoDB fails.
             Exception: For any other exceptions encountered during the save operation.
         """
-        if not mongo_kwargs:
+        if mongo_kwargs is None:
             mongo_kwargs = {"upsert": True}
         update = self.model_dump(
             exclude_unset=exclude_unset,
@@ -308,44 +302,14 @@ class TrackedBaseModel(BaseModel):
         update = {
             "$set": update,
         }
-        error_count = 0
-        while True:
-            try:
-                db_ans = await InternalConfig.db[self.collection_name].update_one(
-                    filter=self.group_id_query, update=update, **mongo_kwargs
-                )
-                if error_count > 0:
-                    logger.info(
-                        f"{ICON} Reconnected to MongoDB after {error_count} errors",
-                        extra={"notification": True, "error_code_clear": "mongodb_save_error"},
-                    )
-                    logger.info(
-                        f"{ICON} SAVED {self.group_id_p} to {self.collection_name}",
-                    )
-                    error_count = 0
-
-                return db_ans
-
-            except DuplicateKeyError:
-                raise
-            except (
-                ServerSelectionTimeoutError,
-                NetworkTimeout,
-                ConnectionFailure,
-                OperationFailure,
-            ) as e:
-                error_count += 1
-                logger.error(
-                    f"{ICON} Error {error_count} MongoDB connection error, while trying to save: {e}",
-                    extra={"error_code": "mongodb_save_error", "notification": True},
-                )
-                # Wait before attempting to reconnect
-                await asyncio.sleep(min(0.5 * error_count, 10))
-                logger.info(f"{ICON} Attempting to reconnect to MongoDb")
-
-            except Exception as e:
-                logger.error(f"{ICON} Error occurred while saving to MongoDB: {e}")
-                raise
+        # Delegate retries and logging to the wrapper
+        return await mongo_call(
+            lambda: InternalConfig.db[self.collection_name].update_one(
+                filter=self.group_id_query, update=update, **mongo_kwargs
+            ),
+            error_code=f"db_save_error_{self.collection_name}",
+            context=f"{self.collection_name}:{self.group_id_p}",
+        )
 
     def tracked_type(self) -> str:
         """
