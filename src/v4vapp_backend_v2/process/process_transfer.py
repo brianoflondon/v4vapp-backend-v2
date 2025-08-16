@@ -64,18 +64,24 @@ async def follow_on_transfer(
     # Check if the operation already has a lightning payment transaction
     # If it does, we skip processing
     reply_messages = []
-    for reply in tracked_op.replies:
-        if reply.reply_type != "ledger_error":
-            message = f"Operation has a {reply.reply_type} reply, skipping processing."
-            logger.info(
-                message,
-                extra={"notification": False, **tracked_op.log_extra},
-            )
-            reply_messages.append(message)
-        else:
-            logger.info(f"Ignoring {reply.reply_type} {reply.reply_id}.")
-    if reply_messages:
-        raise HiveTransferError(f"Operation already has replies: {', '.join(reply_messages)}")
+    if tracked_op.replies:
+        for reply in tracked_op.replies:
+            if reply.reply_type != "ledger_error":
+                message = f"Operation has a {reply.reply_type} reply, skipping processing."
+                logger.info(
+                    message,
+                    extra={"notification": False, **tracked_op.log_extra},
+                )
+                reply_messages.append(message)
+            else:
+                logger.info(f"Ignoring {reply.reply_type} {reply.reply_id}.")
+        if reply_messages:
+            raise HiveTransferError(f"Operation already has replies: {', '.join(reply_messages)}")
+
+    if not tracked_op.conv:
+        await tracked_op.update_conv()
+        if not tracked_op.conv or tracked_op.conv.is_unset():
+            raise HiveTransferError("Conversion not set in operation.")
 
     hive_config = InternalConfig().config.hive
     lnd_config = InternalConfig().config.lnd_config
@@ -427,6 +433,11 @@ async def check_amount_sent(
     Raises:
         AssertionError: If the database client is not initialized.
     """
+    if not tracked_op.conv or tracked_op.conv.is_unset():
+        await tracked_op.update_conv()
+        if not tracked_op.conv or tracked_op.conv.is_unset():
+            raise HiveTransferError("Conversion not set in operation.")
+
     if pay_req.is_zero_value:
         if tracked_op.conv.in_limits():
             return ""

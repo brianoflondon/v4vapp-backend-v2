@@ -66,15 +66,15 @@ class ReplyModel(BaseModel):
 
 
 class TrackedBaseModel(BaseModel):
-    replies: List[ReplyModel] = Field(
-        default_factory=list,
+    replies: List[ReplyModel] | None = Field(
+        None,
         description="List of replies to the operation",
         exclude=False,
     )
 
-    conv: CryptoConv = Field(CryptoConv(), description="Conversion object for the transaction")
+    conv: CryptoConv | None = Field(None, description="Conversion object for the transaction")
     fee_conv: CryptoConv | None = Field(
-        CryptoConv(),
+        None,
         description="Conversion object for fees associated with this transaction if any",
     )
     change_amount: AmountPyd | None = Field(
@@ -82,15 +82,19 @@ class TrackedBaseModel(BaseModel):
         description="Amount of change associated with this transaction if any",
     )
     change_conv: CryptoConv | None = Field(
-        CryptoConv(),
+        None,
         description="Conversion object for any returned change associated with this transaction if any",
     )
     change_memo: str | None = Field(
         None,
         description="Message associated with any change in this transaction if any",
     )
-    process_time: float = Field(0, description="Time in (s) it took to process this transaction")
+    process_time: float | None = Field(
+        None, description="Time in (s) it took to process this transaction"
+    )
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
+    # Controls whether model_dump uses aliases (applies recursively to nested models)
+    dump_by_alias: ClassVar[bool] = True
 
     def __init__(self, **data: Dict[str, Any]) -> None:
         """
@@ -118,6 +122,8 @@ class TrackedBaseModel(BaseModel):
 
         :return: A list of reply IDs.
         """
+        if not self.replies:
+            return []
         return [reply.reply_id for reply in self.replies if reply.reply_id]
 
     def add_reply(
@@ -148,6 +154,8 @@ class TrackedBaseModel(BaseModel):
             reply_message=reply_message,
             reply_error=reply_error,
         )
+        if not self.replies:
+            self.replies = []
         self.replies.append(reply)
 
     def get_reply(self, reply_id: str) -> ReplyModel | None:
@@ -157,6 +165,8 @@ class TrackedBaseModel(BaseModel):
         :param reply_id: The ID of the reply to retrieve.
         :return: The ReplyModel instance if found, otherwise None.
         """
+        if not self.replies:
+            return None
         for reply in self.replies:
             if reply.reply_id == reply_id:
                 return reply
@@ -168,6 +178,8 @@ class TrackedBaseModel(BaseModel):
 
         :return: A list of ReplyModel instances that have an error.
         """
+        if not self.replies:
+            return []
         return [reply for reply in self.replies if reply.reply_error is not None]
 
     def get_replies_by_type(self, reply_type: str) -> list[ReplyModel]:
@@ -177,6 +189,8 @@ class TrackedBaseModel(BaseModel):
         :param reply_type: The type of replies to retrieve.
         :return: A list of ReplyModel instances matching the specified type.
         """
+        if not self.replies:
+            return []
         return [reply for reply in self.replies if reply.reply_type == reply_type]
 
     @classmethod
@@ -250,13 +264,16 @@ class TrackedBaseModel(BaseModel):
 
     async def save(
         self,
-        exclude_unset: bool = True,
+        exclude_unset: bool = False,
         exclude_none: bool = True,
         mongo_kwargs: dict[str, Any] = {},
         **kwargs: Any,
     ) -> UpdateResult:
         """
         Asynchronously saves the current state of the model to the MongoDB database.
+
+        `exclude_unset` should nearly always be FALSE. This is to ensure default values
+        are included in the update.
 
         This method serializes the model's data and performs an update operation on the
         corresponding MongoDB collection. It handles connection errors with automatic
@@ -281,7 +298,10 @@ class TrackedBaseModel(BaseModel):
         if not mongo_kwargs:
             mongo_kwargs = {"upsert": True}
         update = self.model_dump(
-            exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+            exclude_unset=exclude_unset,
+            exclude_none=exclude_none,
+            by_alias=self.dump_by_alias,
+            **kwargs,
         )
         if update.get("replies") == []:
             update.pop("replies", None)  # Remove empty replies list if it exists
@@ -396,25 +416,6 @@ class TrackedBaseModel(BaseModel):
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
             cls.last_quote = all_quotes.quote
-
-    async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Asynchronously updates the last quote for the class.
-
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-        Uses the new quote to update a `conv` object.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
-
-        Returns:
-            None
-        """
-        await TrackedBaseModel.update_quote(quote)
-        await self.update_conv()
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

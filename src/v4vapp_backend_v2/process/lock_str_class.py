@@ -87,7 +87,7 @@ async def _log_outstanding_locks() -> None:
     # Active Redis locks (cross-process visibility)
     try:
         redis = InternalConfig.redis_async
-        keys = await redis.keys("cust_id_lock:*")
+        keys = await redis.keys("lock_str:*")
         if keys:
             lines = []
             for key in keys:
@@ -129,7 +129,11 @@ def start_lock_reporter() -> None:
         # No running loop; caller can start later
         return
     if _REPORTER_TASK is None or _REPORTER_TASK.done():
-        _REPORTER_TASK = loop.create_task(_reporter_loop(), name="custid-lock-reporter")
+        _REPORTER_TASK = loop.create_task(_reporter_loop(), name="lock-str-reporter")
+
+
+def lock_key(cust_id: str) -> str:
+    return f"lock_str:{cust_id}"
 
 
 class LockStr(AccName):
@@ -140,6 +144,10 @@ class LockStr(AccName):
     releasing locks on object IDs using Redis. It extends str to allow using
     the object ID string directly.
     """
+
+    @property
+    def lock_key(self) -> str:
+        return f"lock_str:{self}"
 
     async def acquire_lock(
         self,
@@ -161,7 +169,6 @@ class LockStr(AccName):
         # Ensure periodic reporter is running
         start_lock_reporter()
 
-        lock_key = f"cust_id_lock:{self}"
         redis_instance = InternalConfig.redis_async
 
         # Track this waiter (multiple per cust_id supported)
@@ -171,7 +178,7 @@ class LockStr(AccName):
         try:
             lock = RedisLock(
                 redis_instance,
-                name=lock_key,
+                name=self.lock_key,
                 timeout=timeout,
                 sleep=LOOK_POLLING_SLEEP_TIME,
                 blocking=True,
@@ -179,7 +186,6 @@ class LockStr(AccName):
             )
 
             start_time = time.time()
-            last_log_time = start_time
 
             while True:
                 try:
@@ -247,7 +253,7 @@ class LockStr(AccName):
         """
         redis_instance = InternalConfig.redis_async
         try:
-            lock = RedisLock(redis_instance, name=f"cust_id_lock:{cust_id}", timeout=None)
+            lock = RedisLock(redis_instance, name=f"lock_str:{cust_id}", timeout=None)
         except Exception as e:
             logger.error(f"{ICON} Error creating lock for release {cust_id}: {e}")
             return False
@@ -261,7 +267,7 @@ class LockStr(AccName):
             return False
         except LockError as e:
             if "Cannot release an unlocked lock" in str(e):
-                await redis_instance.delete(f"cust_id_lock:{cust_id}")
+                await redis_instance.delete(f"lock_str:{cust_id}")
                 logger.info(f"{ICON} Release already expired lock for {cust_id}")
                 return True
             else:
@@ -276,10 +282,9 @@ class LockStr(AccName):
         """
         Check if a lock exists for a object ID.
         """
-        lock_key = f"cust_id_lock:{cust_id}"
         redis_instance = InternalConfig.redis_async
         try:
-            exists = await redis_instance.exists(lock_key)
+            exists = await redis_instance.exists(lock_key(cust_id))
             return bool(exists)
         except Exception as e:
             logger.error(f"{ICON} Error checking lock existence for {cust_id}: {e}")
@@ -292,7 +297,7 @@ class LockStr(AccName):
         """
         redis_instance = InternalConfig.redis_async
         try:
-            keys = await redis_instance.keys("cust_id_lock:*")
+            keys = await redis_instance.keys("lock_str:*")
             if keys:
                 await redis_instance.delete(*keys)
                 logger.info(f"{ICON} All object ID locks cleared.")

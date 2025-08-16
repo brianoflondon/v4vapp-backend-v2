@@ -102,7 +102,7 @@ async def process_transfer_op(
     """
     if not hive_transfer.conv or hive_transfer.conv.is_unset():
         await hive_transfer.update_conv()
-        if hive_transfer.conv.is_unset():
+        if hive_transfer.conv and hive_transfer.conv.is_unset():
             raise LedgerEntryCreationException("Conversion not set in operation.")
 
     ledger_entry = LedgerEntry(
@@ -367,6 +367,9 @@ async def process_custom_json(
             and keepsats_transfer.msats
             and custom_json.from_account != custom_json.to_account
         ):
+            if not custom_json.conv or custom_json.conv.is_unset():
+                quote = await TrackedBaseModel.nearest_quote(timestamp=custom_json.timestamp)
+                await custom_json.update_conv(quote=quote)
             ledger_entry = await custom_json_internal_transfer(
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer
             )
@@ -411,7 +414,7 @@ async def process_custom_json(
 
             if not custom_json.conv or custom_json.conv.is_unset():
                 await custom_json.update_conv()
-                if custom_json.conv.is_unset():
+                if custom_json.conv and custom_json.conv.is_unset():
                     raise LedgerEntryCreationException(
                         "Conversion not set in CustomJson operation."
                     )

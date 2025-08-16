@@ -1,4 +1,5 @@
 import asyncio
+from pprint import pprint
 import signal
 import sys
 from contextlib import suppress
@@ -122,7 +123,7 @@ class ResumeToken(BaseModel):
             if serialized_token:
                 self.data = eval(serialized_token)  # Deserialize the token # type: ignore
                 logger.info(
-                    f"Resume token retrieved for collection '{self.collection}'",
+                    f"{ICON} Resume token retrieved for collection '{self.collection}'",
                     extra={"resume_token": self.data},
                 )
                 return self.data
@@ -149,19 +150,19 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         "removedFields" of the change event, otherwise False.
     """
     update_description = change.get("updateDescription", {})
-    # updated_fields = update_description.get("updatedFields", {})
-    # removed_fields = update_description.get("removedFields", [])
+    updated_fields = update_description.get("updatedFields", {})
+    removed_fields = update_description.get("removedFields", [])
     logger.debug(
         f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
     )
 
-    # if update_description or updated_fields or removed_fields:
-    #     print("update_descriptions")
-    #     pprint(update_description)
-    #     print("updated_fields")
-    #     pprint(updated_fields)
-    #     print("removed_fields")
-    #     pprint(removed_fields)
+    if update_description or updated_fields or removed_fields:
+        print("update_descriptions")
+        pprint(update_description)
+        print("updated_fields")
+        pprint(updated_fields)
+        print("removed_fields")
+        pprint(removed_fields)
 
     # Filter out custom_json sent purely for notifications
     # if "json" in updated_fields:

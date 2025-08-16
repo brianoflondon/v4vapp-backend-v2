@@ -355,7 +355,7 @@ class AllQuotes(BaseModel):
             async with asyncio.timeout(timeout):
                 logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
-                    tasks: dict[str, asyncio.Task] = {
+                    tasks = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
                         for service in all_services
                     }

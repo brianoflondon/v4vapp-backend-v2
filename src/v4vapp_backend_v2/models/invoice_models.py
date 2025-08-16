@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Dict, List, override
+from typing import Any, ClassVar, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -226,6 +226,9 @@ class Invoice(TrackedBaseModel):
     expiry_date: datetime | None = Field(
         default=None, description="Expiry date of the invoice (creation_date + expiry)"
     )
+
+    # Dump field names (not aliases) to MongoDB
+    dump_by_alias: ClassVar[bool] = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

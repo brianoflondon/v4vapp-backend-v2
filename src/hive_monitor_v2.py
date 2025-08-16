@@ -244,9 +244,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             await op.get_witness_details()
             op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
             op.delta = op.timestamp - last_witness_timestamp
-            _ = await OpBase.collection().insert_one(
-                op.model_dump(),
-            )
+            await db_store_op(op)
             logger.info(
                 f"{icon} {op.log_str}",
                 extra={
@@ -389,7 +387,7 @@ async def all_ops_loop(
                 elif op.known_custom_json:
                     notification = True
                     if not op.conv:
-                        await op.update_quote_conv()
+                        await op.update_conv()
                     log_it = True
                     db_store = True
 

@@ -207,9 +207,9 @@ async def db_store_invoice(
     Returns:
         None
     """
-
     try:
         invoice_pyd = Invoice(htlc_event)
+        await invoice_pyd.update_conv()
         ans = await invoice_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
@@ -244,6 +244,7 @@ async def db_store_payment(
             fill_cache=True,
             col_pub_keys="pub_keys",
         )
+        await payment_pyd.update_conv()
         ans = await payment_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
@@ -255,12 +256,12 @@ async def db_store_payment(
         # payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
         # update = {"$set": payment_dict}
         # ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
-        logger.info(
-            f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New payment recorded: {payment_pyd.payment_index:>6} "
-            f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
-            extra={"db_ans": ans.raw_result, "payment": payment_dict},
-        )
+        # logger.info(
+        #     f"{lnd_client.icon}{DATABASE_ICON} "
+        #     f"New payment recorded: {payment_pyd.payment_index:>6} "
+        #     f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
+        #     extra={"db_ans": ans.raw_result, "payment": payment_dict},
+        # )
     except Exception as e:
         logger.info(e)
         return

@@ -52,11 +52,17 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
     ):
         existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
         if existing_entry:
-            logger.warning(f"Ledger entry for {tracked_op.short_id} already exists.", extra={"notification": False})
+            logger.warning(
+                f"Ledger entry for {tracked_op.short_id} already exists.",
+                extra={"notification": False},
+            )
             return [existing_entry]
         existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
         if existing_op and existing_op.process_time:
-            logger.warning(f"Process time already set for {tracked_op.short_id} already processed.", extra={"notification": False})
+            logger.warning(
+                f"Process time already set for {tracked_op.short_id} already processed.",
+                extra={"notification": False},
+            )
             return []
 
         logger.info(f"{'=*=' * 20}")
@@ -168,6 +174,7 @@ async def process_lightning_invoice(
     # MARK: Funding
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv()
+        await invoice.save()
     if "funding" in invoice.memo.lower():
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
         ledger_entry = LedgerEntry(

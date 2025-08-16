@@ -57,8 +57,8 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         shuffled_endpoints = API_ENDPOINTS[:]
         shuffle(shuffled_endpoints)
         for api_url in shuffled_endpoints:
+            url = f"{api_url}/{hive_accname}" if hive_accname else api_url
             try:
-                url = f"{api_url}/{hive_accname}" if hive_accname else api_url
                 async with httpx.AsyncClient() as client:
                     response = await fetch_witness_details(client, url)
                     response.raise_for_status()  # Raises an exception for 4xx/5xx status codes

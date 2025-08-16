@@ -80,18 +80,29 @@ class CustomJson(OpBase):
                     ):
                         self.cust_id = self.json_data.from_account
 
-                if self.conv.sats_hbd == 0:
-                    if getattr(self.json_data, "sats", None) is not None:
-                        if (
-                            TrackedBaseModel.last_quote
-                            and not TrackedBaseModel.last_quote.hive_hbd == 0
-                            and hasattr(self.json_data, "sats")
+                if self.conv is not None and self.conv.is_unset():
+                    if (
+                        getattr(self.json_data, "sats", None) is not None
+                        or getattr(self.json_data, "msats", None) is not None
+                    ):
+                        quote = TrackedBaseModel.last_quote
+                        if getattr(self.json_data, "sats", None) is not None and not hasattr(
+                            self.json_data, "msats"
                         ):
-                            self.conv = CryptoConversion(
-                                value=getattr(self.json_data, "msats", 0),
-                                conv_from=Currency.MSATS,
-                                quote=TrackedBaseModel.last_quote,
-                            ).conversion
+                            setattr(
+                                self.json_data, "msats", getattr(self.json_data, "sats", 0) * 1000
+                            )
+
+                        msats_value = (
+                            getattr(self.json_data, "msats", 0)
+                            if hasattr(self.json_data, "msats")
+                            else 0
+                        )
+                        self.conv = CryptoConversion(
+                            value=msats_value,
+                            conv_from=Currency.MSATS,
+                            quote=quote,
+                        ).conversion
         except Exception as e:
             logger.error(
                 f"Error initializing CustomJson: {e}",
@@ -260,15 +271,25 @@ class CustomJson(OpBase):
             quote (QuoteResponse | None): The quote to update.
                 If None, uses the last quote.
         """
-        if getattr(self.json_data, "sats", None) is not None:
-            if self.conv.sats_hbd == 0:
-                if not quote:
-                    quote = await TrackedBaseModel.nearest_quote(self.timestamp)
-                self.conv = CryptoConversion(
-                    value=getattr(self.json_data, "sats", 0),
-                    conv_from=Currency.SATS,
-                    quote=quote,
-                ).conversion
+        if (
+            getattr(self.json_data, "sats", None) is not None
+            or getattr(self.json_data, "msats", None) is not None
+        ):
+            if not quote:
+                quote = await TrackedBaseModel.nearest_quote(self.timestamp)
+            if getattr(self.json_data, "sats", None) is not None and not hasattr(
+                self.json_data, "msats"
+            ):
+                setattr(self.json_data, "msats", getattr(self.json_data, "sats", 0) * 1000)
+
+            msats_value = (
+                getattr(self.json_data, "msats", 0) if hasattr(self.json_data, "msats") else 0
+            )
+            self.conv = CryptoConversion(
+                value=msats_value,
+                conv_from=Currency.MSATS,
+                quote=quote,
+            ).conversion
 
     @property
     def log_str(self) -> str:
