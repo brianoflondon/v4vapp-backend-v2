@@ -97,7 +97,7 @@ async def db_store_op(
             or None/empty list if an error occurs.
     """
     try:
-        return await op.save(mongo_kwargs={"upsert": False})
+        return await op.save(mongo_kwargs={"upsert": True})
 
     except DuplicateKeyError as e:
         logger.info(
