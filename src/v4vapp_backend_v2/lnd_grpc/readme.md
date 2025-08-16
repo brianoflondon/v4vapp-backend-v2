@@ -36,3 +36,18 @@ router_pb2.py: Contains the generated code for the messages defined in the .prot
 router_pb2_grpc.py: Contains the generated code for the gRPC services defined in the .proto file.
 Example Usage
 Here's an example of how you can use the generated code in your Python application:
+
+
+# UV
+
+For uv-Managed Projects (Dependencies in pyproject.toml)uv projects use a uv.lock file to pin exact package versions based on the constraints in pyproject.toml. Upgrading updates the lockfile to the latest compatible versions (respecting your constraints, like >= or < bounds) and syncs the environment.Upgrade all packages in the lockfile:Run uv lock --upgrade to update the uv.lock file with the latest versions for all dependencies.
+Then run uv sync to apply the changes to your project's virtual environment (installing or upgrading packages as needed).
+
+Alternative (upgrade and sync in one step):Run uv sync --upgrade. This updates the lockfile and syncs the environment simultaneously.
+
+Notes:If your pyproject.toml uses pinned versions (e.g., ==1.2.3), you'll need to relax them to ranges (e.g., >=1.2.3) for upgrades to take effect.
+To upgrade a specific package only: uv lock --upgrade-package <package-name> (or uv sync --upgrade-package <package-name> to also sync).
+Example:
+
+uv sync --upgrade
+
