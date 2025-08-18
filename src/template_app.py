@@ -8,9 +8,8 @@ import typer
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 
-ICON = "🏆"
+ICON = "🧩"
 app = typer.Typer()
-
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
 
@@ -19,7 +18,7 @@ def handle_shutdown_signal():
     """
     Signal handler to set the shutdown event.
     """
-    logger.info("Received shutdown signal. Setting shutdown event.")
+    logger.info(f"{ICON} Received shutdown signal. Setting shutdown event.")
     shutdown_event.set()
 
 
@@ -47,7 +46,7 @@ async def main_async_start():
         # Simulate some work
         while not shutdown_event.is_set():
             await asyncio.sleep(5)
-            logger.info("Working...")
+            logger.info(f"{ICON} Working...")
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
@@ -71,7 +70,6 @@ async def main_async_start():
         logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
-        InternalConfig().shutdown()  # Ensure proper cleanup after tests
 
 
 @app.command()
@@ -95,7 +93,7 @@ def main(
     Returns:
         None
     """
-    _ = InternalConfig()
+    _ = InternalConfig(config_filename=config_filename, log_filename="template_app.jsonl")
     logger.info(
         f"{ICON} ✅ Template App. Started. Version: {__version__}", extra={"notification": True}
     )

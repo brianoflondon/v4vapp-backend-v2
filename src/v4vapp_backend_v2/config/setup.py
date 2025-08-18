@@ -22,7 +22,7 @@ from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
 
 logger = logging.getLogger("backend")  # __name__ is a common choice
-
+ICON = "⚙️"
 
 BASE_CONFIG_PATH = Path("config/")
 BASE_LOGGING_CONFIG_PATH = Path(BASE_CONFIG_PATH, "logging/")
@@ -452,7 +452,7 @@ class Config(BaseModel):
         """
         Validates the configuration after the model is initialized.
         """
-        logger.info("Validating the Config file and defaults....")
+        logger.info(f"{ICON} Validating the Config file and defaults....")
 
         # Check config version
         config_version = version.parse(self.version)
@@ -652,10 +652,10 @@ class InternalConfig:
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
-            self._initialized = True  # Must set this to avoid re-initialization during setup
+            self._initialized = True
             super().__init__()
-            logger.info(f"Config filename: {config_filename}")
-            InternalConfig.notification_loop = None  # Initialize notification_loop
+            logger.info(f"{ICON} Config filename: {config_filename}")
+            InternalConfig.notification_loop = None
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
@@ -676,36 +676,19 @@ class InternalConfig:
             with open(config_file) as f_in:
                 config = safe_load(f_in)
             self.config_filename = config_filename
-            logger.info(f"Config file found: {config_file}")
+            logger.info(f"{ICON} Config file found: {config_file}")
         except FileNotFoundError as ex:
-            logger.error(f"Config file not found: {ex}")
+            logger.error(f"{ICON} Config file not found: {ex}")
             raise ex
 
         try:
             self.config = Config.model_validate(config)
         except ValueError as ex:
-            logger.error("Invalid configuration:")
+            logger.error(f"{ICON} Invalid configuration:")
             logger.error(ex)
-            # exit the program with an error but no stack trace
             raise StartupFailure(ex)
 
     def setup_redis(self) -> None:
-        """
-        Initializes Redis clients for the application.
-
-        This method sets up three Redis client instances:
-        - `InternalConfig.redis`: A synchronous Redis client with binary responses (`decode_responses=False`).
-        - `InternalConfig.redis_decoded`: A synchronous Redis client with decoded string responses (`decode_responses=True`).
-        - `InternalConfig.redis_async`: An asynchronous Redis client with decoded string responses (`decode_responses=True`).
-
-        All clients are configured using parameters from `self.config.redis`, including host, port, db, and any additional keyword arguments.
-
-        The method attempts to ping all Redis clients to verify connectivity during startup.
-        If the connection fails, it logs the error and raises a `StartupFailure` exception.
-
-        Raises:
-            StartupFailure: If unable to connect to the Redis server.
-        """
         try:
             InternalConfig.redis = Redis(
                 host=self.config.redis.host,
@@ -731,9 +714,9 @@ class InternalConfig:
             # Optional: Test connections during startup
             InternalConfig.redis.ping()
             InternalConfig.redis_decoded.ping()
-            logger.info("Redis clients initialized successfully")
+            logger.info(f"{ICON} Redis clients initialized successfully")
         except RedisError as ex:
-            logger.error(f"Failed to connect to Redis: {ex}")
+            logger.error(f"{ICON} Failed to connect to Redis: {ex}")
             raise StartupFailure(f"Redis connection failure: {ex}")
 
     def setup_logging(self, log_filename: str = "app.log") -> None:
@@ -771,34 +754,19 @@ class InternalConfig:
         queue_handler = logging.getHandlerByName("queue_handler")
         if queue_handler is not None:
             logger.info(
-                "Queue handler found; ensure QueueListener is started elsewhere if needed."
+                f"{ICON} Queue handler found; ensure QueueListener is started elsewhere if needed."
             )
             queue_handler.listener.start()  # type: ignore[attr-defined]
             atexit.register(queue_handler.listener.stop)  # type: ignore[attr-defined]
             try:
                 InternalConfig.notification_loop = asyncio.get_running_loop()
-                logger.info("Found running loop for setup logging")
+                logger.info(f"{ICON} Found running loop for setup logging")
             except RuntimeError:  # No event loop in the current thread
                 InternalConfig.notification_loop = asyncio.new_event_loop()
                 logger.info(
-                    "Started new event loop for notification logging",
+                    f"{ICON} Started new event loop for notification logging",
                     extra={"loop": InternalConfig.notification_loop.__dict__},
                 )
-
-            # # Get the handlers from the queue handler's configuration
-            # handlers = []
-            # for handler_name in config["handlers"]["queue_handler"]["handlers"]:
-            #     handler = logging.getHandlerByName(handler_name)
-            #     if handler:
-            #         handlers.append(handler)
-
-            # # Create and start the queue listener
-            # from logging.handlers import QueueListener
-            # self.queue_listener = QueueListener(
-            #     queue_handler.queue, *handlers, respect_handler_level=True
-            # )
-            # self.queue_listener.start()
-            # logger.info("QueueListener started successfully")
 
         # Set up the simple format string
         try:
@@ -884,7 +852,9 @@ class InternalConfig:
         if loop is None:
             InternalConfig.notification_lock = False
             return
-        while (loop.is_running() or InternalConfig.notification_lock) and (time.time() - start) < max_wait_s:
+        while (loop.is_running() or InternalConfig.notification_lock) and (
+            time.time() - start
+        ) < max_wait_s:
             print(
                 f"Notification loop: {loop.is_running()} "
                 f"Notification lock: {InternalConfig.notification_lock}"
@@ -924,10 +894,10 @@ class InternalConfig:
         """
         if hasattr(InternalConfig, "redis") and InternalConfig.redis is not None:
             InternalConfig.redis.close()
-            logger.info("Closed raw Redis client.")
+            logger.info(f"{ICON} Closed raw Redis client.")
         if hasattr(InternalConfig, "redis_decoded") and InternalConfig.redis_decoded is not None:
             InternalConfig.redis_decoded.close()
-            logger.info("Closed decoded Redis client.")
+            logger.info(f"{ICON} Closed decoded Redis client.")
 
         self.close_db_clients_sync()
         try:
@@ -939,17 +909,17 @@ class InternalConfig:
                     and InternalConfig.redis_async is not None
                 ):
                     loop.create_task(InternalConfig.redis_async.close())
-                    logger.info("Closed async Redis client.")
+                    logger.info(f"{ICON} Closed async Redis client.")
         except RuntimeError:
             # If there is no running loop, we can safely close the db client
             pass
 
         self.shutdown_logging()
-        logger.info("InternalConfig Shutdown: Waiting for notifications")
+        logger.info(f"{ICON} InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
             if self.notification_loop.is_running():
-                logger.info("InternalConfig Shutdown: Closing notification loop")
+                logger.info(f"{ICON} InternalConfig Shutdown: Closing notification loop")
 
                 # # Get the current task (the one running the shutdown logic)
                 # current_task = asyncio.current_task(loop=self.notification_loop)
@@ -962,7 +932,9 @@ class InternalConfig:
                 ]
                 # Wait for all pending tasks to complete
                 if pending_tasks:
-                    logger.info(f"Waiting for {len(pending_tasks)} pending tasks to complete")
+                    logger.info(
+                        f"{ICON} Waiting for {len(pending_tasks)} pending tasks to complete"
+                    )
                     self.notification_loop.run_until_complete(
                         asyncio.gather(*pending_tasks, return_exceptions=True)
                     )
@@ -972,7 +944,7 @@ class InternalConfig:
 
                 # Wait for the loop to stop by polling (non-blocking)
                 while self.notification_loop.is_running():
-                    logger.info("Waiting for loop to stop")
+                    logger.info(f"{ICON} Waiting for loop to stop")
                     time.sleep(0.1)
 
                 # Shut down async generators and close the loop
@@ -981,14 +953,18 @@ class InternalConfig:
                         self.notification_loop.shutdown_asyncgens()
                     )
                 except RuntimeError:
-                    logger.warning("Event loop already closed or not running async generators")
+                    logger.warning(
+                        f"{ICON} Event loop already closed or not running async generators"
+                    )
                 finally:
                     self.notification_loop.close()
-                logger.info("InternalConfig Shutdown: Notification loop closed")
+                logger.info(f"{ICON} InternalConfig Shutdown: Notification loop closed")
             else:
                 # If the loop isn’t running, just close it
                 self.notification_loop.close()
-                logger.info("InternalConfig Shutdown: Notification loop closed (was not running)")
+                logger.info(
+                    f"{ICON} InternalConfig Shutdown: Notification loop closed (was not running)"
+                )
 
     def close_db_clients_sync(self) -> None:
         """
@@ -996,7 +972,7 @@ class InternalConfig:
         """
         if hasattr(InternalConfig, "db_client_sync") and InternalConfig.db_client_sync:
             InternalConfig.db_client_sync.close()
-            logger.info("Closed synchronous database client.")
+            logger.info(f"{ICON} Closed synchronous database client.")
 
     async def close_db_clients_async(self) -> None:
         """
@@ -1005,7 +981,7 @@ class InternalConfig:
         """
         if hasattr(InternalConfig, "db_client") and InternalConfig.db_client:
             await InternalConfig.db_client.close()
-            logger.info("Closed asynchronous database client.")
+            logger.info(f"{ICON} Closed asynchronous database client.")
 
     # MARK: Special Properties
     @property
@@ -1060,16 +1036,13 @@ def async_time_decorator(func):
             result = await func(*args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.debug(
-                f"Function '{func.__qualname__[:26]}' took {execution_time:.4f} seconds to execute"
-            )
+            logger.debug(f"{ICON} Function '{func.__qualname__[:26]}' took {execution_time:.4f}s")
             return result
         except Exception as e:
             end_time = time.time()
             execution_time = end_time - start_time
             logger.warning(
-                f"Function '{func.__qualname__[:26]}' "
-                f"failed after {execution_time:.4f} seconds with error: {str(e)}",
+                f"{ICON} Function '{func.__qualname__[:26]}' failed after {execution_time:.4f}s: {str(e)}",
                 extra={"notification": False, "error": e},
             )
             raise
@@ -1117,10 +1090,7 @@ def async_time_stats_decorator(runs=1):
                 if len(timings) >= runs:
                     avg_time = mean(timings)
                     logger.info(
-                        f"{ICON} Last: {execution_time * 1000:>4.0f}ms, "
-                        f"Avg: {avg_time * 1000:>4.0f}ms, "
-                        f"Runs: {len(timings)} "
-                        f"{func.__qualname__[:34]:<38} - {kwargs}"
+                        f"{ICON} Last: {execution_time * 1000:>4.0f}ms, Avg: {avg_time * 1000:>4.0f}ms, Runs: {len(timings)} {func.__qualname__[:34]:<38} - {kwargs}"
                     )
                     if len(timings) > 1:
                         logger.info(f"{ICON} Std Dev: {stdev(timings) * 1000:>4.0f}ms")
@@ -1131,8 +1101,7 @@ def async_time_stats_decorator(runs=1):
                 end_time = time.time()
                 execution_time = end_time - start_time
                 logger.warning(
-                    f"{ICON} Function '{func.__qualname__[:26]}' failed after "
-                    f"{execution_time:.4f}s with error: {str(e)}"
+                    f"{ICON} Function '{func.__qualname__[:26]}' failed after {execution_time:.4f}s: {str(e)}"
                 )
                 raise
 
