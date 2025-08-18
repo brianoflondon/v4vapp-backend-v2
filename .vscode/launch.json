@@ -196,7 +196,7 @@
             "program": "src/template_app.py",
             "args": [
                 "--config",
-                "config.yaml"
+                "devhive.config.yaml",
             ],
             "console": "integratedTerminal"
         },

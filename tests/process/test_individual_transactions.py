@@ -95,7 +95,7 @@ async def test_deposit_hive_to_keepsats(
     ledger_count = await get_ledger_count()
     trx = await send_hive_customer_to_server(
         send_sats=test_amount,
-        memo=f"{message} #sats",
+        memo=f"{message} | #sats",
         customer=cust_id,
     )
     pprint(trx)
@@ -161,10 +161,6 @@ async def test_hive_to_lnd_only():
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= 2 * invoice_value_sat, "Total sats should increase after the transaction"
-
-
-# async def test_lnd_to_hive():
-#     transfer = KeepsatsTransfer
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():
