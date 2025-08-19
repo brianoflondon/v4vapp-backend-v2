@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, Query  # Add Query import
 from fastapi.concurrency import asynccontextmanager
 
+from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, redirect_slashes=False)
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
+lightning_v1_router = APIRouter(prefix="/lightning")
 
 
 @crypto_v2_router.get("/")
@@ -80,14 +82,61 @@ async def fixed_quote(
     cache_time: int = Query(600, description="Cache time in seconds"),
     use_cache: bool = Query(True, description="Use cached quotes if available"),
 ) -> FixedHiveQuote:
-    """Returns the fixed quote for Hive/HBD and BTC/Sats vs USD"""
+    """
+    Returns a fixed quote for converting Hive, HBD, and USD amounts to Bitcoin Satoshis (sats).
+
+    Args:
+        HIVE (float | None): The amount of Hive to convert to sats.
+        HBD (float | None): The amount of HBD to convert to sats.
+        USD (float | None): The amount of USD to convert to sats.
+        cache_time (int): Cache time in seconds. Default is 600.
+        use_cache (bool): Whether to use cached quotes if available. Default is True.
+
+    Returns:
+        FixedHiveQuote: An object containing the fixed quote for Hive/HBD and BTC/Sats vs USD.
+    """
     return await FixedHiveQuote.create_quote(
         hive=HIVE, hbd=HBD, usd=USD, cache_time=cache_time, use_cache=use_cache
     )
 
 
+@lightning_v1_router.get("/keepsats/")
+async def keepsats(
+    hive_accname: str = Query(..., description="Hive account name to check for keepsats"),
+    age: int = Query(0, description="Age in hours to check for keepsats"),
+    transactions: bool = Query(False, description="Whether to include transaction history"),
+) -> Dict[str, Any]:
+    """
+    Retrieves the keepsats balance and related information for a specified Hive account.
+    Args:
+        hive_accname (str): Hive account name to check for keepsats.
+        age (int): Age in hours to check for keepsats. Defaults to 0.
+        transactions (bool): Whether to include transaction history. Defaults to False.
+    Returns:
+        Dict[str, Any]: A dictionary containing the Hive account name, net balances in various currencies,
+        in-progress sats, and transaction history.
+    Raises:
+        Any exceptions raised by get_keepsats_balance.
+    """
+    line_items = transactions
+    net_msats, account_balance = await get_keepsats_balance(
+        cust_id=hive_accname, line_items=line_items
+    )
+    return {
+        "hive_accname": hive_accname,
+        "net_msats": account_balance.msats,
+        "net_hive": account_balance.conv_total.hive,
+        "net_usd": account_balance.conv_total.usd,
+        "net_hbd": account_balance.conv_total.hbd,
+        "net_sats": account_balance.conv_total.sats,
+        "in_progress_sats": 0,
+        "all_transactions": [],
+    }
+
+
 app.include_router(crypto_v2_router, tags=["crypto"])
 app.include_router(crypto_v1_router, tags=["legacy"])
+app.include_router(lightning_v1_router, tags=["lightning"])
 
 
 if __name__ == "__main__":
