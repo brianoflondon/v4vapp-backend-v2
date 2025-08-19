@@ -14,6 +14,15 @@
             "justMyCode": false,
         },
         {
+            "name": "DEV API",
+            "type": "debugpy",
+            "consoleName": "DEV API",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/api_v2.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
             "name": "DEV Hive Monitor devser devtre",
             "type": "debugpy",
             "consoleName": "DEV Hive Monitor",

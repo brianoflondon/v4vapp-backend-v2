@@ -33,6 +33,7 @@ TESTING_CACHE_TIMES = {
     "Binance": 360,
     "CoinMarketCap": 360,
     "HiveInternalMarket": 360,
+    "Global": 3000,
 }
 
 CACHE_TIMES = {
@@ -40,8 +41,8 @@ CACHE_TIMES = {
     "Binance": 120,
     "CoinMarketCap": 180,
     "HiveInternalMarket": 60,
+    "Global": 60,
 }
-
 
 DB_RATES_COLLECTION: str = "rates"  # Collection name for storing rates in the database
 
@@ -61,6 +62,7 @@ def _log_rates_insert_done(t: asyncio.Task) -> None:
         logger.debug(f"{ICON} Rates insert completed: {msg}")
     except Exception as e:
         logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
+
 
 class Currency(StrEnum):
     HIVE = "hive"
@@ -330,13 +332,50 @@ class AllQuotes(BaseModel):
     """
 
     quotes: Dict[str, QuoteResponse] = {}
+    quote: QuoteResponse = QuoteResponse()
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     source: str = ""
+    redis_hit: bool = False
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_store_timestamp: ClassVar[datetime | None] = None
 
-    def get_binance_quote(self) -> QuoteResponse:
+    def get_one_quote(self) -> QuoteResponse:
+        """
+        Get the authoritative quote based on rules.
+
+        This method retrieves the authoritative quote from available sources based on
+        predefined rules. If a valid quote from Binance is available, it is returned.
+        If HiveInternalMarket is also available, its hive_hbd attribute is included in
+        the response. If no valid quote from Binance is found, an average quote is
+        calculated and returned.
+
+        Returns:
+            QuoteResponse: The authoritative quote or an error message if no valid
+            quote is found.
+        """
+        if self.quotes:
+            if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
+                quote = self.quotes[Binance.__name__]
+                # If HiveInternalMarket is available, use its hive_hbd value
+                if (
+                    HiveInternalMarket.__name__ in self.quotes
+                    and not self.quotes[HiveInternalMarket.__name__].error
+                    and self.quotes[HiveInternalMarket.__name__].hive_hbd > 0
+                ):
+                    quote_dict = quote.model_dump()
+                    quote_dict["hive_hbd"] = self.quotes[HiveInternalMarket.__name__].hive_hbd
+                    quote = QuoteResponse.model_validate(quote_dict)
+                return quote.model_copy(deep=True)
+            else:
+                # If Binance is not available, calculate average from other sources
+                avg_quote = self.calculate_average_quote()
+                if avg_quote:
+                    return avg_quote
+
+        return QuoteResponse(error="No valid quote found")
+
+    async def get_binance_quote(self) -> QuoteResponse:
         """
         Get the quote from Binance. Special non async call for use in Transfer init
 
@@ -352,6 +391,25 @@ class AllQuotes(BaseModel):
     async def get_all_quotes(
         self, use_cache: bool = True, timeout: float = 60.0, store_db: bool = True
     ) -> None:
+        """
+        Asynchronously fetches cryptocurrency quotes from multiple services, with optional caching, timeout, and database storage.
+        Args:
+            use_cache (bool, optional): If True, attempts to use cached quotes before fetching new data. Defaults to True.
+            timeout (float, optional): Maximum time in seconds to wait for all quote services to respond. Defaults to 60.0.
+            store_db (bool, optional): If True, stores the fetched quotes in the database. Defaults to True.
+        Returns:
+            None
+        Side Effects:
+            - Updates self.quotes with the latest quote data or error responses.
+            - Updates self.fetch_date with the current fetch timestamp.
+            - Logs detailed information and errors during the fetching process.
+            - Stores quotes in Redis cache and optionally in the database.
+        Raises:
+            asyncio.TimeoutError: If fetching quotes exceeds the specified timeout.
+            Exception: If any quote service raises an exception during fetching.
+        Note:
+            Errors from individual services are logged and included in the quote responses.
+        """
         start = timer()
         global_cache = await self.check_global_cache()
         if use_cache and global_cache:
@@ -409,9 +467,12 @@ class AllQuotes(BaseModel):
                 )
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
+        self.quote = self.get_one_quote()
+        self.redis_hit = False
         redis_client = InternalConfig.redis
         cache_data_pickle = pickle.dumps(self.global_quote_pack())
-        redis_client.setex("all_quote_class_quote", time=60, value=cache_data_pickle)
+        cache_times = TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
+        redis_client.setex("all_quote_class_quote", time=cache_times["Global"], value=cache_data_pickle)
         if store_db:
             await self.db_store_quote()
 
@@ -428,8 +489,11 @@ class AllQuotes(BaseModel):
             cache_data = pickle.loads(cache_data_pickle)
             self.fetch_date = cache_data["fetch_date"]
             self.quotes = self.unpack_quotes(cache_data)
+            self.quote = self.get_one_quote()
             self.source = cache_data["source"]
+            self.redis_hit = True
             return True
+        self.redis_hit = False
         return False
 
     def global_quote_pack(self) -> Dict[str, Any]:
@@ -472,8 +536,50 @@ class AllQuotes(BaseModel):
             for service_name, quote_data in cache_data.get("quotes", {}).items()
         }
 
-    # MARK: DB Store Quote
+    def legacy_api_format(self) -> dict[str, Any]:
+        """
+        Format cryptocurrency quotes in a compact, flat structure for API responses.
 
+        Returns:
+            dict: A dictionary with cryptocurrency exchange rates and metadata.
+        """
+        # Get the authoritative quote (usually from Binance unless error)
+        quote = self.get_one_quote()
+
+        # Calculate sats per USD
+        sats_usd = SATS_PER_BTC / quote.btc_usd if quote.btc_usd else 0
+
+        # Collect any errors from services
+        fetch_errors = []
+        for service_name, service_quote in self.quotes.items():
+            if service_quote.error:
+                fetch_errors.append(f"{service_name}: {service_quote.error}")
+
+        # Determine if this was a Redis hit - simplistic approach
+        age = quote.age
+
+        # Build the formatted output
+        result = {
+            "BTC_USD": quote.btc_usd,
+            "sats_USD": sats_usd,
+            "HBD_USD": quote.hbd_usd,
+            "HiveMarket_HBD_USD": quote.hbd_usd,  # Same as HBD_USD unless you have a specific source
+            "Hive_USD": quote.hive_usd,
+            "Hive_HBD": quote.hive_hbd,
+            "sats_Hive": quote.sats_hive,
+            "sats_HBD": quote.sats_hbd,
+            "Hive_sats": 1.0 / quote.sats_hive_p if quote.sats_hive_p else 0,
+            "HBD_sats": 1.0 / quote.sats_hbd_p if quote.sats_hbd_p else 0,
+            "fetch_error": fetch_errors,
+            "last_fetch": quote.fetch_date.isoformat(),
+            "fetch_time": age,  # Using age as a proxy for fetch time
+            "conversion": None,  # Add conversion logic if needed
+            "redis_hit": self.redis_hit,
+        }
+
+        return result
+
+    # MARK: DB Store Quote
 
     async def db_store_quote(self):
         """
@@ -550,37 +656,6 @@ class AllQuotes(BaseModel):
             AsyncCollection: The collection where quotes are stored.
         """
         return InternalConfig.db[DB_RATES_COLLECTION]
-
-    @property
-    def quote(self) -> QuoteResponse:
-        """
-        Get the authoritative quote based on rules.
-
-        This method retrieves the authoritative quote from available sources based on
-        predefined rules. If a valid quote from Binance is available, it is returned.
-        If HiveInternalMarket is also available, its hive_hbd attribute is included in
-        the response. If no valid quote from Binance is found, an average quote is
-        calculated and returned.
-
-        Returns:
-            QuoteResponse: The authoritative quote or an error message if no valid
-            quote is found.
-
-        """
-        if self.quotes:
-            if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
-                self.source = Binance.__name__
-                ans = self.quotes[Binance.__name__]
-                if HiveInternalMarket.__name__ in self.quotes:
-                    ans.hive_hbd = self.hive_hbd
-                return ans
-            else:
-                self.source = "average"
-                average = self.calculate_average_quote()
-                if average:
-                    return average
-
-        return QuoteResponse(error="No valid quote found")
 
     def calculate_average_quote(self) -> QuoteResponse | None:
         """

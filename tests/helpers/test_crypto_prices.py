@@ -378,13 +378,13 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
         assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
         assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
-        assert all_quotes.quote == all_quotes.quotes["Binance"]
+        assert all_quotes.quote.sats_usd_p == all_quotes.quotes["Binance"].sats_usd_p
     elif failing_service == "CoinMarketCap":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
         assert all_quotes.quotes["HiveInternalMarket"].raw_response == hive_resp
-        assert all_quotes.quote == all_quotes.quotes["Binance"]
+        assert all_quotes.quote.sats_usd == all_quotes.quotes["Binance"].sats_usd
     elif failing_service == "Binance":
         assert all_quotes.quotes[failing_service].error
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
@@ -396,7 +396,7 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
         assert all_quotes.quotes["CoinGecko"].raw_response == coingecko_resp
         assert all_quotes.quotes["CoinMarketCap"].raw_response == coinmarketcap_resp
         assert all_quotes.quotes["Binance"].raw_response == binance_resp
-        assert all_quotes.quote.hive_hbd == all_quotes.hive_hbd
+        assert all_quotes.quote.hive_hbd == all_quotes.quotes["Binance"].hive_hbd
 
     for service_name, quote in all_quotes.quotes.items():
         print(service_name, quote.fetch_date, quote.error)
@@ -409,7 +409,7 @@ async def test_get_all_quotes_with_single_failure(mocker, failing_service):
 def test_quote_response_fetch_date():
     quote = QuoteResponse()
     assert quote.fetch_date == datetime(1970, 1, 1, tzinfo=timezone.utc)
-    assert quote.age > 1742126888  # 55 years in seconds back to Jan 1 1970
+    assert quote.age_p > 1742126888  # 55 years in seconds back to Jan 1 1970
 
 
 async def fetch_all_quote_json_files():

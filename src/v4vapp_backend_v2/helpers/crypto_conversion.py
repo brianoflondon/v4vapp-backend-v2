@@ -13,6 +13,22 @@ from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 
+class CryptoConvV1(BaseModel):
+    conv_from: Currency = Currency.HIVE
+    sats: float = 0.0
+    HIVE: float = 0.0
+    HBD: float = 0.0
+    USD: float = 0.0
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        if not self.HIVE and not self.HBD and not self.USD:
+            self.sats = data.get("sats", 0.0)
+            self.HIVE = data.get("hive", 0.0)
+            self.HBD = data.get("hbd", 0.0)
+            self.USD = data.get("usd", 0.0)
+
+
 class CryptoConv(BaseModel):
     """
     Simple dictionary to store the conversion values.
@@ -315,6 +331,21 @@ class CryptoConv(BaseModel):
             return self.amount_hbd
 
         return self.amount_hive
+
+    def v1(self) -> CryptoConvV1:
+        """
+        Converts the current instance to a CryptoConvV1 instance.
+
+        Returns:
+            CryptoConvV1: The converted instance.
+        """
+        return CryptoConvV1(
+            conv_from=self.conv_from,
+            sats=self.sats,
+            HIVE=self.hive,
+            HBD=self.hbd,
+            USD=self.usd,
+        )
 
 
 class CryptoConversion(BaseModel):
