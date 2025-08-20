@@ -31,7 +31,7 @@ SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 TESTING_CACHE_TIMES = {
     "CoinGecko": 360,
     "Binance": 360,
-    "CoinMarketCap": 1200,
+    "CoinMarketCap": 1800,
     "HiveInternalMarket": 360,
     "Global": 3000,
 }
@@ -39,7 +39,7 @@ TESTING_CACHE_TIMES = {
 CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
-    "CoinMarketCap": 600,
+    "CoinMarketCap": 1800,
     "HiveInternalMarket": 60,
     "Global": 60,
 }
