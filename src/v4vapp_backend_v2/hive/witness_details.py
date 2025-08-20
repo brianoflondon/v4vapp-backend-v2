@@ -53,9 +53,11 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     except Exception:
         pass
     # Attempt to fetch from API
+    failure = False
     try:
         shuffled_endpoints = API_ENDPOINTS[:]
         shuffle(shuffled_endpoints)
+        url: str = ""
         for api_url in shuffled_endpoints:
             url = f"{api_url}/{hive_accname}" if hive_accname else api_url
             try:
@@ -71,6 +73,12 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                         )
                     except Exception as redis_error:
                         logger.warning(f"Failed to cache witness details in Redis: {redis_error}")
+
+                    if failure:
+                        logger.info(
+                            f"Successfully fetched witness details for {hive_accname} after retrying with {url}",
+                            extra={"notification": True},
+                        )
 
                     return WitnessDetails.model_validate(answer)
             except httpx.HTTPStatusError as e:
@@ -88,9 +96,10 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                 )
             except ValueError as e:
                 logger.warning(
-                    f"Failed to parse JSON response from {url}",
+                    f"Failed to parse JSON response from {url}, trying again...",
                     extra={"notification": False, "error": e},
                 )
+                failure = True
 
     except Exception as e:
         logger.exception(
