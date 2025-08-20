@@ -1,16 +1,15 @@
+from colorama import Fore, Style
+
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
-from v4vapp_backend_v2.process.hive_notification import (
-    reply_with_hive,
-    send_notification_custom_json,
-)
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.process_errors import (
     CustomJsonToLightningError,
     InsufficientBalanceError,
@@ -52,30 +51,38 @@ async def custom_json_internal_transfer(
     keepsats_transfer.msats = (
         keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
     )
-    # From the server -> customer
-    if keepsats_transfer.from_account == InternalConfig().server_id:
-        if net_msats < keepsats_transfer.msats:
-            logger.warning(
-                f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats.",
-                extra={"notification": False},
-            )
-    # From customer -> server
-    else:
+    # # From the server -> customer
+    # if keepsats_transfer.from_account == InternalConfig().server_id:
+    #     if net_msats < keepsats_transfer.msats:
+    #         logger.warning(
+    #             f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats.",
+    #             extra={"notification": False},
+    #         )
+    # # From customer -> server
+    # else:
+    if True:  # Always check keepsats balance
         # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
         if net_msats + 1_000 < keepsats_transfer.msats:
-            message = f"Insufficient balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
-            logger.error(message)
-            notification = KeepsatsTransfer(
-                from_account=keepsats_transfer.to_account,
-                to_account=keepsats_transfer.from_account,
-                memo=message,
-                invoice_message=custom_json.memo,
-                parent_id=custom_json.group_id,
-                notification=True,
-            )
-            await send_notification_custom_json(
+            message = f"Insufficient Keepsats balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+            logger.warning(message)
+            # Sending this to follow_on_transfer which will deal with the balance failure and send notification
+            return_details = HiveReturnDetails(
                 tracked_op=custom_json,
-                notification=notification,
+                original_memo=keepsats_transfer.memo,
+                reason_str=message,
+                action=ReturnAction.CHANGE,
+                pay_to_cust_id=keepsats_transfer.from_account,
+                nobroadcast=nobroadcast,
+            )
+            trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+            logger.info(
+                f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
+                extra={
+                    "notification": False,
+                    "trx": trx,
+                    **custom_json.log_extra,
+                    **return_details.log_extra,
+                },
             )
             raise InsufficientBalanceError(message)
 

@@ -112,7 +112,7 @@ async def test_deposit_hive_to_keepsats(
     )
 
 
-async def test_hive_to_lnd_only():
+async def test_hive_and_hbd_to_lnd_only():
     """
     Test the process of sending a transfer from a Hive customer to the Lightning Network Daemon (LND).
     This test performs the following steps:
@@ -135,7 +135,8 @@ async def test_hive_to_lnd_only():
     for currency in [Currency.HBD, Currency.HIVE]:
         # invoice_value_sat = invoice_value_sat
         invoice = await get_lightning_invoice(
-            value_sat=invoice_value_sat, memo=f"Simply a bare test invoice {invoice_value_sat}"
+            value_sat=invoice_value_sat,
+            memo=f"{currency.symbol} pay invoice {invoice_value_sat}",
         )
 
         conversion_result = await keepsats_to_hive(
@@ -148,7 +149,7 @@ async def test_hive_to_lnd_only():
         assert invoice.payment_request, "Invoice payment request is empty"
         trx = await send_hive_customer_to_server(
             amount=send_hive_amount,
-            memo=f"{invoice.payment_request} test_hive_to_lnd_only",
+            memo=f"{invoice.payment_request} test_hive_to_lnd_only pay with {currency.symbol}",
             customer="v4vapp-test",
         )
         assert trx.get("trx_id"), "Transaction failed to send"
@@ -369,7 +370,7 @@ async def test_complete_balance_sheet_accounts_ledger():
         printout, details = await account_balance_printout(
             account=account,
             line_items=True,
-            user_memos=False,
+            user_memos=True,
         )
         complete_printout += "\n" + printout
 

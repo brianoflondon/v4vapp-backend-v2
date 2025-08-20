@@ -67,3 +67,17 @@ class LedgerType(StrEnum):
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
     LIMIT_ORDER_CREATE = "limit_or"
     FILL_ORDER = "fill_or"
+
+    @property
+    def printout(self) -> str:
+        """Returns the string representation of the ledger type.
+
+        This property is used to provide a human-readable format of the ledger type,
+        which can be useful for logging or displaying in user interfaces.
+
+        Returns:
+            str: The string representation of the ledger type.
+        """
+        ans = " ".join(word.capitalize() for word in self.name.split("_"))
+        ans = f"{ans} ({self.name} {self.value})"
+        return ans

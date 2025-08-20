@@ -2,9 +2,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.process.lock_str_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 
 class ReturnAction(StrEnum):
@@ -46,6 +46,7 @@ class HiveReturnDetails(BaseModel):
     action: ReturnAction
     reason_str: str = ""
     amount: AmountPyd | None = None
+    msats: int | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
 

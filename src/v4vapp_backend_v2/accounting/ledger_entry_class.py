@@ -267,9 +267,10 @@ class LedgerEntry(BaseModel):
         Returns:
             str: The string representation of the ledger type.
         """
-        ans = " ".join(word.capitalize() for word in self.ledger_type.name.split("_"))
-        ans = f"{ans} ({self.ledger_type.name} {self.ledger_type.value})"
-        return ans
+        return self.ledger_type.printout
+        # ans = " ".join(word.capitalize() for word in self.ledger_type.name.split("_"))
+        # ans = f"{ans} ({self.ledger_type.name} {self.ledger_type.value})"
+        # return ans
 
     @property
     def is_completed(self) -> bool:

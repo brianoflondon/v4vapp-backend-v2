@@ -1,5 +1,7 @@
 import asyncio
 import os
+from pprint import pprint
+from timeit import default_timer as timeit
 
 import pytest
 from nectar.amount import Amount
@@ -134,7 +136,7 @@ async def test_hive_paywithsats_keepsats_failure_not_enough_keepsats():
 
 async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     """
-    Test that sending HIVE to Keepsats fails when the user does not have enough Keepsats balance.
+    Test that sending CustomJson pay invoice with a keepsats balance that fails when the user does not have enough Keepsats balance.
 
     This test performs the following steps:
     1. Retrieves the current ledger entry count.
@@ -156,6 +158,7 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account=server_id,
+        sats=510_000,
         memo=invoice.payment_request,
     )
 
@@ -170,15 +173,29 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     )
 
     assert trx.get("trx_id"), "Transaction failed to send"
-    # There will only be a dummy ledger for the receipt of the custom_json
-    ledger_entries = await watch_for_ledger_count(ledger_count_before + 1, timeout=30)
+    # There are no ledger entries but there needs to be a return custom_json
+    # ledger_entries = await watch_for_ledger_count(ledger_count_before, timeout=30)
 
-    await asyncio.sleep(5)
-    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
-        {"type": "custom_json", "id": "v4vapp_dev_notification"}, sort=[("timestamp", -1)]
-    )
+    start = timeit()
+    while timeit() - start < 3000:
+        await asyncio.sleep(1)
+        last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+            {"type": "custom_json", "id": "v4vapp_dev_notification"}, sort=[("timestamp", -1)]
+        )
+        if last_hive_op:
+            custom_json = CustomJson.model_validate(last_hive_op)
+            if "Insufficient Keepsats balance" in custom_json.json_data.memo:
+                break
+
+    if not last_hive_op:
+        raise TimeoutError("Did not receive expected Hive operation in time.")
+
     custom_json = CustomJson.model_validate(last_hive_op)
     assert "Insufficient Keepsats balance" in custom_json.json_data.memo, (
         f"Expected failure reason not found in description: {custom_json.json_data.memo}"
     )
+    print("Sending - >")
+    pprint(transfer.model_dump(exclude_none=True, exclude_unset=True))
+    print("<- Receiving")
+    pprint(custom_json.json_data.model_dump(exclude_none=True, exclude_unset=True))
     logger.info(f"Test passed: {custom_json.json_data.memo}")

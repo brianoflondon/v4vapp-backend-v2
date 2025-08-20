@@ -7,9 +7,8 @@ from timeit import default_timer as timer
 from typing import Annotated, Dict, List, Tuple
 
 import typer
+from colorama import Fore, Style
 from nectar.amount import Amount
-
-# from colorama import Fore, Style
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
@@ -512,7 +511,9 @@ async def store_rates() -> None:
     Returns:
         None
     """
-    await asyncio.sleep(10)  # Initial sleep to avoid immediate execution and duplicate hits to check rates.
+    await asyncio.sleep(
+        10
+    )  # Initial sleep to avoid immediate execution and duplicate hits to check rates.
     try:
         while not shutdown_event.is_set():
             try:
@@ -692,7 +693,7 @@ def main(
     # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
+        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     if not watch_users:

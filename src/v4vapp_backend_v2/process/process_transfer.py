@@ -1,3 +1,4 @@
+from colorama import Fore, Style
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.account_balances import (
@@ -218,44 +219,46 @@ async def follow_on_transfer(
             release_hold = False
             return
 
-    except HiveTransferError as e:
-        # Various problems with Hive or Keepsats. Send it all back.
-        if tracked_op.op_type == "custom_json":
-            return_details.action = ReturnAction.CUSTOM_JSON
-        else:
-            return_details.action = ReturnAction.REFUND
-            return_details.amount = getattr(
-                tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
-            )
-        return_details.reason_str = f"Error processing Hive to Lightning operation: {e}"
-        logger.warning(
-            return_details.reason_str,
-            extra={"notification": False, **tracked_op.log_extra},
-        )
+    # except HiveTransferError as e:
+    #     # Various problems with Hive or Keepsats. Send it all back.
+    #     if tracked_op.op_type == "custom_json":
+    #         return_details.action = ReturnAction.CUSTOM_JSON
+    #     else:
+    #         return_details.action = ReturnAction.REFUND
+    #         return_details.amount = getattr(
+    #             tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
+    #         )
+    #     return_details.reason_str = f"Error processing Hive to Lightning operation: {e}"
+    #     logger.warning(
+    #         return_details.reason_str,
+    #         extra={"notification": False, **tracked_op.log_extra},
+    #     )
 
-    except LNDPaymentExpired as e:
-        if tracked_op.op_type == "custom_json":
-            return_details.action = ReturnAction.CUSTOM_JSON
-        else:
-            return_details.action = ReturnAction.REFUND
-            return_details.amount = getattr(
-                tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
-            )
-        return_details.reason_str = f"Lightning payment expired: {e}"
-        logger.warning(
-            return_details.reason_str,
-            extra={"notification": False, **tracked_op.log_extra},
-        )
+    # except LNDPaymentExpired as e:
+    #     if tracked_op.op_type == "custom_json":
+    #         return_details.action = ReturnAction.CUSTOM_JSON
+    #     else:
+    #         return_details.action = ReturnAction.REFUND
+    #         return_details.amount = getattr(
+    #             tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
+    #         )
+    #     return_details.reason_str = f"Lightning payment expired: {e}"
+    #     logger.warning(
+    #         return_details.reason_str,
+    #         extra={"notification": False, **tracked_op.log_extra},
+    #     )
 
-    except LNDPaymentError as e:
-        if tracked_op.op_type == "custom_json":
-            return_details.action = ReturnAction.CUSTOM_JSON
+    except (LNDPaymentError, LNDPaymentExpired, HiveTransferError) as e:
+        return_details.action = ReturnAction.REFUND
+        if tracked_op.op_type == "custom_json" and (
+            json_data := getattr(tracked_op, "json_data", None)
+        ):
+            return_details.msats = json_data.msats
         else:
-            return_details.action = ReturnAction.REFUND
             return_details.amount = getattr(
                 tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
             )
-        return_details.reason_str = f"Lightning payment error: {e}"
+        return_details.reason_str = f"{e}"
         logger.error(
             return_details.reason_str,
             extra={"notification": False, **tracked_op.log_extra},
@@ -285,7 +288,7 @@ async def follow_on_transfer(
                 # Arriving here we are usually returning the full amount sent.
                 trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
                 logger.info(
-                    "Reply with Hive transfer successful after payment failure",
+                    f"{Fore.WHITE}Reply with Hive transfer successful after payment failure{Style.RESET_ALL}",
                     extra={
                         "notification": False,
                         "trx": trx,

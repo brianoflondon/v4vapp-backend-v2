@@ -60,7 +60,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     amount = Amount("0.001 HIVE")
 
     if details.action in [ReturnAction.REFUND, ReturnAction.CHANGE]:
-        amount = Amount(str(details.amount)) or Amount("0.001 HIVE")
+        if details.amount:
+            amount = Amount(str(details.amount)) or Amount("0.001 HIVE")
         if details.tracked_op.change_amount:
             amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
         else:
@@ -85,7 +86,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # a custom JSON back to the original sender.
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     # We Override for conversions because those will be set off by custom_json
-    if details.action == ReturnAction.CONVERSION or details.tracked_op.op_type != "custom_json":
+    if details.tracked_op.op_type != "custom_json":
         trx: Dict[str, Any] = await send_transfer(
             hive_client=hive_client,
             from_account=server_account_name,
@@ -109,36 +110,28 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         return_amount_msat = details.tracked_op.change_conv.msats
 
     # Custom JSONs are used for notifications and do not have a sats amount
-    else:
+    elif details.tracked_op.op_type == "custom_json":
         notification = KeepsatsTransfer(
             from_account=server_account_name,
             memo=memo,
             to_account=details.pay_to_cust_id,
+            msats=details.msats,
             invoice_message=details.original_memo,
             parent_id=details.tracked_op.group_id,
             notification=True,
         )
+        if details.msats and details.msats > 0:
+            custom_json_id = "v4vapp_dev_transfer"
+        else:
+            custom_json_id = "v4vapp_dev_notification"
         trx = await send_custom_json(
             json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
             send_account=server_account_name,
             active=True,
-            id="v4vapp_dev_notification",
+            id=custom_json_id,
             hive_client=hive_client,
         )
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
-
-    # # Now add the Hive reply to the original Hive operation
-    # reason = (
-    #     f"{details.action} for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
-    # )
-    # details.tracked_op.add_reply(
-    #     reply_id=trx.get("trx_id", ""),
-    #     reply_type=details.tracked_op.op_type,
-    #     reply_msat=return_amount_msat,
-    #     reply_error=None,
-    #     reply_message=reason,
-    # )
-    # await details.tracked_op.save()
 
     return trx
 
