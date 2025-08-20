@@ -12,8 +12,10 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
-from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -479,26 +481,6 @@ class AllQuotes(BaseModel):
         if store_db:
             await self.db_store_quote()
 
-    async def check_global_cache(self) -> bool:
-        """
-        Check if the global cache is available and valid.
-
-        Returns:
-            bool: True if the global cache is valid, False otherwise.
-        """
-        redis_client = InternalConfig.redis
-        cache_data_pickle = redis_client.get("all_quote_class_quote")
-        if cache_data_pickle:
-            cache_data = pickle.loads(cache_data_pickle)
-            self.fetch_date = cache_data["fetch_date"]
-            self.quotes = self.unpack_quotes(cache_data)
-            self.quote = self.get_one_quote()
-            self.source = cache_data["source"]
-            self.redis_hit = True
-            return True
-        self.redis_hit = False
-        return False
-
     def global_quote_pack(self) -> Dict[str, Any]:
         """
         Pack the global quotes into a dictionary format.
@@ -508,8 +490,7 @@ class AllQuotes(BaseModel):
         """
         return {
             "quotes": self.all_quotes_filtered(),
-            "quote": self.quote.model_dump(exclude={"raw_response"}),
-            "fetch_date": self.fetch_date,
+            "fetch_date": self.fetch_date.isoformat() if self.fetch_date else None,
             "source": self.source,
         }
 
@@ -521,24 +502,59 @@ class AllQuotes(BaseModel):
             Dict[str, QuoteResponse]: A dictionary containing only the valid quotes
             without errors.
         """
-        no_error_quotes = {
-            service_name: quote.model_dump(exclude={"raw_response"})
-            for service_name, quote in self.quotes.items()
-            if not quote.error
-        }
+        no_error_quotes = {}
+        for service_name, quote in self.quotes.items():
+            if not quote.error:
+                quote_dict = quote.model_dump(exclude={"raw_response"})
+                # Ensure fetch_date is serialized as ISO string
+                if "fetch_date" in quote_dict and hasattr(quote_dict["fetch_date"], "isoformat"):
+                    quote_dict["fetch_date"] = quote_dict["fetch_date"].isoformat()
+                no_error_quotes[service_name] = quote_dict
         return no_error_quotes
 
     def unpack_quotes(self, cache_data: Dict[str, Any]) -> Dict[str, QuoteResponse]:
         """
-        Unpack the quotes from the AllQuotes instance.
+        Unpack the quotes from the cached data, handling datetime conversion.
 
         Returns:
             Dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
         """
-        return {
-            service_name: QuoteResponse.model_validate(quote_data)
-            for service_name, quote_data in cache_data.get("quotes", {}).items()
-        }
+        quotes = {}
+        for service_name, quote_data in cache_data.get("quotes", {}).items():
+            # Convert ISO string back to datetime if needed
+            if "fetch_date" in quote_data and isinstance(quote_data["fetch_date"], str):
+                quote_data["fetch_date"] = datetime.fromisoformat(
+                    quote_data["fetch_date"].replace("Z", "+00:00")
+                )
+            quotes[service_name] = QuoteResponse.model_validate(quote_data)
+        return quotes
+
+    async def check_global_cache(self) -> bool:
+        """
+        Check if the global cache is available and valid.
+
+        Returns:
+            bool: True if the global cache is valid, False otherwise.
+        """
+        redis_client = InternalConfig.redis
+        cache_data_pickle = redis_client.get("all_quote_class_quote")
+        if cache_data_pickle:
+            cache_data = pickle.loads(cache_data_pickle)
+            # Handle fetch_date conversion
+            if "fetch_date" in cache_data:
+                if isinstance(cache_data["fetch_date"], str):
+                    self.fetch_date = datetime.fromisoformat(
+                        cache_data["fetch_date"].replace("Z", "+00:00")
+                    )
+                else:
+                    self.fetch_date = cache_data["fetch_date"]
+            self.quotes = self.unpack_quotes(cache_data)
+            self.quote = self.get_one_quote()
+            self.source = cache_data["source"]
+            self.redis_hit = True
+            return True
+        self.redis_hit = False
+        return False
 
     def legacy_api_format(self) -> dict[str, Any]:
         """
