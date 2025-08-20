@@ -33,7 +33,7 @@ TESTING_CACHE_TIMES = {
     "Binance": 360,
     "CoinMarketCap": 1800,
     "HiveInternalMarket": 360,
-    "Global": 3000,
+    "Global": 180,
 }
 
 CACHE_TIMES = {
@@ -353,6 +353,9 @@ class AllQuotes(BaseModel):
         Returns:
             QuoteResponse: The authoritative quote or an error message if no valid
             quote is found.
+
+        Side Effect:
+            Updates the self.quote object
         """
         if self.quotes:
             if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
@@ -366,11 +369,15 @@ class AllQuotes(BaseModel):
                     quote_dict = quote.model_dump()
                     quote_dict["hive_hbd"] = self.quotes[HiveInternalMarket.__name__].hive_hbd
                     quote = QuoteResponse.model_validate(quote_dict)
-                return quote.model_copy(deep=True)
+                self.quote = quote
+                self.source = Binance.__name__
+                return quote
             else:
                 # If Binance is not available, calculate average from other sources
                 avg_quote = self.calculate_average_quote()
                 if avg_quote:
+                    self.quote = avg_quote
+                    self.source = "Average"
                     return avg_quote
 
         return QuoteResponse(error="No valid quote found")
@@ -412,6 +419,7 @@ class AllQuotes(BaseModel):
         """
         start = timer()
         global_cache = await self.check_global_cache()
+        logger.info(f"{ICON} Global rate check cache hit: {global_cache}, use_cache: {use_cache}")
         if use_cache and global_cache:
             logger.debug(
                 f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
@@ -465,7 +473,7 @@ class AllQuotes(BaseModel):
                     f"{ICON} Error in quote from {quote.source}: {quote.error}",
                     extra={"notification": False, **quote.log_data},
                 )
-        self.quote = self.get_one_quote()
+        self.get_one_quote()
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
         self.quote = self.get_one_quote()
@@ -549,7 +557,7 @@ class AllQuotes(BaseModel):
                 else:
                     self.fetch_date = cache_data["fetch_date"]
             self.quotes = self.unpack_quotes(cache_data)
-            self.quote = self.get_one_quote()
+            self.get_one_quote()
             self.source = cache_data["source"]
             self.redis_hit = True
             return True

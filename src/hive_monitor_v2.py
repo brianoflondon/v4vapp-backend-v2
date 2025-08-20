@@ -512,6 +512,7 @@ async def store_rates() -> None:
     Returns:
         None
     """
+    await asyncio.sleep(10)  # Initial sleep to avoid immediate execution and duplicate hits to check rates.
     try:
         while not shutdown_event.is_set():
             try:

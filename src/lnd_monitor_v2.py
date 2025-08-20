@@ -964,6 +964,7 @@ async def main_async_start(connection_name: str) -> None:
     try:
         db_conn = DBConn()
         await db_conn.setup_database()
+        await TrackedBaseModel.update_quote()
         # Get the current event loop
         loop = asyncio.get_event_loop()
 
@@ -996,7 +997,6 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_INVOICE, invoice_report)
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-            await TrackedBaseModel.update_quote()
 
             running_tasks = [
                 asyncio.create_task(
