@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, Query  # Add Query import
 from fastapi.concurrency import asynccontextmanager
 
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
@@ -125,7 +125,7 @@ async def keepsats(
         Any exceptions raised by get_keepsats_balance.
     """
     line_items = transactions
-    net_msats, account_balance = await get_keepsats_balance(
+    net_msats, account_balance = await keepsats_balance_printout(
         cust_id=hive_accname, line_items=line_items
     )
     return {
