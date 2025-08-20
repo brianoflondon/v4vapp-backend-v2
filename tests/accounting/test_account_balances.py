@@ -19,10 +19,10 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
-
 """
 The test data for this module must be up to date with any changes in the accounting models.
 """
+
 
 @pytest.fixture(scope="module")
 def module_monkeypatch():
@@ -152,7 +152,7 @@ async def test_get_account_balance_printout():
 
 
 async def test_get_keepsats_balance():
-    cust_id = "v4vapp-test"
+    cust_id = "v4vapp.qrc"
     net_sats, details = await get_keepsats_balance(cust_id=cust_id)
-    pprint(details)
+    pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")

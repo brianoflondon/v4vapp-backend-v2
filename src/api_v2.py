@@ -100,11 +100,17 @@ async def fixed_quote(
     )
 
 
-@lightning_v1_router.get("/keepsats/")
+@crypto_v1_router.get("/binance/")
+async def binance() -> Dict[str, Any]:
+    return {"BTC": 0.0, "HIVE": 100.0, "USDT": 0, "SATS": 9034258}
+
+
+@lightning_v1_router.get("/keepsats")
 async def keepsats(
     hive_accname: str = Query(..., description="Hive account name to check for keepsats"),
     age: int = Query(0, description="Age in hours to check for keepsats"),
     transactions: bool = Query(False, description="Whether to include transaction history"),
+    admin: bool = Query(False, description="Whether the user is an admin"),
 ) -> Dict[str, Any]:
     """
     Retrieves the keepsats balance and related information for a specified Hive account.

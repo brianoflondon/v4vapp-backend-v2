@@ -12,10 +12,8 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import (
-    mongo_call,
-    summarize_write_result,  # optional pretty log
-)
+from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
+from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -465,14 +463,19 @@ class AllQuotes(BaseModel):
                     f"{ICON} Error in quote from {quote.source}: {quote.error}",
                     extra={"notification": False, **quote.log_data},
                 )
+        self.quote = self.get_one_quote()
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
         self.quote = self.get_one_quote()
         self.redis_hit = False
         redis_client = InternalConfig.redis
         cache_data_pickle = pickle.dumps(self.global_quote_pack())
-        cache_times = TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
-        redis_client.setex("all_quote_class_quote", time=cache_times["Global"], value=cache_data_pickle)
+        cache_times = (
+            TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
+        )
+        redis_client.setex(
+            "all_quote_class_quote", time=cache_times["Global"], value=cache_data_pickle
+        )
         if store_db:
             await self.db_store_quote()
 
@@ -505,6 +508,7 @@ class AllQuotes(BaseModel):
         """
         return {
             "quotes": self.all_quotes_filtered(),
+            "quote": self.quote.model_dump(exclude={"raw_response"}),
             "fetch_date": self.fetch_date,
             "source": self.source,
         }
@@ -703,7 +707,6 @@ class AllQuotes(BaseModel):
             if fetch_dates
             else datetime.now(tz=timezone.utc)
         )
-
         return QuoteResponse(
             hive_usd=avg_hive_usd,
             hbd_usd=avg_hbd_usd,
@@ -1017,3 +1020,6 @@ def per_diff(a: float, b: float) -> float:
     if b == 0:
         return 0
     return ((a - b) / b) * 100
+
+
+# Last line
