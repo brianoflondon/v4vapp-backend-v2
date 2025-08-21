@@ -63,10 +63,12 @@ class KeepsatsTransfer(BaseModel):
     to_account: AccNameType = Field("", alias="hive_accname_to")
     sats: int | None = Field(
         None,
+        gt=0,
         description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
     )
     msats: int | None = Field(
         None,
+        gt=0,
         description=(
             "The amount of millisatoshis being transferred. "
             "Used for more precise amounts, especially in invoices. "

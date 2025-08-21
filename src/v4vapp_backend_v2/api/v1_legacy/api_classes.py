@@ -25,12 +25,23 @@ class KeepsatsTransferExternal(BaseModel):
     )
     sats: int = Field(
         ...,  # This field is required
+        gt=0,  # Ensure sats is positive, never NEGATIVE!!!
         description="Amount of sats to transfer",
+    )
+    msats: int = Field(
+        1,  # This field will be filled in by init
+        gt=0,  # Ensure msats is positive, never NEGATIVE!!!
+        description="Amount of millisatoshis to transfer",
     )
     memo: str | None = Field(
         None,  # This field is optional
         description="Memo to include with the transfer",
     )
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.msats is not None:
+            self.sats = self.msats // 1000
 
 
 class KeepsatsTransferResponse(BaseModel):

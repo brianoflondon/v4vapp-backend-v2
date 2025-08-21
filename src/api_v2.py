@@ -167,11 +167,18 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
         cust_id=transfer.hive_accname_from, line_items=False
     )
 
-    if transfer.sats and net_msats // 1000 < transfer.sats:
+    message = ""
+    if transfer.msats <= 0:
+        message = "Minimum is 0 sats"
+
+    if transfer.msats and net_msats < transfer.msats:
+        message = "Insufficient funds"
+
+    if message:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
-                "message": "Insufficient funds",
+                "message": message,
                 "balance": net_msats // 1000,
                 "requested": transfer.sats,
                 "deficit": transfer.sats - (net_msats // 1000),
