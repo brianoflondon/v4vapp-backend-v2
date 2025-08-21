@@ -27,8 +27,8 @@ class KeepsatsTransferExternal(BaseModel):
         ...,  # This field is required
         description="Amount of sats to transfer",
     )
-    memo: str = Field(
-        "",  # This field is optional
+    memo: str | None = Field(
+        None,  # This field is optional
         description="Memo to include with the transfer",
     )
 
