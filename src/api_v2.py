@@ -15,6 +15,7 @@ from v4vapp_backend_v2.api.v1_legacy.api_classes import (
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
+from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
@@ -111,7 +112,16 @@ async def fixed_quote(
 
 @crypto_v1_router.get("/binance/")
 async def binance() -> Dict[str, Any]:
-    return {"BTC": 0.0, "HIVE": 100.0, "USDT": 0, "SATS": 9034258}
+    try:
+        balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=False)
+    except BinanceErrorBadConnection:
+        return {"error": "Bad connection"}
+    return {
+        "BTC": balances.get("BTC", 0.0),
+        "HIVE": balances.get("HIVE", 0.0),
+        "USDT": balances.get("USDT", 0.0),
+        "SATS": balances.get("SATS", 0),
+    }
 
 
 # MARK: /lightning
