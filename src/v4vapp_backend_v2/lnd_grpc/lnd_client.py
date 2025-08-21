@@ -5,8 +5,12 @@ from typing import Any, AsyncGenerator, Callable
 
 import backoff
 from google.protobuf.json_format import MessageToDict
-from grpc import composite_channel_credentials, metadata_call_credentials, ssl_channel_credentials
-from grpc.aio import AioRpcError, secure_channel
+from grpc import (  # type: ignore
+    composite_channel_credentials,
+    metadata_call_credentials,
+    ssl_channel_credentials,
+)
+from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import logger
@@ -22,6 +26,8 @@ from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
 )
 
 MAX_RETRIES = 20
+
+ICON = "⚡"
 
 
 def get_error_code(e: AioRpcError) -> str:
@@ -58,11 +64,11 @@ class LNDClient:
         try:
             self.get_info = await self.node_get_info
         except LNDConnectionError as e:
-            logger.warning(f"Error getting node info {e}", exc_info=True)
+            logger.warning(f"{ICON} Error getting node info {e}", exc_info=True)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        logger.debug("Disconnecting from LND (async)")
+        logger.debug(f"{ICON} Disconnecting from LND (async)")
         if self.connection_check_task is not None:
             self.connection_check_task.cancel()
             try:
@@ -77,7 +83,7 @@ class LNDClient:
 
     def setup(self):
         try:
-            logger.debug("Connecting to LND")
+            logger.debug(f"{ICON} Connecting to LND")
 
             cert_creds = ssl_channel_credentials(self.connection.cert)
             auth_creds = metadata_call_credentials(self.metadata_callback)
@@ -94,10 +100,10 @@ class LNDClient:
             self.invoices_stub = invoicesstub.InvoicesStub(self.channel)
 
         except FileNotFoundError as e:
-            logger.error(f"Macaroon and cert files missing: {get_error_code(e)}")
+            logger.error(f"{ICON} Macaroon and cert files missing: {e}")
             sys.exit(1)
         except Exception as e:
-            logger.error(e)
+            logger.error(f"{ICON} {e}")
             raise LNDStartupError("Error starting LND connection")
 
     @property
@@ -133,22 +139,19 @@ class LNDClient:
                 always_print_fields_with_no_presence=True,
             )
             logger.info(
-                f"{self.icon} Calling get_info {self.connection.name}",
+                f"{ICON} {self.icon} Calling get_info {self.connection.name}",
                 extra={"get_info": get_info_dict},
             )
             return self.get_info
         except Exception as e:
-            logger.error(f"Error getting node info {e}", exc_info=True)
+            logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
             raise LNDConnectionError(f"Error getting node info {e}")
 
     async def disconnect(self):
         if self.channel is not None:
             await self.channel.close(grace=2)
             self.channel = None
-            self.lightning_stub = None
-            self.router_stub = None
-            self.invoices_stub = None
-            logger.info(f"{self.icon} Disconnected from LND")
+            logger.info(f"{ICON} {self.icon} Disconnected from LND")
 
     async def check_connection(
         self,
@@ -166,7 +169,7 @@ class LNDClient:
                 if self.lightning_stub is not None:
                     _ = await self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest())
                     logger.warning(
-                        f"{self.icon} Connection to LND is OK Error "
+                        f"{ICON} {self.icon} Connection to LND is OK Error "
                         f"cleared error_count: {error_count}",
                         extra={
                             "notification": True,
@@ -179,12 +182,14 @@ class LNDClient:
                     self.error_code = None
                     return
                 else:
-                    logger.warning(f"{self.icon} LNDClient stub is None")
+                    logger.warning(f"{ICON} {self.icon} LNDClient stub is None")
             except AioRpcError as e:
                 if original_error is not None:
                     message = original_error.debug_error_string()
                 else:
-                    message = f"{self.icon} Error in {call_name} RPC call: {get_error_code(e)}"
+                    message = (
+                        f"{ICON} {self.icon} Error in {call_name} RPC call: {get_error_code(e)}"
+                    )
                     original_error = e
                 logger.error(
                     message,
@@ -197,7 +202,9 @@ class LNDClient:
                 self.error_state = True
             error_count += 1
             if error_count >= max_tries:
-                message = f"{self.icon} Too many errors in {call_name} RPC call ({error_count})"
+                message = (
+                    f"{ICON} {self.icon} Too many errors in {call_name} RPC call ({error_count})"
+                )
                 logger.error(
                     message,
                     extra={"notification": True},
@@ -205,7 +212,7 @@ class LNDClient:
                 raise LNDConnectionError(message, error_count)
             back_off_time = min((2**error_count), 60)
             logger.warning(
-                f"Back off: {back_off_time}s Error {call_name}",
+                f"{ICON} Back off: {back_off_time}s Error {call_name}",
                 extra={"notification": False},
             )
             await asyncio.sleep(back_off_time)
@@ -218,11 +225,11 @@ class LNDClient:
     # )
     async def call(self, method: Callable[..., Any], *args, **kwargs):
         try:
-            logger.debug(f"Calling {method} with args: {args}, kwargs: {kwargs}")
+            logger.debug(f"{ICON} Calling {method} with args: {args}, kwargs: {kwargs}")
             return await method(*args, **kwargs)
         except AioRpcError as e:
             if self.connection.use_proxy:
-                message = f"Local proxy not running {self.connection.use_proxy}"
+                message = f"{ICON} Local proxy not running {self.connection.use_proxy}"
                 logger.error(
                     message,
                     extra={
@@ -233,7 +240,7 @@ class LNDClient:
                 )
                 raise LNDFatalError(message)
             logger.warning(
-                f"{self.icon} Error in {method} RPC call: {e.code()}",
+                f"{ICON} {self.icon} Error in {method} RPC call: {e.code()}",
                 extra={
                     "notification": True,
                     "error_code": get_error_code(e),
@@ -272,7 +279,7 @@ class LNDClient:
                 yield response
         except AioRpcError as e:
             if self.error_state:
-                logger.error(f"broken connection in {call_name} RPC call: {e.code()}")
+                logger.error(f"{ICON} broken connection in {call_name} RPC call: {e.code()}")
             raise LNDSubscriptionError(
                 message=f"{self.icon} Error in {call_name} RPC call",
                 rpc_error_code=e.code(),
@@ -281,7 +288,7 @@ class LNDClient:
                 original_error=e,
             )
         except Exception as e:
-            logger.error(f"Error in {call_name} RPC call: {e}")
+            logger.error(f"{ICON} Error in {call_name} RPC call: {e}")
 
     @backoff.on_exception(
         lambda: backoff.expo(base=2, factor=1),
@@ -298,7 +305,7 @@ class LNDClient:
         try:
             return await method(request)
         except AioRpcError as e:
-            logger.error(f"{self.icon} Error in {method_name} RPC call: {e.code()}")
+            logger.error(f"{ICON} {self.icon} Error in {method_name} RPC call: {e.code()}")
             raise LNDConnectionError(f"Error in {method_name} RPC call")
 
     @backoff.on_exception(
@@ -323,11 +330,11 @@ class LNDClient:
         #     if e.code() == grpc.StatusCode.UNAVAILABLE:
         #         raise LNDConnectionError(f"Error in {method_name} RPC call") from e
         except AioRpcError as e:
-            message = f"{self.icon} Error in {method_name} RPC call: {e.code()}"
+            message = f"{ICON} {self.icon} Error in {method_name} RPC call: {e.code()}"
             logger.error(message)
             raise LNDConnectionError(f"{self.icon} Error in {method_name} RPC call")
 
         except Exception as e:
-            message = f"{self.icon} Error in {method_name} RPC call: {e}"
+            message = f"{ICON} {self.icon} Error in {method_name} RPC call: {e}"
             logger.error(message)
             raise LNDConnectionError(f"Error in {method_name} RPC call")
