@@ -486,6 +486,41 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
             pass
 
 
+async def get_channel_display_name(
+    chan_id: int | None,
+    lnd_client: LNDClient,
+    lnd_events_group: LndEventsGroup,
+) -> str:
+    """
+    Get the display name for a channel ID, with fallback to direct lookup if not cached.
+
+    Args:
+        chan_id: The channel ID to look up
+        lnd_client: The LND client for direct lookups
+        lnd_events_group: The events group containing cached channel names
+
+    Returns:
+        The channel name or 'Unknown' if not found
+    """
+    if not chan_id:
+        return "Unknown"
+
+    # First try to get from cache
+    cached_name = lnd_events_group.channel_names.get(int(chan_id))
+    if cached_name and isinstance(cached_name, str):
+        return cached_name
+
+    # If not in cache, try direct lookup
+    try:
+        channel_name_obj = await get_channel_name(
+            channel_id=int(chan_id),
+            lnd_client=lnd_client,
+        )
+        return channel_name_obj.name if channel_name_obj else "Unknown"
+    except Exception:
+        return "Unknown"
+
+
 async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     """Subscribe to channel events from LND"""
     request = lnrpc.ChannelEventSubscription()
@@ -509,49 +544,74 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 logger.info("Channel event received", extra={"channel_event": decoded_event})
 
                 # Process the different event types
-                if hasattr(channel_event, "open_channel"):
-                    channel = channel_event.open_channel
+                if "open_channel" in decoded_event:
+                    channel = decoded_event["open_channel"]
                     await fill_channel_names(lnd_client, lnd_events_group)
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
                     logger.info(
-                        f"{lnd_client.icon} Channel opened: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        f"{lnd_client.icon} Channel opened: {chan_id} {channel_name}",
                         extra={
                             "notification": True,
                         },
                     )
 
-                elif hasattr(channel_event, "closed_channel"):
-                    channel = channel_event.closed_channel
+                elif "closed_channel" in decoded_event:
+                    channel = decoded_event["closed_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
                     logger.info(
-                        f"{lnd_client.icon} Channel closed: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        f"{lnd_client.icon} Channel closed: {chan_id} {channel_name}",
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
 
-                elif hasattr(channel_event, "active_channel"):
-                    channel = channel_event.active_channel
+                elif "active_channel" in decoded_event:
+                    channel = decoded_event["active_channel"]
+                    # Active channel events might not have chan_id, so we need to handle this
+                    chan_id = channel.get("chan_id")
+                    if chan_id:
+                        channel_name = await get_channel_display_name(
+                            chan_id, lnd_client, lnd_events_group
+                        )
+                        logger.info(
+                            f"{lnd_client.icon} Channel active: {chan_id} {channel_name}",
+                            extra={"notification": True},
+                        )
+                    else:
+                        # Handle case where chan_id is not available
+                        funding_txid = channel.get("funding_txid_bytes", "Unknown")
+                        logger.info(
+                            f"{lnd_client.icon} Channel active: funding_txid={funding_txid}",
+                            extra={"notification": True},
+                        )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+                elif "inactive_channel" in decoded_event:
+                    channel = decoded_event["inactive_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    funding_txid = channel.get("funding_txid_bytes", "Unknown")
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
                     logger.info(
-                        f"{lnd_client.icon} Channel active: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        f"{lnd_client.icon} Channel inactive: {chan_id} {channel_name} {funding_txid}",
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
 
-                elif hasattr(channel_event, "inactive_channel"):
-                    channel = channel_event.inactive_channel
-                    logger.info(
-                        f"{lnd_client.icon} Channel inactive: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
-                        extra={"notification": True},
+                elif "pending_open_channel" in decoded_event:
+                    channel = decoded_event["pending_open_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
                     )
-                    await fill_channel_names(lnd_client, lnd_events_group)
-
-                elif hasattr(channel_event, "pending_open_channel"):
-                    channel = channel_event.pending_open_channel
                     logger.info(
-                        f"{lnd_client.icon} Pending channel open: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        f"{lnd_client.icon} Pending channel open: {chan_id} {channel_name}",
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
