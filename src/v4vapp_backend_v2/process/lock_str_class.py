@@ -4,6 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+from colorama import Fore, Style
 from pydantic import AfterValidator
 from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import LockError, LockNotOwnedError
@@ -79,10 +80,12 @@ async def _log_outstanding_locks() -> None:
                 f"{f' | {preview}{suffix}' if preview else ''}"
             )
         logger.info(
-            f"{ICON} Outstanding lock waiters:\n" + "\n".join(lines), extra={"notification": False}
+            f"{ICON} {Fore.YELLOW}Outstanding lock waiters:\n"
+            + f"\n{Style.RESET_ALL}".join(lines),
+            extra={"notification": False},
         )
     else:
-        logger.debug(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
+        logger.info(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
 
     # Active Redis locks (cross-process visibility)
     try:
@@ -101,10 +104,11 @@ async def _log_outstanding_locks() -> None:
                 )
                 lines.append(f"- {key} ttl={ttl_str}")
             logger.info(
-                f"{ICON} Active Redis locks:\n" + "\n".join(lines), extra={"notification": False}
+                f"{ICON} {Fore.MAGENTA}Active Redis locks:\n" + f"\n{Style.RESET_ALL}".join(lines),
+                extra={"notification": False},
             )
         else:
-            logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
+            logger.info(f"{ICON} No active Redis locks.", extra={"notification": False})
     except Exception as e:
         logger.warning(f"{ICON} Failed to list Redis locks: {e}", extra={"notification": False})
 
@@ -197,8 +201,8 @@ class LockStr(AccName):
                     )
                     if acquired:
                         await _unregister_waiter(str(self), request_id)
-                        logger.info(f"{ICON} Lock acquired for object {self}")
-                        logger.info(f"{ICON} {request_details if request_details else ''}")
+                        logger.debug(f"{ICON} Lock acquired for object {self}")
+                        logger.debug(f"{ICON} {request_details if request_details else ''}")
                         return True
                 except asyncio.TimeoutError:
                     # Per-object deduped wait warning
@@ -260,7 +264,7 @@ class LockStr(AccName):
 
         try:
             await lock.release()
-            logger.info(f"{ICON} Lock released for {cust_id}")
+            logger.debug(f"{ICON} Lock released for {cust_id}")
             return True
         except LockNotOwnedError:
             logger.warning(f"{ICON} Lock for {cust_id} was not owned by this process")
@@ -268,7 +272,7 @@ class LockStr(AccName):
         except LockError as e:
             if "Cannot release an unlocked lock" in str(e):
                 await redis_instance.delete(f"lock_str:{cust_id}")
-                logger.info(f"{ICON} Release already expired lock for {cust_id}")
+                logger.debug(f"{ICON} Release already expired lock for {cust_id}")
                 return True
             else:
                 logger.error(f"{ICON} Lock error for {cust_id}: {e}")

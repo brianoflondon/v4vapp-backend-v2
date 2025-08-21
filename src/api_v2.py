@@ -1,15 +1,18 @@
 from typing import Any, Dict
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, Query  # Add Query import
+from fastapi import APIRouter, FastAPI, HTTPException, Query, status
 from fastapi.concurrency import asynccontextmanager
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
+from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance, keepsats_balance_printout
+from v4vapp_backend_v2.api.v1_legacy.api_classes import KeepsatsTransferResponse
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 ICON = "🤖"
 
@@ -105,6 +108,9 @@ async def binance() -> Dict[str, Any]:
     return {"BTC": 0.0, "HIVE": 100.0, "USDT": 0, "SATS": 9034258}
 
 
+# MARK: /lightning
+
+
 @lightning_v1_router.get("/keepsats")
 async def keepsats(
     hive_accname: str = Query(..., description="Hive account name to check for keepsats"),
@@ -138,6 +144,45 @@ async def keepsats(
         "in_progress_sats": 0,
         "all_transactions": [],
     }
+
+
+@app.post("/lightning/keepsats/transfer", tags=["lnd", "keepsats"])
+async def transfer_keepsats(transfer: KeepsatsTransfer) -> KeepsatsTransferResponse:
+    """
+    Transfers satoshis from one user to another.
+
+    Args:
+        transfer (LightningTransfer): The transfer details.
+
+    Returns:
+        LightningTransferResponse: The transfer response.
+    """
+    net_msats, account_balance = await get_keepsats_balance(
+        cust_id=transfer.from_account, line_items=False
+    )
+
+    if transfer.msats and net_msats < transfer.msats:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "message": "Insufficient funds",
+                "balance": net_msats // 1000,
+                "sats": transfer.sats,
+            },
+        )
+
+    trx = await send_transfer_custom_json(transfer)
+    if trx is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Transfer failed",
+        )
+    trx_id = trx.get("trx_id", "unknown")
+    return KeepsatsTransferResponse(
+        success=True,
+        message="Transfer successful",
+        trx_id=trx_id,
+    )
 
 
 app.include_router(crypto_v2_router, tags=["crypto"])
