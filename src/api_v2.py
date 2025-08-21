@@ -168,10 +168,10 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
     )
 
     message = ""
-    if transfer.msats <= 0:
+    if transfer.sats <= 0:
         message = "Minimum is 0 sats"
 
-    if transfer.msats and net_msats < transfer.msats:
+    if transfer.sats and net_msats // 1000 < transfer.sats:
         message = "Insufficient funds"
 
     if message:
