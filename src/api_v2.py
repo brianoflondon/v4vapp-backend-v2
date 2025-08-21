@@ -4,8 +4,14 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
 from fastapi.concurrency import asynccontextmanager
 
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance, keepsats_balance_printout
-from v4vapp_backend_v2.api.v1_legacy.api_classes import KeepsatsTransferResponse
+from v4vapp_backend_v2.accounting.account_balances import (
+    get_keepsats_balance,
+    keepsats_balance_printout,
+)
+from v4vapp_backend_v2.api.v1_legacy.api_classes import (
+    KeepsatsTransferExternal,
+    KeepsatsTransferResponse,
+)
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
@@ -146,8 +152,8 @@ async def keepsats(
     }
 
 
-@app.post("/lightning/keepsats/transfer", tags=["lnd", "keepsats"])
-async def transfer_keepsats(transfer: KeepsatsTransfer) -> KeepsatsTransferResponse:
+@lightning_v1_router.post("/keepsats/transfer")
+async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTransferResponse:
     """
     Transfers satoshis from one user to another.
 
@@ -158,10 +164,10 @@ async def transfer_keepsats(transfer: KeepsatsTransfer) -> KeepsatsTransferRespo
         LightningTransferResponse: The transfer response.
     """
     net_msats, account_balance = await get_keepsats_balance(
-        cust_id=transfer.from_account, line_items=False
+        cust_id=transfer.hive_accname_from, line_items=False
     )
 
-    if transfer.msats and net_msats < transfer.msats:
+    if transfer.sats and net_msats // 1000 < transfer.sats:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
@@ -171,7 +177,14 @@ async def transfer_keepsats(transfer: KeepsatsTransfer) -> KeepsatsTransferRespo
             },
         )
 
-    trx = await send_transfer_custom_json(transfer)
+    transfer_internal = KeepsatsTransfer(
+        hive_accname_from=transfer.hive_accname_from,
+        hive_accname_to=transfer.hive_accname_to,
+        sats=transfer.sats,
+        memo=transfer.memo,
+    )
+
+    trx = await send_transfer_custom_json(transfer_internal)
     if trx is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
