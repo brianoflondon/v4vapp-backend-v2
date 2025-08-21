@@ -111,7 +111,17 @@ async def fixed_quote(
 
 @crypto_v1_router.get("/binance/")
 async def binance() -> Dict[str, Any]:
-    return {"BTC": 0.0, "HIVE": 100.0, "USDT": 0, "SATS": 9034258}
+    try:
+        balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=False)
+        logger.info(f"{ICON} Binance balances: {balances}")
+    except BinanceErrorBadConnection:
+        return {"error": "Bad connection"}
+    return {
+        "BTC": balances.get("BTC", 0.0),
+        "HIVE": balances.get("HIVE", 0.0),
+        "USDT": balances.get("USDT", 0.0),
+        "SATS": balances.get("SATS", 0),
+    }
 
 
 # MARK: /lightning
