@@ -173,7 +173,8 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
             detail={
                 "message": "Insufficient funds",
                 "balance": net_msats // 1000,
-                "sats": transfer.sats,
+                "requested": transfer.sats,
+                "deficit": transfer.sats - (net_msats // 1000),
             },
         )
 
