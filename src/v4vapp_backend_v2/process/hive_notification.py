@@ -142,7 +142,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         reason = f"Reply for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
         details.tracked_op.add_reply(
             reply_id=trx.get("trx_id", ""),
-            reply_type=reply_type
+            reply_type=reply_type,
             reply_msat=return_amount_msat,
             reply_error=None,
             reply_message=reason,

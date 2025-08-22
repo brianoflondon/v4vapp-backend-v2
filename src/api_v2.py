@@ -21,7 +21,6 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
-from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 ICON = "🤖"
 

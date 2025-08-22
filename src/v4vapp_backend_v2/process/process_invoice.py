@@ -37,7 +37,12 @@ async def process_lightning_receipt(
 
     server_id = InternalConfig().server_id
     node_name = InternalConfig().node_name
-    quote = await Invoice.nearest_quote(timestamp=invoice.timestamp)
+
+    fixed_quote = invoice.fixed_quote
+    if fixed_quote:
+        quote = fixed_quote
+    else:
+        quote = await Invoice.nearest_quote(timestamp=invoice.timestamp)
 
     if not invoice.conv or invoice.conv.is_unset():
         await invoice.update_conv(quote=quote)

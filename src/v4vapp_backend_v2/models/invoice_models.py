@@ -10,6 +10,7 @@ from pymongo.asynchronous.collection import AsyncCollection
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
+from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse, currency_to_receive
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
@@ -360,6 +361,33 @@ class Invoice(TrackedBaseModel):
             Currency: The currency in which the invoice is received.
         """
         return currency_to_receive(self.memo)
+
+    @property
+    def fixed_quote(self) -> QuoteResponse | None:
+        """
+        Returns the fixed quote for the invoice, if available.
+
+        Returns:
+            float | None: The fixed quote for the invoice, or None if not set.
+        """
+
+        pattern = r"#UUID\s+([a-f0-9]{6})"
+        match = re.search(pattern, self.memo)  # Use re.search instead of re.match
+
+        if match:
+            unique_id = match.group(1)  # Extract the captured group (the 6-char UUID)
+            try:
+                quote = FixedHiveQuote.check_quote(
+                    unique_id, self.value_msat // 1000
+                )  # Pass just the UUID string
+                if quote:
+                    return quote
+            except ValueError as e:
+                logger.info(f"Fixed quote expired or not found {unique_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking fixed quote for {unique_id}: {e}")
+
+        return None
 
     def fill_cust_id(self) -> None:
         """

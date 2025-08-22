@@ -609,7 +609,7 @@ class AllQuotes(BaseModel):
 
     # MARK: DB Store Quote
 
-    async def db_store_quote(self):
+    async def db_store_quote(self) -> HiveRatesDB:
         """
         Store cryptocurrency quotes in the database.
 
@@ -628,6 +628,16 @@ class AllQuotes(BaseModel):
         Returns:
             None
         """
+        record = HiveRatesDB(
+            timestamp=self.fetch_date,
+            hive_usd=self.quote.hive_usd,
+            hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
+            btc_usd=self.quote.btc_usd,
+            sats_hive=self.quote.sats_hive_p,
+            sats_usd=self.quote.sats_usd,
+            sats_hbd=self.quote.sats_hbd_p,
+            hive_hbd=self.quote.hive_hbd,
+        )
         if (
             AllQuotes.db_store_timestamp
             and self.fetch_date - AllQuotes.db_store_timestamp
@@ -635,20 +645,11 @@ class AllQuotes(BaseModel):
         ):
             delta = format_time_delta(datetime.now(tz=timezone.utc) - AllQuotes.db_store_timestamp)
             logger.info(f"{ICON} Skipping database store, last store was {delta} ago")
-            return
+            return record
         try:
-            record = HiveRatesDB(
-                timestamp=self.fetch_date,
-                hive_usd=self.quote.hive_usd,
-                hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
-                btc_usd=self.quote.btc_usd,
-                sats_hive=self.quote.sats_hive_p,
-                sats_usd=self.quote.sats_usd,
-                sats_hbd=self.quote.sats_hbd_p,
-                hive_hbd=self.quote.hive_hbd,
-            )
             AllQuotes.db_store_timestamp = self.fetch_date
             context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
+            # Do not await: runs in background
             task = asyncio.create_task(
                 mongo_call(
                     lambda: AllQuotes.collection().insert_one(document=record.model_dump()),
@@ -658,12 +659,13 @@ class AllQuotes(BaseModel):
                 name=f"rates_insert:{self.fetch_date.isoformat()}",
             )
             task.add_done_callback(_log_rates_insert_done)
-            # Do not await: runs in background
+            return record
         except Exception as e:
             logger.warning(
                 f"{ICON} Failed to insert rates into database: {e}",
                 extra={"notification": False},
             )
+        return record
 
     @property
     def collection_name(self) -> str:
