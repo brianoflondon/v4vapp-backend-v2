@@ -9,6 +9,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     keepsats_balance_printout,
 )
 from v4vapp_backend_v2.api.v1_legacy.api_classes import (
+    KeepsatsConvertExternal,
     KeepsatsTransferExternal,
     KeepsatsTransferResponse,
 )
@@ -18,6 +19,7 @@ from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
@@ -203,6 +205,65 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
         memo=transfer.memo,
     )
 
+    trx = await send_transfer_custom_json(transfer_internal)
+    if trx is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Transfer failed",
+        )
+    trx_id = trx.get("trx_id", "unknown")
+    return KeepsatsTransferResponse(
+        success=True,
+        message="Transfer successful",
+        trx_id=trx_id,
+    )
+
+
+@lightning_v1_router.post("/keepsats/convert", tags=["lnd", "keepsats"])
+async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransferResponse:
+    """
+    Converts a specified amount of sats from a user's Keepsats account to the internal server account.
+
+    Validates the minimum convert amount and checks if the user has sufficient funds before initiating the transfer.
+    Raises HTTP exceptions for invalid amounts, insufficient funds, or transfer failures.
+
+    Args:
+        convert (KeepsatsConvertExternal): The conversion request containing the user's account name, amount in sats, and memo.
+
+    Returns:
+        KeepsatsTransferResponse: Response object indicating success, message, and transaction ID.
+
+    Raises:
+        HTTPException: If the convert amount is below the minimum, funds are insufficient, or the transfer fails.
+    """
+    config_data = V4VConfig().data
+    if convert.sats < config_data.minimum_invoice_payment_sats:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": (
+                    f"Minimum convert amount is {config_data.minimum_invoice_payment_sats:,.0f} sats"
+                )
+            },
+        )
+    net_msats, account_balance = await keepsats_balance_printout(
+        cust_id=convert.hive_accname, line_items=False
+    )
+    if net_msats < convert.sats * 1_000:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "message": "Insufficient funds",
+                "balance": net_msats // 1000,
+                "sats": convert.sats,
+            },
+        )
+    transfer_internal = KeepsatsTransfer(
+        hive_accname_from=convert.hive_accname,
+        hive_accname_to=InternalConfig().server_id,
+        sats=convert.sats,
+        memo=convert.memo,
+    )
     trx = await send_transfer_custom_json(transfer_internal)
     if trx is None:
         raise HTTPException(
