@@ -62,3 +62,23 @@ class KeepsatsTransferResponse(BaseModel):
         default=None,
         description="Error information if the transfer failed",
     )
+
+
+# MARK: KeepSats Convert
+class KeepsatsConvertExternal(BaseModel):
+    hive_accname: str = Field(
+        ...,
+        description="Hive name converting sats to Hive/HBD",
+    )
+    sats: int = Field(
+        ...,
+        description="Amount of sats to convert",
+    )
+    symbol: str = Field(
+        ...,
+        description="Symbol to convert to (HIVE or HBD)",
+    )
+    memo: str | None = Field(
+        None,
+        description="Memo to include with the conversion",
+    )
