@@ -363,7 +363,7 @@ class Invoice(TrackedBaseModel):
         return currency_to_receive(self.memo)
 
     @property
-    def fixed_quote(self) -> QuoteResponse | None:
+    def fixed_quote(self) -> FixedHiveQuote | None:
         """
         Returns the fixed quote for the invoice, if available.
 

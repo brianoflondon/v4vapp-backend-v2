@@ -40,7 +40,7 @@ async def process_lightning_receipt(
 
     fixed_quote = invoice.fixed_quote
     if fixed_quote:
-        quote = fixed_quote
+        quote = fixed_quote.quote_response
     else:
         quote = await Invoice.nearest_quote(timestamp=invoice.timestamp)
 
@@ -184,6 +184,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
         # Not sure this is right... need to think about the custom_json use in the LND to Hive loop.
         logger.info(f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}")
         # This will send Hive or a custom_json at the end.
+        # Check for fixed quote in the conversion to Hive/HBD
         await conversion_keepsats_to_hive(
             server_id=server_id,
             cust_id=invoice.cust_id,

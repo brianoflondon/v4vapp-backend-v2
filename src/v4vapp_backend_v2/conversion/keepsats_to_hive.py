@@ -51,7 +51,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
+from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -100,13 +100,22 @@ async def conversion_keepsats_to_hive(
     if not msats and not amount and isinstance(tracked_op, Invoice):
         msats = tracked_op.value_msat
 
-    conv_result = await keepsats_to_hive(
-        timestamp=tracked_op.timestamp,
-        msats=msats,
-        amount=amount,
-        quote=quote,
-        to_currency=to_currency,
-    )
+    conv_result: ConversionResult | None = None
+
+    if isinstance(tracked_op, Invoice):
+        fixed_hive_quote = tracked_op.fixed_quote
+        if fixed_hive_quote:
+            quote = fixed_hive_quote.quote_response
+            conv_result = fixed_hive_quote.conversion_result
+
+    if not conv_result:
+        conv_result = await calc_keepsats_to_hive(
+            timestamp=tracked_op.timestamp,
+            msats=msats,
+            amount=amount,
+            quote=quote,
+            to_currency=to_currency,
+        )
     to_currency = conv_result.to_currency
     logger.debug(f"{conv_result}")
     logger.info(f"{conv_result.log_str}")

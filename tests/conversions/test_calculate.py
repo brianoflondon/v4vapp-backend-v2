@@ -9,7 +9,7 @@ from nectar.amount import Amount
 from tests.get_last_quote import last_quote
 from tests.utils import fake_trx_id, latest_block_num
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.conversion.calculate import hive_to_keepsats, keepsats_to_hive
+from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats, calc_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 
@@ -35,7 +35,7 @@ async def test_keepsats_to_hive_convert_from_msats():
     for sats in [500, 4_000, 50_234, 201_000]:
         for currency in [Currency.HIVE, Currency.HBD]:
             msats = sats * 1_000
-            conversion_result = await keepsats_to_hive(
+            conversion_result = await calc_keepsats_to_hive(
                 msats=msats, quote=last_quote(), to_currency=currency
             )
             print(conversion_result)
@@ -54,7 +54,7 @@ async def test_keepsats_to_hive_convert_from_hive():
         for currency in [Currency.HIVE, Currency.HBD]:
             amount = Amount(f"{amount_value} {currency.upper()}")
 
-            conversion_result = await keepsats_to_hive(
+            conversion_result = await calc_keepsats_to_hive(
                 amount=amount,
                 quote=last_quote(),
             )
@@ -105,7 +105,7 @@ async def test_hive_to_keepsats():
     )
 
     # Test with valid conversion amount
-    conversion_result = await hive_to_keepsats(tracked_op, quote=TrackedBaseModel.last_quote)
+    conversion_result = await calc_hive_to_keepsats(tracked_op, quote=TrackedBaseModel.last_quote)
     assert conversion_result is not None
     assert conversion_result.net_to_receive > 0
     print(conversion_result)
@@ -117,7 +117,7 @@ async def test_hive_to_keepsats():
     msats = 2_500_000
 
     # Test with valid conversion amount
-    conversion_result = await hive_to_keepsats(
+    conversion_result = await calc_hive_to_keepsats(
         tracked_op, quote=TrackedBaseModel.last_quote, msats=msats
     )
     assert conversion_result is not None

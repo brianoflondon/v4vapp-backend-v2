@@ -51,7 +51,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
-from v4vapp_backend_v2.conversion.calculate import hive_to_keepsats
+from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -93,7 +93,7 @@ async def conversion_hive_to_keepsats(
     Returns:
          None
     """
-    conv_result = await hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
+    conv_result = await calc_hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
     from_currency = conv_result.from_currency
     logger.info(f"{conv_result.log_str}")
 

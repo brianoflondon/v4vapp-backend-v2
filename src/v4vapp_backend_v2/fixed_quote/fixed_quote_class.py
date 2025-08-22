@@ -5,7 +5,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion, CryptoConvV1
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, HiveRatesDB, QuoteResponse
 
@@ -18,6 +19,8 @@ class FixedHiveQuote(BaseModel):
     conv: CryptoConvV1
     timestamp: datetime = datetime.now(tz=timezone.utc)
     quote_record: HiveRatesDB | None = None
+    quote_response: QuoteResponse | None = None
+    conversion_result: ConversionResult | None = None
 
     @classmethod
     async def create_quote(
@@ -67,15 +70,40 @@ class FixedHiveQuote(BaseModel):
         else:
             value = 0.0
 
-        # Create conversion
         conv = CryptoConversion(quote=all_quotes.quote, conv_from=currency, value=value).conversion
+        quote_response = QuoteResponse(
+            hive_usd=all_quotes.quote.hive_usd,
+            hbd_usd=all_quotes.quote.hbd_usd,
+            btc_usd=all_quotes.quote.btc_usd,
+            hive_hbd=all_quotes.quote.hive_hbd,
+            raw_response={},
+            source="FixedRate",
+            fetch_date=all_quotes.quote.fetch_date,
+            error="",  # No error in this case
+            error_details={},
+        )
 
+        if currency != Currency.HIVE:
+            amount = conv.amount_hbd
+        else:
+            amount = conv.amount_hive
+
+        conversion_result = await calc_keepsats_to_hive(
+            to_currency=currency,
+            amount=amount,
+            quote=all_quotes.quote,
+        )
+
+        # Create conversion
+        sats_send = (conv.msats + conv.msats_fee) // 1000
         # Create quote instance
         quote = cls(
             unique_id=str(uuid4())[:6],
-            sats_send=int(conv.sats),
+            sats_send=sats_send,
             conv=conv.v1(),
             quote_record=quote_record,
+            quote_response=quote_response,
+            conversion_result=conversion_result,
         )
 
         # Cache in Redis
@@ -89,7 +117,7 @@ class FixedHiveQuote(BaseModel):
         return quote
 
     @classmethod
-    def check_quote(cls, unique_id: str, send_sats: int) -> QuoteResponse:
+    def check_quote(cls, unique_id: str, send_sats: int) -> "FixedHiveQuote":
         """
         Checks if the quote is still valid (not expired).
 
@@ -106,22 +134,11 @@ class FixedHiveQuote(BaseModel):
         if quote_data and "quote_record" in quote_data:
             if quote_data.get("sats_send") != send_sats:
                 raise ValueError("Sats amount does not match the quote.")
-
-            quote = HiveRatesDB.model_validate(quote_data["quote_record"])
-            if quote:
-                quote_response = QuoteResponse(
-                    hive_usd=quote.hive_usd,
-                    hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
-                    btc_usd=quote.btc_usd,
-                    hive_hbd=quote.hive_hbd,
-                    raw_response={},
-                    source="HiveRatesDB",
-                    fetch_date=quote.timestamp,
-                    error="",  # No error in this case
-                    error_details={},
-                )
-
-                return quote_response
+            try:
+                fixed_hive_quote = FixedHiveQuote.model_validate(quote_data)
+                return fixed_hive_quote.model_copy()
+            except Exception as e:
+                logger.error(f"Error validating fixed hive quote: {e}")
         raise ValueError("Invalid quote.")
 
 
@@ -129,11 +146,11 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        quote = await FixedHiveQuote.create_quote(hive=0.100)
+        quote = await FixedHiveQuote.create_quote(usd=10, cache_time=3600)
         pprint(quote.model_dump())
-        is_valid = FixedHiveQuote.check_quote(quote.unique_id, send_sats=quote.sats_send)
-        print(f"Quote valid: {is_valid}")
-        await asyncio.sleep(10)
+        fixed_hive_quote = FixedHiveQuote.check_quote(quote.unique_id, send_sats=quote.sats_send)
+        print(f"Quote valid: {fixed_hive_quote is not None}")
+        print(fixed_hive_quote.conversion_result)
 
     InternalConfig(config_filename="devhive.config.yaml")
     asyncio.run(main())

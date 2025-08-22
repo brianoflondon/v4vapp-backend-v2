@@ -168,7 +168,7 @@ class ConversionResult(BaseModel):
         )
 
 
-async def hive_to_keepsats(
+async def calc_hive_to_keepsats(
     tracked_op: TransferBase,
     quote: QuoteResponse | None = None,
     msats: int = 0,
@@ -288,7 +288,7 @@ def hive_to_keepsats_calc(
     return answer
 
 
-async def keepsats_to_hive(
+async def calc_keepsats_to_hive(
     timestamp: datetime = datetime.now(tz=timezone.utc),
     msats: int | None = None,
     to_currency: Currency = Currency.HIVE,

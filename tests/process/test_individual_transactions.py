@@ -30,7 +30,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.calculate import keepsats_to_hive
+from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
@@ -141,7 +141,7 @@ async def test_hive_and_hbd_to_lnd_only():
             memo=f"{currency.symbol} pay invoice {invoice_value_sat}",
         )
 
-        conversion_result = await keepsats_to_hive(
+        conversion_result = await calc_keepsats_to_hive(
             msats=invoice_value_sat * 1_000, to_currency=currency
         )
 
