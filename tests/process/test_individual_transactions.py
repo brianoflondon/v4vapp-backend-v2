@@ -35,6 +35,8 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -277,7 +279,9 @@ async def test_conversion_keepsats_to_hive():
     """
     invoice_sats = 5_000
     await test_deposit_hive_to_keepsats(
-        invoice_sats, timeout=120, message="test_conversion_keepsats_to_hive"
+        invoice_sats,
+        timeout=120,
+        message="Deposit Hive to Keepsats for test_conversion_keepsats_to_hive",
     )
     net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp-test")
     ledger_count = await get_ledger_count()
@@ -289,13 +293,23 @@ async def test_conversion_keepsats_to_hive():
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
-    await watch_for_ledger_count(ledger_count + 7)
+    await watch_for_ledger_count(ledger_count + 6)
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
+
+    await asyncio.sleep(5)
 
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp-test")
     assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
         f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
+    )
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "transfer", "from": "devser.v4vapp"}, sort=[("timestamp", -1)]
+    )
+    transfer = Transfer.model_validate(last_hive_op)
+    assert transfer.to_account == "v4vapp-test", f"Expected v4vapp-test, got {transfer.to_account}"
+    assert "Converted 5,000 sats" in transfer.memo, (
+        f"Expected memo to contain 'Converted 5,000 sats', got {transfer.memo}"
     )
 
 
@@ -313,7 +327,7 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     Lightning invoice generation, and custom JSON transfers.
     """
     await test_deposit_hive_to_keepsats(
-        5_000, timeout=120, message="test_deposit_keepsats_spend_hive_custom_json"
+        5_000, timeout=120, message="Deposit Hive for test_deposit_keepsats_spend_hive_custom_json"
     )
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
@@ -330,16 +344,27 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     )
     trx = await send_transfer_custom_json(transfer)
 
-    await watch_for_ledger_count(ledger_count + 7)
-    await asyncio.sleep(20)
-    ledger_count = await get_ledger_count()
-    logger.info(f"Ledger count: {ledger_count}")
+    await watch_for_ledger_count(ledger_count + 4)
+
+    await asyncio.sleep(5)
 
     net_msats_after, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
     assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
         f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
     )
-    # needs test for reply
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "custom_json"}, sort=[("timestamp", -1)]
+    )
+    custom_json = CustomJson.model_validate(last_hive_op)
+    if custom_json.json_data:
+        memo = custom_json.json_data.memo
+        assert "Paid Invoice with Keepsats" in memo, (
+            f"Expected memo to contain 'Paid Invoice with Keepsats', got {memo}"
+        )
+    else:
+        assert False, (
+            "Custom JSON data is empty, expected to contain memo with invoice payment request"
+        )
 
 
 async def test_send_internal_keepsats_transfer_by_hive_transfer():

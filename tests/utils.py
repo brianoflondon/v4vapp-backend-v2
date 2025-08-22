@@ -15,11 +15,13 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
+    SendHiveTransfer,
     get_hive_client,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
     send_custom_json,
     send_transfer,
+    send_transfer_bulk,
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -119,19 +121,22 @@ async def send_server_balance_to_test() -> dict[str, Any]:
     hive_client, server_name = await get_verified_hive_client(hive_role=HiveRoles.server)
     server_account = Account(server_name, blockchain_instance=hive_client)
     pprint(server_account.balances.get("available", []))
-    for amount in server_account.balances.get("available", []):
+    balances = server_account.balances.get("available", [])
+    transfer_list = []
+    for amount in balances:
         print(f"Server account {server_name} has {amount}")
         if amount.amount > 0:
-            trx = await send_transfer(
+            hive_transfer = SendHiveTransfer(
                 to_account="v4vapp-test",
                 from_account=server_name,
-                hive_client=hive_client,
-                amount=amount,
+                amount=str(amount),
                 memo="Clearing balance transfer from v4vapp backend to v4vapp-test account",
             )
-            pprint(f"Transfer transaction: {trx}")
-            return trx
-    return {}
+            transfer_list.append(hive_transfer)
+    trx = {}
+    if transfer_list:
+        trx = await send_transfer_bulk(hive_client=hive_client, transfer_list=transfer_list)
+    return trx
 
 
 async def send_test_custom_json(transfer: KeepsatsTransfer) -> Dict[str, Any]:

@@ -230,9 +230,9 @@ async def conversion_keepsats_to_hive(
     end_memo = f" | {tracked_op.change_memo}" if tracked_op.change_memo else lightning_memo
     if not is_clean_memo(lightning_memo):
         tracked_op.change_memo = (
-            f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats "
-            f"{conv_result.to_convert_amount} "
-            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
+            f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats to "
+            f"{conv_result.net_to_receive_amount} "
+            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}"
             f"{end_memo}"
         )
 
@@ -240,7 +240,7 @@ async def conversion_keepsats_to_hive(
     tracked_op.change_amount = AmountPyd(
         amount=Amount(amount=conv_result.net_to_receive_amount),
     )
-    tracked_op.change_conv = conv_result.change_conv
+    tracked_op.change_conv = conv_result.net_to_receive_conv
     await tracked_op.save()
 
     details = HiveReturnDetails(
@@ -249,7 +249,7 @@ async def conversion_keepsats_to_hive(
         reason_str=tracked_op.change_memo,
         action=ReturnAction.CONVERSION,
         pay_to_cust_id=cust_id,
-        amount=AmountPyd(amount=conv_result.net_to_receive_amount),
+        amount=tracked_op.change_amount,
         nobroadcast=nobroadcast,
     )
 

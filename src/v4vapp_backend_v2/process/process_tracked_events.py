@@ -65,10 +65,6 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             )
             return []
 
-        logger.info(f"{'=*=' * 20}")
-        logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
-        logger.info(f"{tracked_op.log_str}")
-        logger.info(f"{'=*=' * 20}")
         if isinstance(tracked_op, BlockMarker):
             # This shouldn't be arrived at.
             logger.warning(
@@ -85,8 +81,13 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         unknown_cust_id = uuid4()
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
         cust_id = str(unknown_cust_id) if not cust_id else cust_id
-
-        logger.info(f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str}")
+        logger.info(f"{'=*=' * 20}")
+        logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
+        logger.info(f"{tracked_op.log_str}")
+        logger.info(
+            f"Customer ID {cust_id} processing tracked operation: {tracked_op.log_str[:20]}"
+        )
+        logger.info(f"{'=*=' * 10} {cust_id} {'=*=' * 10}")
         start = timer()
         try:
             async with LockStr(cust_id).locked(
@@ -133,10 +134,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             process_time = timer() - start
             tracked_op.process_time = process_time
             await tracked_op.save()
-            logger.info(f"{'=' * 50}")
+            logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
             logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
             logger.info(f"{tracked_op.log_str}")
-            logger.info(f"{'=' * 50}")
+            logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
 
 
 # MARK: Lightning Transactions
