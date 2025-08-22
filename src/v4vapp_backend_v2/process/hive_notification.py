@@ -86,8 +86,12 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     # a custom JSON back to the original sender.
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues
     # We Override for conversions because those will be set off by custom_json
-    if details.tracked_op.op_type != "custom_json":
-        trx: Dict[str, Any] = await send_transfer(
+    return_amount_msat = 0
+    trx: Dict[str, Any] = {}
+    reply_type = ""
+    if details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION:
+        reply_type = "transfer"
+        trx = await send_transfer(
             hive_client=hive_client,
             from_account=server_account_name,
             to_account=details.pay_to_cust_id,  # Repay to the original sender
@@ -111,6 +115,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
 
     # Custom JSONs are used for notifications and do not have a sats amount
     elif details.tracked_op.op_type == "custom_json":
+        reply_type = "custom_json"
         notification = KeepsatsTransfer(
             from_account=server_account_name,
             memo=memo,
@@ -132,6 +137,22 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             hive_client=hive_client,
         )
         return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+
+    if details.tracked_op and trx:
+        reason = f"Reply for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
+        details.tracked_op.add_reply(
+            reply_id=trx.get("trx_id", ""),
+            reply_type=reply_type
+            reply_msat=return_amount_msat,
+            reply_error=None,
+            reply_message=reason,
+        )
+        await details.tracked_op.save()
+
+        logger.info(
+            "Updated tracked_op with reply",
+            extra={"notification": False, **details.tracked_op.log_extra},
+        )
 
     return trx
 

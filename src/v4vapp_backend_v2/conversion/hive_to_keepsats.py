@@ -218,7 +218,7 @@ async def conversion_hive_to_keepsats(
 
     if not is_clean_memo(tracked_op.lightning_memo):
         tracked_op.change_memo = (
-            f"Deposit Keepsats {conv_result.to_convert_amount} to "
+            f"Deposit {conv_result.to_convert_amount} to "
             f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
             f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
             f"{end_memo}"
