@@ -19,11 +19,44 @@
             --v4v-warning: #f59e0b;
             --v4v-danger: #ef4444;
             --v4v-info: #06b6d4;
+            
+            /* Light mode colors */
+            --bs-body-bg: #ffffff;
+            --bs-body-color: #212529;
+            --bs-secondary-bg: #f8fafc;
+            --bs-tertiary-bg: #e2e8f0;
+            --bs-border-color: #dee2e6;
+            --bs-link-color: var(--v4v-primary);
+            --sidebar-bg: linear-gradient(135deg, var(--v4v-primary) 0%, #1e40af 100%);
+            --card-bg: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #ced4da;
+            --rate-limit-bg: #f8fafc;
+        }
+
+        [data-bs-theme="dark"] {
+            --bs-body-bg: #1a202c;
+            --bs-body-color: #e2e8f0;
+            --bs-secondary-bg: #2d3748;
+            --bs-tertiary-bg: #4a5568;
+            --bs-border-color: #4a5568;
+            --bs-link-color: #60a5fa;
+            --sidebar-bg: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            --card-bg: #2d3748;
+            --input-bg: #4a5568;
+            --input-border: #718096;
+            --rate-limit-bg: #2d3748;
+        }
+
+        body {
+            background-color: var(--bs-body-bg);
+            color: var(--bs-body-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .sidebar {
             min-height: 100vh;
-            background: linear-gradient(135deg, var(--v4v-primary) 0%, #1e40af 100%);
+            background: var(--sidebar-bg);
             color: white;
         }
 
@@ -45,7 +78,7 @@
         }
 
         .main-content {
-            background-color: #f8fafc;
+            background-color: var(--bs-secondary-bg);
             min-height: 100vh;
         }
 
@@ -53,6 +86,21 @@
             border: none;
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
             border-radius: 12px;
+            background-color: var(--card-bg);
+            color: var(--bs-body-color);
+        }
+
+        .form-control, .form-select {
+            background-color: var(--input-bg);
+            border-color: var(--input-border);
+            color: var(--bs-body-color);
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: var(--input-bg);
+            border-color: var(--v4v-primary);
+            color: var(--bs-body-color);
+            box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.25);
         }
 
         .navbar-brand {
@@ -68,6 +116,10 @@
         .breadcrumb-item+.breadcrumb-item::before {
             content: "›";
             color: var(--v4v-secondary);
+        }
+
+        .breadcrumb-item a {
+            color: var(--bs-link-color);
         }
 
         .status-indicator {
@@ -102,7 +154,7 @@
         .rate-limit-row {
             margin-bottom: 10px;
             padding: 15px;
-            background: #f8fafc;
+            background: var(--rate-limit-bg);
             border-radius: 8px;
             border-left: 4px solid var(--v4v-info);
         }
@@ -121,10 +173,45 @@
             border-radius: 8px;
         }
 
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.2rem;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .theme-toggle:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .border-bottom {
+            border-color: var(--bs-border-color) !important;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 min-height: auto;
             }
+        }
+
+        /* Dark mode specific adjustments */
+        [data-bs-theme="dark"] .text-muted {
+            color: #a0aec0 !important;
+        }
+
+        [data-bs-theme="dark"] .border {
+            border-color: var(--bs-border-color) !important;
+        }
+
+        [data-bs-theme="dark"] .list-group-item {
+            background-color: var(--card-bg);
+            border-color: var(--bs-border-color);
+            color: var(--bs-body-color);
         }
     </style>
 
@@ -173,6 +260,12 @@
                                 <span class="me-2">❤️</span>
                                 Health Check
                             </a>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link theme-toggle w-100 text-start" onclick="toggleTheme()" title="Toggle dark/light mode">
+                                <span class="me-2" id="theme-icon">🌙</span>
+                                <span id="theme-text">Dark Mode</span>
+                            </button>
                         </li>
                     </ul>
                 </div>
@@ -242,6 +335,82 @@
 
     <!-- Custom JS -->
     <script>
+        // Dark mode functionality
+        function getStoredTheme() {
+            return localStorage.getItem('theme');
+        }
+
+        function setStoredTheme(theme) {
+            localStorage.setItem('theme', theme);
+        }
+
+        function getPreferredTheme() {
+            const storedTheme = getStoredTheme();
+            if (storedTheme) {
+                return storedTheme;
+            }
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function setTheme(theme) {
+            if (theme === 'auto') {
+                document.documentElement.setAttribute('data-bs-theme', 
+                    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            } else {
+                document.documentElement.setAttribute('data-bs-theme', theme);
+            }
+            updateThemeUI(theme);
+        }
+
+        function updateThemeUI(theme) {
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            
+            if (!themeIcon || !themeText) return;
+            
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            
+            if (theme === 'auto') {
+                themeIcon.textContent = '🔄';
+                themeText.textContent = 'Auto Mode';
+            } else if (currentTheme === 'dark') {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+            } else {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = getStoredTheme() || 'auto';
+            let newTheme;
+            
+            if (currentTheme === 'auto') {
+                newTheme = 'light';
+            } else if (currentTheme === 'light') {
+                newTheme = 'dark';
+            } else {
+                newTheme = 'auto';
+            }
+            
+            setStoredTheme(newTheme);
+            setTheme(newTheme);
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTheme(getPreferredTheme());
+            
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+                const storedTheme = getStoredTheme();
+                if (storedTheme !== 'light' && storedTheme !== 'dark') {
+                    setTheme(getPreferredTheme());
+                }
+            });
+        });
+
         // Auto-dismiss alerts after 5 seconds
         setTimeout(function () {
             var alerts = document.querySelectorAll('.alert-dismissible');
