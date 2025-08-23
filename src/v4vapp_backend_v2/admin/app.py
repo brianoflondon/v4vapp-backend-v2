@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from v4vapp_backend_v2 import __version__ as project_version
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig
 
@@ -73,7 +74,7 @@ class AdminApp:
         async def admin_dashboard(request: Request):
             """Main admin dashboard"""
             nav_items = self.nav_manager.get_navigation_items()
-
+            server_id = InternalConfig().server_id
             return self.templates.TemplateResponse(
                 "dashboard.html",
                 {
@@ -82,8 +83,9 @@ class AdminApp:
                     "nav_items": nav_items,
                     "admin_info": {
                         "version": "1.0.0",
+                        "project_version": project_version,
                         "config_file": self.config.config_filename,
-                        "server_account": getattr(self.config, "server_account", "N/A"),
+                        "server_account": server_id,
                     },
                 },
             )
@@ -96,7 +98,12 @@ class AdminApp:
         @self.app.get("/admin/health")
         async def health_check():
             """Health check endpoint"""
-            return {"status": "healthy", "version": "1.0.0", "config": self.config.config_filename}
+            return {
+                "status": "healthy",
+                "admin_version": "1.0.0",
+                "project_version": project_version,
+                "config": self.config.config_filename,
+            }
 
 
 def create_admin_app(config_filename: str = "devhive.config.yaml") -> FastAPI:
