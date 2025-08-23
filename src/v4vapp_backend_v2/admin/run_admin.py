@@ -70,14 +70,30 @@ Examples:
 
     # Run the server
     try:
-        uvicorn.run(
-            app,
-            host=args.host,
-            port=args.port,
-            reload=args.reload,
-            log_level=args.log_level,
-            access_log=True,
-        )
+        if args.reload:
+            # For reload to work, we need to pass the app as an import string
+            # Create a temporary module-level app instance
+            import os
+
+            os.environ["V4VAPP_ADMIN_CONFIG"] = args.config
+
+            uvicorn.run(
+                "v4vapp_backend_v2.admin.run_admin:app",
+                host=args.host,
+                port=args.port,
+                reload=args.reload,
+                log_level=args.log_level,
+                access_log=True,
+            )
+        else:
+            uvicorn.run(
+                app,
+                host=args.host,
+                port=args.port,
+                reload=False,
+                log_level=args.log_level,
+                access_log=True,
+            )
     except KeyboardInterrupt:
         print("\n👋 Server stopped")
     except Exception as e:
@@ -85,6 +101,24 @@ Examples:
         sys.exit(1)
 
 
+# Module-level app instance for reload mode
+app = None
+
+
+def get_app():
+    """Get or create the app instance"""
+    global app
+    if app is None:
+        import os
+
+        config_filename = os.environ.get("V4VAPP_ADMIN_CONFIG", "devhive.config.yaml")
+        app = create_admin_app(config_filename=config_filename)
+    return app
+
+
+# Create app instance for reload mode
+app = get_app()
+
+
 if __name__ == "__main__":
-    main()
     main()

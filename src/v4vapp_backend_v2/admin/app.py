@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig
 
 
@@ -53,6 +52,11 @@ class AdminApp:
 
     def _setup_routers(self):
         """Setup all admin routers"""
+        # Set the admin config for the v4vconfig router
+        from v4vapp_backend_v2.admin.routers import v4vconfig
+
+        v4vconfig.set_admin_config(self.config)
+
         # V4V Config router
         self.app.include_router(
             v4vconfig.router, prefix="/admin/v4vconfig", tags=["V4V Configuration"]
@@ -106,5 +110,4 @@ if __name__ == "__main__":
     import uvicorn
 
     app = create_admin_app()
-    uvicorn.run(app, host="127.0.0.1", port=8080, reload=True)
     uvicorn.run(app, host="127.0.0.1", port=8080, reload=True)

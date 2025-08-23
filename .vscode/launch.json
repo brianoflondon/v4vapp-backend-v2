@@ -23,6 +23,28 @@
             "justMyCode": false,
         },
         {
+            "name": "DEV Admin Interface",
+            "type": "debugpy",
+            "consoleName": "DEV Admin Interface",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/v4vapp_backend_v2/admin/run_admin.py",
+            "args": [
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8080",
+                "--config",
+                "devhive.config.yaml",
+                "--log-level",
+                "debug"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
             "name": "DEV Hive Monitor devser devtre",
             "type": "debugpy",
             "consoleName": "DEV Hive Monitor",

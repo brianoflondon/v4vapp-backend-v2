@@ -1,12 +1,13 @@
 import json
 from datetime import datetime, timezone
+from pprint import pprint
 from typing import List
 
 from nectar.account import Account
 from nectar.hive import Hive
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_verified_hive_client
@@ -19,6 +20,16 @@ class V4VConfigRateLimits(BaseModel):
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
     sats: int = Field(0, description="Limit in satoshis for the rate limit.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_legacy_limit_field(cls, data):
+        """Handle legacy 'limit' field from Hive data and map it to 'sats'"""
+        if isinstance(data, dict) and "limit" in data and "sats" not in data:
+            # Map 'limit' to 'sats' for backward compatibility
+            data = data.copy()  # Don't modify original
+            data["sats"] = data.pop("limit")
+        return data
 
     def __repr__(self) -> str:
         return super().__repr__()
@@ -89,6 +100,8 @@ class V4VConfig:
         if not hasattr(self, "_initialized"):
             self._initialized = True
             super().__init__(*args, **kwargs)
+            if not server_accname:
+                server_accname = InternalConfig().server_id
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()
@@ -213,7 +226,7 @@ class V4VConfig:
         """
         if not hive_client:
             hive_client, server_id = await get_verified_hive_client()
-        acc = Account(self.server_accname, blockchain_instance=hive_client, lazy=True)
+        acc = Account(server_id, blockchain_instance=hive_client, lazy=True)
         existing_metadata = self._get_posting_metadata()
         if not existing_metadata:
             existing_metadata = {}
@@ -240,6 +253,8 @@ class V4VConfig:
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
         try:
+            logger.info("Updating Hive settings")
+            pprint(new_meta)
             trx = acc.update_account_jsonmetadata(new_meta)
             logger.info(
                 f"Settings in Hive changed: {trx.get('trx_id')}",

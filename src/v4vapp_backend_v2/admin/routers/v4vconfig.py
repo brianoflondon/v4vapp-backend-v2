@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigData, V4VConfigRateLimits
 
 # Setup router and templates
@@ -23,11 +23,26 @@ templates_dir = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 nav_manager = NavigationManager()
 
+# Global config instance - will be set by the admin app
+_admin_config: InternalConfig | None = None
+
+
+def set_admin_config(config: InternalConfig):
+    """Set the admin configuration instance"""
+    global _admin_config
+    _admin_config = config
+
 
 def get_v4v_config() -> V4VConfig:
-    """Get V4VConfig instance"""
-    # You might want to make this configurable or get from dependency injection
-    return V4VConfig(server_accname="v4vapp")
+    """Get V4VConfig instance with proper configuration"""
+    if _admin_config is None:
+        # Fallback to default config for development
+        logger.warning("No admin config set, using default devhive.config.yaml")
+        # Initialize a temporary config to ensure proper setup
+        InternalConfig(config_filename="devhive.config.yaml")
+
+    # Use the configured Hive client
+    return V4VConfig(server_accname=InternalConfig().server_id)
 
 
 @router.get("/", response_class=HTMLResponse)
