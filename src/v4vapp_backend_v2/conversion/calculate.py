@@ -152,9 +152,8 @@ class ConversionResult(BaseModel):
         Returns:
             Amount: An Amount object representing the net amount to receive, denominated in the target currency.
         """
-        return Amount(
-            f"{self.net_to_receive_conv.value_in(self.hive_or_hbd)} {self.hive_or_hbd.value.upper()}"
-        )
+        hive_rounded = round(self.net_to_receive_conv.value_in(self.hive_or_hbd), 3)
+        return Amount(f"{hive_rounded} {self.hive_or_hbd.value.upper()}")
 
     @property
     def to_convert_amount(self) -> Amount:
@@ -163,9 +162,8 @@ class ConversionResult(BaseModel):
         Returns:
             Amount: An Amount object representing the amount to convert, denominated in the target currency.
         """
-        return Amount(
-            f"{self.to_convert_conv.value_in(self.hive_or_hbd)} {self.hive_or_hbd.value.upper()}"
-        )
+        hive_rounded = round(self.to_convert_conv.value_in(self.hive_or_hbd), 3)
+        return Amount(f"{hive_rounded} {self.hive_or_hbd.value.upper()}")
 
 
 async def calc_hive_to_keepsats(

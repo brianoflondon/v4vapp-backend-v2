@@ -12,10 +12,8 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import (
-    mongo_call,
-    summarize_write_result,  # optional pretty log
-)
+from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
+from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -609,7 +607,7 @@ class AllQuotes(BaseModel):
 
     # MARK: DB Store Quote
 
-    async def db_store_quote(self) -> HiveRatesDB:
+    async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
         """
         Store cryptocurrency quotes in the database.
 
@@ -638,6 +636,8 @@ class AllQuotes(BaseModel):
             sats_hbd=self.quote.sats_hbd_p,
             hive_hbd=self.quote.hive_hbd,
         )
+        if not store_db:
+            return record
         if (
             AllQuotes.db_store_timestamp
             and self.fetch_date - AllQuotes.db_store_timestamp
@@ -1047,5 +1047,11 @@ def per_diff(a: float, b: float) -> float:
         return 0
     return ((a - b) / b) * 100
 
+
+# Last line
+
+# Last line
+
+# Last line
 
 # Last line

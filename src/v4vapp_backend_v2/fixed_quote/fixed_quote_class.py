@@ -18,9 +18,9 @@ class FixedHiveQuote(BaseModel):
     sats_send: int
     conv: CryptoConvV1
     timestamp: datetime = datetime.now(tz=timezone.utc)
-    quote_record: HiveRatesDB | None = None
-    quote_response: QuoteResponse | None = None
-    conversion_result: ConversionResult | None = None
+    quote_record: HiveRatesDB
+    quote_response: QuoteResponse
+    conversion_result: ConversionResult
 
     @classmethod
     async def create_quote(
@@ -30,6 +30,7 @@ class FixedHiveQuote(BaseModel):
         usd: float | None = None,
         cache_time: int = 600,
         use_cache: bool = True,
+        store_db: bool = True,
     ) -> "FixedHiveQuote":
         """
         Asynchronously creates a new fixed quote based on the provided currency and amount.
@@ -52,7 +53,7 @@ class FixedHiveQuote(BaseModel):
         """
         all_quotes = AllQuotes()
         await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
-        quote_record = await all_quotes.db_store_quote()
+        quote_record = await all_quotes.db_store_quote(store_db=store_db)
         # Determine currency and value
         currency = (
             Currency.HIVE
