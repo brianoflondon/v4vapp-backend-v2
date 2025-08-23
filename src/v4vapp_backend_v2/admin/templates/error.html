@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="h1 text-danger mb-4">⚠️</div>
+                <h2 class="text-danger mb-3">Error</h2>
+                <p class="lead mb-4">{{ error }}</p>
+
+                <div class="d-flex justify-content-center gap-3">
+                    {% if back_url %}
+                    <a href="{{ back_url }}" class="btn btn-primary">
+                        <i class="bi bi-arrow-left me-1"></i>
+                        Go Back
+                    </a>
+                    {% endif %}
+                    <a href="/admin" class="btn btn-outline-secondary">
+                        <i class="bi bi-house me-1"></i>
+                        Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

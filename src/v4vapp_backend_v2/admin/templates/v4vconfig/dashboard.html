@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block page_actions %}
+<div class="d-flex gap-2">
+    <a href="/admin/v4vconfig/refresh" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        Refresh from Hive
+    </a>
+    <a href="/admin/v4vconfig/api" class="btn btn-outline-info" target="_blank">
+        <i class="bi bi-code me-1"></i>
+        View JSON
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <!-- Status Overview -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>🔄 Hive → Lightning</h5>
+                        <div class="h4 mt-2">
+                            {% if config.closed_get_lnd %}
+                            <span class="status-indicator status-closed"></span>
+                            <span class="text-danger">CLOSED</span>
+                            {% else %}
+                            <span class="status-indicator status-open"></span>
+                            <span class="text-success">OPEN</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">Gateway Status</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5>⚡ Lightning → Hive</h5>
+                        <div class="h4 mt-2">
+                            {% if config.closed_get_hive %}
+                            <span class="status-indicator status-closed"></span>
+                            <span class="text-danger">CLOSED</span>
+                            {% else %}
+                            <span class="status-indicator status-open"></span>
+                            <span class="text-success">OPEN</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">Gateway Status</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Form -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-gear me-2"></i>
+                    V4VApp Configuration
+                </h5>
+                {% if timestamp %}
+                <small class="text-muted">Last updated: {{ timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</small>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="post" action="/admin/v4vconfig/update" id="config-form">
+                    <!-- Basic Settings -->
+                    <div class="config-section">
+                        <h6 class="border-bottom pb-2 mb-3">💰 Fee Settings</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Hive Return Fee</label>
+                                    <input type="number" class="form-control" name="hive_return_fee"
+                                        value="{{ config.hive_return_fee }}" step="0.001" required>
+                                    <div class="form-text">Fee for returning Hive transactions</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Conversion Fee (%)</label>
+                                    <input type="number" class="form-control" name="conv_fee_percent"
+                                        value="{{ config.conv_fee_percent }}" step="0.001" required>
+                                    <div class="form-text">Percentage fee for conversions</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Conversion Fee (Sats)</label>
+                                    <input type="number" class="form-control" name="conv_fee_sats"
+                                        value="{{ config.conv_fee_sats }}" required>
+                                    <div class="form-text">Fixed sat fee for conversions</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Streaming Fee (%)</label>
+                                    <input type="number" class="form-control"
+                                        name="v4v_fees_streaming_sats_to_hive_percent"
+                                        value="{{ config.v4v_fees_streaming_sats_to_hive_percent }}" step="0.001"
+                                        required>
+                                    <div class="form-text">Fee for streaming sats to Hive</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Limits -->
+                    <div class="config-section">
+                        <h6 class="border-bottom pb-2 mb-3">📊 Payment Limits</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Minimum Invoice (Sats)</label>
+                                    <input type="number" class="form-control" name="minimum_invoice_payment_sats"
+                                        value="{{ config.minimum_invoice_payment_sats }}" required>
+                                    <div class="form-text">Smallest invoice amount</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Maximum Invoice (Sats)</label>
+                                    <input type="number" class="form-control" name="maximum_invoice_payment_sats"
+                                        value="{{ config.maximum_invoice_payment_sats }}" required>
+                                    <div class="form-text">Largest invoice amount</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Max LND Fee (mSats)</label>
+                                    <input type="number" class="form-control" name="max_acceptable_lnd_fee_msats"
+                                        value="{{ config.max_acceptable_lnd_fee_msats }}" required>
+                                    <div class="form-text">Maximum routing fee</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gateway Status -->
+                    <div class="config-section">
+                        <h6 class="border-bottom pb-2 mb-3">🚦 Gateway Control</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="closed_get_lnd" {% if
+                                        config.closed_get_lnd %}checked{% endif %}>
+                                    <label class="form-check-label">
+                                        <strong>Close Hive → Lightning Gateway</strong>
+                                        <div class="form-text">Disable payments from Hive to Lightning</div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="closed_get_hive" {% if
+                                        config.closed_get_hive %}checked{% endif %}>
+                                    <label class="form-check-label">
+                                        <strong>Close Lightning → Hive Gateway</strong>
+                                        <div class="form-text">Disable payments from Lightning to Hive</div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- URLs and Links -->
+                    <div class="config-section">
+                        <h6 class="border-bottom pb-2 mb-3">🔗 Service URLs</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Frontend IRI</label>
+                                    <input type="url" class="form-control" name="v4v_frontend_iri"
+                                        value="{{ config.v4v_frontend_iri }}" placeholder="https://app.v4v.app">
+                                    <div class="form-text">Frontend application URL</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">API IRI</label>
+                                    <input type="url" class="form-control" name="v4v_api_iri"
+                                        value="{{ config.v4v_api_iri }}" placeholder="https://api.v4v.app">
+                                    <div class="form-text">API endpoint URL</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Dynamic Fees URL</label>
+                                    <input type="text" class="form-control" name="dynamic_fees_url"
+                                        value="{{ config.dynamic_fees_url }}" placeholder="@username">
+                                    <div class="form-text">Hive account for dynamic fees</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Dynamic Fees Permlink</label>
+                                    <input type="text" class="form-control" name="dynamic_fees_permlink"
+                                        value="{{ config.dynamic_fees_permlink }}" placeholder="fees-config">
+                                    <div class="form-text">Permlink for fees post</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rate Limits -->
+                    <div class="config-section">
+                        <h6 class="border-bottom pb-2 mb-3">⏱️ Rate Limits</h6>
+                        <div id="rate-limits">
+                            {% for limit in config.lightning_rate_limits %}
+                            <div class="rate-limit-row">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">Hours</label>
+                                        <input type="number" class="form-control rate-hours" value="{{ limit.hours }}"
+                                            min="1">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Sats Limit</label>
+                                        <input type="number" class="form-control rate-sats" value="{{ limit.sats }}"
+                                            min="1">
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button type="button" class="btn btn-outline-danger btn-sm remove-rate-limit">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <button type="button" id="add-rate-limit" class="btn btn-outline-primary btn-sm mt-2">
+                            <i class="bi bi-plus"></i> Add Rate Limit
+                        </button>
+                        <input type="hidden" name="rate_limits_json" id="rate-limits-json">
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="text-center mt-4 pt-3 border-top">
+                        <button type="submit" class="btn btn-primary btn-lg px-5">
+                            <i class="bi bi-save me-2"></i>
+                            Update Configuration
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Rate limits management
+    function updateRateLimitsJson() {
+        const rateLimits = [];
+        document.querySelectorAll('.rate-limit-row').forEach(row => {
+            const hours = row.querySelector('.rate-hours').value;
+            const sats = row.querySelector('.rate-sats').value;
+            if (hours && sats) {
+                rateLimits.push({ hours: parseInt(hours), sats: parseInt(sats) });
+            }
+        });
+        document.getElementById('rate-limits-json').value = JSON.stringify(rateLimits);
+    }
+
+    // Add new rate limit
+    document.getElementById('add-rate-limit').addEventListener('click', function () {
+        const container = document.getElementById('rate-limits');
+        const newRow = document.createElement('div');
+        newRow.className = 'rate-limit-row';
+        newRow.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-md-3">
+                <label class="form-label">Hours</label>
+                <input type="number" class="form-control rate-hours" value="" min="1" placeholder="24">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Sats Limit</label>
+                <input type="number" class="form-control rate-sats" value="" min="1" placeholder="1000000">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-danger btn-sm remove-rate-limit">
+                    <i class="bi bi-trash"></i> Remove
+                </button>
+            </div>
+        </div>
+    `;
+        container.appendChild(newRow);
+    });
+
+    // Remove rate limit
+    document.addEventListener('click', function (e) {
+        if (e.target.classList.contains('remove-rate-limit') || e.target.closest('.remove-rate-limit')) {
+            const row = e.target.closest('.rate-limit-row');
+            if (row) {
+                row.remove();
+            }
+        }
+    });
+
+    // Update JSON before form submission
+    document.getElementById('config-form').addEventListener('submit', function () {
+        updateRateLimitsJson();
+    });
+
+    // Form validation
+    validateForm('config-form');
+
+    // Initialize tooltips and auto-save indicators
+    document.addEventListener('DOMContentLoaded', function () {
+        // Add change indicators
+        const form = document.getElementById('config-form');
+        const originalData = new FormData(form);
+
+        form.addEventListener('input', function () {
+            // Could add unsaved changes indicator here
+        });
+    });
+</script>
+{% endblock %}

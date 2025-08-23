@@ -1,0 +1,89 @@
+/* V4VApp Admin Custom Styles */
+
+:root {
+    --v4v-primary: #2563eb;
+    --v4v-secondary: #64748b;
+    --v4v-success: #10b981;
+    --v4v-warning: #f59e0b;
+    --v4v-danger: #ef4444;
+    --v4v-info: #06b6d4;
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Loading states */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+/* Form enhancements */
+.form-control:focus {
+    border-color: var(--v4v-primary);
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.25);
+}
+
+.btn-primary {
+    background-color: var(--v4v-primary);
+    border-color: var(--v4v-primary);
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+    border-color: #1d4ed8;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+
+    .config-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .rate-limit-row {
+        padding: 10px;
+    }
+}
+
+/* Success states */
+.success-highlight {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-left: 4px solid var(--v4v-success);
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+    .main-content {
+        background-color: #1f2937;
+    }
+
+    .card {
+        background-color: #374151;
+        color: white;
+    }
+}

@@ -3,7 +3,7 @@ from typing import Any, Dict
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.hive.hive_extras import (
     HiveTransferError,
@@ -229,10 +229,15 @@ async def send_transfer_custom_json(
         Dict[str, str]: The transaction result if successful, otherwise an empty dictionary.
     """
     try:
+        hive_config = InternalConfig().config.hive
         hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+        if hive_config.hive_accs.get(transfer.from_account):
+            send_from = transfer.from_account
+        else:
+            send_from = InternalConfig().server_id
         trx = await send_custom_json(
             json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
-            send_account=transfer.from_account,
+            send_account=send_from,
             active=True,
             id="v4vapp_dev_transfer",
             hive_client=hive_client,

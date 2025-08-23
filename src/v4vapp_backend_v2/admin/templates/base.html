@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title }} - V4VApp Admin{% endblock %}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --v4v-primary: #2563eb;
+            --v4v-secondary: #64748b;
+            --v4v-success: #10b981;
+            --v4v-warning: #f59e0b;
+            --v4v-danger: #ef4444;
+            --v4v-info: #06b6d4;
+        }
+
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--v4v-primary) 0%, #1e40af 100%);
+            color: white;
+        }
+
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            margin: 2px 0;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .main-content {
+            background-color: #f8fafc;
+            min-height: 100vh;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        .navbar-brand {
+            font-weight: 600;
+            color: var(--v4v-primary) !important;
+        }
+
+        .breadcrumb {
+            background: none;
+            padding: 0;
+        }
+
+        .breadcrumb-item+.breadcrumb-item::before {
+            content: "›";
+            color: var(--v4v-secondary);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-open {
+            background-color: var(--v4v-success);
+        }
+
+        .status-closed {
+            background-color: var(--v4v-danger);
+        }
+
+        .status-warning {
+            background-color: var(--v4v-warning);
+        }
+
+        .config-section {
+            margin-bottom: 2rem;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: var(--v4v-secondary);
+        }
+
+        .rate-limit-row {
+            margin-bottom: 10px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid var(--v4v-info);
+        }
+
+        .alert {
+            border: none;
+            border-radius: 12px;
+        }
+
+        .btn {
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .nav-pills .nav-link {
+            border-radius: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                min-height: auto;
+            }
+        }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
+                <div class="position-sticky pt-3">
+                    <div class="px-3 mb-4">
+                        <h4 class="text-white">🏠 V4VApp Admin</h4>
+                        <small class="text-white-50">Backend Administration</small>
+                    </div>
+
+                    <ul class="nav flex-column px-3">
+                        {% for item in nav_items %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if item.active %}active{% endif %}" href="{{ item.url }}">
+                                <span class="me-2">{{ item.icon }}</span>
+                                {{ item.name }}
+                                {% if item.badge %}
+                                <span class="badge bg-{{ item.badge_color }} ms-auto">{{ item.badge }}</span>
+                                {% endif %}
+                            </a>
+                            {% if item.description and item.active %}
+                            <small class="text-white-50 px-3 d-block">{{ item.description }}</small>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <hr class="my-3 mx-3" style="border-color: rgba(255, 255, 255, 0.2);">
+
+                    <ul class="nav flex-column px-3">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/docs" target="_blank">
+                                <span class="me-2">📚</span>
+                                API Docs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/health" target="_blank">
+                                <span class="me-2">❤️</span>
+                                Health Check
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div
+                    class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <div>
+                        <h1 class="h2 mb-0">{{ title }}</h1>
+                        {% if breadcrumbs %}
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb mt-1">
+                                {% for crumb in breadcrumbs %}
+                                <li class="breadcrumb-item">
+                                    {% if loop.last %}
+                                    {{ crumb.name }}
+                                    {% else %}
+                                    <a href="{{ crumb.url }}" class="text-decoration-none">{{ crumb.name }}</a>
+                                    {% endif %}
+                                </li>
+                                {% endfor %}
+                            </ol>
+                        </nav>
+                        {% endif %}
+                    </div>
+
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        {% block page_actions %}{% endblock %}
+                    </div>
+                </div>
+
+                <!-- Flash messages -->
+                {% if request.query_params.get('success') %}
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Configuration updated successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                {% if request.query_params.get('refreshed') %}
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                    Configuration refreshed from Hive!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                {% if request.query_params.get('error') %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    An error occurred. Please try again.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                <!-- Main content area -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom JS -->
+    <script>
+        // Auto-dismiss alerts after 5 seconds
+        setTimeout(function () {
+            var alerts = document.querySelectorAll('.alert-dismissible');
+            alerts.forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
+
+        // Form validation helper
+        function validateForm(formId) {
+            var form = document.getElementById(formId);
+            if (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            }
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>
