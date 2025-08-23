@@ -25,7 +25,7 @@ _OUTSTANDING_LOCK = asyncio.Lock()
 _NEXT_ALLOWED_WARN: dict[str, float] = {}
 
 _REPORTER_TASK: asyncio.Task | None = None
-_REPORT_INTERVAL_SEC = 120
+_REPORT_INTERVAL_SEC = 15
 
 
 class CustIDLockException(Exception):
@@ -81,11 +81,12 @@ async def _log_outstanding_locks() -> None:
             )
         logger.info(
             f"{ICON} {Fore.YELLOW}Outstanding lock waiters:\n"
-            + f"\n{Style.RESET_ALL}".join(lines),
+            + "\n".join(lines)
+            + f"{Style.RESET_ALL}",
             extra={"notification": False},
         )
     else:
-        logger.info(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
+        logger.debug(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
 
     # Active Redis locks (cross-process visibility)
     try:
@@ -104,11 +105,13 @@ async def _log_outstanding_locks() -> None:
                 )
                 lines.append(f"- {key} ttl={ttl_str}")
             logger.info(
-                f"{ICON} {Fore.MAGENTA}Active Redis locks:\n" + f"\n{Style.RESET_ALL}".join(lines),
+                f"{ICON} {Fore.MAGENTA}Active Redis locks:\n"
+                + "\n".join(lines)
+                + f"{Style.RESET_ALL}",
                 extra={"notification": False},
             )
         else:
-            logger.info(f"{ICON} No active Redis locks.", extra={"notification": False})
+            logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
     except Exception as e:
         logger.warning(f"{ICON} Failed to list Redis locks: {e}", extra={"notification": False})
 
