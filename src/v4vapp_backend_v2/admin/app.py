@@ -63,6 +63,14 @@ class AdminApp:
             v4vconfig.router, prefix="/admin/v4vconfig", tags=["V4V Configuration"]
         )
 
+        # Accounts router
+        from v4vapp_backend_v2.admin.routers import accounts
+
+        accounts.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            accounts.router, prefix="/admin/accounts", tags=["Account Balances"]
+        )
+
         # Add more routers here as needed
         # self.app.include_router(other_router, prefix="/admin/other", tags=["Other"])
 

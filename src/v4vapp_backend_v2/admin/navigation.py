@@ -37,6 +37,14 @@ class NavigationManager:
                 badge="Config",
                 badge_color="info",
             ),
+            NavigationItem(
+                name="Account Balances",
+                url="/admin/accounts",
+                icon="🏦",
+                description="View ledger account balances and transaction history",
+                badge="Ledger",
+                badge_color="success",
+            ),
             # Add more items here as you expand the admin interface
             # NavigationItem(
             #     name="User Management",
