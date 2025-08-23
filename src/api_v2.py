@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, status
 from fastapi.concurrency import asynccontextmanager
 
+from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.account_balances import (
     get_keepsats_balance,
     keepsats_balance_printout,
@@ -21,6 +22,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 ICON = "🤖"
 
@@ -28,13 +30,34 @@ ICON = "🤖"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     InternalConfig(config_filename="devhive.config.yaml", log_filename="api_v2.jsonl")
+    v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
+    if not v4v_config.fetch():
+        logger.warning("Failed to fetch V4V config")
+        await v4v_config.put()
     db_conn = DBConn()
     await db_conn.setup_database()
     logger.info("API v2 started", extra={"notification": False})
     yield
 
 
-app = FastAPI(lifespan=lifespan, redirect_slashes=False)
+app = FastAPI(
+    lifespan=lifespan,
+    title="V4VApp Lightning to Hive API",
+    description="The API to generate a Lightning Invoice and start a payment to Hive.",
+    version=__version__,
+    redirect_slashes=False,
+)
+# terms_of_service="http://example.com/terms/",
+# contact={
+#     "name": "Brian of London",
+#     "url": "http://x-force.example.com/contact/",
+#     "email": "dp@x-force.example.com",
+# },
+# license_info={
+#     "name": "Apache 2.0",
+#     "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+# },
+
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
 lightning_v1_router = APIRouter(prefix="/lightning")
@@ -218,7 +241,7 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
     )
 
 
-@lightning_v1_router.post("/keepsats/convert", tags=["lnd", "keepsats"])
+@lightning_v1_router.post("/keepsats/convert")
 async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransferResponse:
     """
     Converts a specified amount of sats from a user's Keepsats account to the internal server account.

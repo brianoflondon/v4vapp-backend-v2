@@ -57,7 +57,7 @@ async def test_put_settings_into_hive():
     hive_config.data.minimum_invoice_payment_sats += 1
     test_minimum_invoice_payment_sats = hive_config.data.minimum_invoice_payment_sats
     # FORCE them to update Hive
-    hive_config.put()
+    await hive_config.put(hive_client=hive)
     assert hive_config.data.minimum_invoice_payment_sats == test_minimum_invoice_payment_sats
     await asyncio.sleep(4)
     # Fetch the settings again to check if they were updated

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from v4vapp_backend_v2.config.setup import logger
 
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_verified_hive_client
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 
@@ -132,7 +132,7 @@ class V4VConfig:
             )
             self.fetch()
 
-    def fetch(self) -> None:
+    def fetch(self) -> bool:
         """
         Synchronizes configuration data from the Hive blockchain.
 
@@ -150,6 +150,9 @@ class V4VConfig:
             Exception: Logs an error if there is an issue fetching or processing
                 the settings from the Hive blockchain.
 
+        Returns:
+            bool: True if the settings were successfully fetched and validated, False otherwise.
+
         Logging:
             - Logs an info message when settings are successfully fetched and validated.
             - Logs an info message if no settings are found for the given account.
@@ -161,7 +164,7 @@ class V4VConfig:
                 # Uses the default values and doesn't check Hive.
                 logger.info("No server account name provided, using default values.")
                 self.data = V4VConfigData()
-                return
+                return False
 
             metadata = self._get_posting_metadata()
             if metadata:
@@ -173,20 +176,23 @@ class V4VConfig:
                         f"Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
                     )
+                    return True
             else:
                 metadata = {}
                 logger.info(
                     f"No settings found in Hive. {self.server_accname}",
                 )
                 self.data = V4VConfigData()
+                return False
         except Exception as ex:
             self.data = V4VConfigData()
             logger.warning(
                 f"Error fetching settings from Hive: {ex} using default values.",
                 extra={"hive_config": self.data.model_dump()},
             )
+        return True if self.data else False
 
-    def put(self) -> None:
+    async def put(self, hive_client: Hive | None = None) -> None:
         """
         Updates the Hive configuration settings with the provided data.
 
@@ -205,7 +211,9 @@ class V4VConfig:
             - Logs a message if the settings in Hive do not need to change.
             - Logs a message with the transaction ID when the settings are successfully updated.
         """
-        acc = Account(self.server_accname, blockchain_instance=self.hive, lazy=True)
+        if not hive_client:
+            hive_client, server_id = await get_verified_hive_client()
+        acc = Account(self.server_accname, blockchain_instance=hive_client, lazy=True)
         existing_metadata = self._get_posting_metadata()
         if not existing_metadata:
             existing_metadata = {}
@@ -224,7 +232,10 @@ class V4VConfig:
         # If the settings are different, update them in Hive
         # and add the new settings to the metadata
         # Serialize the new settings
-        existing_metadata.pop(CONFIG_ROOT_KEY)
+
+        # Fix: Only pop the key if it exists
+        if CONFIG_ROOT_KEY in existing_metadata:
+            existing_metadata.pop(CONFIG_ROOT_KEY)
         new_meta = {**(existing_metadata or {}), CONFIG_ROOT_KEY: self.data.model_dump()}
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
