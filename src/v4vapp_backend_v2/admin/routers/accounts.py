@@ -165,6 +165,23 @@ async def get_account_balance(
         for account_type in accounts_by_type:
             accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
 
+        # Convert details to JSON-serializable format
+        details_json = None
+        if details:
+            try:
+                # Convert Pydantic model to dictionary, then to JSON-serializable format
+                details_json = details.model_dump(mode="json")
+            except Exception as e:
+                # Fallback: try to convert to dict
+                try:
+                    details_json = dict(details)
+                except:
+                    # Last resort: convert to string representation
+                    details_json = {
+                        "error": f"Could not serialize details: {str(e)}",
+                        "string_repr": str(details),
+                    }
+
         return templates.TemplateResponse(
             "accounts/balance_result.html",
             {
@@ -174,7 +191,7 @@ async def get_account_balance(
                 "account": account,
                 "account_string": account_string,
                 "printout": printout,
-                "details": details,
+                "details": details_json,
                 "line_items": line_items_bool,
                 "user_memos": user_memos_bool,
                 "as_of_date": as_of_date,

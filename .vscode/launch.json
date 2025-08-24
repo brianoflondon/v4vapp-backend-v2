@@ -30,7 +30,7 @@
             "program": "${workspaceFolder}/src/v4vapp_backend_v2/admin/run_admin.py",
             "args": [
                 "--host",
-                "127.0.0.1",
+                "0.0.0.0",
                 "--port",
                 "8080",
                 "--config",

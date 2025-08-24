@@ -269,6 +269,7 @@
     </div>
 
     <!-- Balance Controls -->
+    <!-- Balance Controls -->
     <div class="card mb-3">
         <div class="card-header">
             <h6 class="card-title mb-0">
@@ -283,7 +284,7 @@
                 <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
 
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="lineItemsSwitch" name="line_items"
                                 value="true" {{ 'checked' if line_items else '' }} onchange="updateBalanceReport()">
@@ -294,7 +295,7 @@
                         </div>
                         <small class="text-muted">Display individual transaction lines</small>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="userMemosSwitch" name="user_memos"
                                 value="true" {{ 'checked' if user_memos else '' }} onchange="updateBalanceReport()">
@@ -305,95 +306,299 @@
                         </div>
                         <small class="text-muted">Display user memo information</small>
                     </div>
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                                <i class="bi bi-code me-1"></i>Toggle Raw Data
+                            </button>
+                        </div>
+                        <small class="text-muted d-block text-end">View underlying data structure</small>
+                    </div>
                 </div>
             </form>
         </div>
-    </div>
+        }
 
-    <!-- Balance Report -->
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-file-text me-2"></i>
-                Balance Report
-                <small class="text-muted ms-2">
-                    (Line Items: {{ 'Yes' if line_items else 'No' }},
-                    User Memos: {{ 'Yes' if user_memos else 'No' }})
-                </small>
-            </h5>
-        </div>
-        <div class="card-body p-0">
-            <div id="loadingIndicator" class="text-center p-4" style="display: none;">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <div class="mt-2">Recalculating balance...</div>
+        <!-- Balance Report -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-text me-2"></i>
+                    Balance Report
+                    <small class="text-muted ms-2">
+                        (Line Items: {{ 'Yes' if line_items else 'No' }},
+                        User Memos: {{ 'Yes' if user_memos else 'No' }})
+                    </small>
+                </h5>
             </div>
-            <div class="balance-printout" id="balancePrintout">{{ printout }}</div>
+            <div class="card-body p-0">
+                <div id="loadingIndicator" class="text-center p-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="mt-2">Recalculating balance...</div>
+                </div>
+                <div class="balance-printout" id="balancePrintout">{{ printout }}</div>
+            </div>
+        </div>
+
+        <!-- Raw Data (Collapsible) -->
+        <div class="collapse mt-3" id="rawData">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-code-square me-1"></i>
+                        Raw Account Balance Data (JSON)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <pre class="bg-dark text-light p-3 rounded"
+                        style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ details | tojson(indent=2) }}</code></pre>
+                </div>
+            </div>
         </div>
     </div>
-</div>
-{% endblock %}
+    {% endblock %}
 
-{% block extra_js %}
-<script>
-    function toggleAccountSelector() {
-        const accountSelectorCard = document.getElementById('accountSelectorCard');
-        if (accountSelectorCard) {
-            if (accountSelectorCard.style.display === 'none') {
-                accountSelectorCard.style.display = 'block';
-                // Scroll to the selector and focus on it
-                accountSelectorCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Focus on the select element after a short delay
-                setTimeout(() => {
-                    document.getElementById('accountSelector').focus();
-                }, 300);
-            } else {
-                accountSelectorCard.style.display = 'none';
+    {% block extra_js %}
+    <script>
+        function toggleAccountSelector() {
+            const accountSelectorCard = document.getElementById('accountSelectorCard');
+            if (accountSelectorCard) {
+                if (accountSelectorCard.style.display === 'none') {
+                    accountSelectorCard.style.display = 'block';
+                    // Scroll to the selector and focus on it
+                    accountSelectorCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Focus on the select element after a short delay
+                    setTimeout(() => {
+                        document.getElementById('accountSelector').focus();
+                    }, 300);
+                } else {
+                    accountSelectorCard.style.display = 'none';
+                }
             }
         }
-    }
 
-    function refreshBalance() {
-        // Add spinning animation to refresh button
-        const refreshBtn = document.getElementById('refreshBtn');
-        if (refreshBtn) {
-            refreshBtn.classList.add('btn-refresh-spinning');
-            refreshBtn.disabled = true;
-            refreshBtn.title = 'Refreshing...';
-            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refreshing...';
+        function refreshBalance() {
+            // Add spinning animation to refresh button
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.classList.add('btn-refresh-spinning');
+                refreshBtn.disabled = true;
+                refreshBtn.title = 'Refreshing...';
+                refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refreshing...';
+            }
+
+            // Show loading indicator
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const balancePrintout = document.getElementById('balancePrintout');
+
+            if (loadingIndicator && balancePrintout) {
+                loadingIndicator.style.display = 'block';
+                balancePrintout.style.display = 'none';
+            }
+
+            // Use the existing balance options form to refresh with current settings
+            const form = document.getElementById('balanceOptionsForm');
+            if (form) {
+                // Create FormData from the existing form (which has current settings)
+                const formData = new FormData(form);
+
+                // Ensure checkboxes are handled properly
+                const lineItemsSwitch = document.getElementById('lineItemsSwitch');
+                const userMemosSwitch = document.getElementById('userMemosSwitch');
+
+                if (lineItemsSwitch) {
+                    formData.set('line_items', lineItemsSwitch.checked ? 'true' : 'false');
+                }
+                if (userMemosSwitch) {
+                    formData.set('user_memos', userMemosSwitch.checked ? 'true' : 'false');
+                }
+
+                // For refresh, zero out the as_of_date_str to get current time
+                formData.set('as_of_date_str', '');
+
+                // Submit via fetch to update content dynamically
+                fetch('/admin/accounts/balance', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.text())
+                    .then(html => {
+                        // Parse the response HTML to extract the new printout
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newPrintout = doc.getElementById('balancePrintout');
+
+                        if (newPrintout && balancePrintout) {
+                            balancePrintout.innerHTML = newPrintout.innerHTML;
+                        }
+
+                        // Update the header status text
+                        const statusText = doc.querySelector('.card-title small.text-muted');
+                        if (statusText) {
+                            const currentStatusText = document.querySelector('.card-title small.text-muted');
+                            if (currentStatusText) {
+                                currentStatusText.innerHTML = statusText.innerHTML;
+                            }
+                        }
+
+                        // Update the Report Date in the account details
+                        const newDetailItems = doc.querySelectorAll('.detail-item');
+                        const currentDetailItems = document.querySelectorAll('.detail-item');
+
+                        newDetailItems.forEach((newItem, index) => {
+                            const label = newItem.querySelector('.detail-label');
+                            if (label && label.textContent.trim() === 'Report Date:' && currentDetailItems[index]) {
+                                const newDateValue = newItem.querySelector('.detail-value');
+                                const currentDateValue = currentDetailItems[index].querySelector('.detail-value');
+                                if (newDateValue && currentDateValue) {
+                                    currentDateValue.textContent = newDateValue.textContent;
+                                }
+                            }
+                        });
+
+                        // Hide loading indicator
+                        if (loadingIndicator && balancePrintout) {
+                            loadingIndicator.style.display = 'none';
+                            balancePrintout.style.display = 'block';
+                        }
+
+                        // Remove spinning animation
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('btn-refresh-spinning');
+                            refreshBtn.disabled = false;
+                            refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
+                            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error refreshing balance:', error);
+
+                        // Hide loading indicator and show error
+                        if (loadingIndicator && balancePrintout) {
+                            loadingIndicator.style.display = 'none';
+                            balancePrintout.style.display = 'block';
+                            balancePrintout.innerHTML = '<div class="text-danger p-3">Error refreshing report. Please try again.</div>';
+                        }
+
+                        // Remove spinning animation
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('btn-refresh-spinning');
+                            refreshBtn.disabled = false;
+                            refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
+                            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+                        }
+                    });
+            } else {
+                // Fallback: reload the page
+                window.location.reload();
+            }
         }
 
-        // Show loading indicator
-        const loadingIndicator = document.getElementById('loadingIndicator');
-        const balancePrintout = document.getElementById('balancePrintout');
+        function switchAccount() {
+            const accountSelector = document.getElementById('accountSelector');
+            const selectedAccount = accountSelector.value;
 
-        if (loadingIndicator && balancePrintout) {
+            if (selectedAccount) {
+                // Show loading indicator
+                const loadingIndicator = document.getElementById('loadingIndicator');
+                const balancePrintout = document.getElementById('balancePrintout');
+
+                if (loadingIndicator && balancePrintout) {
+                    loadingIndicator.style.display = 'block';
+                    balancePrintout.style.display = 'none';
+                }
+
+                // Submit the form
+                document.getElementById('accountSelectorForm').submit();
+            }
+        }
+
+        function filterQuickSwitchBySub() {
+            const subFilter = document.getElementById('quickSubFilter').value;
+            const accountSelect = document.getElementById('accountSelector');
+            const options = accountSelect.querySelectorAll('option');
+            const optgroups = accountSelect.querySelectorAll('optgroup');
+
+            // Reset selection
+            accountSelect.value = '';
+
+            // If no filter, show all options
+            if (!subFilter) {
+                options.forEach(option => {
+                    option.style.display = '';
+                });
+                optgroups.forEach(optgroup => {
+                    optgroup.style.display = '';
+                });
+                return;
+            }
+
+            // Track which optgroups have visible options
+            const visibleOptgroups = new Set();
+            let matchingOptions = [];
+
+            // Filter options by sub account
+            options.forEach(option => {
+                const optionSub = option.getAttribute('data-sub');
+                const optionType = option.getAttribute('data-type');
+
+                if (option.value === '') {
+                    // Keep the "Select an account..." option
+                    option.style.display = '';
+                } else if (optionSub === subFilter) {
+                    option.style.display = '';
+                    visibleOptgroups.add(optionType);
+                    matchingOptions.push(option);
+                } else {
+                    option.style.display = 'none';
+                }
+            });
+
+            // Show/hide optgroups based on whether they have visible options
+            optgroups.forEach(optgroup => {
+                const label = optgroup.label; // Account type from label
+                if (visibleOptgroups.has(label)) {
+                    optgroup.style.display = '';
+                } else {
+                    optgroup.style.display = 'none';
+                }
+            });
+
+            // If only one matching option, auto-select it
+            if (matchingOptions.length === 1) {
+                accountSelect.value = matchingOptions[0].value;
+                // Add visual feedback
+                accountSelect.classList.add('border-success');
+                setTimeout(() => {
+                    accountSelect.classList.remove('border-success');
+                }, 2000);
+            }
+        }
+
+        function updateBalanceReport() {
+            const form = document.getElementById('balanceOptionsForm');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const balancePrintout = document.getElementById('balancePrintout');
+
+            // Show loading indicator
             loadingIndicator.style.display = 'block';
             balancePrintout.style.display = 'none';
-        }
 
-        // Use the existing balance options form to refresh with current settings
-        const form = document.getElementById('balanceOptionsForm');
-        if (form) {
-            // Create FormData from the existing form (which has current settings)
+            // Create FormData from the form
             const formData = new FormData(form);
 
-            // Ensure checkboxes are handled properly
-            const lineItemsSwitch = document.getElementById('lineItemsSwitch');
-            const userMemosSwitch = document.getElementById('userMemosSwitch');
-
-            if (lineItemsSwitch) {
-                formData.set('line_items', lineItemsSwitch.checked ? 'true' : 'false');
+            // Ensure unchecked checkboxes are handled properly
+            if (!document.getElementById('lineItemsSwitch').checked) {
+                formData.set('line_items', 'false');
             }
-            if (userMemosSwitch) {
-                formData.set('user_memos', userMemosSwitch.checked ? 'true' : 'false');
+            if (!document.getElementById('userMemosSwitch').checked) {
+                formData.set('user_memos', 'false');
             }
 
-            // For refresh, zero out the as_of_date_str to get current time
-            formData.set('as_of_date_str', '');
-
-            // Submit via fetch to update content dynamically
+            // Submit the form via fetch
             fetch('/admin/accounts/balance', {
                 method: 'POST',
                 body: formData
@@ -405,264 +610,85 @@
                     const doc = parser.parseFromString(html, 'text/html');
                     const newPrintout = doc.getElementById('balancePrintout');
 
-                    if (newPrintout && balancePrintout) {
+                    if (newPrintout) {
+                        // Update the printout content
                         balancePrintout.innerHTML = newPrintout.innerHTML;
-                    }
 
-                    // Update the header status text
-                    const statusText = doc.querySelector('.card-title small.text-muted');
-                    if (statusText) {
-                        const currentStatusText = document.querySelector('.card-title small.text-muted');
-                        if (currentStatusText) {
-                            currentStatusText.innerHTML = statusText.innerHTML;
-                        }
-                    }
-
-                    // Update the Report Date in the account details
-                    const newDetailItems = doc.querySelectorAll('.detail-item');
-                    const currentDetailItems = document.querySelectorAll('.detail-item');
-
-                    newDetailItems.forEach((newItem, index) => {
-                        const label = newItem.querySelector('.detail-label');
-                        if (label && label.textContent.trim() === 'Report Date:' && currentDetailItems[index]) {
-                            const newDateValue = newItem.querySelector('.detail-value');
-                            const currentDateValue = currentDetailItems[index].querySelector('.detail-value');
-                            if (newDateValue && currentDateValue) {
-                                currentDateValue.textContent = newDateValue.textContent;
+                        // Update the header status text
+                        const statusText = doc.querySelector('.card-title small.text-muted');
+                        if (statusText) {
+                            const currentStatusText = document.querySelector('.card-title small.text-muted');
+                            if (currentStatusText) {
+                                currentStatusText.innerHTML = statusText.innerHTML;
                             }
                         }
-                    });
+                    }
 
                     // Hide loading indicator
-                    if (loadingIndicator && balancePrintout) {
-                        loadingIndicator.style.display = 'none';
-                        balancePrintout.style.display = 'block';
-                    }
-
-                    // Remove spinning animation
-                    if (refreshBtn) {
-                        refreshBtn.classList.remove('btn-refresh-spinning');
-                        refreshBtn.disabled = false;
-                        refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
-                        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
-                    }
+                    loadingIndicator.style.display = 'none';
+                    balancePrintout.style.display = 'block';
                 })
                 .catch(error => {
-                    console.error('Error refreshing balance:', error);
+                    console.error('Error updating balance report:', error);
 
                     // Hide loading indicator and show error
-                    if (loadingIndicator && balancePrintout) {
-                        loadingIndicator.style.display = 'none';
-                        balancePrintout.style.display = 'block';
-                        balancePrintout.innerHTML = '<div class="text-danger p-3">Error refreshing report. Please try again.</div>';
-                    }
-
-                    // Remove spinning animation
-                    if (refreshBtn) {
-                        refreshBtn.classList.remove('btn-refresh-spinning');
-                        refreshBtn.disabled = false;
-                        refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
-                        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
-                    }
+                    loadingIndicator.style.display = 'none';
+                    balancePrintout.style.display = 'block';
+                    balancePrintout.innerHTML = '<div class="text-danger p-3">Error updating report. Please try again.</div>';
                 });
-        } else {
-            // Fallback: reload the page
-            window.location.reload();
         }
-    }
 
-    function switchAccount() {
-        const accountSelector = document.getElementById('accountSelector');
-        const selectedAccount = accountSelector.value;
-
-        if (selectedAccount) {
-            // Show loading indicator
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            const balancePrintout = document.getElementById('balancePrintout');
-
-            if (loadingIndicator && balancePrintout) {
-                loadingIndicator.style.display = 'block';
-                balancePrintout.style.display = 'none';
-            }
-
-            // Submit the form
-            document.getElementById('accountSelectorForm').submit();
+        function downloadReport() {
+            const content = document.getElementById('balancePrintout').textContent;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `balance_report_{{ account.name.replace(' ', '_') }}_{{ account.sub.replace(' ', '_') if account.sub else 'no_sub' }}_{{ as_of_date.strftime('%Y%m%d_%H%M%S') }}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
         }
-    }
 
-    function filterQuickSwitchBySub() {
-        const subFilter = document.getElementById('quickSubFilter').value;
-        const accountSelect = document.getElementById('accountSelector');
-        const options = accountSelect.querySelectorAll('option');
-        const optgroups = accountSelect.querySelectorAll('optgroup');
+        function copyToClipboard() {
+            const content = document.getElementById('balancePrintout').textContent;
+            navigator.clipboard.writeText(content).then(function () {
+                // Show success message
+                const btn = event.target.closest('button');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-success');
 
-        // Reset selection
-        accountSelect.value = '';
-
-        // If no filter, show all options
-        if (!subFilter) {
-            options.forEach(option => {
-                option.style.display = '';
+                setTimeout(function () {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-info');
+                }, 2000);
+            }, function (err) {
+                console.error('Could not copy text: ', err);
+                alert('Failed to copy to clipboard');
             });
-            optgroups.forEach(optgroup => {
-                optgroup.style.display = '';
-            });
-            return;
         }
 
-        // Track which optgroups have visible options
-        const visibleOptgroups = new Set();
-        let matchingOptions = [];
+        // Auto-scroll to top of balance report when page loads
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('balancePrintout').scrollTop = 0;
 
-        // Filter options by sub account
-        options.forEach(option => {
-            const optionSub = option.getAttribute('data-sub');
-            const optionType = option.getAttribute('data-type');
-
-            if (option.value === '') {
-                // Keep the "Select an account..." option
-                option.style.display = '';
-            } else if (optionSub === subFilter) {
-                option.style.display = '';
-                visibleOptgroups.add(optionType);
-                matchingOptions.push(option);
-            } else {
-                option.style.display = 'none';
-            }
-        });
-
-        // Show/hide optgroups based on whether they have visible options
-        optgroups.forEach(optgroup => {
-            const label = optgroup.label; // Account type from label
-            if (visibleOptgroups.has(label)) {
-                optgroup.style.display = '';
-            } else {
-                optgroup.style.display = 'none';
-            }
-        });
-
-        // If only one matching option, auto-select it
-        if (matchingOptions.length === 1) {
-            accountSelect.value = matchingOptions[0].value;
-            // Add visual feedback
-            accountSelect.classList.add('border-success');
-            setTimeout(() => {
-                accountSelect.classList.remove('border-success');
-            }, 2000);
-        }
-    }
-
-    function updateBalanceReport() {
-        const form = document.getElementById('balanceOptionsForm');
-        const loadingIndicator = document.getElementById('loadingIndicator');
-        const balancePrintout = document.getElementById('balancePrintout');
-
-        // Show loading indicator
-        loadingIndicator.style.display = 'block';
-        balancePrintout.style.display = 'none';
-
-        // Create FormData from the form
-        const formData = new FormData(form);
-
-        // Ensure unchecked checkboxes are handled properly
-        if (!document.getElementById('lineItemsSwitch').checked) {
-            formData.set('line_items', 'false');
-        }
-        if (!document.getElementById('userMemosSwitch').checked) {
-            formData.set('user_memos', 'false');
-        }
-
-        // Submit the form via fetch
-        fetch('/admin/accounts/balance', {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => response.text())
-            .then(html => {
-                // Parse the response HTML to extract the new printout
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const newPrintout = doc.getElementById('balancePrintout');
-
-                if (newPrintout) {
-                    // Update the printout content
-                    balancePrintout.innerHTML = newPrintout.innerHTML;
-
-                    // Update the header status text
-                    const statusText = doc.querySelector('.card-title small.text-muted');
-                    if (statusText) {
-                        const currentStatusText = document.querySelector('.card-title small.text-muted');
-                        if (currentStatusText) {
-                            currentStatusText.innerHTML = statusText.innerHTML;
-                        }
-                    }
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function (e) {
+                // Ctrl/Cmd + K to toggle account selector
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    toggleAccountSelector();
                 }
-
-                // Hide loading indicator
-                loadingIndicator.style.display = 'none';
-                balancePrintout.style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error updating balance report:', error);
-
-                // Hide loading indicator and show error
-                loadingIndicator.style.display = 'none';
-                balancePrintout.style.display = 'block';
-                balancePrintout.innerHTML = '<div class="text-danger p-3">Error updating report. Please try again.</div>';
+                // F5 or Ctrl/Cmd + R to refresh balance
+                else if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'r')) {
+                    e.preventDefault();
+                    refreshBalance();
+                }
             });
-    }
-
-    function downloadReport() {
-        const content = document.getElementById('balancePrintout').textContent;
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `balance_report_{{ account.name.replace(' ', '_') }}_{{ account.sub.replace(' ', '_') if account.sub else 'no_sub' }}_{{ as_of_date.strftime('%Y%m%d_%H%M%S') }}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }
-
-    function copyToClipboard() {
-        const content = document.getElementById('balancePrintout').textContent;
-        navigator.clipboard.writeText(content).then(function () {
-            // Show success message
-            const btn = event.target.closest('button');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
-            btn.classList.remove('btn-outline-info');
-            btn.classList.add('btn-success');
-
-            setTimeout(function () {
-                btn.innerHTML = originalText;
-                btn.classList.remove('btn-success');
-                btn.classList.add('btn-outline-info');
-            }, 2000);
-        }, function (err) {
-            console.error('Could not copy text: ', err);
-            alert('Failed to copy to clipboard');
         });
-    }
-
-    // Auto-scroll to top of balance report when page loads
-    document.addEventListener('DOMContentLoaded', function () {
-        document.getElementById('balancePrintout').scrollTop = 0;
-
-        // Add keyboard shortcuts
-        document.addEventListener('keydown', function (e) {
-            // Ctrl/Cmd + K to toggle account selector
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-                toggleAccountSelector();
-            }
-            // F5 or Ctrl/Cmd + R to refresh balance
-            else if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'r')) {
-                e.preventDefault();
-                refreshBalance();
-            }
-        });
-    });
-</script>
-{% endblock %}
+    </script>
+    {% endblock %}
