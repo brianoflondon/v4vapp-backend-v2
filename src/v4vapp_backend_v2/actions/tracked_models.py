@@ -1,6 +1,7 @@
 import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
+from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
 from pydantic import BaseModel, Field
@@ -18,6 +19,15 @@ from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 ICON = "🔄"
 
 
+class ReplyType(StrEnum):
+    TRANSFER = "transfer"
+    INVOICE = "invoice"
+    PAYMENT = "payment"
+    CUSTOM_JSON = "custom_json"
+    LEDGER_ERROR = "ledger_error"
+    UNKNOWN = "unknown"
+
+
 class ReplyModel(BaseModel):
     """
     Base model for operations that can have replies.
@@ -25,7 +35,7 @@ class ReplyModel(BaseModel):
     """
 
     reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
-    reply_type: str | None = Field(
+    reply_type: ReplyType | None = Field(
         None,
         description="Transaction type of the reply, i.e. 'transfer' 'invoice' 'payment'",
         exclude=False,

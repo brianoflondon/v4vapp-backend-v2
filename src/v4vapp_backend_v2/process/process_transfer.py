@@ -7,6 +7,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
+from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
@@ -67,7 +68,7 @@ async def follow_on_transfer(
     reply_messages = []
     if tracked_op.replies:
         for reply in tracked_op.replies:
-            if reply.reply_type != "ledger_error":
+            if reply.reply_type not in [ReplyType.LEDGER_ERROR, ReplyType.CUSTOM_JSON]:
                 message = f"Operation has a {reply.reply_type} reply, skipping processing."
                 logger.info(
                     message,
@@ -77,6 +78,10 @@ async def follow_on_transfer(
             else:
                 logger.info(f"Ignoring {reply.reply_type} {reply.reply_id}.")
         if reply_messages:
+            logger.warning(
+                f"Operation {tracked_op.group_id} already has replies: {', '.join(reply_messages)}",
+                extra={"notification": False, **tracked_op.log_extra},
+            )
             raise HiveTransferError(f"Operation already has replies: {', '.join(reply_messages)}")
 
     if not tracked_op.conv:

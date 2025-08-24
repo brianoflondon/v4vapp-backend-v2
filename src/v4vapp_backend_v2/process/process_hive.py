@@ -10,7 +10,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerType,
 )
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer, load_tracked_object
-from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.actions.tracked_models import ReplyType, TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
@@ -23,7 +23,7 @@ from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
 from v4vapp_backend_v2.process.process_errors import HiveLightningError
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
-from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
+from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
 
 # MARK: Hive Transaction Processing
 
@@ -83,6 +83,10 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
 
     except HiveLightningError as e:
         logger.error(f"Hive to Lightning error: {e}")
+        return []
+
+    except HiveTransferError as e:
+        logger.error(f"Hive transfer error: {e}")
         return []
 
 
@@ -231,7 +235,7 @@ async def process_transfer_op(
         reply_id = f"{hive_transfer.group_id}_ledger_error"
         try:
             hive_transfer.add_reply(
-                reply_id=reply_id, reply_type="ledger_error", reply_error=message
+                reply_id=reply_id, reply_type=ReplyType.LEDGER_ERROR, reply_error=message
             )
             await hive_transfer.save()
         except ValueError as e:
@@ -381,7 +385,7 @@ async def process_custom_json(
                 if parent_op:
                     parent_op.add_reply(
                         reply_id=custom_json.group_id_p,
-                        reply_type=custom_json.op_type,
+                        reply_type=ReplyType.CUSTOM_JSON,
                         reply_msat=keepsats_transfer.msats if keepsats_transfer.msats else 0,
                         reply_message="Reply to transfer",
                     )
