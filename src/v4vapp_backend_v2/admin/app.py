@@ -34,6 +34,7 @@ class AdminApp:
     """Main admin application class"""
 
     def __init__(self, config_filename: str = "devhive.config.yaml"):
+        InternalConfig(config_filename=config_filename, log_filename="admin_v2.jsonl")
         self.app = FastAPI(
             lifespan=lifespan,
             title="V4VApp Admin Interface",
@@ -41,6 +42,7 @@ class AdminApp:
             version="1.0.0",
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
+            redirect_slashes=False,
         )
 
         # Store config_filename in app state

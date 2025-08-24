@@ -179,3 +179,4 @@ config/config_env.yaml
 config/*config.yaml
 config/*config.json
 config/mongo-keyfile
+balance_sheet.rtf
