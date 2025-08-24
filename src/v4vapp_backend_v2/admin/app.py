@@ -42,7 +42,6 @@ class AdminApp:
             version="1.0.0",
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
-            redirect_slashes=False,
         )
 
         # Store config_filename in app state
@@ -87,6 +86,14 @@ class AdminApp:
         accounts.set_templates_and_nav(self.templates, self.nav_manager)
         self.app.include_router(
             accounts.router, prefix="/admin/accounts", tags=["Account Balances"]
+        )
+
+        # Financial Reports router
+        from v4vapp_backend_v2.admin.routers import financial_reports
+
+        financial_reports.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            financial_reports.router, prefix="/admin/financial-reports", tags=["Financial Reports"]
         )
 
         # Add more routers here as needed

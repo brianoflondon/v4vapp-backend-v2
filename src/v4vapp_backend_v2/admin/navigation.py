@@ -45,6 +45,14 @@ class NavigationManager:
                 badge="Ledger",
                 badge_color="success",
             ),
+            NavigationItem(
+                name="Financial Reports",
+                url="/admin/financial-reports",
+                icon="📊",
+                description="Balance sheet, profit & loss, and comprehensive financial reports",
+                badge="Reports",
+                badge_color="info",
+            ),
             # Add more items here as you expand the admin interface
             # NavigationItem(
             #     name="User Management",
