@@ -60,7 +60,7 @@ async def accounts_page(request: Request):
         ]
 
     # Group accounts by account_type
-    accounts_by_type: dict[str, list] = {}
+    accounts_by_type: dict[str, list[LedgerAccount]] = {}
     for account in all_accounts:
         account_type = account.account_type.value
         if account_type not in accounts_by_type:
@@ -92,8 +92,8 @@ async def accounts_page(request: Request):
 async def get_account_balance(
     request: Request,
     account_string: str = Form(...),
-    line_items: bool = Form(True),
-    user_memos: bool = Form(True),
+    line_items: Optional[str] = Form("true"),
+    user_memos: Optional[str] = Form("true"),
     as_of_date_str: Optional[str] = Form(None),
     age_hours: Optional[int] = Form(0),
 ):
@@ -102,6 +102,9 @@ async def get_account_balance(
         raise RuntimeError("Templates and navigation not initialized")
 
     try:
+        # Convert string form values to booleans
+        line_items_bool = bool(line_items and line_items.lower() in ("true", "on", "1"))
+        user_memos_bool = bool(user_memos and user_memos.lower() in ("true", "on", "1"))
 
         # Parse the account from string
         account = LedgerAccount.from_string(account_string)
@@ -121,13 +124,46 @@ async def get_account_balance(
         # Get the balance printout
         printout, details = await account_balance_printout(
             account=account,
-            line_items=line_items,
-            user_memos=user_memos,
+            line_items=line_items_bool,
+            user_memos=user_memos_bool,
             as_of_date=as_of_date,
             age=age,
         )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
+
+        # Get all accounts for the selector
+        try:
+            all_accounts = await list_all_accounts()
+        except Exception:
+            # If database is not available, use mock data
+            from v4vapp_backend_v2.accounting.ledger_account_classes import (
+                AssetAccount,
+                ExpenseAccount,
+                LiabilityAccount,
+                RevenueAccount,
+            )
+
+            all_accounts = [
+                AssetAccount(name="Customer Deposits Hive", sub="devser.v4vapp"),
+                AssetAccount(name="Treasury Lightning", sub="from_keepsats"),
+                LiabilityAccount(name="VSC Liability", sub="v4vapp-test"),
+                LiabilityAccount(name="VSC Liability", sub="v4vapp.qrc"),
+                RevenueAccount(name="Fee Income Keepsats", sub="from_keepsats"),
+                ExpenseAccount(name="Fee Expenses Lightning", sub=""),
+            ]
+
+        # Group accounts by type for the selector
+        accounts_by_type = {}
+        for acc in all_accounts:
+            account_type = acc.account_type.value
+            if account_type not in accounts_by_type:
+                accounts_by_type[account_type] = []
+            accounts_by_type[account_type].append(acc)
+
+        # Sort each group
+        for account_type in accounts_by_type:
+            accounts_by_type[account_type].sort(key=lambda x: (x.name, x.sub))
 
         return templates.TemplateResponse(
             "accounts/balance_result.html",
@@ -139,10 +175,11 @@ async def get_account_balance(
                 "account_string": account_string,
                 "printout": printout,
                 "details": details,
-                "line_items": line_items,
-                "user_memos": user_memos,
+                "line_items": line_items_bool,
+                "user_memos": user_memos_bool,
                 "as_of_date": as_of_date,
                 "age_hours": age_hours,
+                "accounts_by_type": accounts_by_type,
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
