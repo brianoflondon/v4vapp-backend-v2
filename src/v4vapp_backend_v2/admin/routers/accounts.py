@@ -39,12 +39,6 @@ async def accounts_page(request: Request):
         raise RuntimeError("Templates and navigation not initialized")
 
     try:
-        # Ensure database is set up
-        from v4vapp_backend_v2.database.db_pymongo import DBConn
-
-        db_conn = DBConn()
-        await db_conn.setup_database()
-
         # Get all accounts grouped by type
         all_accounts = await list_all_accounts()
     except Exception:
@@ -108,11 +102,6 @@ async def get_account_balance(
         raise RuntimeError("Templates and navigation not initialized")
 
     try:
-        # Ensure database is set up
-        from v4vapp_backend_v2.database.db_pymongo import DBConn
-
-        db_conn = DBConn()
-        await db_conn.setup_database()
 
         # Parse the account from string
         account = LedgerAccount.from_string(account_string)
@@ -144,7 +133,7 @@ async def get_account_balance(
             "accounts/balance_result.html",
             {
                 "request": request,
-                "title": f"Balance: {account.name}",
+                "title": f"Balance: {account}",
                 "nav_items": nav_items,
                 "account": account,
                 "account_string": account_string,

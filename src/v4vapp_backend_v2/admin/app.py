@@ -4,6 +4,7 @@ Main Admin Application
 FastAPI application for V4VApp backend administration.
 """
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,7 +14,20 @@ from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2 import __version__ as project_version
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.admin.routers import v4vconfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db_pymongo import DBConn
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Access config_filename from app.state
+    config_filename = app.state.config_filename
+    InternalConfig(config_filename=config_filename, log_filename="admin_v2.jsonl")
+    db_conn = DBConn()
+    await db_conn.setup_database()
+    logger.info("Admin Interface and API started", extra={"notification": False})
+    yield
 
 
 class AdminApp:
@@ -21,12 +35,16 @@ class AdminApp:
 
     def __init__(self, config_filename: str = "devhive.config.yaml"):
         self.app = FastAPI(
+            lifespan=lifespan,
             title="V4VApp Admin Interface",
             description="Administration interface for V4VApp backend services",
             version="1.0.0",
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
         )
+
+        # Store config_filename in app state
+        self.app.state.config_filename = config_filename
 
         # Initialize internal config
         self.config = InternalConfig(config_filename=config_filename)
@@ -54,8 +72,6 @@ class AdminApp:
     def _setup_routers(self):
         """Setup all admin routers"""
         # Set the admin config for the v4vconfig router
-        from v4vapp_backend_v2.admin.routers import v4vconfig
-
         v4vconfig.set_admin_config(self.config)
 
         # V4V Config router
@@ -125,4 +141,5 @@ if __name__ == "__main__":
     import uvicorn
 
     app = create_admin_app()
+    uvicorn.run(app, host="127.0.0.1", port=8080, reload=True)
     uvicorn.run(app, host="127.0.0.1", port=8080, reload=True)
