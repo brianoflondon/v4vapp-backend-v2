@@ -35,8 +35,8 @@ Examples:
     parser.add_argument("--port", type=int, default=8080, help="Port to bind to (default: 8080)")
     parser.add_argument(
         "--config",
-        default="devhive.config.yaml",
-        help="Configuration file to use (default: devhive.config.yaml)",
+        default="devdocker.config.yaml",
+        help="Configuration file to use (default: devdocker.config.yaml)",
     )
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     parser.add_argument(
@@ -111,13 +111,25 @@ def get_app():
     if app is None:
         import os
 
-        config_filename = os.environ.get("V4VAPP_ADMIN_CONFIG", "devhive.config.yaml")
+        config_filename = os.environ.get("V4VAPP_ADMIN_CONFIG", "devdocker.config.yaml")
         app = create_admin_app(config_filename=config_filename)
     return app
 
 
 # Create app instance for reload mode
-app = get_app()
+if __name__ != "__main__":
+    # Only create the app instance when imported (for reload mode)
+    # Parse command line args to get config
+    import os
+
+    if len(sys.argv) > 1:
+        # Parse args when running as module
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--config", default="devdocker.config.yaml")
+        args, _ = parser.parse_known_args()
+        os.environ["V4VAPP_ADMIN_CONFIG"] = args.config
+
+    app = get_app()
 
 
 if __name__ == "__main__":

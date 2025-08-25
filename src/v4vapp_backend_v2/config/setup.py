@@ -652,6 +652,7 @@ class InternalConfig:
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            print(f"Starting initialization... {config_filename} {log_filename}")
             self._initialized = True
             super().__init__()
             logger.info(f"{ICON} Config filename: {config_filename}")
@@ -690,6 +691,7 @@ class InternalConfig:
 
     def setup_redis(self) -> None:
         try:
+            logger.info(f"Setting up redis: {self.config.redis.host}")
             InternalConfig.redis = Redis(
                 host=self.config.redis.host,
                 port=self.config.redis.port,
@@ -716,7 +718,7 @@ class InternalConfig:
             InternalConfig.redis_decoded.ping()
             logger.info(f"{ICON} Redis clients initialized successfully")
         except RedisError as ex:
-            logger.error(f"{ICON} Failed to connect to Redis: {ex}")
+            logger.error(f"{ICON} Failed to connect to {self.config.redis.host} Redis: {ex}")
             raise StartupFailure(f"Redis connection failure: {ex}")
 
     def setup_logging(self, log_filename: str = "app.log") -> None:

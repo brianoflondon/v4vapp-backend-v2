@@ -1,3 +1,4 @@
+import argparse
 from typing import Any, Dict
 
 import uvicorn
@@ -26,37 +27,30 @@ from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_jso
 
 ICON = "🤖"
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    InternalConfig(config_filename="devhive.config.yaml", log_filename="api_v2.jsonl")
-    v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
-    if not v4v_config.fetch():
-        logger.warning("Failed to fetch V4V config")
-        await v4v_config.put()
-    db_conn = DBConn()
-    await db_conn.setup_database()
-    logger.info("API v2 started", extra={"notification": False})
-    yield
+# Global variable to store config filename
+config_filename = "devhive.config.yaml"
 
 
-app = FastAPI(
-    lifespan=lifespan,
-    title="V4VApp Lightning to Hive API",
-    description="The API to generate a Lightning Invoice and start a payment to Hive.",
-    version=__version__,
-    redirect_slashes=False,
-)
-# terms_of_service="http://example.com/terms/",
-# contact={
-#     "name": "Brian of London",
-#     "url": "http://x-force.example.com/contact/",
-#     "email": "dp@x-force.example.com",
-# },
-# license_info={
-#     "name": "Apache 2.0",
-#     "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
-# },
+def create_lifespan(config_file: str):
+    """Factory function to create lifespan with the correct config filename"""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        InternalConfig(config_filename=config_file, log_filename="api_v2.jsonl")
+        v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
+        if not v4v_config.fetch():
+            logger.warning("Failed to fetch V4V config")
+            await v4v_config.put()
+        db_conn = DBConn()
+        await db_conn.setup_database()
+        logger.info("API v2 started", extra={"notification": False})
+        yield
+
+    return lifespan
+
+
+# This will be replaced when we parse command line arguments
+app = None
 
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
@@ -300,10 +294,45 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
     )
 
 
-app.include_router(crypto_v2_router, tags=["crypto"])
-app.include_router(crypto_v1_router, tags=["legacy"])
-app.include_router(lightning_v1_router, tags=["lightning"])
+def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
+    """Create FastAPI app with the specified config file"""
+    app = FastAPI(
+        lifespan=create_lifespan(config_file),
+        title="V4VApp Lightning to Hive API",
+        description="The API to generate a Lightning Invoice and start a payment to Hive.",
+        version=__version__,
+        redirect_slashes=False,
+    )
+
+    app.include_router(crypto_v2_router, tags=["crypto"])
+    app.include_router(crypto_v1_router, tags=["legacy"])
+    app.include_router(lightning_v1_router, tags=["lightning"])
+
+    return app
 
 
 if __name__ == "__main__":
-    uvicorn.run("api_v2:app", host="0.0.0.0", port=8000, workers=1)
+    parser = argparse.ArgumentParser(description="V4VApp API v2 Server")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="devhive.config.yaml",
+        help="Configuration filename (default: devhive.config.yaml)",
+    )
+    parser.add_argument(
+        "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
+    )
+    parser.add_argument("--port", type=int, default=8000, help="Port to bind to (default: 8000)")
+    parser.add_argument(
+        "--workers", type=int, default=1, help="Number of worker processes (default: 1)"
+    )
+
+    args = parser.parse_args()
+
+    # Create the app with the specified config file
+    app = create_app(config_file=args.config)
+
+    uvicorn.run(app, host=args.host, port=args.port, workers=args.workers)
+else:
+    # Create app with default config for module imports
+    app = create_app()

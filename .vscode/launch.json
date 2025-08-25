@@ -19,6 +19,10 @@
             "consoleName": "DEV API",
             "request": "launch",
             "program": "${workspaceFolder}/src/api_v2.py",
+            "args": [
+                "--config",
+                "devdocker.config.yaml"
+            ],
             "console": "integratedTerminal",
             "justMyCode": false,
         },
