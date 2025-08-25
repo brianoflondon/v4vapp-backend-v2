@@ -1,9 +1,9 @@
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 from bson import ObjectId
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig
@@ -18,7 +18,7 @@ class PendingTransaction(BaseModel):
     to_account: AccNameType
     amount: Amount
     memo: str
-    no_broadcast: bool
+    nobroadcast: bool
     is_private: bool
 
     model_config = ConfigDict(
@@ -34,6 +34,19 @@ class PendingTransaction(BaseModel):
     def serialize_amount(self, value: Amount):
         return str(value)
 
+    @field_validator("amount", mode="before")
+    def parse_amount(cls, v):
+        if isinstance(v, Amount):
+            return v
+        if isinstance(v, str):
+            try:
+                return Amount(v)
+            except ValueError:
+                raise TypeError(
+                    "amount must be Amount or str which converts to Amount eg 12.020 HIVE"
+                )
+        raise TypeError("amount must be Amount or str")
+
     @classmethod
     def collection_name(cls) -> str:
         return "pending"
@@ -47,11 +60,24 @@ class PendingTransaction(BaseModel):
         all_pending = await InternalConfig.db["pending"].find({}).to_list(length=None)
         return [cls(**doc) for doc in all_pending]
 
-    def __str__(self) -> str:
-        return f"PendingTransaction({self.id}, {self.from_account} -> {self.to_account}, {self.amount}, {self.memo})"
+    @classmethod
+    async def total_pending(cls) -> Dict[str, Amount]:
+        all_pending = await cls.list_all()
+        totals: Dict[str, Amount] = {}
+        for pending in all_pending:
+            assert isinstance(pending, PendingTransaction)
+            if pending.amount.symbol == "HIVE":
+                totals["HIVE"] = totals.get("HIVE", Amount("0.000 HIVE")) + pending.amount
+            elif pending.amount.symbol == "HBD":
+                totals["HBD"] = totals.get("HBD", Amount("0.000 HBD")) + pending.amount
+        return totals
 
-    def key(self) -> str:
-        return f"{self.timestamp}:{self.from_account}:{self.to_account}:{self.amount}"
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the PendingTransaction instance, including
+        its id, source and destination accounts, amount, and memo.
+        """
+        return f"PendingTransaction({self.id}, {self.from_account} -> {self.to_account}, {self.amount}, {self.memo})"
 
     async def save(self) -> "PendingTransaction":
         result = await mongo_call(
@@ -72,5 +98,4 @@ class PendingTransaction(BaseModel):
         )
 
 
-# Last line
 # Last line

@@ -13,15 +13,17 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_mongodb,
 )
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_dataframe
-from v4vapp_backend_v2.hive.hive_extras import (
-    get_verified_hive_client,
-    get_verified_hive_client_for_accounts,
-)
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
-from v4vapp_backend_v2.hive.hive_extras import SendHiveTransfer, send_transfer, send_transfer_bulk
+from v4vapp_backend_v2.hive.hive_extras import (
+    PendingTransaction,
+    get_verified_hive_client,
+    get_verified_hive_client_for_accounts,
+    send_transfer,
+    send_transfer_bulk,
+)
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 
@@ -161,7 +163,7 @@ async def main():
     for sats in [500, 501, 502, 503, 504, 505, 506]:  # , 1500, 1234, 2100, 5000]:
         for customer in customers:
             invoice = await get_lightning_invoice(sats, f"Test {sats}")
-            hive_transfer = SendHiveTransfer(
+            hive_transfer = PendingTransaction(
                 from_account=customer,
                 to_account=server,
                 amount="0.001 HIVE",
@@ -179,7 +181,7 @@ async def main():
     for sats in [507, 508, 509, 510, 511, 512, 513]:  # , 1500, 1234, 2100, 5000]:
         for customer in customers:
             invoice = await get_lightning_invoice(sats, f"Test {sats}")
-            hive_transfer = SendHiveTransfer(
+            hive_transfer = PendingTransaction(
                 from_account=customer,
                 to_account=server,
                 amount="0.001 HIVE",

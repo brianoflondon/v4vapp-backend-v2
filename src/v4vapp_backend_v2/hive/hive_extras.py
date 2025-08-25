@@ -518,21 +518,21 @@ async def perform_transfer_checks(
     #     )
 
 
-class SendHiveTransfer(BaseModel):
-    """
-    Model representing a Hive transfer operation.
-    This model is used to encapsulate the details of a transfer operation
-    including the sender, recipient, amount, asset, and memo.
-    """
+# class PendingTransaction(BaseModel):
+#     """
+#     Model representing a Hive transfer operation.
+#     This model is used to encapsulate the details of a transfer operation
+#     including the sender, recipient, amount, asset, and memo.
+#     """
 
-    from_account: str
-    to_account: str
-    amount: str
-    memo: str = ""
+#     from_account: str
+#     to_account: str
+#     amount: str
+#     memo: str = ""
 
 
 async def send_transfer_bulk(
-    transfer_list: List[SendHiveTransfer],
+    transfer_list: List[PendingTransaction],
     hive_client: Hive | None = None,
     keys: List[str] = [],
     nobroadcast: bool = False,
@@ -562,7 +562,9 @@ async def send_transfer_bulk(
     if not hive_client:
         hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
     if hive_client and nobroadcast:
-        raise ValueError("nobroadcast is not supported if hive_client")
+        raise ValueError(
+            "nobroadcast is not supported if hive_client is passed, nobroadcast must be set in the hive_client"
+        )
     transfer = transfer_list[0]
     try:
         tx = TransactionBuilder(blockchain_instance=hive_client)
@@ -663,9 +665,9 @@ async def send_transfer(
             store_pending = await PendingTransaction(
                 from_account=from_account,
                 to_account=to_account,
-                amount=str(amount),
+                amount=amount,
                 memo=memo,
-                no_broadcast=nobroadcast,
+                nobroadcast=nobroadcast,
                 is_private=is_private,
             ).save()
             trx = account.transfer(

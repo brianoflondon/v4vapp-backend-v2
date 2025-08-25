@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pprint import pprint
+from random import choice, uniform
 from timeit import default_timer as timeit
 
 import pytest
@@ -21,6 +22,8 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.process.process_resend_hive import resend_hive_transaction
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -199,3 +202,29 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     print("<- Receiving")
     pprint(custom_json.json_data.model_dump(exclude_none=True, exclude_unset=True))
     logger.info(f"Test passed: {custom_json.json_data.memo}")
+
+
+def random_amount() -> Amount:
+    value = round(uniform(2, 10), 3)
+    symbol = choice(["HIVE", "HBD"])
+    return Amount(f"{value:.3f} {symbol}")
+
+
+async def test_store_pending():
+    server_id = InternalConfig().server_id
+    for n in range(10):
+        amount = random_amount()
+        memo = f"Test pending transaction {n}"
+        store_pending = await PendingTransaction(
+            from_account=server_id,
+            to_account="v4vapp-test",
+            amount=amount,
+            memo=memo,
+            nobroadcast=False,
+            is_private=False,
+        ).save()
+
+
+async def test_resend_hive_transaction():
+    await resend_hive_transaction()
+    pass

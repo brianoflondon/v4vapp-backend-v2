@@ -15,7 +15,7 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
-    SendHiveTransfer,
+    PendingTransaction,
     get_hive_client,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
@@ -126,7 +126,7 @@ async def send_server_balance_to_test() -> dict[str, Any]:
     for amount in balances:
         print(f"Server account {server_name} has {amount}")
         if amount.amount > 0:
-            hive_transfer = SendHiveTransfer(
+            hive_transfer = PendingTransaction(
                 to_account="v4vapp-test",
                 from_account=server_name,
                 amount=str(amount),
