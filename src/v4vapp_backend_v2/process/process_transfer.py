@@ -13,10 +13,12 @@ from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_kee
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
+from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount, account_hive_balances
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
@@ -108,6 +110,7 @@ async def follow_on_transfer(
 
     server_id = InternalConfig().server_id
 
+    # MARK: Server is the receiver
     # Only process if the operation is directed to the server account
     if tracked_op.to_account != server_id:
         logger.info(
@@ -118,6 +121,7 @@ async def follow_on_transfer(
     cust_id = tracked_op.cust_id
     amount = Amount("0.001 HIVE")
 
+    # MARK: Conversion Hive/HBD to Keepsats
     if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
         # This is a conversion of Hive/HBD and deposit Lightning Keepsats
         # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
@@ -160,11 +164,13 @@ async def follow_on_transfer(
             and isinstance(tracked_op.json_data, KeepsatsTransfer)
         ):
             # This is a keepsats to Hive conversion.
+            to_currency = Currency.HBD if tracked_op.detect_hbd else Currency.HIVE
             await conversion_keepsats_to_hive(
                 server_id=server_id,
                 cust_id=cust_id,
                 tracked_op=tracked_op,
                 nobroadcast=nobroadcast,
+                to_currency=to_currency,
                 msats=tracked_op.json_data.msats,
             )
             release_hold = False  #   There is no hold to release
@@ -224,34 +230,22 @@ async def follow_on_transfer(
             release_hold = False
             return
 
-    # except HiveTransferError as e:
-    #     # Various problems with Hive or Keepsats. Send it all back.
-    #     if tracked_op.op_type == "custom_json":
-    #         return_details.action = ReturnAction.CUSTOM_JSON
-    #     else:
-    #         return_details.action = ReturnAction.REFUND
-    #         return_details.amount = getattr(
-    #             tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
-    #         )
-    #     return_details.reason_str = f"Error processing Hive to Lightning operation: {e}"
-    #     logger.warning(
-    #         return_details.reason_str,
-    #         extra={"notification": False, **tracked_op.log_extra},
-    #     )
-
-    # except LNDPaymentExpired as e:
-    #     if tracked_op.op_type == "custom_json":
-    #         return_details.action = ReturnAction.CUSTOM_JSON
-    #     else:
-    #         return_details.action = ReturnAction.REFUND
-    #         return_details.amount = getattr(
-    #             tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
-    #         )
-    #     return_details.reason_str = f"Lightning payment expired: {e}"
-    #     logger.warning(
-    #         return_details.reason_str,
-    #         extra={"notification": False, **tracked_op.log_extra},
-    #     )
+    except HiveNotEnoughHiveInAccount as e:
+        server_balance = account_hive_balances()
+        sending_amount = e.sending_amount
+        server_has = server_balance[sending_amount.symbol]
+        shortfall = sending_amount - server_has
+        logger.warning(
+            f"Not enough HIVE in Server: {server_id} Shortfall: {shortfall} Error:{e}",
+            extra={
+                "notification": True,
+                "server_balance": server_balance,
+                **tracked_op.log_extra,
+            },
+        )
+        pending_list = await PendingTransaction.list_all()
+        for pending in pending_list:
+            logger.warning(pending)
 
     except (LNDPaymentError, LNDPaymentExpired, HiveTransferError) as e:
         return_details.action = ReturnAction.REFUND
@@ -301,6 +295,26 @@ async def follow_on_transfer(
                         **return_details.log_extra,
                     },
                 )
+            # MARK: Server Balance
+            # This is where we handle not enough Hive in the server account
+            except HiveNotEnoughHiveInAccount as e:
+                server_balance = account_hive_balances()
+                if return_details.amount:
+                    return_amount = Amount(return_details.amount)
+                    server_has = server_balance[return_amount.symbol]
+                    shortfall = return_amount - server_has
+                    logger.warning(
+                        f"Not enough HIVE in Server: {server_id} Shortfall: {shortfall} Error:{e}",
+                        extra={
+                            "notification": True,
+                            "server_balance": server_balance,
+                            **tracked_op.log_extra,
+                        },
+                    )
+                    pending_list = await PendingTransaction.list_all()
+                    for pending in pending_list:
+                        logger.warning(pending)
+
             except Exception as e:
                 logger.exception(
                     f"Error returning Hive transfer: {e}",

@@ -133,7 +133,7 @@ class TrackedBaseModel(BaseModel):
     def add_reply(
         self,
         reply_id: str,
-        reply_type: str,
+        reply_type: ReplyType | None = None,
         reply_msat: int = 0,
         reply_message: str = "",
         reply_error: Any = None,

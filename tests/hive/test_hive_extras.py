@@ -5,6 +5,7 @@ import pytest
 
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
+    account_hive_balances,
     call_hive_internal_market,
     decode_memo,
     get_blockchain_instance,
@@ -149,6 +150,7 @@ async def test_send_custom_json_active_key():
     except Exception as e:
         pytest.fail(f"send_custom_json raised an exception: {e}")
 
+
 @pytest.mark.skipif(
     HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
     reason="Active key not provided.",
@@ -174,6 +176,7 @@ async def test_send_custom_json_posting_key():
         assert answer is not None
     except Exception as e:
         pytest.fail(f"send_custom_json raised an exception: {e}")
+
 
 @pytest.mark.skipif(
     HIVE_POSTING_TEST_KEY == "NO_KEY_PROVIDED",
@@ -254,6 +257,13 @@ async def test_send_custom_json_failures(
             hive_client=hive_client,
             keys=keys,
         )
+
+
+def test_account_hive_balances():
+    balances = account_hive_balances("v4vapp-test")
+    assert isinstance(balances, dict)
+    assert "HIVE" in balances
+    assert "HBD" in balances
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
@@ -88,7 +89,9 @@ class HiveNotEnoughHiveInAccount(HiveTransferError):
     Exception raised when there are not enough Hive funds in the account.
     """
 
-    pass
+    def __init__(self, message: str, sending_amount: Amount):
+        super().__init__(message)
+        self.sending_amount = sending_amount
 
 
 class HiveTryingToSendZeroOrNegativeAmount(HiveTransferError):
@@ -255,11 +258,10 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         The function logs the last node used by the Hive blockchain instance and any
         errors encountered.
     """
+    hive = get_hive_client()
+    market = Market("HBD:HIVE", hive=hive)
     try:
-        hive = get_hive_client()
-        market = Market("HBD:HIVE", hive=hive)
         ticker = market.ticker()
-
         # raise KeyError("'highest_bid'")
         highest_bid: Price = ticker["highest_bid"]
         highest_bid_value = float(highest_bid["price"])
@@ -276,6 +278,31 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         message = f"Problem calling Hive Market API {ex}"
         logger.error(message)
         return HiveInternalQuote(error=message)
+
+
+def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount]:
+    """
+    Retrieves the current HIVE and HBD balances for the given account.
+    Returns
+
+    Returns:
+        Dict[str, float]: A dictionary containing the HIVE and HBD balances.
+    """
+    hive = get_hive_client()
+    if not hive_accname:
+        hive_accname = InternalConfig().server_id
+    hive_account = Account(hive_accname, blockchain_instance=hive)
+    try:
+        balances = hive_account.balances.get("available", {})
+        if balances is None or len(balances) < 2:
+            return {"HIVE": Amount("0.000 HIVE"), "HBD": Amount("0.000 HBD")}
+        return {
+            "HIVE": balances[0],
+            "HBD": balances[1],
+        }
+    except Exception as e:
+        logger.error(f"Error fetching server hive balances: {e}")
+        raise HiveSomeOtherRPCException(f"Error fetching server hive balances: {e}")
 
 
 def get_event_id(hive_event: Any) -> str:
@@ -343,7 +370,9 @@ def decode_memo(
         d_memo = m.decrypt(memo)
         if d_memo == memo:
             return memo
-        return d_memo[1:]
+        if d_memo:
+            return d_memo[1:]
+        return ""
     except struct.error:
         # arises when an unencrypted memo is decrypted..
         return memo
@@ -399,7 +428,7 @@ async def send_custom_json(
             nor `keys` are provided.
         CustomJsonSendError: If an error occurs while sending the custom JSON operation.
     """
-    # Need Required_auths not posting auths for a tranfer
+    # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
     if not isinstance(json_data, dict):
         raise ValueError("json_data must be a dictionary")
@@ -546,7 +575,7 @@ async def send_transfer_bulk(
             }
             tx.appendOps(Transfer(transfer_nectar))
             tx.appendSigner(transfer.from_account, "active")
-        signed_tx = tx.sign()
+        # signed_tx = tx.sign()
         broadcast_tx = tx.broadcast()
         return broadcast_tx or {}
     except UnhandledRPCError as ex:
@@ -556,7 +585,8 @@ async def send_transfer_bulk(
                 raise HiveNotEnoughHiveInAccount(
                     f"{transfer.from_account} Failure during send | "
                     f"Not enough to pay {transfer.amount}  | "
-                    f"to: {transfer.to_account} | Hive error: {ex}"
+                    f"to: {transfer.to_account} | Hive error: {ex}",
+                    sending_amount=Amount(str(transfer.amount)),
                 )
             if "Cannot transfer a negative amount" in arg:
                 raise HiveTryingToSendZeroOrNegativeAmount(
@@ -573,7 +603,7 @@ async def send_transfer_bulk(
                     f"to: {transfer.to_account} | Hive error: {ex}"
                 )
         else:
-            trx = {"UnhandledRPCError": f"{ex}"}
+            # trx = {"UnhandledRPCError": f"{ex}"}
             logger.error(
                 f"UnhandledRPCError during send_transfer: {ex}",
                 extra={
@@ -630,6 +660,14 @@ async def send_transfer(
     retries = 0
     while retries < 3:
         try:
+            store_pending = await PendingTransaction(
+                from_account=from_account,
+                to_account=to_account,
+                amount=str(amount),
+                memo=memo,
+                no_broadcast=nobroadcast,
+                is_private=is_private,
+            ).save()
             trx = account.transfer(
                 to=to_account,
                 amount=amount.amount,
@@ -637,6 +675,8 @@ async def send_transfer(
                 account=from_account,
                 memo=memo,
             )
+            # Delete the pending transaction since Hive transaction was successful
+            await store_pending.delete()
             check_nobroadcast = " NO BROADCAST " if hive_client.nobroadcast else ""
             logger.info(
                 f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
@@ -660,7 +700,8 @@ async def send_transfer(
                     raise HiveNotEnoughHiveInAccount(
                         f"{from_account} Failure during send | "
                         f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
-                        f"to: {to_account} | Hive error: {ex}"
+                        f"to: {to_account} | Hive error: {ex}",
+                        sending_amount=amount,
                     )
                 elif "Cannot transfer a negative amount" in arg:
                     raise HiveTryingToSendZeroOrNegativeAmount(

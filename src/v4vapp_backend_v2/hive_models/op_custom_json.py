@@ -8,7 +8,11 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import detect_keepsats, paywithsats_amount
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_hbd,
+    detect_keepsats,
+    paywithsats_amount,
+)
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
@@ -226,6 +230,18 @@ class CustomJson(OpBase):
         return memo
 
     @property
+    def detect_hbd(self) -> bool:
+        """
+        Checks if the transfer is in HBD (Hive Backed Dollar).
+
+        Returns:
+            bool: True if the transfer is in HBD, False otherwise.
+        """
+        if hasattr(self.json_data, "memo"):
+            return detect_hbd(self.json_data.memo)
+        return False
+
+    @property
     def to_account(self) -> str:
         """
         Returns the account to which the transfer is made.
@@ -299,6 +315,11 @@ class CustomJson(OpBase):
         return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.link}"
 
     @property
+    def notification_str(self) -> str:
+        if hasattr(self.json_data, "notification_str"):
+            return f"{self.json_data.notification_str} {self.markdown_link}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.markdown_link}"
+
     def notification_str(self) -> str:
         if hasattr(self.json_data, "notification_str"):
             return f"{self.json_data.notification_str} {self.markdown_link}"

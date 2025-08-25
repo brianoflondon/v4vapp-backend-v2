@@ -9,6 +9,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_hbd,
     detect_keepsats,
     detect_paywithsats,
     find_short_id,
@@ -278,6 +279,16 @@ class TransferBase(OpBase):
             - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
         """
         return paywithsats_amount(self.d_memo)
+
+    @property
+    def detect_hbd(self) -> bool:
+        """
+        Checks if the transfer is in HBD (Hive Backed Dollar).
+
+        Returns:
+            bool: True if the transfer is in HBD, False otherwise.
+        """
+        return detect_hbd(self.d_memo)
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

@@ -274,6 +274,15 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
                 "sats": convert.sats,
             },
         )
+    if convert.memo:
+        if convert.symbol == "HBD" and "#HBD" not in convert.memo:
+            convert.memo += " | #HBD"
+    else:  # Convert memo is empty
+        if convert.symbol == "HBD":
+            convert.memo = f"Converting {convert.sats:,.0f} sats to #HBD"
+        else:
+            convert.memo = f"Converting {convert.sats:,.0f} sats to #HIVE"
+
     transfer_internal = KeepsatsTransfer(
         hive_accname_from=convert.hive_accname,
         hive_accname_to=InternalConfig().server_id,
