@@ -21,6 +21,7 @@ from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer

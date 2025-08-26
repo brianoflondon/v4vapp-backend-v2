@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Optional
+from typing import Dict
 
 from bson import ObjectId
 from nectar.amount import Amount
@@ -13,14 +13,14 @@ from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
 class PendingTransaction(BaseModel):
-    id: Optional[ObjectId] = Field(default=None, alias="_id")
+    id: ObjectId | None = Field(default=None, alias="_id")
     timestamp: float = Field(default_factory=time.time)
     from_account: AccNameType
     to_account: AccNameType
     amount: Amount
     memo: str
-    nobroadcast: bool
-    is_private: bool
+    nobroadcast: bool = False
+    is_private: bool = False
     value: float = 0.0
     symbol: str = "HIVE"
     currency: Currency = Currency.HIVE

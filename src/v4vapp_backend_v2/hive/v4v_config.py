@@ -50,7 +50,7 @@ class V4VConfigData(BaseModel):
     )
     conv_fee_sats: int = Field(50, description="Conversion fee in satoshis for transactions.")
     minimum_invoice_payment_sats: int = Field(
-        500, description="Minimum invoice payment in satoshis."
+        250, description="Minimum invoice payment in satoshis."
     )
     maximum_invoice_payment_sats: int = Field(
         100_000, description="Maximum invoice payment in satoshis."
@@ -79,6 +79,8 @@ class V4VConfigData(BaseModel):
     )
     dynamic_fees_url: str = Field("", description="URL for dynamic fees.")
     dynamic_fees_permlink: str = Field("", description="Permlink for dynamic fees.")
+    # server_id: str = Field("", description="Server Hive Account.")
+    # treasury_id: str = Field("", description="Treasury Hive Account.")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -226,6 +228,8 @@ class V4VConfig:
         """
         if not hive_client:
             hive_client, server_id = await get_verified_hive_client()
+        else:
+            server_id = self.server_accname or InternalConfig().server_id
         acc = Account(server_id, blockchain_instance=hive_client, lazy=True)
         existing_metadata = self._get_posting_metadata()
         if not existing_metadata:
@@ -263,7 +267,7 @@ class V4VConfig:
             return
         except Exception as ex:
             logger.error(
-                f"Error updating settings in Hive: {ex}",
+                f"Error updating settings in Hive: {ex} {ex.__class__.__name__}",
                 extra={"hive_config": new_meta, **self.log_extra},
             )
             return
