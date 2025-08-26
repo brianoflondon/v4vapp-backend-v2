@@ -8,6 +8,7 @@ from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
@@ -20,11 +21,20 @@ class PendingTransaction(BaseModel):
     memo: str
     nobroadcast: bool
     is_private: bool
+    value: float = 0.0
+    symbol: str = "HIVE"
+    currency: Currency = Currency.HIVE
 
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
     )
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.value = self.amount.amount if self.amount else 0.0
+        self.symbol = self.amount.symbol if self.amount else "HIVE"
+        self.currency = Currency(self.symbol.lower())
 
     @field_serializer("id")
     def serialize_objectid(self, value):
@@ -58,6 +68,24 @@ class PendingTransaction(BaseModel):
     @classmethod
     async def list_all(cls) -> list["PendingTransaction"]:
         all_pending = await InternalConfig.db["pending"].find({}).to_list(length=None)
+        return [cls(**doc) for doc in all_pending]
+
+    @classmethod
+    async def list_all_hbd(cls) -> list["PendingTransaction"]:
+        all_pending = (
+            await InternalConfig.db["pending"]
+            .find({"currency": Currency.HBD})
+            .to_list(length=None)
+        )
+        return [cls(**doc) for doc in all_pending]
+
+    @classmethod
+    async def list_all_hive(cls) -> list["PendingTransaction"]:
+        all_pending = (
+            await InternalConfig.db["pending"]
+            .find({"currency": Currency.HIVE})
+            .to_list(length=None)
+        )
         return [cls(**doc) for doc in all_pending]
 
     @classmethod

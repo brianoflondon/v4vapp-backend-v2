@@ -3,7 +3,7 @@ from typing import Any
 from nectar.amount import Amount
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
 class AmountPyd(BaseModel):

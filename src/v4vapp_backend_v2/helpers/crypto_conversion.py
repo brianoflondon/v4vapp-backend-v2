@@ -8,7 +8,8 @@ from typing import Any, ClassVar
 from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 

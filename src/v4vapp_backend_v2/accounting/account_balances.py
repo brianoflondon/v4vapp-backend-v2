@@ -22,7 +22,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
     lightning_memo,

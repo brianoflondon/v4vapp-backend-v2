@@ -17,7 +17,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 

@@ -7,7 +7,6 @@ from nectar.amount import Amount
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
-from v4vapp_backend_v2.process.process_resend_hive import resend_hive_transaction
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +47,18 @@ async def test_store_pending():
             is_private=False,
         ).save()
 
+    pending_hive = await PendingTransaction.list_all_hive()
+    pending_hbd = await PendingTransaction.list_all_hbd()
+    print("Pending HIVE Transactions:")
+    for pending in pending_hive:
+        print(pending)
+
+    print("----------------------")
+
+    print("Pending HBD Transactions:")
+    for pending in pending_hbd:
+        print(pending)
+
 
 async def test_list_all_pending():
     await test_store_pending()
@@ -85,5 +96,3 @@ async def test_clear_pending_transactions():
         await pending.delete()
     all_pending_after = await PendingTransaction.list_all()
     assert len(all_pending_after) == 0
-
-

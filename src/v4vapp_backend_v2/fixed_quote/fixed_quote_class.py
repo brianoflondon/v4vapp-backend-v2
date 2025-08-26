@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion, CryptoConvV1
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, HiveRatesDB, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
 class FixedHiveQuote(BaseModel):

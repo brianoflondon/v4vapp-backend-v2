@@ -11,7 +11,7 @@ from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount, account_hive_balances
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd

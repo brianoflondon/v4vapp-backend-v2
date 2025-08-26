@@ -12,8 +12,11 @@ from pydantic import BaseModel, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
-from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
@@ -60,27 +63,6 @@ def _log_rates_insert_done(t: asyncio.Task) -> None:
         logger.debug(f"{ICON} Rates insert completed: {msg}")
     except Exception as e:
         logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
-
-
-class Currency(StrEnum):
-    HIVE = "hive"
-    HBD = "hbd"
-    USD = "usd"
-    SATS = "sats"
-    MSATS = "msats"
-    BTC = "btc"
-
-    @property
-    def symbol(self) -> str:
-        """
-        Returns the symbol of the cryptocurrency in uppercase for Nectar Amount.
-
-        Returns:
-            str: The uppercase symbol of the cryptocurrency.
-        """
-        if self in [Currency.HIVE, Currency.HBD]:
-            return self.value.upper()
-        raise ValueError("Invalid currency")
 
 
 def currency_to_receive(memo: str) -> Currency:

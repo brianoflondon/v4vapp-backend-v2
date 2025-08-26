@@ -9,7 +9,7 @@ from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummar
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 """
 Helper classes for accounting summaries, including account balances and lightning conv summaries.
