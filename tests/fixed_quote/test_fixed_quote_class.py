@@ -18,6 +18,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
         test_config_logging_path,
     )
+    InternalConfig(config_filename=str(Path(test_config_path, "config.yaml")))
     TrackedBaseModel.last_quote = last_quote()
     yield
     InternalConfig().shutdown()  # Ensure proper cleanup after tests

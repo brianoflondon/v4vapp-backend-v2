@@ -5,10 +5,16 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion, CryptoConvV1
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import (
+    AllQuotes,
+    HiveRatesDB,
+    QuoteResponse,
+    hive_rates_db_record,
+)
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
@@ -52,9 +58,14 @@ class FixedHiveQuote(BaseModel):
         Side Effects:
             Stores the created quote in Redis with a key based on its unique ID.
         """
-        all_quotes = AllQuotes()
-        await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
-        quote_record = await all_quotes.db_store_quote(store_db=store_db)
+        quote = TrackedBaseModel.last_quote
+        if quote.is_unset:
+            all_quotes = AllQuotes()
+            await all_quotes.get_all_quotes(store_db=False, use_cache=use_cache)
+            quote_record = await all_quotes.db_store_quote(store_db=store_db)
+            quote = all_quotes.quote
+        else:
+            quote_record = hive_rates_db_record(quote)
         # Determine currency and value
         currency = (
             Currency.HIVE
@@ -72,15 +83,15 @@ class FixedHiveQuote(BaseModel):
         else:
             value = 0.0
 
-        conv = CryptoConversion(quote=all_quotes.quote, conv_from=currency, value=value).conversion
+        conv = CryptoConversion(quote=quote, conv_from=currency, value=value).conversion
         quote_response = QuoteResponse(
-            hive_usd=all_quotes.quote.hive_usd,
-            hbd_usd=all_quotes.quote.hbd_usd,
-            btc_usd=all_quotes.quote.btc_usd,
-            hive_hbd=all_quotes.quote.hive_hbd,
+            hive_usd=quote.hive_usd,
+            hbd_usd=quote.hbd_usd,
+            btc_usd=quote.btc_usd,
+            hive_hbd=quote.hive_hbd,
             raw_response={},
             source="FixedRate",
-            fetch_date=all_quotes.quote.fetch_date,
+            fetch_date=quote.fetch_date,
             error="",  # No error in this case
             error_details={},
         )
@@ -93,13 +104,13 @@ class FixedHiveQuote(BaseModel):
         conversion_result = await calc_keepsats_to_hive(
             to_currency=currency,
             amount=amount,
-            quote=all_quotes.quote,
+            quote=quote,
         )
 
         # Create conversion
         sats_send = (conv.msats + conv.msats_fee) // 1000
         # Create quote instance
-        quote = cls(
+        fixed_quote = cls(
             unique_id=str(uuid4())[:6],
             sats_send=sats_send,
             conv=conv.v1(),
@@ -111,12 +122,12 @@ class FixedHiveQuote(BaseModel):
         # Cache in Redis
         redis_client = InternalConfig.redis_decoded
         ok = redis_client.setex(
-            f"fixed_quote:{quote.unique_id}",
+            f"fixed_quote:{fixed_quote.unique_id}",
             time=cache_time,
-            value=quote.model_dump_json(exclude_none=True),
+            value=fixed_quote.model_dump_json(exclude_none=True),
         )
 
-        return quote
+        return fixed_quote
 
     @classmethod
     def check_quote(cls, unique_id: str, send_sats: int) -> "FixedHiveQuote":

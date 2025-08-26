@@ -181,6 +181,18 @@ class QuoteResponse(BaseModel):
         self.error = error
         self.error_details = error_details
 
+    @property
+    def is_unset(self) -> bool:
+        """
+        Check if the quote is unset (i.e., not fetched or invalid).
+
+        Returns:
+            bool: True if the quote is unset, False otherwise.
+        """
+        if self.btc_usd == 0:
+            return True
+        return False
+
     @computed_field
     def sats_hive(self) -> float:
         """
@@ -589,6 +601,24 @@ class AllQuotes(BaseModel):
 
     # MARK: DB Store Quote
 
+    def db_hive_rates_db_record(self) -> HiveRatesDB:
+        """
+        Create a HiveRatesDB record from the current quote data.
+
+        Returns:
+            HiveRatesDB: The database record representing the current quote.
+        """
+        return HiveRatesDB(
+            timestamp=self.fetch_date,
+            hive_usd=self.quote.hive_usd,
+            hbd_usd=self.quote.hbd_usd,
+            btc_usd=self.quote.btc_usd,
+            sats_hive=self.quote.sats_hive_p,
+            sats_usd=self.quote.sats_usd,
+            sats_hbd=self.quote.sats_hbd_p,
+            hive_hbd=self.quote.hive_hbd,
+        )
+
     async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
         """
         Store cryptocurrency quotes in the database.
@@ -608,16 +638,7 @@ class AllQuotes(BaseModel):
         Returns:
             None
         """
-        record = HiveRatesDB(
-            timestamp=self.fetch_date,
-            hive_usd=self.quote.hive_usd,
-            hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
-            btc_usd=self.quote.btc_usd,
-            sats_hive=self.quote.sats_hive_p,
-            sats_usd=self.quote.sats_usd,
-            sats_hbd=self.quote.sats_hbd_p,
-            hive_hbd=self.quote.hive_hbd,
-        )
+        record = self.db_hive_rates_db_record()
         if not store_db:
             return record
         if (
@@ -739,6 +760,25 @@ class AllQuotes(BaseModel):
         if count == 0:
             raise ValueError("No valid Hive HBD price found")
         return hive_hbd / count
+
+
+def hive_rates_db_record(quote) -> HiveRatesDB:
+    """
+    Create a HiveRatesDB record from the current quote data.
+
+    Returns:
+        HiveRatesDB: The database record representing the current quote.
+    """
+    return HiveRatesDB(
+        timestamp=quote.fetch_date,
+        hive_usd=quote.hive_usd,
+        hbd_usd=quote.hbd_usd,
+        btc_usd=quote.btc_usd,
+        sats_hive=quote.sats_hive_p,
+        sats_usd=quote.sats_usd,
+        sats_hbd=quote.sats_hbd_p,
+        hive_hbd=quote.hive_hbd,
+    )
 
 
 class QuoteServiceError(Exception):
