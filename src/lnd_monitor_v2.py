@@ -158,19 +158,45 @@ async def check_dest_alias(
             matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
             if matching_payment:
                 if matching_payment.payment_request:
-                    dest_alias = await get_node_alias_from_pay_request(
-                        matching_payment.payment_request, lnd_client
-                    )
-                    return dest_alias
+                    try:
+                        dest_alias = await get_node_alias_from_pay_request(
+                            matching_payment.payment_request, lnd_client
+                        )
+                        return dest_alias
+                    except LNDConnectionError as e:
+                        logger.warning(
+                            f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
+                            extra={"notification": False},
+                        )
+                        return "Unknown"
+                    except Exception as e:
+                        logger.warning(
+                            f"{lnd_client.icon} Could not fetch dest alias: {e}",
+                            extra={"notification": False},
+                        )
+                        return "Unknown"
                 else:
                     return "Keysend"
     # Keysend payments outgoing do not have a payment request
     if isinstance(htlc_event, lnrpc.Payment):
         if htlc_event.payment_request:
-            dest_alias = await get_node_alias_from_pay_request(
-                htlc_event.payment_request, lnd_client
-            )
-            return dest_alias
+            try:
+                dest_alias = await get_node_alias_from_pay_request(
+                    htlc_event.payment_request, lnd_client
+                )
+                return dest_alias
+            except LNDConnectionError as e:
+                logger.warning(
+                    f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
+                    extra={"notification": False},
+                )
+                return "Unknown"
+            except Exception as e:
+                logger.warning(
+                    f"{lnd_client.icon} Could not fetch dest alias: {e}",
+                    extra={"notification": False},
+                )
+                return "Unknown"
         else:
             return "Keysend"
 
@@ -299,7 +325,20 @@ async def payment_report(
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
     pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
+    try:
+        dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
+    except LNDConnectionError as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
+            extra={"notification": False},
+        )
+        dest_alias = "Unknown"
+    except Exception as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch dest alias: {e}",
+            extra={"notification": False},
+        )
+        dest_alias = "Unknown"
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
