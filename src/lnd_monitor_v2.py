@@ -158,49 +158,47 @@ async def check_dest_alias(
             matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
             if matching_payment:
                 if matching_payment.payment_request:
-                    try:
-                        dest_alias = await get_node_alias_from_pay_request(
-                            matching_payment.payment_request, lnd_client
-                        )
-                        return dest_alias
-                    except LNDConnectionError as e:
-                        logger.warning(
-                            f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
-                            extra={"notification": False},
-                        )
-                        return "Unknown"
-                    except Exception as e:
-                        logger.warning(
-                            f"{lnd_client.icon} Could not fetch dest alias: {e}",
-                            extra={"notification": False},
-                        )
-                        return "Unknown"
+                    return await fetch_dest_alias_from_request(
+                        matching_payment.payment_request, lnd_client
+                    )
                 else:
                     return "Keysend"
     # Keysend payments outgoing do not have a payment request
     if isinstance(htlc_event, lnrpc.Payment):
         if htlc_event.payment_request:
-            try:
-                dest_alias = await get_node_alias_from_pay_request(
-                    htlc_event.payment_request, lnd_client
-                )
-                return dest_alias
-            except LNDConnectionError as e:
-                logger.warning(
-                    f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
-                    extra={"notification": False},
-                )
-                return "Unknown"
-            except Exception as e:
-                logger.warning(
-                    f"{lnd_client.icon} Could not fetch dest alias: {e}",
-                    extra={"notification": False},
-                )
-                return "Unknown"
+            return await fetch_dest_alias_from_request(htlc_event.payment_request, lnd_client)
         else:
             return "Keysend"
 
     return ""
+
+
+async def fetch_dest_alias_from_request(payment_request: str, lnd_client: LNDClient) -> str:
+    """
+    Safely fetch node alias from a payment request string. Returns 'Unknown' on failure.
+
+    Args:
+        payment_request: The BOLT-11 payment request string.
+        lnd_client: The LND client instance used for RPC.
+
+    Returns:
+        The resolved node alias as a string, or 'Unknown' if lookup failed.
+    """
+    try:
+        dest_alias = await get_node_alias_from_pay_request(payment_request, lnd_client)
+        return dest_alias
+    except LNDConnectionError as e:
+        logger.warning(
+            f"{getattr(lnd_client, 'icon', '')} Could not fetch dest alias (connection): {e}",
+            extra={"notification": False},
+        )
+        return "Unknown"
+    except Exception as e:
+        logger.warning(
+            f"{getattr(lnd_client, 'icon', '')} Could not fetch dest alias: {e}",
+            extra={"notification": False},
+        )
+        return "Unknown"
 
 
 async def remove_event_group(
