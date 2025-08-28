@@ -196,7 +196,6 @@ def balance_sheet_printout(balance_sheet: Dict) -> str:
 
     return "\n".join(output)
 
-
 def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     """
     Formats a table with balances in SATS, HIVE, HBD, and USD.
@@ -228,11 +227,25 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             )
             if all_zero:
                 continue  # Skip accounts with all zero balances
+
+            # For Retained Earnings, use dynamic labels based on sign
+            is_retained_earnings = category == "Equity" and account_name == "Retained Earnings"
+
             for sub, balance in sub_accounts.items():
                 if sub == "Total":
                     continue
+
+                if is_retained_earnings:
+                    # Determine label based on sign (using sats as the base unit for checking)
+                    if balance.get("sats", 0) >= 0:
+                        dynamic_label = "Retained Earnings"
+                    else:
+                        dynamic_label = "Retained Loss"
+                else:
+                    dynamic_label = account_name
+
                 output.append(
-                    f"{truncate_text(account_name, 40):<40} "
+                    f"{truncate_text(dynamic_label, 40):<40} "
                     f"{truncate_text(sub, 17):<17} "
                     f"{balance.get('sats', 0):>10,.0f} "
                     f"{balance.get('hive', 0):>12,.3f} "
@@ -268,8 +281,18 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                     "msats": 0,
                 }
             total = sub_accounts["Total"]
+
+            # Dynamic total label for Retained Earnings
+            if is_retained_earnings:
+                if total.get("sats", 0) >= 0:
+                    total_label = "   Total Retained Earnings"
+                else:
+                    total_label = "   Total Retained Loss"
+            else:
+                total_label = "   Total " + truncate_text(account_name, 35)
+
             output.append(
-                f"{'   Total ' + truncate_text(account_name, 35):<40} "
+                f"{total_label:<40} "
                 f"{'':<17} "
                 f"{total.get('sats', 0):>10,.0f} "
                 f"{total.get('hive', 0):>12,.3f} "

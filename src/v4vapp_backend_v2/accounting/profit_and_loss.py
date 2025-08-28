@@ -99,12 +99,19 @@ async def profit_and_loss_printout(
     for sub, balance in pl_report["Net Income"].items():
         if sub == "Total":
             continue
+        # Determine label based on sign (using msats as the base unit for checking)
+        if balance["msats"] >= 0:
+            label = "Net Income"
+        else:
+            label = "Net Loss"
         output.append(
-            f"{'Net Income':<40} {sub:<17} {balance['sats']:>10,.0f} {balance['msats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance['usd']:>12,.2f}"
+            f"{label:<40} {sub:<17} {balance['sats']:>10,.0f} {balance['msats']:>12,.0f} {balance['hive']:>12,.3f} {balance['hbd']:>12,.3f} {balance['usd']:>12,.2f}"
         )
+    # Handle the total separately
     total = pl_report["Net Income"].get("Total", {})
+    total_label = "   Total Net Income" if total.get("msats", 0) >= 0 else "   Total Net Loss"
     output.append(
-        f"{'   Total Net Income':<40} {'':<17} {total.get('sats', 0):>10,.0f} {total.get('msats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
+        f"{total_label:<40} {'':<17} {total.get('sats', 0):>10,.0f} {total.get('msats', 0):>12,.0f} {total.get('hive', 0):>12,.3f} {total.get('hbd', 0):>12,.3f} {total.get('usd', 0):>12,.2f}"
     )
     output.append("=" * max_width)
 
