@@ -46,6 +46,19 @@ class AdminApp:
             redoc_url="/admin/redoc",
         )
 
+        # Add proxy middleware to trust headers from reverse proxy
+        # This allows FastAPI to correctly detect HTTPS when behind nginx proxy
+        @self.app.middleware("http")
+        async def proxy_middleware(request: Request, call_next):
+            # Trust common proxy headers
+            if "x-forwarded-proto" in request.headers:
+                request.scope["scheme"] = request.headers["x-forwarded-proto"]
+            if "x-forwarded-host" in request.headers:
+                request.scope["server"] = (request.headers["x-forwarded-host"], None)
+
+            response = await call_next(request)
+            return response
+
         # Store config_filename in app state
         self.app.state.config_filename = config_filename
 

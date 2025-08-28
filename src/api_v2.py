@@ -2,7 +2,7 @@ import argparse
 from typing import Any, Dict
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import asynccontextmanager
 
 from v4vapp_backend_v2 import __version__
@@ -20,7 +20,6 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -314,6 +313,19 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
         version=__version__,
         redirect_slashes=False,
     )
+
+    # Add proxy middleware to trust headers from reverse proxy
+    # This allows FastAPI to correctly detect HTTPS when behind nginx proxy
+    @app.middleware("http")
+    async def proxy_middleware(request: Request, call_next):
+        # Trust common proxy headers
+        if "x-forwarded-proto" in request.headers:
+            request.scope["scheme"] = request.headers["x-forwarded-proto"]
+        if "x-forwarded-host" in request.headers:
+            request.scope["server"] = (request.headers["x-forwarded-host"], None)
+
+        response = await call_next(request)
+        return response
 
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])

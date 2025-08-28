@@ -199,3 +199,17 @@ body {
     border-color: var(--bs-border-color);
     color: var(--bs-body-color);
 }
+
+/* Make .bg-light readable in dark theme (override Bootstrap's light bg) */
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-border-color) !important;
+}
+
+/* Fix financial reports content backgrounds in dark mode */
+[data-bs-theme="dark"] .bg-light pre,
+[data-bs-theme="dark"] .bg-light code {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
