@@ -40,8 +40,10 @@ UNIT_TOLERANCE = {
 
 # @async_time_stats_decorator()
 async def all_account_balances(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime | None = None, age: timedelta | None = None
 ) -> AccountBalances:
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -55,15 +57,16 @@ async def all_account_balances(
 # @async_time_stats_decorator()
 async def one_account_balance(
     account: LedgerAccount | str,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
         account = LiabilityAccount(
             name="VSC Liability",
             sub=account,
         )
-
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -88,8 +91,8 @@ async def account_balance_printout(
     account: LedgerAccount | str,
     line_items: bool = True,
     user_memos: bool = True,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
-    age: timedelta = timedelta(seconds=0),
+    as_of_date: datetime | None = None,
+    age: timedelta | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
@@ -109,6 +112,9 @@ async def account_balance_printout(
         str: A formatted string containing either the full transaction history or the closing balance
              for the specified account and sub-account up to the specified date.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     if isinstance(account, str):
         account = LiabilityAccount(
             name="VSC Liability",
@@ -116,8 +122,6 @@ async def account_balance_printout(
         )
 
     max_width = 135
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
 
     ledger_account_details = await one_account_balance(
         account=account, as_of_date=as_of_date, age=age
@@ -278,7 +282,7 @@ async def ledger_pipeline_result(
     cust_id: str,
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     age: timedelta | None = None,
 ) -> LedgerConvSummary:
     """
@@ -292,6 +296,8 @@ async def ledger_pipeline_result(
         LedgerConvSummary: The result of the aggregation as a LedgerConvSummary.
     """
     # Get a brand new MongoDB client with defaults
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     ans = LedgerConvSummary(
         cust_id=cust_id,
@@ -329,7 +335,7 @@ async def ledger_pipeline_result(
 
 async def get_account_lightning_conv(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     age: timedelta = timedelta(hours=4),
     line_items: bool = False,
 ) -> LedgerConvSummary:
@@ -346,7 +352,8 @@ async def get_account_lightning_conv(
     Returns:
         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
     """
-
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     hive_config = InternalConfig().config.hive
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
@@ -434,7 +441,7 @@ async def check_hive_conversion_limits(
 
 async def get_keepsats_balance(
     cust_id: str = "",
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     line_items: bool = False,
 ) -> Tuple[int, LedgerAccountDetails]:
     """
@@ -452,6 +459,8 @@ async def get_keepsats_balance(
         net_msats (int): The net balance of Keepsats in milisatoshis.
         LedgerAccountDetails: An object containing the balance details for the specified customer.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     account = LiabilityAccount(
         name="VSC Liability",
         sub=cust_id,
