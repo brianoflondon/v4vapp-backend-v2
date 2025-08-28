@@ -51,6 +51,8 @@ class LedgerType(StrEnum):
 
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
     CONTRA_KEEPSATS_TO_HIVE = "k_contra_h"  # Contra entry for Keepsats to Hive conversion
+    RECLASSIFY_VSC_SATS = "r_vsc_sats"  # Reclassify VSC Liability (server) balance
+    RECLASSIFY_VSC_HIVE = "r_vsc_hive"  # Reclassify VSC Liability (server) balance
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions

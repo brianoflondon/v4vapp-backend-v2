@@ -9,27 +9,32 @@ Operates by moving funds between the Server and VSC Liability accounts:
 
     No net value change
     LedgerType.CONV_HIVE_TO_KEEPSATS h_conv_k
+
 Step 2: Convert the received Hive or HBD to Keepsats in the Server's Asset account.
         Debit: Asset Treasury Lightning (server) - SATS
         Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
 
     No net value change
     LedgerType.CONTRA_HIVE_TO_KEEPSATS h_contra_k
+
 Step 3: Contra entry to keep Asset Customer Deposits Hive (server) balanced:
         Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
         Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD
 
     Net income change no change to DEA = LER
     LedgerType.FEE_INCOME fee_inc
+
 Step 4: Fee Income
         Debit: Liability VSC Liability (customer) - HIVE/HBD
         Credit: Revenue Fee Income Keepsats (keepsats) - SATS
 
     No net value change (conversion to Keepsats on VSC)
     LedgerType.WITHDRAW_HIVE withdraw_h
+
 Step 5: Deposit Keepsats into SERVER's Liability account:
         Debit: Liability VSC Liability (customer) - HIVE/HBD
         Credit: Liability VSC Liability (server) - SATS
+
 
     No net value change but net sats owned to customer
 Then Send custom_json Transfer from Server to Customer:

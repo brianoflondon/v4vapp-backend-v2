@@ -1,5 +1,5 @@
 """
-Internal conversions of Hive or HBD to Keepsats.
+Internal conversions of Keepsats to Hive or HBD.
 Operates by moving funds between the Server and VSC Liability accounts:
 
 ->  pre performed Step 1: Customer's balance debited of sats
@@ -29,6 +29,10 @@ Step 4: Fee Income
 Step 5: Deposit Hive into SERVER's Liability account:
         Debit: Liability VSC Liability (server) - HIVE/HBD
         Credit: Liability VSC Liability (customer) - HIVE/HBD
+
+
+
+
 
     No net value change but net sats owned to customer
 Then Send hive Transfer from Server to Customer:
@@ -231,6 +235,50 @@ async def conversion_keepsats_to_hive(
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
+
+    # MARK: Reclassify VSC Liability
+
+    ledger_type = LedgerType.RECLASSIFY_VSC_SATS
+    reclassify_sats_entry = LedgerEntry(
+        short_id=tracked_op.short_id,
+        op_type=tracked_op.op_type,
+        cust_id=cust_id,
+        ledger_type=ledger_type,
+        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Reclassify positive SATS from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
+        debit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        debit_unit=Currency.MSATS,
+        debit_amount=conv_result.to_convert_conv.msats,
+        debit_conv=conv_result.to_convert_conv,
+        credit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
+        credit_unit=Currency.MSATS,
+        credit_amount=conv_result.to_convert_conv.msats,
+        credit_conv=conv_result.to_convert_conv,
+    )
+    ledger_entries.append(reclassify_sats_entry)
+    await reclassify_sats_entry.save()
+
+    ledger_type = LedgerType.RECLASSIFY_VSC_HIVE
+    reclassify_hive_entry = LedgerEntry(
+        short_id=tracked_op.short_id,
+        op_type=tracked_op.op_type,
+        cust_id=cust_id,
+        ledger_type=ledger_type,
+        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Reclassify negative {to_currency} from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive outflow",
+        debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
+        debit_unit=to_currency,
+        debit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
+        debit_conv=conv_result.net_to_receive_conv,
+        credit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        credit_unit=to_currency,
+        credit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
+        credit_conv=conv_result.net_to_receive_conv,
+    )
+    ledger_entries.append(reclassify_hive_entry)
+    await reclassify_hive_entry.save()
 
     lightning_memo = getattr(tracked_op, "lightning_memo", "")
     if not lightning_memo:
