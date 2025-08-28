@@ -196,9 +196,23 @@
             String(now.getMinutes()).padStart(2, '0') + '-' +
             String(now.getSeconds()).padStart(2, '0');
 
-        // Get all the text content from the page
+        // Get rendered text (escaped/newlines preserved)
         const balanceSheetText = `{{ balance_sheet_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
         const profitLossText = `{{ profit_loss_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+
+        // Build account balances text if present
+        let accountBalancesText = '';
+        {% if account_balances %}
+        {% for acc in account_balances %}
+        accountBalancesText += `{{ acc.printout | replace('\n', '\\n') | replace('"', '\\"') }}` + '\n' + '-'.repeat(40) + '\n';
+        {% endfor %}
+        {% endif %}
+
+        // Include ledger entries text if present
+        let ledgerEntriesText = '';
+        {% if include_ledger_entries and ledger_entries_text %}
+        ledgerEntriesText = `{{ ledger_entries_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+        {% endif %}
 
         let reportContent = 'COMPLETE FINANCIAL REPORT\n';
         reportContent += '='.repeat(80) + '\n\n';
@@ -211,7 +225,12 @@
         reportContent += profitLossText + '\n\n';
         reportContent += 'ACCOUNT BALANCES\n';
         reportContent += '-'.repeat(40) + '\n';
-        reportContent += 'See complete report in browser for detailed account balances.\n\n';
+        reportContent += accountBalancesText + '\n';
+        {% if include_ledger_entries and ledger_entries_text %}
+        reportContent += '\nLEDGER ENTRIES\n';
+        reportContent += '-'.repeat(40) + '\n';
+        reportContent += ledgerEntriesText + '\n\n';
+        {% endif %}
 
         const blob = new Blob([reportContent], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
