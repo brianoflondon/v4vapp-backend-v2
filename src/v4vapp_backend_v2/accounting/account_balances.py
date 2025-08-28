@@ -472,7 +472,9 @@ async def get_keepsats_balance(
         as_of_date=as_of_date + timedelta(days=1),
     )
 
-    net_msats = int(account_balance.balances_net.get(Currency.MSATS, 0))
+    net_msats = int(account_balance.msats)
+    if net_msats < 0 and account_balance.sats == 0:
+        net_msats = 0
     return net_msats, account_balance
 
 
