@@ -5,7 +5,7 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import profi
 
 
 async def generate_profit_and_loss_report(
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    as_of_date: datetime | None = None,
     age: timedelta = timedelta(days=0),
 ) -> dict:
     """
@@ -22,6 +22,8 @@ async def generate_profit_and_loss_report(
             - Expenses: {account_name: {sub: {sats, msats, hive, hbd, usd}}}
             - Net Income: {sub: {sats, msats, hive, hbd, usd}, "Total": {...}}
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
     # Fetch ledger entries if DataFrame is empty
     pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
     pl_cursor = await LedgerEntry.collection().aggregate(pipeline=pl_pipeline)
@@ -32,21 +34,14 @@ async def generate_profit_and_loss_report(
 
 
 async def profit_and_loss_printout(
-    pl_report: dict = {},
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
+    pl_report: dict | None = None,
+    as_of_date: datetime | None = None,
     age: timedelta = timedelta(days=0),
 ) -> str:
-    """
-    Formats a Profit and Loss report, displaying SATS, msats, HIVE, HBD, and USD, with Net Income by sub-account and total.
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
 
-    Args:
-        pl_report (dict): The P&L report dictionary from generate_profit_and_loss_report.
-        as_of_date (datetime, optional): End date for the report period.
-
-    Returns:
-        str: A formatted string representation of the P&L report.
-    """
-    if not pl_report:
+    if pl_report is None:
         pl_report = await generate_profit_and_loss_report(as_of_date=as_of_date, age=age)
 
     max_width = 126

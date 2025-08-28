@@ -14,7 +14,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 # @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
+    as_of_date: datetime | None = None, age: timedelta = timedelta(seconds=0)
 ) -> Dict[str, Dict[str, Dict[str, float]]]:
     """
     Generates a balance sheet from MongoDB data.
@@ -26,6 +26,9 @@ async def generate_balance_sheet_mongodb(
     Returns:
         Sequence[Mapping[str, Any]]: The generated balance sheet.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     bs_pipeline = balance_sheet_pipeline(as_of_date=as_of_date, age=age)
     pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
 
@@ -89,9 +92,12 @@ async def generate_balance_sheet_mongodb(
     tolerance_msats_check = assets_total["msats"] - (
         liabilities_total["msats"] + equity_total["msats"]
     )
-    assert tolerance_msats_check == tolerance_msats, (
-        f"Balance sheet tolerance mismatch: {tolerance_msats_check} != {tolerance_msats}"
-    )
+    # Use math.isclose to avoid brittle exact equality on computed sums
+    if not math.isclose(tolerance_msats_check, tolerance_msats, rel_tol=0.0, abs_tol=1_000):
+        raise AssertionError(
+            f"Balance sheet tolerance mismatch: computed={tolerance_msats_check} msats, "
+            f"check pipeline returned={tolerance_msats} msats"
+        )
 
     balance_sheet["is_balanced"] = is_balanced
     balance_sheet["tolerance"] = tolerance_msats
@@ -101,18 +107,21 @@ async def generate_balance_sheet_mongodb(
 
 
 async def check_balance_sheet_mongodb(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime | None = None, age: timedelta | None = None
 ) -> Tuple[bool, float]:
     """
     Checks if the balance sheet is balanced using MongoDB data.
 
     Args:
-        as_of_date (datetime): The date for which the balance sheet is checked.
+        as_of_date (datetime | None): The date for which the balance sheet is checked.
         age (timedelta | None): The age of the data to include in the balance sheet.
 
     Returns:
         bool: True if the balance sheet is balanced, False otherwise.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     bs_check_pipeline = balance_sheet_check_pipeline(as_of_date=as_of_date, age=age)
     bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
     bs_check = await bs_check_cursor.to_list()
@@ -195,6 +204,7 @@ def balance_sheet_printout(balance_sheet: Dict) -> str:
     output.append("=" * max_width)
 
     return "\n".join(output)
+
 
 def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
     """

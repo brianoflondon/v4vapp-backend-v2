@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
+
 def balance_sheet_check_pipeline(
     as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
 ) -> Sequence[Mapping[str, Any]]:
@@ -303,7 +304,7 @@ def balance_sheet_pipeline(
 
 
 def profit_loss_pipeline(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime | None = None, age: timedelta | None = None
 ) -> Sequence[Mapping[str, Any]]:
     """
     Pipeline to generate a profit and loss statement as of a specific date.
@@ -314,6 +315,9 @@ def profit_loss_pipeline(
     Returns:
         dict: A dictionary representing the profit and loss statement.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     if age:
         start_date = as_of_date - age
         date_range_query = {"$gte": start_date, "$lte": as_of_date}
