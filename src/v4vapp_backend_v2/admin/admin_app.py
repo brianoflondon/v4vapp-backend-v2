@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,6 +18,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 
 
 @asynccontextmanager
@@ -108,12 +110,58 @@ class AdminApp:
             """Main admin dashboard"""
             nav_items = self.nav_manager.get_navigation_items()
             server_id = InternalConfig().server_id
+            # Gather hive account balances for display
+            hive_accounts = getattr(InternalConfig().config.hive, "hive_accs", []) or []
+            hive_balances: dict = {}
+            for acc in hive_accounts:
+                try:
+                    balances = await run_in_threadpool(account_hive_balances, acc)
+                    # Normalize and convert amounts to floats for rendering/formatting
+                    balances_norm: dict = {}
+                    for k, v in (balances or {}).items():
+                        key = str(k).upper()
+                        # Prefer HIVE and HBD keys
+                        if key in ("HIVE", "HBD") or key.lower() in ("hive", "hbd"):
+                            # Try multiple ways to coerce to float
+                            val = None
+                            try:
+                                val = float(v)
+                            except Exception:
+                                try:
+                                    # some Amount objects may expose 'amount' property
+                                    val = float(str(getattr(v, "amount", v)))
+                                except Exception:
+                                    try:
+                                        # fallback: try parsing numeric from string
+                                        val = float(str(v).split()[0].replace(",", ""))
+                                    except Exception:
+                                        val = None
+                            balances_norm[key] = val
+                except Exception as e:
+                    balances_norm = {"error": str(e)}
+                # Add formatted string representations for display in template
+                try:
+                    if "error" not in balances_norm:
+                        for k in ("HIVE", "HBD"):
+                            val = balances_norm.get(k)
+                            if val is None:
+                                balances_norm[f"{k}_fmt"] = "0.000"
+                            else:
+                                try:
+                                    balances_norm[f"{k}_fmt"] = f"{float(val):,.3f}"
+                                except Exception:
+                                    balances_norm[f"{k}_fmt"] = str(val)
+                except Exception:
+                    # keep original dict on any formatting error
+                    pass
+                hive_balances[acc] = balances_norm
             return self.templates.TemplateResponse(
                 "dashboard.html",
                 {
                     "request": request,
                     "title": "Admin Dashboard",
                     "nav_items": nav_items,
+                    "hive_balances": hive_balances,
                     "admin_info": {
                         "version": "1.0.0",
                         "project_version": project_version,

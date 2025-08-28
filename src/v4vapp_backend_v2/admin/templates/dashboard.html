@@ -19,10 +19,10 @@
     <div class="col-md-4 mb-4">
         <div class="card">
             <div class="card-body text-center">
-                <div class="h1 text-primary mb-2">⚙️</div>
-                <h5 class="card-title">Configuration</h5>
-                <p class="card-text text-muted">Manage V4VApp settings</p>
-                <a href="/admin/v4vconfig" class="btn btn-primary btn-sm">Configure</a>
+                <div class="h1 text-primary mb-2">👥</div>
+                <h5 class="card-title">Account Balances</h5>
+                <p class="card-text text-muted">View and manage account balances</p>
+                <a href="/admin/accounts" class="btn btn-primary btn-sm">View Accounts</a>
             </div>
         </div>
     </div>
@@ -30,10 +30,10 @@
     <div class="col-md-4 mb-4">
         <div class="card">
             <div class="card-body text-center">
-                <div class="h1 text-info mb-2">📊</div>
-                <h5 class="card-title">API Documentation</h5>
-                <p class="card-text text-muted">Explore the REST API</p>
-                <a href="/admin/docs" class="btn btn-info btn-sm" target="_blank">View Docs</a>
+                <div class="h1 text-info mb-2">�</div>
+                <h5 class="card-title">Financial Reports</h5>
+                <p class="card-text text-muted">Generate and view financial reports</p>
+                <a href="/admin/financial-reports" class="btn btn-info btn-sm" target="_blank">View Reports</a>
             </div>
         </div>
     </div>
@@ -69,17 +69,37 @@
                         </ul>
                     </div>
                     <div class="col-md-6">
-                        <h6 class="text-muted">Quick Actions</h6>
-                        <div class="d-flex flex-column gap-2">
-                            <a href="/admin/v4vconfig/refresh" class="btn btn-outline-primary btn-sm">
-                                <i class="bi bi-arrow-clockwise me-1"></i>
-                                Refresh Config
-                            </a>
-                            <a href="/admin/v4vconfig/api" class="btn btn-outline-info btn-sm" target="_blank">
-                                <i class="bi bi-code me-1"></i>
-                                View Config JSON
-                            </a>
+                        <h6 class="text-muted">Hive Balances</h6>
+                        {% if hive_balances %}
+                        <div class="table-responsive">
+                            <table class="table table-borderless table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Account</th>
+                                        <th scope="col" class="text-end">HIVE</th>
+                                        <th scope="col" class="text-end">HBD</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for acc, balances in hive_balances.items() %}
+                                    <tr>
+                                        <td><strong>{{ acc }}</strong></td>
+                                        {% if balances.error %}
+                                        <td colspan="2" class="text-danger small">Error: {{ balances.error }}</td>
+                                        {% else %}
+                                        <td class="text-end">{{ balances.get('HIVE_fmt') or balances.get('hive_fmt') or
+                                            '0.000' }}</td>
+                                        <td class="text-end">{{ balances.get('HBD_fmt') or balances.get('hbd_fmt') or
+                                            '0.000' }}</td>
+                                        {% endif %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
+                        {% else %}
+                        <div class="small text-muted">No hive accounts configured.</div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

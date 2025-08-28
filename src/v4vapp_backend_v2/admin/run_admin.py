@@ -15,7 +15,7 @@ import uvicorn
 src_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(src_dir))
 
-from v4vapp_backend_v2.admin.app import create_admin_app
+from v4vapp_backend_v2.admin.admin_app import create_admin_app
 
 
 def main():
