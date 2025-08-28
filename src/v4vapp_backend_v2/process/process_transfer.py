@@ -236,10 +236,11 @@ async def follow_on_transfer(
         server_has = server_balance[sending_amount.symbol]
         shortfall = sending_amount - server_has
         logger.warning(
-            f"Not enough HIVE in Server: {server_id} Shortfall: {shortfall} Error:{e}",
+            f"🚨🚨🚨 Not enough {sending_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
             extra={
                 "notification": True,
                 "server_balance": server_balance,
+                "error": str(e),
                 **tracked_op.log_extra,
             },
         )
@@ -304,9 +305,10 @@ async def follow_on_transfer(
                     server_has = server_balance[return_amount.symbol]
                     shortfall = return_amount - server_has
                     logger.warning(
-                        f"Not enough HIVE in Server: {server_id} Shortfall: {shortfall} Error:{e}",
+                        f"🚨🚨🚨 Not enough {return_amount.symbol}: {server_id} Shortfall: {shortfall} 🚨🚨🚨",
                         extra={
                             "notification": True,
+                            "error": str(e),
                             "server_balance": server_balance,
                             **tracked_op.log_extra,
                         },

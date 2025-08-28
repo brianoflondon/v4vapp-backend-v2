@@ -1,4 +1,3 @@
-from pprint import pprint
 from typing import List
 
 from nectar.amount import Amount
@@ -7,12 +6,12 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (
     account_hive_balances,
     get_verified_hive_client,
-    send_transfer_bulk,
+    send_pending,
 )
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 
-async def resend_hive_transaction():
+async def resend_pending_transactions():
     """
     Resend a pending Hive transaction.
     """
@@ -52,10 +51,12 @@ async def resend_hive_transaction():
                 )
                 sending.append(pending)
 
-    for pending in sending:
-        print(pending)
-
     nobroadcast = any(pending.nobroadcast for pending in sending)
     hive_client, _ = await get_verified_hive_client(nobroadcast=nobroadcast)
-    broadcast = await send_transfer_bulk(transfer_list=sending, hive_client=hive_client)
-    pprint(broadcast)
+    for pending in sending:
+        try:
+            trx = await send_pending(pending=pending, hive_client=hive_client)
+            logger.info(f"Resent pending transaction {pending}, trx: {trx.get('trx_id')}")
+            await pending.delete()
+        except Exception as e:
+            logger.warning(f"Failed to resend pending transaction {pending}: {e}")

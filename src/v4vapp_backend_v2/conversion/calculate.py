@@ -31,6 +31,8 @@ class ConversionResult(BaseModel):
     change: float
     change_conv: CryptoConv
     balance: float = 0.0
+    original_msats: float = 0.0
+    original_msats_conv: CryptoConv | None = None
 
     def _fmt_value(self, value: float, currency: Currency, padded: bool = False) -> str:
         """
@@ -97,6 +99,7 @@ class ConversionResult(BaseModel):
             ["to_currency", unit_label(self.to_currency), ""],
             ["to_convert", str(self.to_convert_amount), ""],
             ["net_to_receive", str(self.net_to_receive_amount), ""],
+            ["original_msats", str(self.original_msats), "msats"],
         ]
         return f"Conversion Details:\n{tabulate(conversion_data, headers=['Parameter', 'Value', 'Unit'], tablefmt='fancy_grid')}"
 
@@ -425,6 +428,9 @@ async def calc_keepsats_to_hive(
         raise HiveToKeepsatsConversionError("msats must be provided if amount is not supplied.")
 
     original_msats = msats
+    original_msats_conv = CryptoConversion(
+        value=original_msats, conv_from=from_currency, quote=quote
+    ).conversion
 
     # Deduct notification fee if above minimum threshold
     notification_fee = 0
@@ -476,4 +482,6 @@ async def calc_keepsats_to_hive(
         change=change,
         change_conv=change_conv,
         balance=balance,
+        original_msats=original_msats,
+        original_msats_conv=original_msats_conv,
     )

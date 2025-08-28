@@ -625,6 +625,37 @@ async def send_transfer_bulk(
         raise HiveSomeOtherRPCException(f"{ex}")
 
 
+async def send_pending(
+    pending: PendingTransaction,
+    hive_client: Hive | None = None,
+) -> Dict[str, str]:
+    """
+    Send a pending transaction.
+
+    Args:
+        pending (PendingTransaction): The pending transaction to send.
+        hive_client (Hive | None, optional): An instance of Hive client. If not provided, one will be created using the provided keys.
+
+    Returns:
+        Dict[str, str]: The result of the broadcasted transaction, or an empty dictionary if not broadcasted.
+
+    Raises:
+        ValueError: If neither hive_client nor keys are provided, or if nobroadcast is True while hive_client is provided.
+        HiveNotEnoughHiveInAccount: If the sender does not have sufficient funds.
+        HiveTryingToSendZeroOrNegativeAmount: If attempting to send zero or negative amount, or duplicate transaction detected.
+        HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
+    """
+    return await send_transfer(
+        to_account=pending.to_account,
+        amount=pending.amount,
+        from_account=pending.from_account,
+        memo=pending.memo,
+        hive_client=hive_client,
+        nobroadcast=pending.nobroadcast,
+        is_private=pending.is_private,
+    )
+
+
 async def send_transfer(
     to_account: str,
     amount: Amount,

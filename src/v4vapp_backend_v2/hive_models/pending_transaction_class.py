@@ -100,6 +100,13 @@ class PendingTransaction(BaseModel):
                 totals["HBD"] = totals.get("HBD", Amount("0.000 HBD")) + pending.amount
         return totals
 
+    @classmethod
+    async def find(cls, **kwargs) -> "PendingTransaction | None":
+        data = await InternalConfig.db["pending"].find_one(kwargs)
+        if data:
+            return cls.model_validate(data)
+        return None
+
     def __str__(self) -> str:
         """
         Returns a string representation of the PendingTransaction instance, including

@@ -37,6 +37,7 @@ from v4vapp_backend_v2.helpers.text_formatting import text_to_rtf
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -368,6 +369,20 @@ async def test_deposit_keepsats_spend_hive_custom_json():
 
 
 async def test_send_internal_keepsats_transfer_by_hive_transfer():
+    """
+    Test the process of sending an internal Keepsats transfer via a Hive transaction.
+
+    This test performs the following steps:
+    1. Deposits a specified amount of HIVE to Keepsats.
+    2. Retrieves and logs the current ledger count.
+    3. Sends a Hive transaction from a customer to the server, including a memo to trigger a Keepsats transfer.
+    4. Prints the transaction details for verification.
+
+    The test ensures that the integration between Hive deposits and Keepsats transfers works as expected.
+
+    Raises:
+        AssertionError: If any step in the process fails.
+    """
     await test_deposit_hive_to_keepsats(
         5_000, timeout=120, message="test_send_internal_keepsats_transfer_by_hive_transfer"
     )
@@ -382,6 +397,43 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
         customer="v4vapp-test",
     )
     pprint(trx)
+
+    await watch_for_ledger_count(ledger_count + 2)
+    await asyncio.sleep(5)
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "custom_json"}, sort=[("timestamp", -1)]
+    )
+    custom_json = CustomJson.model_validate(last_hive_op)
+    pprint(custom_json.model_dump())
+    print(custom_json.memo)
+    assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
+
+
+async def test_pending_hive_payment():
+    await test_deposit_hive_to_keepsats(5_000, timeout=120, message="test_pending_hive_payment")
+
+    memo = "Converting 5000 sats to #HBD"
+    transfer_internal = KeepsatsTransfer(
+        hive_accname_from="v4vapp-test",
+        hive_accname_to=InternalConfig().server_id,
+        sats=5_000,
+        memo=memo,
+    )
+    trx = await send_transfer_custom_json(transfer_internal)
+
+    pprint(trx)
+
+    # This will fail with a pending transaction because there isn't enough HBD
+    await asyncio.sleep(10)
+    pending = await PendingTransaction.list_all()
+    assert len(pending) > 0, "Expected at least one pending transaction"
+    amount = Amount("10.000 HBD")
+    memo = "deposit #sats"
+    await send_hive_customer_to_server(amount=amount, memo=memo, customer="v4vapp-test")
+
+    await asyncio.sleep(10)
+    pending = await PendingTransaction.list_all()
+    assert len(pending) == 0, "Expected no pending transactions"
 
 
 async def test_complete_balance_sheet_accounts_ledger():
