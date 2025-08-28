@@ -137,7 +137,7 @@ class CustomJson(OpBase):
                     return True
         return False
 
-    # MARK: Methods to surface CustomJsonData if it exists
+    # MARK: Methods to surface if it exists
     @property
     def paywithsats(self) -> bool:
         """
@@ -321,7 +321,5 @@ class CustomJson(OpBase):
             return f"{self.json_data.notification_str} {self.markdown_link}"
         return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.markdown_link}"
 
-    def notification_str(self) -> str:
-        if hasattr(self.json_data, "notification_str"):
-            return f"{self.json_data.notification_str} {self.markdown_link}"
-        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.markdown_link}"
+
+# Last line of the file
