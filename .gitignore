@@ -1,6 +1,7 @@
 # Local data
 archive_data/*
 d_vol/
+balance_sheet.rtf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -179,5 +180,4 @@ config/config_env.yaml
 config/*config.yaml
 config/*config.json
 config/mongo-keyfile
-balance_sheet.rtf
 

@@ -106,6 +106,11 @@ async def get_account_balance(
         line_items_bool = bool(line_items and line_items.lower() in ("true", "on", "1"))
         user_memos_bool = bool(user_memos and user_memos.lower() in ("true", "on", "1"))
 
+        # Enforce dependency: user memos only make sense when line items are shown.
+        # If line items are disabled, force user_memos to False server-side as well.
+        if not line_items_bool:
+            user_memos_bool = False
+
         # Parse the account from string
         account = LedgerAccount.from_string(account_string)
 

@@ -49,14 +49,30 @@
         color: var(--bs-body-color);
     }
 
+    /* Checked state: use fallback if CSS variable is missing and force knob color for visibility */
     .form-check-input:checked {
-        background-color: var(--v4v-primary);
-        border-color: var(--v4v-primary);
+        background-color: var(--v4v-primary, #2563eb) !important;
+        border-color: var(--v4v-primary, #2563eb) !important;
+        color: var(--v4v-primary, #2563eb) !important;
+    }
+
+    /* Some Bootstrap versions render the switch knob with ::before, others with ::after. Force a visible light-blue knob. */
+    .form-check-input:checked::before,
+    .form-check-input:checked::after {
+        background-color: #87CEEB !important;
+        /* light blue knob */
+        background-image: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Ensure the input is positioned so pseudo-elements align correctly */
+    .form-switch .form-check-input {
+        position: relative;
     }
 
     .form-check-input:focus {
-        border-color: var(--v4v-primary);
-        box-shadow: 0 0 0 0.25rem rgba(var(--v4v-primary-rgb), 0.25);
+        border-color: var(--v4v-primary, #2563eb);
+        box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.15);
     }
 
     .form-select:focus {
@@ -318,8 +334,6 @@
                 </div>
             </form>
         </div>
-        }
-
         <!-- Balance Report -->
         <div class="card">
             <div class="card-header">
@@ -638,6 +652,22 @@
                 });
         }
 
+        // Ensure user memos is always false when line items are disabled
+        function enforceUserMemosState() {
+            const lineSwitch = document.getElementById('lineItemsSwitch');
+            const memosSwitch = document.getElementById('userMemosSwitch');
+            if (!lineSwitch || !memosSwitch) return;
+
+            if (!lineSwitch.checked) {
+                // Turn off memos and disable the control so user cannot re-enable it
+                memosSwitch.checked = false;
+                memosSwitch.disabled = true;
+            } else {
+                // Re-enable memos when line items are enabled
+                memosSwitch.disabled = false;
+            }
+        }
+
         function downloadReport() {
             const content = document.getElementById('balancePrintout').textContent;
             const blob = new Blob([content], { type: 'text/plain' });
@@ -689,6 +719,17 @@
                     refreshBalance();
                 }
             });
+
+            // Initialize and enforce the dependency: user memos depends on line items
+            enforceUserMemosState();
+
+            // Also attach a change listener to enforce when the line items switch is toggled
+            const lineSwitch = document.getElementById('lineItemsSwitch');
+            if (lineSwitch) {
+                lineSwitch.addEventListener('change', function () {
+                    enforceUserMemosState();
+                });
+            }
         });
     </script>
     {% endblock %}
