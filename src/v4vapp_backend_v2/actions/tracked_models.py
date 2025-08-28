@@ -59,14 +59,6 @@ class ReplyModel(BaseModel):
         :param data: The data to initialize the model with.
         """
         super().__init__(**data)
-        # TODO: We could automatically determine the reply_type based on the reply_id
-        self.reply_id = data.get("reply_id", "")
-        self.reply_type = data.get("reply_type", None)
-        self.reply_msat = data.get("reply_msat", 0)
-        self.reply_error = data.get("reply_error", None)
-        self.reply_message = data.get("reply_message", None)
-
-    # model_config = ConfigDict(use_enum_values=True)
 
 
 class TrackedBaseModel(BaseModel):
