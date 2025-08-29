@@ -46,6 +46,10 @@ class BaseConfig(BaseModel):
     pass
 
 
+class AdminConfig(BaseConfig):
+    highlight_users: List[str] = []
+
+
 class LoggingConfig(BaseConfig):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
@@ -444,6 +448,8 @@ class Config(BaseModel):
 
     api_keys: ApiKeys = ApiKeys()
     hive: HiveConfig = HiveConfig()
+
+    admin_config: AdminConfig = AdminConfig()
 
     min_config_version: ClassVar[str] = "0.2.0"
 

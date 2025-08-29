@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -124,9 +124,8 @@ class AdminApp:
             nav_items = self.nav_manager.get_navigation_items()
             server_id = InternalConfig().server_id
             # Gather hive account balances for display
-            hive_accounts = getattr(InternalConfig().config.hive, "hive_accs", []) or []
             hive_balances: dict = {}
-            for acc in hive_accounts:
+            for acc in InternalConfig().config.admin_config.highlight_users:
                 try:
                     balances = await run_in_threadpool(account_hive_balances, acc)
                     # Normalize and convert amounts to floats for rendering/formatting
@@ -198,6 +197,16 @@ class AdminApp:
                 "project_version": project_version,
                 "config": self.config.config_filename,
             }
+
+        @self.app.get("/favicon.ico", include_in_schema=False)
+        async def favicon():
+            """Serve favicon"""
+            favicon_path = self.static_dir / "favicon.ico"
+            if favicon_path.exists():
+                return FileResponse(favicon_path)
+            else:
+                # Return a default favicon or 404
+                return FileResponse(self.static_dir / "favicon.ico", status_code=404)
 
 
 def create_admin_app(config_filename: str = "devhive.config.yaml") -> FastAPI:
