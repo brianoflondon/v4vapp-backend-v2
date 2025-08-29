@@ -15,7 +15,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     list_all_accounts,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 
 router = APIRouter()
@@ -46,7 +46,6 @@ async def accounts_page(request: Request):
         from v4vapp_backend_v2.accounting.ledger_account_classes import (
             AssetAccount,
             ExpenseAccount,
-            LiabilityAccount,
             RevenueAccount,
         )
 
@@ -180,7 +179,7 @@ async def get_account_balance(
                 # Fallback: try to convert to dict
                 try:
                     details_json = dict(details)
-                except:
+                except Exception:
                     # Last resort: convert to string representation
                     details_json = {
                         "error": f"Could not serialize details: {str(e)}",

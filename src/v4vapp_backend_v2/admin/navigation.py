@@ -46,6 +46,14 @@ class NavigationManager:
                 badge_color="success",
             ),
             NavigationItem(
+                name="Users",
+                url="/admin/users",
+                icon="👥",
+                description="View VSC Liability user accounts and balances",
+                badge="Users",
+                badge_color="info",
+            ),
+            NavigationItem(
                 name="Financial Reports",
                 url="/admin/financial-reports",
                 icon="📊",

@@ -103,6 +103,12 @@ class AdminApp:
             accounts.router, prefix="/admin/accounts", tags=["Account Balances"]
         )
 
+        # Users router
+        from v4vapp_backend_v2.admin.routers import users
+
+        users.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(users.router, prefix="/admin/users", tags=["Users"])
+
         # Financial Reports router
         from v4vapp_backend_v2.admin.routers import financial_reports
 

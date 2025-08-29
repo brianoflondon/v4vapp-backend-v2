@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people me-2"></i>
+                        VSC Liability Users
+                    </h5>
+                    <small class="text-muted">Users with VSC Liability accounts and their current balances</small>
+                </div>
+                <div class="card-body">
+                    {% if users_data %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th scope="col">User</th>
+                                    <th scope="col" class="text-end">Balance (SATS)</th>
+                                    <th scope="col" class="text-center">Status</th>
+                                    <th scope="col" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users_data %}
+                                <tr>
+                                    <td>
+                                        <strong>
+                                            <a href="/admin/accounts" class="text-decoration-none">
+                                                {{ user.sub }}
+                                            </a>
+                                        </strong>
+                                    </td>
+                                    <td class="text-end">
+                                        {% if user.balance_sats is not none %}
+                                        {% if user.balance_sats > 0 %}
+                                        <span class="text-success fw-bold">{{ user.balance_sats_fmt }}</span>
+                                        {% elif user.balance_sats < 0 %} <span class="text-danger fw-bold">{{
+                                            user.balance_sats_fmt }}</span>
+                                            {% else %}
+                                            <span class="text-muted">{{ user.balance_sats_fmt }}</span>
+                                            {% endif %}
+                                            {% else %}
+                                            <span class="text-warning">Error</span>
+                                            {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if user.error %}
+                                        <span class="badge bg-danger">Error</span>
+                                        {% elif user.has_transactions %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No Activity</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="/admin/accounts" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye me-1"></i>
+                                            View Details
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Summary Stats -->
+                    <div class="row mt-4">
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-primary">{{ summary.total_users }}</div>
+                                    <small class="text-muted">Total Users</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-success">{{ summary.active_users }}</div>
+                                    <small class="text-muted">Active Users</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-info">{{ summary.total_positive_balance_fmt }}</div>
+                                    <small class="text-muted">Total Positive Balance</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-warning">{{ summary.error_count }}</div>
+                                    <small class="text-muted">Errors</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="h1 text-muted mb-3">👥</div>
+                        <h4 class="text-muted">No VSC Liability Users Found</h4>
+                        <p class="text-muted">There are currently no users with VSC Liability accounts in the system.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
