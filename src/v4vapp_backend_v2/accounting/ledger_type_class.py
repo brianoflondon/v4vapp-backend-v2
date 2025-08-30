@@ -49,6 +49,8 @@ class LedgerType(StrEnum):
     CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
     CONTRA_LIGHTNING_TO_HIVE = "l_contra_h"  # Contra entry for Lightning to Hive conversion
 
+    CONSUME_CUSTOMER_KEEPSATS = "consume_k"  # Consume customer SATS for conversion
+
     CONTRA_HIVE_TO_KEEPSATS = "h_contra_k"  # Contra entry for Hive to Keepsats conversion
     CONTRA_KEEPSATS_TO_HIVE = "k_contra_h"  # Contra entry for Keepsats to Hive conversion
     RECLASSIFY_VSC_SATS = "r_vsc_sats"  # Reclassify VSC Liability (server) balance

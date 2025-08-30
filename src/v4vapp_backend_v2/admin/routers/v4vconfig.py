@@ -26,6 +26,8 @@ nav_manager = NavigationManager()
 # Global config instance - will be set by the admin app
 _admin_config: InternalConfig | None = None
 
+ICON = "🔗"
+
 
 def set_admin_config(config: InternalConfig):
     """Set the admin configuration instance"""
@@ -69,7 +71,7 @@ async def v4vconfig_dashboard(request: Request):
         )
 
     except Exception as e:
-        logger.error(f"Error loading V4V config dashboard: {e}")
+        logger.error(f"{ICON} Error loading V4V config dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load configuration: {e}")
 
 
@@ -88,7 +90,7 @@ async def get_v4vconfig_api():
         }
 
     except Exception as e:
-        logger.error(f"Error getting V4V config via API: {e}")
+        logger.error(f"{ICON} Error getting V4V config via API: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get configuration: {e}")
 
 
@@ -111,7 +113,7 @@ async def update_v4vconfig_api(new_config: V4VConfigData):
         await config.put()
 
         logger.info(
-            "V4V Configuration updated via admin API",
+            f"{ICON} V4V Configuration updated via admin API",
             extra={
                 "old_config": old_config.model_dump() if old_config else None,
                 "new_config": validated_config.model_dump(),
@@ -126,10 +128,10 @@ async def update_v4vconfig_api(new_config: V4VConfigData):
         }
 
     except ValidationError as e:
-        logger.warning(f"V4V config validation error: {e}")
+        logger.warning(f"{ICON} V4V config validation error: {e}")
         raise HTTPException(status_code=400, detail=f"Validation error: {e}")
     except Exception as e:
-        logger.error(f"Error updating V4V configuration: {e}")
+        logger.error(f"{ICON} Error updating V4V configuration: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update configuration: {e}")
 
 
@@ -160,7 +162,7 @@ async def update_v4vconfig_form(
             rate_limits_data = json.loads(rate_limits_json) if rate_limits_json.strip() else []
             rate_limits = [V4VConfigRateLimits(**rl) for rl in rate_limits_data]
         except (json.JSONDecodeError, ValidationError) as e:
-            logger.warning(f"Rate limits parsing error, keeping existing: {e}")
+            logger.warning(f"{ICON} Rate limits parsing error, keeping existing: {e}")
             # Keep existing rate limits if parsing fails
             current_config = config.data
             rate_limits = current_config.lightning_rate_limits if current_config else []
@@ -189,7 +191,7 @@ async def update_v4vconfig_form(
         await config.put()
 
         logger.info(
-            "V4V Configuration updated via admin form",
+            f"{ICON} V4V Configuration updated via admin form",
             extra={
                 "old_config": old_config.model_dump() if old_config else None,
                 "new_config": new_config.model_dump(),
@@ -200,7 +202,7 @@ async def update_v4vconfig_form(
         return RedirectResponse(url="/admin/v4vconfig?success=1", status_code=303)
 
     except ValidationError as e:
-        logger.error(f"V4V config form validation error: {e}")
+        logger.error(f"{ICON} V4V config form validation error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(
             "error.html",
@@ -213,7 +215,7 @@ async def update_v4vconfig_form(
             },
         )
     except Exception as e:
-        logger.error(f"V4V config form update error: {e}")
+        logger.error(f"{ICON} V4V config form update error: {e}")
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         return templates.TemplateResponse(
             "error.html",
@@ -233,10 +235,10 @@ async def refresh_v4vconfig():
     try:
         config = get_v4v_config()
         config.fetch()
-        logger.info("V4V Configuration refreshed from Hive via admin interface")
+        logger.info(f"{ICON} V4V Configuration refreshed from Hive via admin interface")
         return RedirectResponse(url="/admin/v4vconfig?refreshed=1", status_code=303)
     except Exception as e:
-        logger.error(f"Error refreshing V4V config: {e}")
+        logger.error(f"{ICON} Error refreshing V4V config: {e}")
         return RedirectResponse(url="/admin/v4vconfig?error=refresh_failed", status_code=303)
 
 

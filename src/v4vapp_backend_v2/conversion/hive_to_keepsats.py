@@ -101,7 +101,7 @@ async def conversion_hive_to_keepsats(
     """
     conv_result = await calc_hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
     from_currency = conv_result.from_currency
-    logger.info(f"{conv_result.log_str}")
+    logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert

@@ -42,6 +42,7 @@ Then Send hive Transfer from Server to Customer:
 
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import List
 
@@ -60,6 +61,7 @@ from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
@@ -123,7 +125,7 @@ async def conversion_keepsats_to_hive(
         )
     to_currency = conv_result.to_currency
     logger.debug(f"{conv_result}")
-    logger.info(f"{conv_result.log_str}")
+    logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
@@ -208,6 +210,31 @@ async def conversion_keepsats_to_hive(
     ledger_entries.append(fee_ledger_entry)
     await fee_ledger_entry.save()
 
+    # MARK: Consume Customer SATS for Conversion
+    # This is only necessary for direct sats to Hive conversions
+    if isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive:
+        logger.info(f"Direct sats to Hive conversion {tracked_op.group_id}")
+        ledger_type = LedgerType.CONSUME_CUSTOMER_KEEPSATS  # Add this to LedgerType
+        consume_entry = LedgerEntry(
+            short_id=tracked_op.short_id,
+            op_type=tracked_op.op_type,
+            cust_id=cust_id,
+            ledger_type=ledger_type,
+            group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.to_convert_conv.msats / 1000:,.0f} msats for {cust_id}",
+            debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
+            debit_unit=Currency.MSATS,
+            debit_amount=conv_result.to_convert_conv.msats,
+            debit_conv=conv_result.to_convert_conv,
+            credit=AssetAccount(name="Treasury Lightning", sub="from_keepsats"),
+            credit_unit=Currency.MSATS,
+            credit_amount=conv_result.to_convert_conv.msats,
+            credit_conv=conv_result.to_convert_conv,
+        )
+        ledger_entries.append(consume_entry)
+        await consume_entry.save()
+
     # MARK: 5 Hive to Keepsats Customer Deposit
     ledger_type = LedgerType.DEPOSIT_HIVE
     deposit_ledger_entry = LedgerEntry(
@@ -236,7 +263,7 @@ async def conversion_keepsats_to_hive(
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
 
-    # MARK: Reclassify VSC Liability
+    # MARK: Reclassify VSC sats Liability
 
     ledger_type = LedgerType.RECLASSIFY_VSC_SATS
     reclassify_sats_entry = LedgerEntry(
@@ -258,27 +285,6 @@ async def conversion_keepsats_to_hive(
     )
     ledger_entries.append(reclassify_sats_entry)
     await reclassify_sats_entry.save()
-
-    ledger_type = LedgerType.RECLASSIFY_VSC_HIVE
-    reclassify_hive_entry = LedgerEntry(
-        short_id=tracked_op.short_id,
-        op_type=tracked_op.op_type,
-        cust_id=cust_id,
-        ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Reclassify negative {to_currency} from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive outflow",
-        debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
-        debit_unit=to_currency,
-        debit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
-        debit_conv=conv_result.net_to_receive_conv,
-        credit=LiabilityAccount(name="VSC Liability", sub=server_id),
-        credit_unit=to_currency,
-        credit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
-        credit_conv=conv_result.net_to_receive_conv,
-    )
-    ledger_entries.append(reclassify_hive_entry)
-    await reclassify_hive_entry.save()
 
     lightning_memo = getattr(tracked_op, "lightning_memo", "")
     if not lightning_memo:
@@ -312,6 +318,39 @@ async def conversion_keepsats_to_hive(
     )
 
     await reply_with_hive(details, nobroadcast=nobroadcast)
+
+    while True:
+        pending = await PendingTransaction.list_all()
+        if not pending:
+            break
+        logger.warning(
+            f"Pending transactions waiting for Hive balance to refill. {tracked_op.group_id}",
+            extra={"notification": False},
+        )
+        await asyncio.sleep(30)
+    # TODO: #167 this should be part of the database for pending and only cleared later.
+    # MARK: Reclassify VSC Hive
+    # This reclassification should happen AFTER Hive is successfully SENT.
+    ledger_type = LedgerType.RECLASSIFY_VSC_HIVE
+    reclassify_hive_entry = LedgerEntry(
+        short_id=tracked_op.short_id,
+        op_type=tracked_op.op_type,
+        cust_id=cust_id,
+        ledger_type=ledger_type,
+        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        timestamp=datetime.now(tz=timezone.utc),
+        description=f"Reclassify negative {to_currency} from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive outflow",
+        debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
+        debit_unit=to_currency,
+        debit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
+        debit_conv=conv_result.net_to_receive_conv,
+        credit=LiabilityAccount(name="VSC Liability", sub=server_id),
+        credit_unit=to_currency,
+        credit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
+        credit_conv=conv_result.net_to_receive_conv,
+    )
+    ledger_entries.append(reclassify_hive_entry)
+    await reclassify_hive_entry.save()
 
 
 # Last line
