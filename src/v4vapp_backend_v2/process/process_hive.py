@@ -66,16 +66,18 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
 
     # MARK: Transfers or Recurrent Transfers
     try:
-        ledger_entry: LedgerEntry | None = None
         if isinstance(op, TransferBase):
             ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
+            return [ledger_entry] if ledger_entry else []
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
             ledger_entry = await process_create_fill_order_op(
                 limit_fill_order=op, nobroadcast=nobroadcast
             )
+            return [ledger_entry] if ledger_entry else []
         elif isinstance(op, CustomJson):
-            ledger_entry = await process_custom_json(custom_json=op, nobroadcast=nobroadcast)
-        return [ledger_entry] if ledger_entry else []
+            ledger_entries = await process_custom_json(custom_json=op, nobroadcast=nobroadcast)
+            return ledger_entries
+        return []
 
     except LedgerEntryException as e:
         logger.error(f"Error processing transfer operation: {e}")
@@ -345,7 +347,7 @@ async def process_create_fill_order_op(
 # MARK: CustomJson Operations
 async def process_custom_json(
     custom_json: CustomJson, nobroadcast: bool = False
-) -> LedgerEntry | None:
+) -> List[LedgerEntry]:
     """
     Processes a CustomJson operation and creates a ledger entry if applicable.
 
@@ -377,7 +379,7 @@ async def process_custom_json(
             if not custom_json.conv or custom_json.conv.is_unset():
                 quote = await TrackedBaseModel.nearest_quote(timestamp=custom_json.timestamp)
                 await custom_json.update_conv(quote=quote)
-            ledger_entry = await custom_json_internal_transfer(
+            ledger_entries = await custom_json_internal_transfer(
                 custom_json=custom_json, keepsats_transfer=keepsats_transfer
             )
             # Check for a parent id to see if this is a reply transaction
@@ -399,7 +401,7 @@ async def process_custom_json(
                         await process_lightning_receipt_stage_2(
                             invoice=parent_op, nobroadcast=nobroadcast
                         )
-                        return ledger_entry
+                        return ledger_entries
                     if isinstance(parent_op, CustomJson) and custom_json.to_account == server_id:
                         # Process this as if it were a request to convert Keepsats to Hive/HBD
                         logger.info(
@@ -411,7 +413,7 @@ async def process_custom_json(
                 # Process this as if it were an inbound Hive transfer with a memo.
                 await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
 
-            return
+            return []
 
         # MARK: CustomJson to pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
@@ -427,7 +429,7 @@ async def process_custom_json(
                     )
 
             await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
-            return None
+            return []
 
     logger.error(
         f"CustomJson operation not implemented for v4vapp_group_id: {custom_json.group_id}.",

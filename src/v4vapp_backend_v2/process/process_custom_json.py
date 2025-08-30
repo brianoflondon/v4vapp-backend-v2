@@ -1,10 +1,15 @@
+from datetime import datetime, timezone
+from typing import List
+
 from colorama import Fore, Style
 
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
-from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount, RevenueAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -18,7 +23,7 @@ from v4vapp_backend_v2.process.process_errors import (
 
 async def custom_json_internal_transfer(
     custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
-) -> LedgerEntry:
+) -> List[LedgerEntry]:
     """
     Must perform balance check before processing the transfer.
 
@@ -51,42 +56,40 @@ async def custom_json_internal_transfer(
     keepsats_transfer.msats = (
         keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
     )
-    # # From the server -> customer
-    # if keepsats_transfer.from_account == InternalConfig().server_id:
-    #     if net_msats < keepsats_transfer.msats:
-    #         logger.warning(
-    #             f"Ignoring low Server Keepsats balance {net_msats // 1000:,.0f} sats is insufficient for transfer of {keepsats_transfer.sats:,} sats.",
-    #             extra={"notification": False},
-    #         )
-    # # From customer -> server
-    # else:
-    if True:  # Always check keepsats balance
-        # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
-        if net_msats + 1_000 < keepsats_transfer.msats:
-            message = f"Insufficient Keepsats balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
-            logger.warning(message)
-            # Sending this to follow_on_transfer which will deal with the balance failure and send notification
-            return_details = HiveReturnDetails(
-                tracked_op=custom_json,
-                original_memo=keepsats_transfer.memo,
-                reason_str=message,
-                action=ReturnAction.CHANGE,
-                pay_to_cust_id=keepsats_transfer.from_account,
-                nobroadcast=nobroadcast,
-            )
-            trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
-            logger.info(
-                f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
-                extra={
-                    "notification": False,
-                    "trx": trx,
-                    **custom_json.log_extra,
-                    **return_details.log_extra,
-                },
-            )
-            raise InsufficientBalanceError(message)
+    server_id = InternalConfig().server_id
+    fee_transfer = False
+    fee_sats = custom_json.fee_memo
+    if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
+        fee_transfer = True
+
+    # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
+    if net_msats + 1_000 < keepsats_transfer.msats and not fee_transfer:
+        message = f"Insufficient Keepsats balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+        logger.warning(message)
+        # Sending this to follow_on_transfer which will deal with the balance failure and send notification
+        return_details = HiveReturnDetails(
+            tracked_op=custom_json,
+            original_memo=keepsats_transfer.memo,
+            reason_str=message,
+            action=ReturnAction.CHANGE,
+            pay_to_cust_id=keepsats_transfer.from_account,
+            nobroadcast=nobroadcast,
+        )
+        trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+        logger.info(
+            f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
+            extra={
+                "notification": False,
+                "trx": trx,
+                **custom_json.log_extra,
+                **return_details.log_extra,
+            },
+        )
+        raise InsufficientBalanceError(message)
 
     debit_credit_amount = keepsats_transfer.msats
+
+    ledger_entries: List[LedgerEntry] = []
 
     user_memo = (
         keepsats_transfer.user_memo
@@ -114,6 +117,7 @@ async def custom_json_internal_transfer(
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
+    ledger_entries.append(transfer_ledger_entry)
     return_details = None
     if keepsats_transfer.parent_id:
         parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
@@ -126,6 +130,7 @@ async def custom_json_internal_transfer(
                 "recurrent_transfer",
                 "fill_recurrent_transfer",
             ]
+            and not fee_transfer
         ):
             return_details = HiveReturnDetails(
                 tracked_op=parent_op,
@@ -136,8 +141,8 @@ async def custom_json_internal_transfer(
                 amount=parent_op.change_amount,
                 nobroadcast=nobroadcast,
             )
-    else:
-        # If there is no parent_id, we assume this is a new transfer
+    elif not fee_transfer:
+        # If there is no parent_id, we assume this is a new transfer but we don't acknowledge fees
         return_details = HiveReturnDetails(
             tracked_op=custom_json,
             original_memo=keepsats_transfer.memo,
@@ -147,10 +152,45 @@ async def custom_json_internal_transfer(
             nobroadcast=nobroadcast,
         )
 
+    if fee_transfer:
+        await TrackedBaseModel.update_quote()
+        quote = TrackedBaseModel.last_quote
+        fee_conv = CryptoConversion(
+            value=keepsats_transfer.msats, conv_from=Currency.MSATS, quote=quote
+        ).conversion
+        cust_id = custom_json.from_account
+        ledger_type = LedgerType.FEE_INCOME
+        fee_ledger_entry = LedgerEntry(
+            short_id=custom_json.short_id,
+            op_type=custom_json.op_type,
+            cust_id=cust_id,
+            ledger_type=ledger_type,
+            group_id=f"{custom_json.group_id}-{ledger_type.value}",
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Fee for Keepsats {keepsats_transfer.msats / 1000:,.0f} sats for {cust_id}",
+            debit=LiabilityAccount(
+                name="VSC Liability",
+                sub=server_id,
+            ),
+            debit_unit=Currency.MSATS,
+            debit_amount=keepsats_transfer.msats,
+            debit_conv=fee_conv,
+            credit=RevenueAccount(
+                name="Fee Income Keepsats",
+                sub="to_keepsats",
+            ),
+            user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
+            credit_unit=Currency.MSATS,
+            credit_amount=keepsats_transfer.msats,
+            credit_conv=fee_conv,
+        )
+        await fee_ledger_entry.save()
+        ledger_entries.append(fee_ledger_entry)
+
     if return_details:
         trx = await reply_with_hive(
             details=return_details,
             nobroadcast=nobroadcast,
         )
 
-    return transfer_ledger_entry
+    return ledger_entries

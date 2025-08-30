@@ -188,6 +188,28 @@ class CustomJson(OpBase):
         return ""
 
     @property
+    def fee_memo(self) -> int:
+        """
+        Extracts the fee amount in sats from a memo string in the format:
+        "Fee for Keepsats {number} sats for {username} #Fee"
+        where {number} can include commas (e.g., "1,234").
+
+        Args:
+            memo (str): The memo string to parse.
+
+        Returns:
+            int: The extracted fee amount in sats, or 0 if the format doesn't match.
+        """
+        if not self.memo:
+            return 0
+        pattern = r"Fee for Keepsats (\d+(?:,\d{3})*) sats for [\w-]+ #Fee"
+        match = re.search(pattern, self.memo)
+        if match:
+            sats_str = match.group(1)
+            return int(sats_str.replace(",", ""))
+        return 0  # Return 0 if the memo doesn't match the expected format
+
+    @property
     def d_memo(self) -> str:
         """
         Returns the decoded memo associated with the transfer.

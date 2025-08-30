@@ -49,11 +49,7 @@ from typing import List
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    AssetAccount,
-    LiabilityAccount,
-    RevenueAccount,
-)
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
@@ -102,6 +98,7 @@ async def conversion_hive_to_keepsats(
     conv_result = await calc_hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
     from_currency = conv_result.from_currency
     logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
+    logger.info(f"Conversion result: \n{conv_result}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
@@ -151,7 +148,7 @@ async def conversion_hive_to_keepsats(
         debit_conv=conv_result.to_convert_conv,
         credit=AssetAccount(
             name="Converted Keepsats Offset",
-            sub="to_keepsats",  # This is the Server
+            sub="to_keepsats",
             contra=True,
         ),
         credit_unit=from_currency,
@@ -162,35 +159,37 @@ async def conversion_hive_to_keepsats(
     await contra_ledger_entry.save()
 
     # MARK: 4 Fee Income From Customer
-    ledger_type = LedgerType.FEE_INCOME
-    fee_ledger_entry = LedgerEntry(
-        short_id=tracked_op.short_id,
-        op_type=tracked_op.op_type,
-        cust_id=cust_id,
-        ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="VSC Liability",
-            sub=cust_id,
-        ),
-        debit_unit=from_currency,
-        debit_amount=conv_result.fee_conv.value_in(from_currency),
-        debit_conv=conv_result.fee_conv,
-        credit=RevenueAccount(
-            name="Fee Income Keepsats",
-            sub="to_keepsats",
-        ),
-        user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
-        credit_unit=Currency.MSATS,
-        credit_amount=conv_result.fee_conv.msats,
-        credit_conv=conv_result.fee_conv,
-    )
-    ledger_entries.append(fee_ledger_entry)
-    await fee_ledger_entry.save()
+    # This needs to be a custom Json
+    # ledger_type = LedgerType.FEE_INCOME
+    # fee_ledger_entry = LedgerEntry(
+    #     short_id=tracked_op.short_id,
+    #     op_type=tracked_op.op_type,
+    #     cust_id=cust_id,
+    #     ledger_type=ledger_type,
+    #     group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+    #     timestamp=datetime.now(tz=timezone.utc),
+    #     description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
+    #     debit=LiabilityAccount(
+    #         name="VSC Liability",
+    #         sub=cust_id,
+    #     ),
+    #     debit_unit=from_currency,
+    #     debit_amount=conv_result.fee_conv.value_in(from_currency),
+    #     debit_conv=conv_result.fee_conv,
+    #     credit=RevenueAccount(
+    #         name="Fee Income Keepsats",
+    #         sub="to_keepsats",
+    #     ),
+    #     user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
+    #     credit_unit=Currency.MSATS,
+    #     credit_amount=conv_result.fee_conv.msats,
+    #     credit_conv=conv_result.fee_conv,
+    # )
+    # ledger_entries.append(fee_ledger_entry)
+    # await fee_ledger_entry.save()
 
     # MARK: 5 Hive to Keepsats Customer Deposit
+
     ledger_type = LedgerType.WITHDRAW_HIVE
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
@@ -206,15 +205,15 @@ async def conversion_hive_to_keepsats(
         ),
         user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
         debit_unit=from_currency,
-        debit_amount=conv_result.net_to_receive_conv.value_in(from_currency),
-        debit_conv=conv_result.net_to_receive_conv,
+        debit_amount=conv_result.to_convert_conv.value_in(from_currency),
+        debit_conv=conv_result.to_convert_conv,
         credit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,  # This is the asset account for the server, where keepsats are held
         ),
         credit_unit=Currency.MSATS,
-        credit_amount=conv_result.net_to_receive_conv.msats,
-        credit_conv=conv_result.net_to_receive_conv,
+        credit_amount=conv_result.to_convert_conv.msats,
+        credit_conv=conv_result.to_convert_conv,
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
@@ -237,14 +236,42 @@ async def conversion_hive_to_keepsats(
     tracked_op.change_conv = conv_result.change_conv
     await tracked_op.save()
 
+    # This needs to be a custom json transfering Keepsats from devser VSC Liability to customer
+    # should be the FULL amount (including the fee)
+    # Then the fee will be a separate custom json
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
-        msats=conv_result.net_to_receive_conv.msats,
+        msats=conv_result.to_convert_conv.msats,
         memo=tracked_op.d_memo,
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
+    logger.info(
+        f"Sent main transfer custom_json: {trx['trx_id']}",
+        extra={"trx": trx, **transfer.log_extra},
+    )
+
+    transfer_fee = KeepsatsTransfer(
+        from_account=cust_id,
+        to_account=server_id,
+        msats=conv_result.fee_conv.msats,
+        memo=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id} #Fee",
+        parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
+    )
+    trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)
+    logger.info(
+        f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
+    )
+
+    # transfer = KeepsatsTransfer(
+    #     from_account=server_id,
+    #     to_account=cust_id,
+    #     msats=conv_result.net_to_receive_conv.msats,
+    #     memo=tracked_op.d_memo,
+    #     parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
+    # )
+    # trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
 
     logger.info(f"Sent custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer.log_extra})
 

@@ -236,6 +236,7 @@ async def send_transfer_custom_json(
             send_from = transfer.from_account
         else:
             send_from = InternalConfig().server_id
+        # TODO: #169 add pending for custom_json
         trx = await send_custom_json(
             json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
             send_account=send_from,

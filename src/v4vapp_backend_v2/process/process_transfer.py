@@ -67,7 +67,12 @@ async def follow_on_transfer(
     # MARK: 1. Checks
     # Check if the operation already has a lightning payment transaction
     # If it does, we skip processing
+    # if this was a Fee memo from a conversion, don't follow on process.
     reply_messages = []
+    if getattr(tracked_op, "fee_memo", 0) > 0:
+        logger.info(f"Operation is a fee memo, skipping processing. {tracked_op.memo}")
+        return
+
     if tracked_op.replies:
         for reply in tracked_op.replies:
             if reply.reply_type not in [ReplyType.LEDGER_ERROR, ReplyType.CUSTOM_JSON]:
