@@ -419,6 +419,8 @@ async def calc_keepsats_to_hive(
             change=change,
             change_conv=change_conv,
             balance=balance,
+            original_msats=target_net_conv.msats,
+            original_msats_conv=target_net_conv,
         )
 
     # ------------------------------------------------------------------

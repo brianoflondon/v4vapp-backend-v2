@@ -79,6 +79,60 @@ class TestAdminEndpoints:
         if response.status_code == 200:
             assert response.headers.get("content-type") == "image/x-icon"
 
+    def test_user_balance_endpoint(self, admin_client):
+        """Test direct user balance endpoint"""
+        # Test GET version
+        response = admin_client.get("/admin/accounts/balance/user/v4vapp-test")
+        assert response.status_code == 200
+        content = response.text
+
+        # Check for expected content - could be balance page or error page depending on DB availability
+        expected_title = "Balance: VSC Liability (Liability) - Sub: v4vapp-test"
+        error_title = "Balance Error"
+
+        if expected_title in content:
+            # Database is available, check for balance content
+            assert "VSC Liability" in content
+            print("✓ Balance page loaded successfully")
+        elif error_title in content:
+            # Database is not available, check for error content
+            assert "VSC Liability (Liability) - Sub: v4vapp-test" in content
+            assert "error" in content.lower()
+            print("✓ Error page displayed correctly (database not available)")
+        else:
+            # Unexpected response
+            assert False, (
+                f"Unexpected response content. Expected '{expected_title}' or '{error_title}' in response"
+            )
+
+        # Test POST version with form data
+        response = admin_client.post(
+            "/admin/accounts/balance/user/brianoflondon",
+            data={
+                "line_items": "true",
+                "user_memos": "true",
+                "as_of_date_str": "",
+                "age_hours": "0",
+            },
+        )
+        assert response.status_code == 200
+        content = response.text
+
+        # Check that we get some response (balance or error)
+        assert (
+            "Balance: VSC Liability (Liability) - Sub: brianoflondon" in content
+            or "Balance Error" in content
+        )
+
+    def test_user_balance_endpoint_invalid_user(self, admin_client):
+        """Test user balance endpoint with invalid user"""
+        response = admin_client.get("/admin/accounts/balance/user/nonexistent_user")
+        # Should still return 200 but with error content
+        assert response.status_code == 200
+        content = response.text
+        # Should contain error information
+        assert "Balance Error" in content or "error" in content.lower()
+
 
 class TestAdminTemplates:
     """Test template rendering and content"""

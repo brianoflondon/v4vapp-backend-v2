@@ -19,24 +19,75 @@
     .account-summary {
         background-color: var(--bs-secondary-bg);
         border-radius: 8px;
-        padding: 1rem;
+        padding: 0.5rem;
         margin-bottom: 1.5rem;
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .account-summary-left {
+        flex: 1;
+    }
+
+    .account-summary-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .account-summary-title {
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .balance-display {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .balance-item {
+        background-color: var(--card-bg);
+        border-radius: 6px;
+        padding: 0.5rem;
+        border-left: 4px solid var(--v4v-primary);
+        min-width: 120px;
+        text-align: center;
+        padding-right: 2rem;
+    }
+
+    .balance-label {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--v4v-secondary);
+        margin-bottom: 0.25rem;
+    }
+
+    .balance-value {
+        font-size: 1.1rem;
+        font-weight: bold;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        color: var(--bs-body-color);
     }
 
     .account-details {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
     }
 
     .detail-item {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.5rem;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.25rem 0.5rem;
         background-color: var(--card-bg);
-        border-radius: 6px;
-        border-left: 4px solid var(--v4v-primary);
+        border-radius: 4px;
+        border-left: 3px solid var(--v4v-primary);
+        font-size: 0.8rem;
     }
 
     .detail-label {
@@ -182,36 +233,50 @@
 <div class="container-fluid">
     <!-- Account Summary -->
     <div class="account-summary">
-        <h4 class="mb-3">
-            <i class="bi bi-bank2 me-2"></i>
-            {{ account.name }}
-            {% if account.sub %}
-            <small class="text-muted">- {{ account.sub }}</small>
-            {% endif %}
-            {% if account.contra %}
-            <span class="badge bg-warning ms-2">Contra</span>
-            {% endif %}
-        </h4>
+        <div class="balance-item">
+            <div class="account-summary-header">
+                <h5 class="account-summary-title">
+                    <i class="bi bi-calculator me-2"></i>
+                    {{ account.sub }}
+                </h5>
+            </div>
+            <div class="balance-value">{{ "{:,}".format(details.sats or 0) }} SATS</div>
+        </div>
 
-        <div class="account-details">
-            <div class="detail-item">
-                <span class="detail-label">Account Type:</span>
-                <span class="detail-value">{{ account.account_type.value }}</span>
+        <div class="account-summary-left">
+            <div class="account-summary-header">
+                <h5 class="account-summary-title">
+                    <i class="bi bi-bank2 me-2"></i>
+                    {{ account.name }}
+                    {% if account.sub %}
+                    <small class="text-muted">- {{ account.sub }}</small>
+                    {% endif %}
+                    {% if account.contra %}
+                    <span class="badge bg-warning ms-2">Contra</span>
+                    {% endif %}
+                </h5>
             </div>
-            <div class="detail-item">
-                <span class="detail-label">Sub Account:</span>
-                <span class="detail-value">{{ account.sub if account.sub else 'None' }}</span>
+
+            <div class="account-details">
+                <div class="detail-item">
+                    <span class="detail-label">Type:</span>
+                    <span class="detail-value">{{ account.account_type.value }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Sub:</span>
+                    <span class="detail-value">{{ account.sub if account.sub else 'None' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Report Date:</span>
+                    <span class="detail-value">{{ as_of_date.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+                </div>
+                {% if age_hours and age_hours > 0 %}
+                <div class="detail-item">
+                    <span class="detail-label">Age Filter:</span>
+                    <span class="detail-value">{{ age_hours }} hours</span>
+                </div>
+                {% endif %}
             </div>
-            <div class="detail-item">
-                <span class="detail-label">Report Date:</span>
-                <span class="detail-value">{{ as_of_date.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
-            </div>
-            {% if age_hours and age_hours > 0 %}
-            <div class="detail-item">
-                <span class="detail-label">Age Filter:</span>
-                <span class="detail-value">{{ age_hours }} hours</span>
-            </div>
-            {% endif %}
         </div>
     </div>
 
@@ -284,7 +349,6 @@
         </div>
     </div>
 
-    <!-- Balance Controls -->
     <!-- Balance Controls -->
     <div class="card mb-3">
         <div class="card-header">
