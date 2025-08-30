@@ -15,6 +15,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_objec
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
+from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -118,6 +119,14 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                         )
 
                 return ledger_entries
+
+        except HiveNotEnoughHiveInAccount as e:
+            logger.error(
+                f"Not enough funds for {cust_id}: {e}",
+                extra={"notification": True, "error-code": f"not-enough-funds-{cust_id}"},
+            )
+            return []
+
         except LedgerEntryDuplicateException as e:
             raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
 
