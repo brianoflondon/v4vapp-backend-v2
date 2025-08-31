@@ -1,5 +1,5 @@
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,6 +13,16 @@ from v4vapp_backend_v2.hive.hive_extras import (
     send_custom_json,
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+
+
+@pytest.fixture
+async def mock_pending_custom_json():
+    """Fixture to mock PendingCustomJson for send_custom_json tests."""
+    with patch("v4vapp_backend_v2.hive.hive_extras.PendingCustomJson") as mock_class:
+        mock_instance = mock_class.return_value
+        mock_instance.save = AsyncMock(return_value=None)
+        mock_instance.delete = AsyncMock(return_value=None)
+        yield mock_class
 
 
 @pytest.mark.asyncio
@@ -129,7 +139,13 @@ async def test_get_hive_client_error():
     reason="Active key not provided.",
 )
 @pytest.mark.asyncio
-async def test_send_custom_json_active_key():
+@patch("v4vapp_backend_v2.hive.hive_extras.PendingCustomJson")
+async def test_send_custom_json_active_key(mock_pending_class):
+    # Configure the mock for PendingCustomJson
+    mock_pending_instance = mock_pending_class.return_value
+    mock_pending_instance.save = AsyncMock(return_value=None)  # Mock save() as async
+    mock_pending_instance.delete = AsyncMock(return_value=None)  # Mock delete() as async if needed
+
     test_data = KeepsatsTransfer(
         from_account="alice",
         to_account="bob",
@@ -156,7 +172,7 @@ async def test_send_custom_json_active_key():
     reason="Active key not provided.",
 )
 @pytest.mark.asyncio
-async def test_send_custom_json_posting_key():
+async def test_send_custom_json_posting_key(mock_pending_custom_json):
     test_data = KeepsatsTransfer(
         from_account="alice",
         to_account="bob",
@@ -183,7 +199,7 @@ async def test_send_custom_json_posting_key():
     reason="Active key not provided.",
 )
 @pytest.mark.asyncio
-async def test_send_custom_json_fail_posting_key_instead_active():
+async def test_send_custom_json_fail_posting_key_instead_active(mock_pending_custom_json):
     test_data = KeepsatsTransfer(
         from_account="alice",
         to_account="bob",
@@ -235,7 +251,7 @@ async def test_send_custom_json_fail_posting_key_instead_active():
         ),
         # Test case: Generic exception
         (
-            {"key": "value"},
+            {"key": "test 5"},
             "test_account",
             MagicMock(custom_json=MagicMock(side_effect=Exception("Generic error"))),
             [],
@@ -245,11 +261,20 @@ async def test_send_custom_json_fail_posting_key_instead_active():
     ],
 )
 async def test_send_custom_json_failures(
-    json_data, send_account, hive_client, keys, expected_exception, match_message
+    json_data,
+    send_account,
+    hive_client,
+    keys,
+    expected_exception,
+    match_message,
+    mock_pending_custom_json,
 ):
     """
     Parameterized test for failure scenarios in send_custom_json.
     """
+    # Ensure hive_client.nobroadcast matches the default nobroadcast=False to avoid ValueError
+    if hive_client:
+        hive_client.nobroadcast = False
     with pytest.raises(expected_exception, match=match_message):
         await send_custom_json(
             json_data=json_data,

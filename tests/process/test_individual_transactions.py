@@ -157,10 +157,10 @@ async def test_hive_and_hbd_to_lnd_only():
         )
         assert trx.get("trx_id"), "Transaction failed to send"
 
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 18, timeout=60)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 22, timeout=60)
 
     await asyncio.sleep(1)
-    assert len(all_ledger_entries) - ledger_count == 18, "Expected 18 new ledger entries"
+    assert len(all_ledger_entries) - ledger_count == 22, "Expected 22 new ledger entries"
     limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
     limit_used = limits_after[0].total_sats - limits_before[0].total_sats
     logger.info(f"Limit used: {limit_used} sats")

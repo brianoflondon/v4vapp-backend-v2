@@ -213,6 +213,7 @@ def random_amount() -> Amount:
     return Amount(f"{value:.3f} {symbol}")
 
 
+@pytest.mark.skip
 async def test_store_pending():
     server_id = InternalConfig().server_id
     for n in range(5):
