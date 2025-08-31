@@ -243,7 +243,8 @@ async def subscribe_stream(
     pipeline: Sequence[Mapping[str, Any]] | None = None,
     use_resume=True,
     error_count: int = 0,
-):
+    error_code: str | None = None,
+) -> str | None:
     """
     Asynchronously subscribes to a stream and logs updates.
 
@@ -281,6 +282,11 @@ async def subscribe_stream(
             logger.warning(f"{ICON} {collection_name} stream started from 60s ago.")
 
         async with await collection.watch(**watch_kwargs) as stream:
+            if error_code:
+                logger.info(
+                    f"{ICON} {collection_name} stream error: {error_code}",
+                    extra={"notification": True, "error_code_clear": error_code},
+                )
             error_code = f"db_monitor_{collection_name}"
 
             # Close the stream immediately when shutdown is requested
@@ -344,10 +350,13 @@ async def subscribe_stream(
             if not shutdown_event.is_set():
                 asyncio.create_task(
                     subscribe_stream(
-                        collection_name=collection_name, pipeline=pipeline, error_count=error_count
+                        collection_name=collection_name,
+                        pipeline=pipeline,
+                        error_count=error_count,
+                        error_code=error_code,
                     )
                 )
-            return
+            return error_code
 
     except (
         ServerSelectionTimeoutError,
@@ -366,10 +375,13 @@ async def subscribe_stream(
         if not shutdown_event.is_set():
             asyncio.create_task(
                 subscribe_stream(
-                    collection_name=collection_name, pipeline=pipeline, error_count=error_count
+                    collection_name=collection_name,
+                    pipeline=pipeline,
+                    error_count=error_count,
+                    error_code=error_code,
                 )
             )
-        return
+        return error_code
 
     except Exception as e:
         logger.error(

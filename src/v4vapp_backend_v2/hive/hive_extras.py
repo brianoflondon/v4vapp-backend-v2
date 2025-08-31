@@ -105,9 +105,9 @@ class HiveTryingToSendZeroOrNegativeAmount(HiveTransferError):
     pass
 
 
-class HiveAccountNameOnExchangesList(HiveTransferError):
+class HiveMissingKeyError(HiveTransferError):
     """
-    Exception raised when the Hive account name is on the bad accounts list.
+    Exception raised when a required key is missing.
     """
 
     pass
@@ -628,9 +628,9 @@ async def send_pending(
         HiveSomeOtherRPCException: For any other RPC or unexpected exceptions.
     """
     return await send_transfer(
-        to_account=pending.to_account,
+        to_account=str(pending.to_account),
         amount=pending.amount,
-        from_account=pending.from_account,
+        from_account=str(pending.from_account),
         memo=pending.memo,
         nobroadcast=pending.nobroadcast,
         hive_client=hive_client,
@@ -696,16 +696,16 @@ async def send_transfer(
         memo = f"#{memo}"
 
     retries = 0
+    store_pending = await PendingTransaction(
+        from_account=from_account,
+        to_account=to_account,
+        amount=amount,
+        memo=memo,
+        nobroadcast=nobroadcast,
+        is_private=is_private,
+    ).save()
     while retries < 3:
         try:
-            store_pending = await PendingTransaction(
-                from_account=from_account,
-                to_account=to_account,
-                amount=amount,
-                memo=memo,
-                nobroadcast=nobroadcast,
-                is_private=is_private,
-            ).save()
             trx = account.transfer(
                 to=to_account,
                 amount=amount.amount,
@@ -742,12 +742,14 @@ async def send_transfer(
                         sending_amount=amount,
                     )
                 elif "Cannot transfer a negative amount" in arg:
+                    await store_pending.delete()
                     raise HiveTryingToSendZeroOrNegativeAmount(
                         f"{from_account} Failure during send | "
                         f"Can't send negative or zero {amount.amount_decimal:.3f} {amount.symbol} | "
                         f"to: {to_account} | Hive error: {ex}"
                     )
                 elif "Duplicate transaction check failed" in arg:
+                    await store_pending.delete()
                     raise HiveTryingToSendZeroOrNegativeAmount(
                         f"{from_account} Failure during send | "
                         f"Looks like we tried to send transaction twice | "
@@ -809,9 +811,30 @@ async def send_transfer(
                         },
                     )
                     raise HiveSomeOtherRPCException(f"{ex}")
+        except MissingKeyError as ex:
+            await store_pending.delete()
+            logger.error(
+                f"MissingKeyError during send_transfer: {ex}",
+                extra={
+                    "notification": True,
+                    "to_account": to_account,
+                    "from_account": from_account,
+                    "amount": amount.amount_decimal,
+                    "symbol": amount.symbol,
+                    "memo": memo,
+                },
+            )
+            raise HiveMissingKeyError(
+                f"{from_account} Failure during send | "
+                f"Missing Key | "
+                f"{memo} | "
+                f"{amount.amount_decimal:.3f} {amount.symbol} | "
+                f"to: {to_account} | Hive error: {ex}"
+            )
+
         except Exception as ex:
             logger.error(
-                f"UnhandledRPCError during send_transfer: {ex}",
+                f"UnhandledRPCError during send_transfer: {ex} {ex.__class__.__name__}",
                 extra={
                     "notification": True,
                     "to_account": to_account,

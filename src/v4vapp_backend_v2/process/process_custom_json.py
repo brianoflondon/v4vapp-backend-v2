@@ -15,6 +15,7 @@ from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import (
     CustomJsonToLightningError,
     InsufficientBalanceError,
@@ -154,6 +155,7 @@ async def custom_json_internal_transfer(
 
     if fee_transfer:
         await TrackedBaseModel.update_quote()
+        fee_direction = custom_json.fee_direction
         quote = TrackedBaseModel.last_quote
         fee_conv = CryptoConversion(
             value=keepsats_transfer.msats, conv_from=Currency.MSATS, quote=quote
@@ -177,7 +179,7 @@ async def custom_json_internal_transfer(
             debit_conv=fee_conv,
             credit=RevenueAccount(
                 name="Fee Income Keepsats",
-                sub="to_keepsats",
+                sub=fee_direction,
             ),
             user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
             credit_unit=Currency.MSATS,
@@ -186,6 +188,10 @@ async def custom_json_internal_transfer(
         )
         await fee_ledger_entry.save()
         ledger_entries.append(fee_ledger_entry)
+        if keepsats_transfer.parent_id:
+            parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
+            if parent_op:
+                await release_keepsats(tracked_op=parent_op)
 
     if return_details:
         trx = await reply_with_hive(

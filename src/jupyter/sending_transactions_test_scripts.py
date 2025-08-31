@@ -147,7 +147,6 @@ async def main():
     )
     pprint(trx)
 
-    pprint(trx)
     # trx = await send_hive_customer_to_server(amount=Amount("25 HIVE"), memo="Deposit yet more #sats")
     # pprint(trx)
     await asyncio.sleep(30)  # Wait for the transaction to be processed

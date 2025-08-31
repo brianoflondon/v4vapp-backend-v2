@@ -7,9 +7,11 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import process_clean_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
+from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
-from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
 
 
 async def process_lightning_receipt(
@@ -100,7 +102,10 @@ async def process_lightning_receipt(
 async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool = False) -> None:
     """
     Process the second part of a Lightning invoice which is inbound.
-    This function is called after the initial deposit has been made.
+    This function is called after the initial deposit has been made by custom_json transfer
+    from the server_id to the cust_id within the VSC Liability accounts.
+
+    This is called from the `process_custom_json` function whenever the server is the sender.
 
     Args:
         invoice (Invoice): The Lightning invoice to be processed.
@@ -112,25 +117,40 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
 
     # MARK: Sats to Hive or HBD
     server_id = InternalConfig().server_id
-    if (
-        invoice.cust_id
-        and invoice.is_lndtohive
-        and invoice.recv_currency in {Currency.HIVE, Currency.HBD}
-    ):
-        # For now we will treat any inbound amount as Keepsats.
-        # Not sure this is right... need to think about the custom_json use in the LND to Hive loop.
-        logger.info(f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}")
-        # This will send Hive or a custom_json at the end.
-        # Check for fixed quote in the conversion to Hive/HBD
-        await conversion_keepsats_to_hive(
-            server_id=server_id,
-            cust_id=invoice.cust_id,
-            tracked_op=invoice,
-            to_currency=invoice.recv_currency,
-            nobroadcast=nobroadcast,
-        )
-        return
+    if invoice.cust_id and invoice.is_lndtohive:
+        if invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
+            # For now we will treat any inbound amount as Keepsats.
+            # Not sure this is right... need to think about the custom_json use in the LND to Hive loop.
+            logger.info(
+                f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}"
+            )
+            # This will send Hive or a custom_json at the end.
+            # Check for fixed quote in the conversion to Hive/HBD
+            await conversion_keepsats_to_hive(
+                server_id=server_id,
+                cust_id=invoice.cust_id,
+                tracked_op=invoice,
+                to_currency=invoice.recv_currency,
+                nobroadcast=nobroadcast,
+            )
+            return
+        elif invoice.recv_currency in {Currency.SATS, Currency.MSATS}:
+            logger.info(
+                f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
+                extra={"notification": False},
+            )
+            details = HiveReturnDetails(
+                tracked_op=invoice,
+                original_memo=invoice.memo,
+                reason_str=process_clean_memo(invoice.memo),
+                action=ReturnAction.CHANGE,
+                pay_to_cust_id=invoice.cust_id,
+                nobroadcast=nobroadcast,
+            )
+            await reply_with_hive(details=details, nobroadcast=nobroadcast)
+            return
 
+    # MARK: No further action (not a conversion)
     else:
         logger.error(
             f"Unsupported currency for Lightning to Hive transfer: {invoice.recv_currency}",

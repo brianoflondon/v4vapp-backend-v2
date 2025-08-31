@@ -56,7 +56,7 @@ This must be run after the three watchers are running, as it relies on the watch
 
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
-    ic = InternalConfig(config_filename="config/devhive.config.yaml")
+    InternalConfig(config_filename="config/devhive.config.yaml")
     db_conn = DBConn()
     await db_conn.setup_database()
     yield
@@ -286,7 +286,7 @@ async def test_conversion_keepsats_to_hive():
     )
     net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp-test")
     ledger_count = await get_ledger_count()
-    logger.info(f"Ledger count: {ledger_count}")
+    logger.info(f"Starting Ledger count: {ledger_count}")
     transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
@@ -294,7 +294,7 @@ async def test_conversion_keepsats_to_hive():
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
-    await watch_for_ledger_count(ledger_count + 6)
+    await watch_for_ledger_count(ledger_count + 12)
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 
@@ -398,7 +398,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     )
     pprint(trx)
 
-    await watch_for_ledger_count(ledger_count + 2)
+    await watch_for_ledger_count(ledger_count + 3)
     await asyncio.sleep(5)
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]

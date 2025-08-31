@@ -210,6 +210,18 @@ class CustomJson(OpBase):
         return 0  # Return 0 if the memo doesn't match the expected format
 
     @property
+    def fee_direction(self) -> str:
+        """
+        Returns the fee direction based on the memo.
+
+        Returns:
+            str: The fee direction, either "to_keepsats" or "from_keepsats".
+        """
+        if "#to_keepsats" in self.memo:
+            return "to_keepsats"
+        return "from_keepsats"
+
+    @property
     def d_memo(self) -> str:
         """
         Returns the decoded memo associated with the transfer.

@@ -23,7 +23,7 @@ from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.process_custom_json import custom_json_internal_transfer
 from v4vapp_backend_v2.process.process_errors import HiveLightningError
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt_stage_2
-from v4vapp_backend_v2.process.process_resend_hive import resend_pending_transactions
+from v4vapp_backend_v2.process.process_resend_hive import resend_pending_transactions, resend_transactions
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
 
 # MARK: Hive Transaction Processing
@@ -254,7 +254,7 @@ async def process_transfer_op(
         try:
             await follow_on_task
             # In addition to processing, check if there are any pending transactions
-            await resend_pending()
+            await resend_transactions()
         except LedgerEntryDuplicateException as e:
             logger.warning(f"Follow-on task duplicate entry: {e}", extra={"notification": False})
         except Exception as e:

@@ -42,17 +42,12 @@ Then Send hive Transfer from Server to Customer:
 
 """
 
-import asyncio
 from datetime import datetime, timezone
 from typing import List
 
 from nectar.amount import Amount
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    AssetAccount,
-    LiabilityAccount,
-    RevenueAccount,
-)
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import logger
@@ -61,10 +56,11 @@ from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
-from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
-from v4vapp_backend_v2.process.hive_notification import reply_with_hive
+from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
+from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats
 
 
 async def conversion_keepsats_to_hive(
@@ -102,6 +98,9 @@ async def conversion_keepsats_to_hive(
     to_currency = conv_result.to_currency
     logger.debug(f"{conv_result}")
     logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
+
+    # Reserve the fees amount
+    await hold_keepsats(conv_result.fee_conv.msats, cust_id, tracked_op)
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
@@ -141,7 +140,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra asset for Keepsats Conversion: {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Contra Conversion: {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id} Keepsats",
         debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
         debit_unit=to_currency,
         debit_amount=conv_result.to_convert_conv.value_in(to_currency),
@@ -158,33 +157,33 @@ async def conversion_keepsats_to_hive(
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
 
-    # MARK: 4 Fee Income From Customer
-    ledger_type = LedgerType.FEE_INCOME
-    fee_ledger_entry = LedgerEntry(
-        short_id=tracked_op.short_id,
-        op_type=tracked_op.op_type,
-        cust_id=cust_id,
-        ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
-        timestamp=datetime.now(tz=timezone.utc),
-        description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="VSC Liability",
-            sub=cust_id,  # This is the Customer Keepsats Lightning balance
-        ),
-        debit_unit=Currency.MSATS,
-        debit_amount=conv_result.fee_conv.msats,
-        debit_conv=conv_result.fee_conv,
-        credit=RevenueAccount(
-            name="Fee Income Keepsats",
-            sub="from_keepsats",  # This is the Server
-        ),
-        credit_unit=Currency.MSATS,
-        credit_amount=conv_result.fee_conv.msats,
-        credit_conv=conv_result.fee_conv,
-    )
-    ledger_entries.append(fee_ledger_entry)
-    await fee_ledger_entry.save()
+    # # MARK: 4 Fee Income From Customer
+    # ledger_type = LedgerType.FEE_INCOME
+    # fee_ledger_entry = LedgerEntry(
+    #     short_id=tracked_op.short_id,
+    #     op_type=tracked_op.op_type,
+    #     cust_id=cust_id,
+    #     ledger_type=ledger_type,
+    #     group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+    #     timestamp=datetime.now(tz=timezone.utc),
+    #     description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
+    #     debit=LiabilityAccount(
+    #         name="VSC Liability",
+    #         sub=cust_id,  # This is the Customer Keepsats Lightning balance
+    #     ),
+    #     debit_unit=Currency.MSATS,
+    #     debit_amount=conv_result.fee_conv.msats,
+    #     debit_conv=conv_result.fee_conv,
+    #     credit=RevenueAccount(
+    #         name="Fee Income Keepsats",
+    #         sub="from_keepsats",  # This is the Server
+    #     ),
+    #     credit_unit=Currency.MSATS,
+    #     credit_amount=conv_result.fee_conv.msats,
+    #     credit_conv=conv_result.fee_conv,
+    # )
+    # ledger_entries.append(fee_ledger_entry)
+    # await fee_ledger_entry.save()
 
     # MARK: Consume Customer SATS for Conversion
     # This is only necessary for direct sats to Hive conversions
@@ -295,16 +294,20 @@ async def conversion_keepsats_to_hive(
 
     await reply_with_hive(details, nobroadcast=nobroadcast)
 
-    while True:
-        pending = await PendingTransaction.list_all()
-        if not pending:
-            break
-        logger.warning(
-            f"Pending transactions waiting for Hive balance to refill. {tracked_op.group_id}",
-            extra={"notification": False},
-        )
-        await asyncio.sleep(30)
     # TODO: #167 this should be part of the database for pending and only cleared later.
+
+    transfer_fee = KeepsatsTransfer(
+        from_account=cust_id,
+        to_account=server_id,
+        msats=conv_result.fee_conv.msats,
+        memo=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id} #Fee #from_keepsats",
+        parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
+    )
+    trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)
+    logger.info(
+        f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
+    )
+
     # MARK: Reclassify VSC Hive
     # This reclassification should happen AFTER Hive is successfully SENT.
     ledger_type = LedgerType.RECLASSIFY_VSC_HIVE
