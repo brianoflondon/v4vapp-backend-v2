@@ -90,69 +90,6 @@ async def process_lightning_receipt(
 
         return ledger_entries_list
 
-        #     logger.info(f"Processing Lightning to Keepsats for customer ID: {invoice.cust_id}")
-        #     # This line here bypasses the Hive Return logic.
-
-        #     ledger_entries, message, return_amount = await lightning_to_keepsats_deposit(
-        #         invoice, nobroadcast
-        #     )
-        # # MARK: Sats to Hive or HBD
-        # elif invoice.recv_currency in {Currency.HIVE, Currency.HBD}:
-        #     logger.info(
-        #         f"Processing Lightning to Hive conversion for customer ID: {invoice.cust_id}"
-        #     )
-        #     ledger_entries, message, return_amount = await process_lightning_to_hive(
-        #         invoice, nobroadcast
-        #     )
-        # else:
-        #     logger.error(
-        #         f"Unsupported currency for Lightning to Hive transfer: {invoice.recv_currency}",
-        #         extra={"notification": False, **invoice.log_extra},
-        #     )
-        #     raise NotImplementedError(
-        #         f"Unsupported currency for Lightning to Hive transfer: {invoice.recv_currency}"
-        #     )
-
-        # if invoice.value_msat <= V4VConfig().data.minimum_invoice_payment_sats * 1_000:
-        #     logger.info(f"Invoice {invoice.short_id} is below the minimum notification threshold.")
-        #     return ledger_entries
-
-        # if return_amount:
-        #     return_details = HiveReturnDetails(
-        #         tracked_op=invoice,
-        #         original_memo=invoice.memo,
-        #         reason_str=message,
-        #         action=ReturnAction.REFUND,
-        #         amount=return_amount,
-        #         pay_to_cust_id=invoice.cust_id,
-        #         nobroadcast=nobroadcast,
-        #     )
-        #     logger.info(f"Return amount to customer: {return_amount}")
-        #     try:
-        #         await depreciated_send_notification_hive_transfer(
-        #             tracked_op=invoice,
-        #             reason=message,
-        #             nobroadcast=nobroadcast,
-        #             amount=return_amount,
-        #             pay_to_cust_id=invoice.cust_id,
-        #         )
-        #     except KeepsatsDepositNotificationError as e:
-        #         logger.warning(
-        #             f"Failed to send notification for invoice, skipped {invoice.short_id}: {e}",
-        #             extra={"notification": False, **invoice.log_extra},
-        #         )
-        #     except Exception as e:
-        #         logger.exception(
-        #             f"Error returning Hive transfer: {e}",
-        #             extra={
-        #                 "notification": False,
-        #                 "reason": message,
-        #                 **invoice.log_extra,
-        #             },
-        #         )
-
-        # return ledger_entries
-
     logger.warning(
         f"Invoice {invoice.short_id} received but no further actions. {invoice.log_str}",
         extra={"notification": False, **invoice.log_extra},

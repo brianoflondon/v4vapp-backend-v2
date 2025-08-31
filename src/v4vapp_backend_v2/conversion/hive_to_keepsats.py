@@ -2,46 +2,38 @@
 Internal conversions of Hive or HBD to Keepsats.
 Operates by moving funds between the Server and VSC Liability accounts:
 
-    Net value received into Assets (Debit Asset and Credit Liability).
-->  pre performed Step 1: Receive Hive or HBD:
-        Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
-
-    No net value change
-    LedgerType.CONV_HIVE_TO_KEEPSATS h_conv_k
+Pre-performed Step 1: Receive Hive or HBD (external to this function):
+    Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
+    Credit: Liability VSC Liability (customer) - HIVE/HBD
 
 Step 2: Convert the received Hive or HBD to Keepsats in the Server's Asset account.
-        Debit: Asset Treasury Lightning (server) - SATS
-        Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
+    Debit: Asset Treasury Lightning (server) - SATS
+    Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
+    LedgerType: CONV_HIVE_TO_KEEPSATS
 
-    No net value change
-    LedgerType.CONTRA_HIVE_TO_KEEPSATS h_contra_k
+Step 3: Contra entry to balance Asset Customer Deposits Hive (server):
+    Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
+    Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD
+    LedgerType: CONTRA_HIVE_TO_KEEPSATS
 
-Step 3: Contra entry to keep Asset Customer Deposits Hive (server) balanced:
-        Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD
+Step 4: Deposit Keepsats into Server's Liability account:
+    Debit: Liability VSC Liability (customer) - HIVE/HBD
+    Credit: Liability VSC Liability (server) - SATS
+    LedgerType: WITHDRAW_HIVE
 
-    Net income change no change to DEA = LER
-    LedgerType.FEE_INCOME fee_inc
+Step 5: Send custom_json transfer of full Keepsats amount from Server to Customer:
+    Debit: Liability VSC Liability (server) - SATS
+    Credit: Liability VSC Liability (customer) - SATS
 
-Step 4: Fee Income
-        Debit: Liability VSC Liability (customer) - HIVE/HBD
-        Credit: Revenue Fee Income Keepsats (keepsats) - SATS
+Step 6: Send custom_json transfer of fee from Customer to Server:
+    Debit: Liability VSC Liability (customer) - SATS
+    Credit: Liability VSC Liability (server) - SATS
+    (Fee is deducted from the customer's received amount via this transfer)
 
-    No net value change (conversion to Keepsats on VSC)
-    LedgerType.WITHDRAW_HIVE withdraw_h
-
-Step 5: Deposit Keepsats into SERVER's Liability account:
-        Debit: Liability VSC Liability (customer) - HIVE/HBD
-        Credit: Liability VSC Liability (server) - SATS
-
-
-    No net value change but net sats owned to customer
-Then Send custom_json Transfer from Server to Customer:
-        Debit: Liability VSC Liability (server) - SATS
-        Credit: Liability VSC Liability (customer) - SATS
-
-
+Notes:
+- Fee income is handled via the custom_json fee transfer, not a separate ledger entry.
+- All ledger entries maintain no net value change until the custom_json transfers.
+- The function updates the tracked operation with conversion details and change amounts.
 """
 
 from datetime import datetime, timezone
@@ -158,36 +150,6 @@ async def conversion_hive_to_keepsats(
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
 
-    # MARK: 4 Fee Income From Customer
-    # This needs to be a custom Json
-    # ledger_type = LedgerType.FEE_INCOME
-    # fee_ledger_entry = LedgerEntry(
-    #     short_id=tracked_op.short_id,
-    #     op_type=tracked_op.op_type,
-    #     cust_id=cust_id,
-    #     ledger_type=ledger_type,
-    #     group_id=f"{tracked_op.group_id}-{ledger_type.value}",
-    #     timestamp=datetime.now(tz=timezone.utc),
-    #     description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
-    #     debit=LiabilityAccount(
-    #         name="VSC Liability",
-    #         sub=cust_id,
-    #     ),
-    #     debit_unit=from_currency,
-    #     debit_amount=conv_result.fee_conv.value_in(from_currency),
-    #     debit_conv=conv_result.fee_conv,
-    #     credit=RevenueAccount(
-    #         name="Fee Income Keepsats",
-    #         sub="to_keepsats",
-    #     ),
-    #     user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
-    #     credit_unit=Currency.MSATS,
-    #     credit_amount=conv_result.fee_conv.msats,
-    #     credit_conv=conv_result.fee_conv,
-    # )
-    # ledger_entries.append(fee_ledger_entry)
-    # await fee_ledger_entry.save()
-
     # MARK: 5 Hive to Keepsats Customer Deposit
 
     ledger_type = LedgerType.WITHDRAW_HIVE
@@ -236,7 +198,8 @@ async def conversion_hive_to_keepsats(
     tracked_op.change_conv = conv_result.change_conv
     await tracked_op.save()
 
-    # This needs to be a custom json transfering Keepsats from devser VSC Liability to customer
+    # MARK: Sending Keepsats and Fee
+    # This needs to be a custom json transferring Keepsats from devser VSC Liability to customer
     # should be the FULL amount (including the fee)
     # Then the fee will be a separate custom json
     transfer = KeepsatsTransfer(

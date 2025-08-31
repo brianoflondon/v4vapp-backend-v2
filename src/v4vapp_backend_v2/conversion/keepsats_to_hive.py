@@ -77,31 +77,7 @@ async def conversion_keepsats_to_hive(
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
 ) -> None:
-    """
-    Converts a HIVE or HBD deposit to Keepsats (Lightning msats) and records the corresponding ledger entries.
-    This function performs the following steps:
-    1. Determines the appropriate conversion quote based on the timestamp of the tracked operation.
-    2. Validates the currency for conversion (must be HIVE or HBD).
-    3. Calculates the converted amount and associated fee in msats.
-    4. Creates and saves ledger entries for:
-        - The conversion transaction.
-        - The contra asset entry.
-        - The fee income.
-        - The deposit of Keepsats.
-    5. Initiates a Keepsats transfer from the server to the customer.
-    Args:
-         server_id (str): The identifier for the server handling the conversion.
-         cust_id (str): The customer identifier receiving the Keepsats deposit.
-         tracked_op (TrackedTransferWithCustomJson): The tracked transfer operation containing metadata and timestamp.
-
-         msats (int, optional): The amount in millisatoshis (msats) for the conversion. Defaults to 0. If given
-            it will override the convert_amount (but uses the Hive currency symbol from convert_amount)
-         nobroadcast (bool, optional): If True, the transfer will not be broadcasted. Defaults to False.
-    Raises:
-         WrongCurrencyError: If the currency for conversion is not HIVE or HBD.
-    Returns:
-         None
-    """
+    """ """
 
     # Inbound Invoices contain the msats amount
     if not msats and not amount and isinstance(tracked_op, Invoice):
