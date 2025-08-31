@@ -6,7 +6,10 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.hive_models.pending_transaction_class import (
+    PendingCustomJson,
+    PendingTransaction,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -96,3 +99,83 @@ async def test_clear_pending_transactions():
         await pending.delete()
     all_pending_after = await PendingTransaction.list_all()
     assert len(all_pending_after) == 0
+
+
+# New test: Store PendingCustomJson instances
+async def test_store_pending_custom_json():
+    for n in range(5):  # Fewer for simplicity
+        json_data = {"key": f"value{n}", "number": n}
+        memo_like = f"Test custom json {n}"  # Not a real memo, but for context
+        pending_custom = PendingCustomJson(
+            json_data=json_data,
+            send_account="v4vapp-test",
+            active=True,
+            cj_id="v4vapp_transfer",
+        )
+        await pending_custom.save()
+
+    # List and print for verification
+    all_custom = await PendingCustomJson.list_all()
+    print("PendingCustomJson Transactions:")
+    for custom in all_custom:
+        print(custom)
+
+
+# New test: List all PendingCustomJson and verify types
+async def test_list_all_pending_custom_json():
+    await test_store_pending_custom_json()  # Ensure some data exists
+    all_custom = await PendingCustomJson.list_all()
+    assert isinstance(all_custom, list)
+    for custom in all_custom:
+        print(custom)
+        assert isinstance(custom, PendingCustomJson)
+        assert custom.pending_type == "pending_custom_json"  # Fixed: was custom.type
+        assert custom.json_data is not None  # Basic check
+
+
+# New test: Clear PendingCustomJson instances
+async def test_clear_pending_custom_json():
+    await test_store_pending_custom_json()
+    all_custom = await PendingCustomJson.list_all()
+    assert len(all_custom) > 0
+    for custom in all_custom:
+        await custom.delete()
+    all_custom_after = await PendingCustomJson.list_all()
+    assert len(all_custom_after) == 0
+
+
+# New test: Verify mixed types don't interfere (generic behavior)
+async def test_mixed_pending_types():
+    # Store one of each type
+    pending_tx = PendingTransaction(
+        from_account=InternalConfig().server_id,
+        to_account="v4vapp-test",
+        amount=Amount("5.000 HIVE"),
+        memo="Mixed test",
+        nobroadcast=True,
+        is_private=False,
+    )
+    await pending_tx.save()
+
+    pending_custom = PendingCustomJson(
+        json_data={"test": "mixed"},
+        send_account="v4vapp-test",
+        active=True,
+        cj_id="v4vapp_transfer",
+    )
+    await pending_custom.save()
+
+    # List each type separately (should only return the correct type due to generics and type filtering)
+    tx_list = await PendingTransaction.list_all()
+    custom_list = await PendingCustomJson.list_all()
+
+    assert len(tx_list) >= 1
+    assert len(custom_list) >= 1
+    assert all(isinstance(tx, PendingTransaction) for tx in tx_list)
+    assert all(isinstance(custom, PendingCustomJson) for custom in custom_list)
+
+    # Clean up
+    for tx in tx_list:
+        await tx.delete()
+    for custom in custom_list:
+        await custom.delete()

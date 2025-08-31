@@ -264,15 +264,6 @@ async def conversion_hive_to_keepsats(
         f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
     )
 
-    # transfer = KeepsatsTransfer(
-    #     from_account=server_id,
-    #     to_account=cust_id,
-    #     msats=conv_result.net_to_receive_conv.msats,
-    #     memo=tracked_op.d_memo,
-    #     parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
-    # )
-    # trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-
     logger.info(f"Sent custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer.log_extra})
 
 

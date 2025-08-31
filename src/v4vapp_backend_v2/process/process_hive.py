@@ -254,7 +254,7 @@ async def process_transfer_op(
         try:
             await follow_on_task
             # In addition to processing, check if there are any pending transactions
-            await resend_pending_transactions()
+            await resend_pending()
         except LedgerEntryDuplicateException as e:
             logger.warning(f"Follow-on task duplicate entry: {e}", extra={"notification": False})
         except Exception as e:

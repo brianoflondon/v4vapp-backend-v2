@@ -196,8 +196,9 @@ async def send_notification_custom_json(
             reply_message=reason,
         )
         await tracked_op.save()
+        reply = tracked_op.replies[-1] if tracked_op.replies else ""
         logger.info(
-            f"Updated tracked_op with reply: {tracked_op.replies[-1]}",
+            f"Updated tracked_op with reply: {reply}",
             extra={"notification": False, **tracked_op.log_extra},
         )
         return trx

@@ -20,7 +20,10 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
-from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.hive_models.pending_transaction_class import (
+    PendingCustomJson,
+    PendingTransaction,
+)
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
@@ -392,7 +395,7 @@ def decode_memo(
 
 
 async def send_custom_json(
-    json_data: dict,
+    json_data: Dict[str, Any],
     send_account: str,
     hive_client: Hive | None = None,
     keys: List[str] = [],
@@ -430,6 +433,14 @@ async def send_custom_json(
     """
     # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
+
+    pending = PendingCustomJson(
+        cj_id=id,
+        send_account=send_account,
+        json_data=json_data,
+        active=active,
+    )
+    await pending.save()
     if not isinstance(json_data, dict):
         raise ValueError("json_data must be a dictionary")
     if not json_data:
@@ -438,6 +449,8 @@ async def send_custom_json(
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = get_hive_client(keys=keys)
+    if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
+        raise ValueError("nobroadcast is not set to the same value as hive_client")
     try:
         if active:
             kwargs = {"required_auths": [send_account]}
@@ -447,6 +460,7 @@ async def send_custom_json(
         trx = hive_client.custom_json(
             id=id, json_data=json_data, **kwargs, nobroadcast=nobroadcast
         )
+        await pending.delete()
         return trx
     except UnhandledRPCError as ex:
         logger.warning(
@@ -497,38 +511,6 @@ async def perform_transfer_checks(
     bad_accounts_list = await get_bad_hive_accounts()
     if acc_name in bad_accounts_list:
         raise HiveAccountNameOnExchangesList(f"{acc_name} is on bad accounts list")
-    # if not validate_account(acc_name):
-    #     # This means we're sending keepsats to a non-Hive account
-    #     # raise HiveBadHiveAccountName(f"{acc_name} is not a valid Hive account")
-    #     return False
-    # valid, avail_amount = validate_amount(amount, symbol)
-    # if nobroadcast and not valid:
-    #     logging.warning("Nobroadcast set, error NOT RAISED")
-    #     message = (
-    #         f"{Config.SERVER_ACCOUNT_NAME} Balance: {avail_amount:.3f} | "
-    #         f"Not enough to pay {amount:.3f} {symbol} | "
-    #         f"to: {acc_name}"
-    #     )
-    #     logging.warning(message)
-    # elif not valid:
-    #     raise HiveNotEnoughHiveInAccount(
-    #         f"{Config.SERVER_ACCOUNT_NAME} Balance: {avail_amount:.3f} | "
-    #         f"Not enough to pay {amount:.3f} {symbol} | "
-    #         f"to: {acc_name} | Shortfall: {avail_amount - amount:.3f}"
-    #     )
-
-
-# class PendingTransaction(BaseModel):
-#     """
-#     Model representing a Hive transfer operation.
-#     This model is used to encapsulate the details of a transfer operation
-#     including the sender, recipient, amount, asset, and memo.
-#     """
-
-#     from_account: str
-#     to_account: str
-#     amount: str
-#     memo: str = ""
 
 
 async def send_transfer_bulk(
@@ -650,9 +632,8 @@ async def send_pending(
         amount=pending.amount,
         from_account=pending.from_account,
         memo=pending.memo,
-        hive_client=hive_client,
         nobroadcast=pending.nobroadcast,
-        is_private=pending.is_private,
+        hive_client=hive_client,
     )
 
 
@@ -667,18 +648,42 @@ async def send_transfer(
     is_private: bool = False,
 ) -> Dict[str, str]:
     """
-    Asynchronously sends a transfer operation to the Hive blockchain.
-    This function allows sending a transfer operation with specified parameters
-    to the Hive blockchain. It supports both active and posting authority, and can
-    be configured to either broadcast the transaction or not.
+    Sends a transfer of Hive tokens from one account to another, with support for retries,
+    private memos, and error handling.
+
+    Args:
+        to_account (str): The recipient Hive account name.
+        amount (Amount): The amount to transfer, including asset type.
+        from_account (str): The sender Hive account name.
+        memo (str, optional): Memo to include with the transfer. Defaults to "".
+        hive_client (Hive, optional): An existing Hive client instance. If not provided,
+            one will be created using keys. Defaults to None.
+        keys (List[str], optional): List of private keys for signing the transaction.
+            Defaults to [].
+        nobroadcast (bool, optional): If True, the transaction will not be broadcast to
+            the network. Defaults to False.
+        is_private (bool, optional): If True, the memo will be encrypted (prefixed with '#').
+            Defaults to False.
+
+    Returns:
+        Dict[str, str]: The transaction result dictionary, including transaction ID and
+        other details.
+
+    Raises:
+        ValueError: If neither hive_client nor keys are provided, or if the account is invalid.
+        HiveNotEnoughHiveInAccount: If the sender does not have sufficient funds.
+        HiveTryingToSendZeroOrNegativeAmount: If the transfer amount is zero or negative,
+            or if a duplicate transaction is detected.
+        HiveSomeOtherRPCException: For other RPC errors or if transaction expiration occurs
+            after retries.
 
     """
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
     if not hive_client:
         hive_client = get_hive_client(keys=keys, nobroadcast=nobroadcast)
-    if hive_client and nobroadcast:
-        raise ValueError("nobroadcast is not supported if hive_client")
+    if hive_client.nobroadcast and hive_client.nobroadcast != nobroadcast:
+        raise ValueError("nobroadcast is not set to the same value as hive_client")
     account: Account = Account(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
