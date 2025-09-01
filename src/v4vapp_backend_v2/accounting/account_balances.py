@@ -42,6 +42,17 @@ UNIT_TOLERANCE = {
 async def all_account_balances(
     as_of_date: datetime | None = None, age: timedelta | None = None
 ) -> AccountBalances:
+    """
+    Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
+    Args:
+        as_of_date (datetime | None): The date to calculate balances as of. Defaults to current UTC time if not provided.
+        age (timedelta | None): Optional age to filter or adjust balances.
+    Returns:
+        AccountBalances: An object containing the validated account balances.
+    Raises:
+        ValidationError: If the results cannot be validated into AccountBalances.
+    """
+
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age)
@@ -60,6 +71,21 @@ async def one_account_balance(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
 ) -> LedgerAccountDetails:
+    """
+    Retrieve the balance details for a single ledger account as of a specified date.
+    Args:
+        account (LedgerAccount | str): The ledger account object or its string identifier.
+        as_of_date (datetime | None, optional): The date for which to retrieve the account balance. Defaults to current UTC time if not provided.
+        age (timedelta | None, optional): Optional age filter for the balance calculation.
+    Returns:
+        LedgerAccountDetails: The details of the account balance as of the specified date.
+    Raises:
+        None explicitly, but logs a warning if no results are found for the given account.
+    Notes:
+        - If `account` is provided as a string, it is converted to a LiabilityAccount.
+        - If no balance data is found, returns a default LedgerAccountDetails instance.
+    """
+
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
@@ -76,7 +102,7 @@ async def one_account_balance(
     account_balance = AccountBalances.model_validate(clean_results)
     return (
         account_balance.root[0]
-        if account_balance.root
+        if (account_balance.root and len(account_balance.root) > 0)
         else LedgerAccountDetails(
             name=account.name,
             account_type=account.account_type,
@@ -93,6 +119,7 @@ async def account_balance_printout(
     user_memos: bool = True,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
+    ledger_account_details: LedgerAccountDetails | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
@@ -122,10 +149,10 @@ async def account_balance_printout(
         )
 
     max_width = 135
-
-    ledger_account_details = await one_account_balance(
-        account=account, as_of_date=as_of_date, age=age
-    )
+    if not ledger_account_details:
+        ledger_account_details = await one_account_balance(
+            account=account, as_of_date=as_of_date, age=age
+        )
     units = set(ledger_account_details.balances.keys())
 
     title_line = f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC"
@@ -139,8 +166,9 @@ async def account_balance_printout(
         output.append("=" * max_width)
         return "\n".join(output), ledger_account_details
 
-    total_usd = 0.0
-    total_sats = 0.0
+    # Use pre-computed overall totals from ledger_account_details
+    total_usd = ledger_account_details.conv_total.usd or 0.0
+    total_sats = ledger_account_details.conv_total.sats or 0.0
 
     COL_TS = 12
     COL_DESC = 54
@@ -151,8 +179,6 @@ async def account_balance_printout(
     COL_LEDGER_TYPE = 11
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
-        final_balance = 0 if unit == Currency.MSATS else 0.0
-
         if unit not in units:
             continue
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
@@ -209,9 +235,10 @@ async def account_balance_printout(
                         memo = truncate_text(lightning_memo(row.user_memo), 60)
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
-            final_balance = all_rows[-1].amount_running_total if all_rows else 0.0
-            final_conv_balance = (
-                all_rows[-1].conv_running_total if all_rows else ConvertedSummary()
+            # Use pre-computed per-unit totals from ledger_account_details
+            final_balance = ledger_account_details.balances_net.get(unit, 0)
+            final_conv_balance = ledger_account_details.balances_totals.get(
+                unit, ConvertedSummary()
             )
             total_hive = final_conv_balance.hive or 0.0
             total_hbd = final_conv_balance.hbd or 0.0
@@ -242,13 +269,7 @@ async def account_balance_printout(
             balance_fmt = f"{display_balance:,.3f}"
         output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
 
-        total_usd += total_usd_for_unit
-        total_sats += total_sats_for_unit
-
-    # WE don't need to do the summing up of totals here, they are performed in the LedgerAccountDetails class
-    # assert ledger_account_details.conv_total.usd == total_usd, (
-    #     f"Total USD mismatch: {ledger_account_details.conv_total.usd} != {total_usd}"
-    # )
+        # No longer summing here—using pre-computed totals
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
@@ -471,7 +492,7 @@ async def keepsats_balance(
         as_of_date=as_of_date + timedelta(days=1),
     )
 
-    net_msats = int(account_balance.msats)
+    net_msats = account_balance.msats
     if net_msats < 0 and account_balance.sats == 0:
         net_msats = 0
     return net_msats, account_balance
