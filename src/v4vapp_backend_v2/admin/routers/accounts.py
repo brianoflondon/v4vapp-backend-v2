@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
+    account_balance_printout_grouped_by_customer,
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
@@ -87,6 +88,10 @@ async def accounts_page(request: Request):
     )
 
 
+def account_balance_printout_by_customer(account, line_items, user_memos, as_of_date, age):
+    raise NotImplementedError
+
+
 @router.get("/balance/user/{acc_name}", response_class=HTMLResponse)
 async def get_user_balance_get(
     request: Request,
@@ -112,7 +117,7 @@ async def get_user_balance_get(
         age = timedelta(seconds=0)  # No age for GET requests
 
         # Get the balance printout
-        printout, details = await account_balance_printout(
+        printout, details = await account_balance_printout_grouped_by_customer(
             account=account,
             line_items=line_items_bool,
             user_memos=user_memos_bool,
@@ -220,6 +225,7 @@ async def get_user_balance(
     acc_name: str,
     line_items: Optional[str] = Form("true"),
     user_memos: Optional[str] = Form("true"),
+    customer_grouping: Optional[str] = Form("false"),
     as_of_date_str: Optional[str] = Form(None),
     age_hours: Optional[int] = Form(0),
 ):
@@ -231,6 +237,9 @@ async def get_user_balance(
         # Convert string form values to booleans
         line_items_bool = bool(line_items and line_items.lower() in ("true", "on", "1"))
         user_memos_bool = bool(user_memos and user_memos.lower() in ("true", "on", "1"))
+        customer_grouping_bool = bool(
+            customer_grouping and customer_grouping.lower() in ("true", "on", "1")
+        )
 
         # Enforce dependency: user memos only make sense when line items are shown.
         # If line items are disabled, force user_memos to False server-side as well.
@@ -255,14 +264,23 @@ async def get_user_balance(
         # Create age timedelta
         age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else timedelta(seconds=0)
 
-        # Get the balance printout
-        printout, details = await account_balance_printout(
-            account=account,
-            line_items=line_items_bool,
-            user_memos=user_memos_bool,
-            as_of_date=as_of_date,
-            age=age,
-        )
+        # Get the balance printout - choose function based on customer_grouping parameter
+        if customer_grouping_bool:
+            printout, details = await account_balance_printout_grouped_by_customer(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
+        else:
+            printout, details = await account_balance_printout(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
 
@@ -328,6 +346,7 @@ async def get_user_balance(
                 "details": details_json,
                 "line_items": line_items_bool,
                 "user_memos": user_memos_bool,
+                "customer_grouping": customer_grouping_bool,
                 "as_of_date": as_of_date,
                 "age_hours": age_hours,
                 "accounts_by_type": accounts_by_type,
@@ -364,6 +383,7 @@ async def get_account_balance(
     account_string: str = Form(...),
     line_items: Optional[str] = Form("true"),
     user_memos: Optional[str] = Form("true"),
+    customer_grouping: Optional[str] = Form("false"),
     as_of_date_str: Optional[str] = Form(None),
     age_hours: Optional[int] = Form(0),
 ):
@@ -375,6 +395,9 @@ async def get_account_balance(
         # Convert string form values to booleans
         line_items_bool = bool(line_items and line_items.lower() in ("true", "on", "1"))
         user_memos_bool = bool(user_memos and user_memos.lower() in ("true", "on", "1"))
+        customer_grouping_bool = bool(
+            customer_grouping and customer_grouping.lower() in ("true", "on", "1")
+        )
 
         # Enforce dependency: user memos only make sense when line items are shown.
         # If line items are disabled, force user_memos to False server-side as well.
@@ -396,14 +419,23 @@ async def get_account_balance(
         # Create age timedelta
         age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else timedelta(seconds=0)
 
-        # Get the balance printout
-        printout, details = await account_balance_printout(
-            account=account,
-            line_items=line_items_bool,
-            user_memos=user_memos_bool,
-            as_of_date=as_of_date,
-            age=age,
-        )
+        # Get the balance printout - choose function based on customer_grouping parameter
+        if customer_grouping_bool:
+            printout, details = await account_balance_printout_grouped_by_customer(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
+        else:
+            printout, details = await account_balance_printout(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
 
@@ -469,6 +501,7 @@ async def get_account_balance(
                 "details": details_json,
                 "line_items": line_items_bool,
                 "user_memos": user_memos_bool,
+                "customer_grouping": customer_grouping_bool,
                 "as_of_date": as_of_date,
                 "age_hours": age_hours,
                 "accounts_by_type": accounts_by_type,

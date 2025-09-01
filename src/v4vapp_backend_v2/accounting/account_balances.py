@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pprint import pprint
 from typing import Any, List, Mapping, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
@@ -192,9 +193,11 @@ async def account_balance_printout(
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
             transactions_by_date: dict[str, list] = {}
+            transactions_by_cust_id: dict[str, list] = {}
             for row in all_rows:
                 date_str = f"{row.timestamp:%Y-%m-%d}" if row.timestamp else "No Date"
                 transactions_by_date.setdefault(date_str, []).append(row)
+                transactions_by_cust_id.setdefault(row.cust_id, []).append(row)
 
             for date_str, rows in sorted(transactions_by_date.items()):
                 output.append(f"\n=== {date_str} ===")
@@ -237,6 +240,258 @@ async def account_balance_printout(
                     if user_memos and row.user_memo:
                         memo = truncate_text(lightning_memo(row.user_memo), 60)
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
+
+        # Perform a conversion with the current quote for this Currency unit
+        final_balance = ledger_account_details.balances_net.get(unit, 0)
+        if unit in [Currency.HIVE, Currency.HBD]:
+            final_balance = round(final_balance, 3)
+        else:
+            final_balance = int(final_balance)
+        conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
+        output.append("-" * max_width)
+        output.append(
+            f"{'Converted':<10} "
+            f"{conversion.hive:>15,.3f} HIVE "
+            f"{conversion.hbd:>12,.3f} HBD "
+            f"{conversion.usd:>12,.3f} USD "
+            f"{conversion.sats:>12,.0f} SATS "
+            f"{conversion.msats:>16,.0f} msats"
+        )
+        total_usd += conversion.usd
+        total_msats += conversion.msats
+
+        output.append("-" * max_width)
+        display_balance = (
+            final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
+        )
+        if unit.upper() == "MSATS":
+            balance_fmt = f"{display_balance:,.0f}"
+        else:
+            balance_fmt = f"{display_balance:,.3f}"
+        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
+
+    output.append("-" * max_width)
+    output.append(f"Total USD: {total_usd:>18,.3f} USD")
+    output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
+    output.append(title_line)
+
+    output.append("=" * max_width + "\n")
+    output_text = "\n".join(output)
+
+    return output_text, ledger_account_details
+
+
+# @async_time_stats_decorator()
+async def account_balance_printout_grouped_by_customer(
+    account: LedgerAccount | str,
+    line_items: bool = True,
+    user_memos: bool = True,
+    as_of_date: datetime | None = None,
+    age: timedelta | None = None,
+    ledger_account_details: LedgerAccountDetails | None = None,
+) -> Tuple[str, LedgerAccountDetails]:
+    """
+    Calculate and display the balance for a specified account with transactions grouped by date and customer ID.
+    This alternate version recalculates running totals per customer within each date to maintain consistency.
+    Properly accounts for assets and liabilities, and includes converted values to other units
+    (SATS, HIVE, HBD, USD, msats).
+
+    Args:
+        account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
+        a str is passed, we assume this is a `VSC Liability` account for customer `account`.
+        line_items (bool, optional): If True, shows individual transaction line items. Defaults to True.
+        user_memos (bool, optional): If True, shows user memos for transactions. Defaults to True.
+        as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
+        age (timedelta | None, optional): Optional age filter for the balance calculation.
+        ledger_account_details (LedgerAccountDetails | None, optional): Pre-fetched account details.
+
+    Returns:
+        str: A formatted string containing the balance with customer-grouped transactions.
+    """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
+    if isinstance(account, str):
+        account = LiabilityAccount(
+            name="VSC Liability",
+            sub=account,
+        )
+
+    max_width = 135
+    if not ledger_account_details:
+        ledger_account_details = await one_account_balance(
+            account=account, as_of_date=as_of_date, age=age
+        )
+    units = set(ledger_account_details.balances.keys())
+    quote = await TrackedBaseModel.update_quote()
+
+    title_line = (
+        f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC (Grouped by Customer)"
+    )
+    output = ["_" * max_width]
+    output.append(title_line)
+    output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    output.append("-" * max_width)
+
+    if not ledger_account_details.balances:
+        output.append("No transactions found for this account up to today.")
+        output.append("=" * max_width)
+        return "\n".join(output), ledger_account_details
+
+    COL_TS = 12
+    COL_DESC = 54
+    COL_DEBIT = 11
+    COL_CREDIT = 11
+    COL_BAL = 11
+    COL_SHORT_ID = 15
+    COL_LEDGER_TYPE = 11
+
+    total_usd: Decimal = Decimal(0)
+    total_msats: int = 0
+
+    for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
+        if unit not in units:
+            continue
+        display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
+        conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+
+        output.append(f"\nUnit: {display_unit}")
+        output.append("-" * 10)
+        all_rows = ledger_account_details.balances[unit]
+        if all_rows:
+            # Group by date first
+            transactions_by_date: dict[str, list] = {}
+            for row in all_rows:
+                date_str = f"{row.timestamp:%Y-%m-%d}" if row.timestamp else "No Date"
+                transactions_by_date.setdefault(date_str, []).append(row)
+
+            for date_str, date_rows in sorted(transactions_by_date.items()):
+                output.append(f"\n=== {date_str} ===")
+
+                # Check if there are multiple cust_ids for this date
+                cust_ids = set(row.cust_id for row in date_rows)
+                if len(cust_ids) > 1:
+                    # Group by cust_id and recalculate running totals per customer
+                    for cust_id in sorted(cust_ids):
+                        cust_rows = [row for row in date_rows if row.cust_id == cust_id]
+                        output.append(f"\n--- Customer: {cust_id} ---")
+
+                        # Recalculate running totals for this customer group
+                        running_total = 0.0
+                        for row in sorted(
+                            cust_rows,
+                            key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                        ):
+                            contra_str = "-c-" if row.contra else "   "
+                            timestamp = (
+                                f"{row.timestamp:%H:%M:%S.%f}"[:10] if row.timestamp else "N/A"
+                            )
+                            description = truncate_text(row.description, 50)
+                            ledger_type = row.ledger_type
+
+                            # Raw numeric values
+                            debit_val = (
+                                row.amount if row.side == "debit" and row.unit == unit else 0.0
+                            )
+                            credit_val = (
+                                row.amount if row.side == "credit" and row.unit == unit else 0.0
+                            )
+
+                            # Update running total for this customer
+                            if row.side == "debit":
+                                running_total += row.amount_signed
+                            else:  # credit
+                                running_total += row.amount_signed
+
+                            balance_val = running_total
+
+                            if unit.upper() == "MSATS":
+                                debit_val /= conversion_factor
+                                credit_val /= conversion_factor
+                                balance_val /= conversion_factor
+
+                            # Number formats
+                            if unit.upper() == "MSATS":
+                                debit_fmt = f"{debit_val:,.0f}"
+                                credit_fmt = f"{credit_val:,.0f}"
+                                balance_fmt = f"{balance_val:,.0f}"
+                            else:
+                                debit_fmt = f"{debit_val:,.3f}"
+                                credit_fmt = f"{credit_val:,.3f}"
+                                balance_fmt = f"{balance_val:,.3f}"
+
+                            line = (
+                                f"{timestamp:<{COL_TS}} "
+                                f"{description:<{COL_DESC}} "
+                                f"{contra_str} "
+                                f"{debit_fmt:>{COL_DEBIT}} "
+                                f"{credit_fmt:>{COL_CREDIT}} "
+                                f"{balance_fmt:>{COL_BAL}} "
+                                f"{row.short_id:>{COL_SHORT_ID}} "
+                                f"{ledger_type:>{COL_LEDGER_TYPE}}"
+                            )
+                            if line_items:
+                                output.append(line)
+                            if user_memos and row.user_memo:
+                                memo = truncate_text(lightning_memo(row.user_memo), 60)
+                                output.append(f"{' ' * (COL_TS + 1)} {memo}")
+                else:
+                    # Single cust_id, recalculate running totals for consistency
+                    output.append(f"\n--- Customer: {list(cust_ids)[0]} ---")
+                    running_total = 0.0
+                    for row in sorted(
+                        date_rows,
+                        key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                    ):
+                        contra_str = "-c-" if row.contra else "   "
+                        timestamp = f"{row.timestamp:%H:%M:%S.%f}"[:10] if row.timestamp else "N/A"
+                        description = truncate_text(row.description, 50)
+                        ledger_type = row.ledger_type
+
+                        # Raw numeric values
+                        debit_val = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                        credit_val = (
+                            row.amount if row.side == "credit" and row.unit == unit else 0.0
+                        )
+
+                        # Update running total
+                        if row.side == "debit":
+                            running_total += row.amount_signed
+                        else:  # credit
+                            running_total += row.amount_signed
+
+                        balance_val = running_total
+
+                        if unit.upper() == "MSATS":
+                            debit_val /= conversion_factor
+                            credit_val /= conversion_factor
+                            balance_val /= conversion_factor
+
+                        # Number formats
+                        if unit.upper() == "MSATS":
+                            debit_fmt = f"{debit_val:,.0f}"
+                            credit_fmt = f"{credit_val:,.0f}"
+                            balance_fmt = f"{balance_val:,.0f}"
+                        else:
+                            debit_fmt = f"{debit_val:,.3f}"
+                            credit_fmt = f"{credit_val:,.3f}"
+                            balance_fmt = f"{balance_val:,.3f}"
+
+                        line = (
+                            f"{timestamp:<{COL_TS}} "
+                            f"{description:<{COL_DESC}} "
+                            f"{contra_str} "
+                            f"{debit_fmt:>{COL_DEBIT}} "
+                            f"{credit_fmt:>{COL_CREDIT}} "
+                            f"{balance_fmt:>{COL_BAL}} "
+                            f"{row.short_id:>{COL_SHORT_ID}} "
+                            f"{ledger_type:>{COL_LEDGER_TYPE}}"
+                        )
+                        if line_items:
+                            output.append(line)
+                        if user_memos and row.user_memo:
+                            memo = truncate_text(lightning_memo(row.user_memo), 60)
+                            output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
         # Perform a conversion with the current quote for this Currency unit
         final_balance = ledger_account_details.balances_net.get(unit, 0)
@@ -347,6 +602,7 @@ async def ledger_pipeline_result(
             )
         for item in entry.get("line_items", []):
             ans.ledger_entries.append(item)
+            pprint(item)
     return ans
 
 
@@ -354,7 +610,7 @@ async def get_account_lightning_conv(
     cust_id: str = "",
     as_of_date: datetime | None = None,
     age: timedelta = timedelta(hours=4),
-    line_items: bool = False,
+    line_items: bool = True,
 ) -> LedgerConvSummary:
     """
     Retrieves the lightning conversion for a specific customer as of a given date.
@@ -432,7 +688,7 @@ async def check_hive_conversion_limits(
         )
         return []
 
-    as_of_date = datetime.now(tz=timezone.utc) + timedelta(seconds=10)
+    as_of_date = datetime.now(tz=timezone.utc)
     for limit in lightning_rate_limits:
         age = timedelta(hours=limit.hours)
         limit_timedelta = timedelta(hours=limit.hours)

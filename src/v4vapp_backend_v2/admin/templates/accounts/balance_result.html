@@ -292,6 +292,7 @@
             <form id="accountSelectorForm" method="post" action="/admin/accounts/balance">
                 <input type="hidden" name="line_items" value="{{ 'true' if line_items else 'false' }}">
                 <input type="hidden" name="user_memos" value="{{ 'true' if user_memos else 'false' }}">
+                <input type="hidden" name="customer_grouping" value="{{ 'true' if customer_grouping else 'false' }}">
                 <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
                 <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
 
@@ -387,13 +388,16 @@
                         <small class="text-muted">Display user memo information</small>
                     </div>
                     <div class="col-md-4">
-                        <div class="d-flex justify-content-end">
-                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
-                                <i class="bi bi-code me-1"></i>Toggle Raw Data
-                            </button>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="customerGroupingSwitch"
+                                name="customer_grouping" value="true" {{ 'checked' if customer_grouping else '' }}
+                                onchange="updateBalanceReport()">
+                            <label class="form-check-label" for="customerGroupingSwitch">
+                                <i class="bi bi-people me-1"></i>
+                                Group by Customer
+                            </label>
                         </div>
-                        <small class="text-muted d-block text-end">View underlying data structure</small>
+                        <small class="text-muted">Group transactions by customer ID within dates</small>
                     </div>
                 </div>
             </form>
@@ -406,9 +410,17 @@
                     Balance Report
                     <small class="text-muted ms-2">
                         (Line Items: {{ 'Yes' if line_items else 'No' }},
-                        User Memos: {{ 'Yes' if user_memos else 'No' }})
+                        User Memos: {{ 'Yes' if user_memos else 'No' }},
+                        Customer Grouping: {{ 'Yes' if customer_grouping else 'No' }})
                     </small>
                 </h5>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                        <i class="bi bi-code-square me-1"></i>
+                        Show Raw Data
+                    </button>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div id="loadingIndicator" class="text-center p-4" style="display: none;">
@@ -486,12 +498,16 @@
                 // Ensure checkboxes are handled properly
                 const lineItemsSwitch = document.getElementById('lineItemsSwitch');
                 const userMemosSwitch = document.getElementById('userMemosSwitch');
+                const customerGroupingSwitch = document.getElementById('customerGroupingSwitch');
 
                 if (lineItemsSwitch) {
                     formData.set('line_items', lineItemsSwitch.checked ? 'true' : 'false');
                 }
                 if (userMemosSwitch) {
                     formData.set('user_memos', userMemosSwitch.checked ? 'true' : 'false');
+                }
+                if (customerGroupingSwitch) {
+                    formData.set('customer_grouping', customerGroupingSwitch.checked ? 'true' : 'false');
                 }
 
                 // For refresh, zero out the as_of_date_str to get current time
@@ -675,6 +691,9 @@
             if (!document.getElementById('userMemosSwitch').checked) {
                 formData.set('user_memos', 'false');
             }
+            if (!document.getElementById('customerGroupingSwitch').checked) {
+                formData.set('customer_grouping', 'false');
+            }
 
             // Submit the form via fetch
             fetch('/admin/accounts/balance', {
@@ -794,6 +813,25 @@
                     enforceUserMemosState();
                 });
             }
+
+            // Initialize raw data toggle button
+            initializeRawDataToggle();
         });
+
+        function initializeRawDataToggle() {
+            const rawDataToggle = document.querySelector('[data-bs-target="#rawData"]');
+            const rawDataCollapse = document.getElementById('rawData');
+
+            if (rawDataToggle && rawDataCollapse) {
+                // Update button text when collapse state changes
+                rawDataCollapse.addEventListener('shown.bs.collapse', function () {
+                    rawDataToggle.innerHTML = '<i class="bi bi-code-square me-1"></i>Hide Raw Data';
+                });
+
+                rawDataCollapse.addEventListener('hidden.bs.collapse', function () {
+                    rawDataToggle.innerHTML = '<i class="bi bi-code-square me-1"></i>Show Raw Data';
+                });
+            }
+        }
     </script>
     {% endblock %}
