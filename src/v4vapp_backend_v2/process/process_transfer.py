@@ -516,7 +516,7 @@ async def check_keepsats_balance(extra_spend_msats: int, cust_id: str) -> str:
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    net_msats, keepsats_balance = await keepsats_balance_printout(cust_id=cust_id)
+    net_msats, keepsats_balance = await keepsats_balance(cust_id=cust_id)
     if not keepsats_balance.balances.get(Currency.MSATS):
         raise HiveTransferError(
             f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"

@@ -439,7 +439,7 @@ async def check_hive_conversion_limits(
     return ans
 
 
-async def get_keepsats_balance(
+async def keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime | None = None,
     line_items: bool = False,
@@ -466,7 +466,6 @@ async def get_keepsats_balance(
         sub=cust_id,
         contra=False,
     )
-    logger.info(account)
     account_balance = await one_account_balance(
         account=account,
         as_of_date=as_of_date + timedelta(days=1),
@@ -495,7 +494,7 @@ async def keepsats_balance_printout(
         - Customer ID and Keepsats balance information.
         - Net balance, previous balance (if provided), and the delta between balances.
     """
-    net_msats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=line_items)
+    net_msats, account_balance = await keepsats_balance(cust_id=cust_id, line_items=line_items)
 
     logger.info("_" * 50)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from v4vapp_backend_v2.accounting.account_balances import get_keepsats_balance, list_all_accounts
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance, list_all_accounts
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 
@@ -59,7 +59,7 @@ async def users_page(request: Request):
     for account in vsc_liability_accounts:
         try:
             # Get the balance in msats and convert to sats
-            net_msats, account_details = await get_keepsats_balance(
+            net_msats, account_details = await keepsats_balance(
                 cust_id=account.sub, as_of_date=datetime.now(tz=timezone.utc)
             )
             balance_sats = net_msats // 1000  # Convert msats to sats

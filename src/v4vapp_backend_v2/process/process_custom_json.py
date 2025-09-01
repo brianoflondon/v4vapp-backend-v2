@@ -3,7 +3,7 @@ from typing import List
 
 from colorama import Fore, Style
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance, keepsats_balance_printout
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount, RevenueAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
@@ -51,7 +51,7 @@ async def custom_json_internal_transfer(
     if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
 
-    net_msats, account_balance = await keepsats_balance_printout(
+    net_msats, account_balance = await keepsats_balance(
         cust_id=keepsats_transfer.from_account
     )
     keepsats_transfer.msats = (

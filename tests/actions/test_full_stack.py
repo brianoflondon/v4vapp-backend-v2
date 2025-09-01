@@ -17,7 +17,7 @@ from tests.utils import (
 )
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
-    get_keepsats_balance,
+    keepsats_balance,
     keepsats_balance_printout,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
@@ -316,5 +316,5 @@ async def test_get_keepsats_balance():
         AssertionError: If the balance retrieval fails or does not match expected values.
     """
     cust_id = "v4vapp-test"
-    net_sats, account_balance = await get_keepsats_balance(cust_id=cust_id, line_items=False)
+    net_sats, account_balance = await keepsats_balance(cust_id=cust_id, line_items=False)
     assert net_sats >= 0, f"Expected non-negative Keepsats balance, found {net_sats}"

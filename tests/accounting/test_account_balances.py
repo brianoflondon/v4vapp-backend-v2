@@ -9,7 +9,7 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import all_account_b
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     all_account_balances,
-    get_keepsats_balance,
+    keepsats_balance,
     list_all_accounts,
     one_account_balance,
 )
@@ -153,6 +153,6 @@ async def test_get_account_balance_printout():
 
 async def test_get_keepsats_balance():
     cust_id = "v4vapp.qrc"
-    net_sats, details = await get_keepsats_balance(cust_id=cust_id)
+    net_sats, details = await keepsats_balance(cust_id=cust_id)
     pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")

@@ -6,10 +6,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.concurrency import asynccontextmanager
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.account_balances import (
-    get_keepsats_balance,
-    keepsats_balance_printout,
-)
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
 from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsConvertExternal,
     KeepsatsTransferExternal,
@@ -167,7 +164,7 @@ async def keepsats(
         Any exceptions raised by get_keepsats_balance.
     """
     line_items = transactions
-    net_msats, account_balance = await keepsats_balance_printout(
+    net_msats, account_balance = await keepsats_balance(
         cust_id=hive_accname, line_items=line_items
     )
     return {
@@ -193,7 +190,7 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
     Returns:
         LightningTransferResponse: The transfer response.
     """
-    net_msats, account_balance = await get_keepsats_balance(
+    net_msats, account_balance = await keepsats_balance(
         cust_id=transfer.hive_accname_from, line_items=False
     )
 
@@ -263,7 +260,7 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
                 )
             },
         )
-    net_msats, account_balance = await keepsats_balance_printout(
+    net_msats, account_balance = await keepsats_balance(
         cust_id=convert.hive_accname, line_items=False
     )
     if net_msats < convert.sats * 1_000:
@@ -272,7 +269,8 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
             detail={
                 "message": "Insufficient funds",
                 "balance": net_msats // 1000,
-                "sats": convert.sats,
+                "requested": convert.sats,
+                "deficit": convert.sats - (net_msats // 1000),
             },
         )
     if convert.memo:
