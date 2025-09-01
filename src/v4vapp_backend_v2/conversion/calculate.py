@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from nectar.amount import Amount
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from tabulate import tabulate
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -22,30 +23,32 @@ class ConversionResult(BaseModel):
     quote: QuoteResponse
     from_currency: Currency
     to_currency: Currency
-    to_convert: float
+    to_convert: Decimal
     to_convert_conv: CryptoConv
-    net_to_receive: float
+    net_to_receive: Decimal
     net_to_receive_conv: CryptoConv
-    fee: float
+    fee: Decimal
     fee_conv: CryptoConv
-    change: float
+    change: Decimal
     change_conv: CryptoConv
-    balance: float = 0.0
-    original_msats: float = 0.0
+    balance: Decimal = Decimal(0)
+    original_msats: Decimal = Decimal(0)
     original_msats_conv: CryptoConv | None = None
 
-    def _fmt_value(self, value: float, currency: Currency, padded: bool = False) -> str:
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+    def _fmt_value(self, value: Decimal | int, currency: Currency, padded: bool = False) -> str:
         """
         Format numbers:
         - MSATS displayed as sats (value/1000) with 3 decimals
         - HIVE/HBD as 3 decimals
         """
         if currency == Currency.MSATS:
-            return f"{value / 1000:>50,.3f}" if padded else f"{value / 1000:,.0f}"
-        return f"{value:>50,.3f}" if padded else f"{value:,.3f}"
+            return f"{float(value) / 1000:>50,.3f}" if padded else f"{float(value) / 1000:,.0f}"
+        return f"{float(value):>50,.3f}" if padded else f"{float(value):,.3f}"
 
     def __str__(self) -> str:
-        def fmt(value: float, currency: Currency) -> str:
+        def fmt(value: Decimal | int, currency: Currency) -> str:
             # Reuse class formatter with padding for the table
             return self._fmt_value(value, currency, padded=True)
 
@@ -199,7 +202,7 @@ async def calc_hive_to_keepsats(
     from_currency = Currency(tracked_op.amount.symbol_lower)
     to_currency = Currency.MSATS
 
-    original = tracked_op.amount.amount_decimal
+    original = Decimal(str(tracked_op.amount.amount_decimal))
 
     return hive_to_keepsats_calc(
         msats=msats,
@@ -217,7 +220,7 @@ def hive_to_keepsats_calc(
     quote: QuoteResponse,
     from_currency: Currency,
     to_currency: Currency,
-    original: float,
+    original: Decimal,
 ) -> ConversionResult:
     if msats == 0:
         # Base transfer amount on the inbound Hive/HBD transfer amount
@@ -277,15 +280,15 @@ def hive_to_keepsats_calc(
         quote=quote,
         from_currency=from_currency,
         to_currency=to_currency,
-        to_convert=to_convert,
+        to_convert=Decimal(to_convert),
         to_convert_conv=to_convert_conv,
-        net_to_receive=net_to_receive,
+        net_to_receive=Decimal(net_to_receive),
         net_to_receive_conv=net_to_receive_conv,
-        fee=fee,
+        fee=Decimal(fee),
         fee_conv=fee_conv,
-        change=change,
+        change=Decimal(change),
         change_conv=change_conv,
-        balance=balance,
+        balance=Decimal(balance),
     )
     return answer
 
@@ -399,7 +402,7 @@ async def calc_keepsats_to_hive(
         # Sanity clamp if tiny rounding differences
         # (If conversion drift causes > small difference, you could re-iterate with refined guess)
         # change / balance semantics:
-        original_msats = msats_initial
+        original_msats = Decimal(msats_initial)
         change = original_msats - (to_convert + notification_fee_msats)
         change_conv = CryptoConversion(
             value=change, conv_from=from_currency, quote=quote
@@ -410,16 +413,16 @@ async def calc_keepsats_to_hive(
             quote=quote,
             from_currency=from_currency,
             to_currency=to_currency,
-            to_convert=to_convert,
+            to_convert=Decimal(to_convert),
             to_convert_conv=to_convert_conv,
-            net_to_receive=net_to_receive,
+            net_to_receive=Decimal(net_to_receive),
             net_to_receive_conv=net_to_receive_conv,  # contains the requested Hive/HBD amount
-            fee=fee,
+            fee=Decimal(fee),
             fee_conv=fee_conv,
-            change=change,
+            change=Decimal(change),
             change_conv=change_conv,
-            balance=balance,
-            original_msats=target_net_conv.msats,
+            balance=Decimal(balance),
+            original_msats=Decimal(target_net_conv.msats),
             original_msats_conv=target_net_conv,
         )
 
@@ -429,7 +432,7 @@ async def calc_keepsats_to_hive(
     if msats is None:
         raise HiveToKeepsatsConversionError("msats must be provided if amount is not supplied.")
 
-    original_msats = msats
+    original_msats = Decimal(msats)
     original_msats_conv = CryptoConversion(
         value=original_msats, conv_from=from_currency, quote=quote
     ).conversion
@@ -475,15 +478,15 @@ async def calc_keepsats_to_hive(
         quote=quote,
         from_currency=from_currency,
         to_currency=to_currency,
-        to_convert=to_convert,
+        to_convert=Decimal(to_convert),
         to_convert_conv=to_convert_conv,
-        net_to_receive=net_to_receive,
+        net_to_receive=Decimal(net_to_receive),
         net_to_receive_conv=net_to_receive_conv,
-        fee=fee,
+        fee=Decimal(fee),
         fee_conv=fee_conv,
-        change=change,
+        change=Decimal(change),
         change_conv=change_conv,
-        balance=balance,
+        balance=Decimal(balance),
         original_msats=original_msats,
         original_msats_conv=original_msats_conv,
     )

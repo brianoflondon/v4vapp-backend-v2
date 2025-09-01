@@ -1,10 +1,11 @@
 import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
@@ -91,6 +92,10 @@ class TrackedBaseModel(BaseModel):
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     # Controls whether model_dump uses aliases (applies recursively to nested models)
     dump_by_alias: ClassVar[bool] = True
+
+    model_config = ConfigDict(
+        json_encoders={Decimal: str},  # Serialize Decimal as string for JSON
+    )
 
     def __init__(self, **data: Dict[str, Any]) -> None:
         """
@@ -301,6 +306,10 @@ class TrackedBaseModel(BaseModel):
         )
         if update.get("replies") == []:
             update.pop("replies", None)  # Remove empty replies list if it exists
+
+        # Convert Decimal objects to floats for MongoDB compatibility
+        update = self._convert_decimals_for_mongo(update)
+
         update = {
             "$set": update,
         }
@@ -312,6 +321,21 @@ class TrackedBaseModel(BaseModel):
             error_code=f"db_save_error_{self.collection_name}",
             context=f"{self.collection_name}:{self.group_id_p}",
         )
+
+    def _convert_decimals_for_mongo(self, document: dict) -> dict:
+        """
+        Recursively converts Decimal objects to floats for MongoDB compatibility.
+        MongoDB BSON encoder cannot handle Decimal objects directly, but can handle floats.
+        Converting to float maintains calculation capability while accepting minor precision loss.
+        """
+        if isinstance(document, dict):
+            return {k: self._convert_decimals_for_mongo(v) for k, v in document.items()}
+        elif isinstance(document, list):
+            return [self._convert_decimals_for_mongo(item) for item in document]
+        elif isinstance(document, Decimal):
+            return float(document)
+        else:
+            return document
 
     def tracked_type(self) -> str:
         """

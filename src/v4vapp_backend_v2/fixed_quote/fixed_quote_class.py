@@ -1,9 +1,10 @@
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pprint import pprint
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -28,6 +29,8 @@ class FixedHiveQuote(BaseModel):
     quote_record: HiveRatesDB
     quote_response: QuoteResponse
     conversion_result: ConversionResult
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
 
     @classmethod
     async def create_quote(
@@ -121,7 +124,7 @@ class FixedHiveQuote(BaseModel):
 
         # Cache in Redis
         redis_client = InternalConfig.redis_decoded
-        ok = redis_client.setex(
+        _ = redis_client.setex(
             f"fixed_quote:{fixed_quote.unique_id}",
             time=cache_time,
             value=fixed_quote.model_dump_json(exclude_none=True),

@@ -277,7 +277,7 @@ async def conversion_keepsats_to_hive(
 
     await tracked_op.update_conv(quote=quote)
     tracked_op.change_amount = AmountPyd(
-        amount=Amount(amount=conv_result.net_to_receive_amount),
+        amount=conv_result.net_to_receive_amount,
     )
     tracked_op.change_conv = conv_result.net_to_receive_conv
     await tracked_op.save()

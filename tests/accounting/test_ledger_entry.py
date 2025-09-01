@@ -74,7 +74,7 @@ async def test_ledger_entry_constructor():
     pprint(ledger_entry.log_extra)
     assert ledger_entry.is_completed
     assert float(ledger_entry.debit_amount_signed) == conversion_debit_amount
-    assert float(ledger_entry.credit_amount_signed) == -conversion_credit_debit_conv.hive
+    assert float(ledger_entry.credit_amount_signed) == float(-conversion_credit_debit_conv.hive)
 
     print(ledger_entry.conv_signed)
 
@@ -124,6 +124,6 @@ async def test_ledger_entry_constructor_conv_account():
     pprint(ledger_entry.log_extra)
     assert ledger_entry.is_completed
     assert float(ledger_entry.debit_amount_signed) == conversion_debit_amount
-    assert float(ledger_entry.credit_amount_signed) == -conversion_credit_debit_conv.hive
+    assert float(ledger_entry.credit_amount_signed) == float(-conversion_credit_debit_conv.hive)
 
     print(ledger_entry.conv_signed)

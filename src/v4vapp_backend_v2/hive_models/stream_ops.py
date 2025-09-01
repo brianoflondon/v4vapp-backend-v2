@@ -199,6 +199,7 @@ async def stream_ops_async(
             )
         except TypeError as e:
             logger.warning(f"{start_block:,} TypeError in block_stream: {e} restarting")
+            logger.exception(e)
         except Exception as e:
             logger.exception(
                 f"{start_block:,} | Error in block_stream: {e} restarting",

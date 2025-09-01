@@ -2,13 +2,14 @@ import asyncio
 import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from timeit import default_timer as timer
 from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
@@ -98,22 +99,24 @@ class HiveRatesDB(BaseModel):
 
     Attributes:
         timestamp (datetime): The timestamp when the rates were fetched.
-        hive_usd (float): The exchange rate of HIVE to USD.
-        btc_usd (float): The exchange rate of BTC to USD.
-        sats_hive (float): The exchange rate of Satoshi to HIVE.
-        sats_usd (float): The exchange rate of Satoshi to USD.
-        sats_hbd (float): The exchange rate of Satoshi to HBD.
-        hive_hbd (float): The exchange rate of HIVE to HBD.
+        hive_usd (Decimal): The exchange rate of HIVE to USD.
+        btc_usd (Decimal): The exchange rate of BTC to USD.
+        sats_hive (Decimal): The exchange rate of Satoshi to HIVE.
+        sats_usd (Decimal): The exchange rate of Satoshi to USD.
+        sats_hbd (Decimal): The exchange rate of Satoshi to HBD.
+        hive_hbd (Decimal): The exchange rate of HIVE to HBD.
     """
 
     timestamp: datetime
-    hive_usd: float
-    hbd_usd: float
-    btc_usd: float
-    hive_hbd: float
-    sats_hive: float
-    sats_usd: float
-    sats_hbd: float
+    hive_usd: Decimal
+    hbd_usd: Decimal
+    btc_usd: Decimal
+    hive_hbd: Decimal
+    sats_hive: Decimal
+    sats_usd: Decimal
+    sats_hbd: Decimal
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
 
 
 # Define the annotated type
@@ -142,10 +145,10 @@ class QuoteResponse(BaseModel):
         age (int): Calculates the age of the quote in seconds.
     """
 
-    hive_usd: float = 0
-    hbd_usd: float = 0
-    btc_usd: float = 0
-    hive_hbd: float = 0
+    hive_usd: Decimal = Decimal(0)
+    hbd_usd: Decimal = Decimal(0)
+    btc_usd: Decimal = Decimal(0)
+    hive_hbd: Decimal = Decimal(0)
     raw_response: RawResponseType = Field(
         default={},
         description="The raw response to queries for this quote as received from the source",
@@ -156,12 +159,14 @@ class QuoteResponse(BaseModel):
     error: str = ""
     error_details: Dict[str, Any] = {}
 
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
     def __init__(
         self,
-        hive_usd: float = 0,
-        hbd_usd: float = 0,
-        btc_usd: float = 0,
-        hive_hbd: float = 0,
+        hive_usd: Decimal | float | str = Decimal(0),
+        hbd_usd: Decimal | float | str = Decimal(0),
+        btc_usd: Decimal | float | str = Decimal(0),
+        hive_hbd: Decimal | float | str = Decimal(0),
         raw_response: RawResponseType = {},
         source: str = "",
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
@@ -170,11 +175,10 @@ class QuoteResponse(BaseModel):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.hive_usd = round(hive_usd, 6)
-        self.hbd_usd = round(hbd_usd, 6)
-        self.hive_usd = round(hive_usd, 6)
-        self.btc_usd = round(btc_usd, 6)
-        self.hive_hbd = round(hive_hbd, 6)
+        self.hive_usd = Decimal(str(hive_usd)) if hive_usd != Decimal(0) else Decimal(0)
+        self.hbd_usd = Decimal(str(hbd_usd)) if hbd_usd != Decimal(0) else Decimal(0)
+        self.btc_usd = Decimal(str(btc_usd)) if btc_usd != Decimal(0) else Decimal(0)
+        self.hive_hbd = Decimal(str(hive_hbd)) if hive_hbd != Decimal(0) else Decimal(0)
         self.raw_response = raw_response
         self.source = source
         self.fetch_date = fetch_date
@@ -194,76 +198,84 @@ class QuoteResponse(BaseModel):
         return False
 
     @computed_field
-    def sats_hive(self) -> float:
+    def sats_hive(self) -> Decimal:
         """
         Calculate the number of Satoshis equivalent to one HIVE.
         Computed property so included in model_dump
         Returns:
-            float: The number of Satoshis per HIVE, rounded to 4 decimal places.
+            Decimal: The number of Satoshis per HIVE, quantized to 6 decimal places.
         """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hive_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hive_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_hive_p(self) -> float:
+    def sats_hive_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools.
         Returns:
-            float: The value of sats_hive.
+            Decimal: The value of sats_hive.
         """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hive_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hive_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @computed_field
-    def sats_hbd(self) -> float:
+    def sats_hbd(self) -> Decimal:
         """
         Calculate the number of Satoshis equivalent to one HBD (Hive Backed Dollar).
         Computed property so included in model_dump
         Returns:
-            float: The number of Satoshis per HBD, rounded to 4 decimal places.
+            Decimal: The number of Satoshis per HBD, quantized to 6 decimal places.
         """
         if self.btc_usd == 0:
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hbd_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hbd_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_hbd_p(self) -> float:
+    def sats_hbd_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools.
         Returns:
-            float: The value of sats_hbd.
+            Decimal: The value of sats_hbd.
         """
         if self.btc_usd == 0:
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hbd_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hbd_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_usd(self) -> float:
+    def sats_usd(self) -> Decimal:
         """
         Calculate Satoshis per USD based on btc_usd.
         Computed property so included in model_dump
         """
         if self.btc_usd == 0:
-            return 0.0
-        return round(SATS_PER_BTC / self.btc_usd, 4)
+            return Decimal(0)
+        return (Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_usd_p(self) -> float:
+    def sats_usd_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools. Added for consistency with other properties.
         Returns:
-            float: The value of sats_usd.
+            Decimal: The value of sats_usd.
         """
         return self.sats_usd
 
@@ -331,6 +343,8 @@ class AllQuotes(BaseModel):
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_store_timestamp: ClassVar[datetime | None] = None
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
 
     def get_one_quote(self) -> QuoteResponse:
         """
@@ -567,7 +581,7 @@ class AllQuotes(BaseModel):
         quote = self.get_one_quote()
 
         # Calculate sats per USD
-        sats_usd = SATS_PER_BTC / quote.btc_usd if quote.btc_usd else 0
+        sats_usd = Decimal(SATS_PER_BTC) / quote.btc_usd if quote.btc_usd else Decimal(0)
 
         # Collect any errors from services
         fetch_errors = []
@@ -588,8 +602,8 @@ class AllQuotes(BaseModel):
             "Hive_HBD": quote.hive_hbd,
             "sats_Hive": quote.sats_hive,
             "sats_HBD": quote.sats_hbd,
-            "Hive_sats": 1.0 / quote.sats_hive_p if quote.sats_hive_p else 0,
-            "HBD_sats": 1.0 / quote.sats_hbd_p if quote.sats_hbd_p else 0,
+            "Hive_sats": float(Decimal(1) / quote.sats_hive_p) if quote.sats_hive_p else 0,
+            "HBD_sats": float(Decimal(1) / quote.sats_hbd_p) if quote.sats_hbd_p else 0,
             "fetch_error": fetch_errors,
             "last_fetch": quote.fetch_date.isoformat(),
             "fetch_time": age,  # Using age as a proxy for fetch time
@@ -610,13 +624,13 @@ class AllQuotes(BaseModel):
         """
         return HiveRatesDB(
             timestamp=self.fetch_date,
-            hive_usd=self.quote.hive_usd,
-            hbd_usd=self.quote.hbd_usd,
-            btc_usd=self.quote.btc_usd,
+            hive_usd=Decimal(str(self.quote.hive_usd)),
+            hbd_usd=Decimal(str(self.quote.hbd_usd)),
+            btc_usd=Decimal(str(self.quote.btc_usd)),
             sats_hive=self.quote.sats_hive_p,
             sats_usd=self.quote.sats_usd,
             sats_hbd=self.quote.sats_hbd_p,
-            hive_hbd=self.quote.hive_hbd,
+            hive_hbd=Decimal(str(self.quote.hive_hbd)),
         )
 
     async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
@@ -652,10 +666,14 @@ class AllQuotes(BaseModel):
         try:
             AllQuotes.db_store_timestamp = self.fetch_date
             context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
+            # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
+            document = record.model_dump()
+            document = self._convert_decimals_for_mongo(document)
+
             # Do not await: runs in background
             task = asyncio.create_task(
                 mongo_call(
-                    lambda: AllQuotes.collection().insert_one(document=record.model_dump()),
+                    lambda: AllQuotes.collection().insert_one(document=document),
                     error_code="mongodb_rates_insert",
                     context=context,
                 ),
@@ -669,6 +687,21 @@ class AllQuotes(BaseModel):
                 extra={"notification": False},
             )
         return record
+
+    def _convert_decimals_for_mongo(self, document: dict) -> dict:
+        """
+        Recursively converts Decimal objects to floats for MongoDB compatibility.
+        MongoDB BSON encoder cannot handle Decimal objects directly, but can handle floats.
+        Converting to float maintains calculation capability while accepting minor precision loss.
+        """
+        if isinstance(document, dict):
+            return {k: self._convert_decimals_for_mongo(v) for k, v in document.items()}
+        elif isinstance(document, list):
+            return [self._convert_decimals_for_mongo(item) for item in document]
+        elif isinstance(document, Decimal):
+            return float(document)
+        else:
+            return document
 
     @property
     def collection_name(self) -> str:
@@ -724,10 +757,16 @@ class AllQuotes(BaseModel):
             return None
         self.source = ", ".join([quote.source for quote in good_quotes])
 
-        avg_hive_usd = sum(quote.hive_usd for quote in good_quotes) / len(good_quotes)
-        avg_hbd_usd = sum(quote.hbd_usd for quote in good_quotes) / len(good_quotes)
-        avg_btc_usd = sum(quote.btc_usd for quote in good_quotes) / len(good_quotes)
-        avg_hive_hbd = sum(quote.hive_hbd for quote in good_quotes) / len(good_quotes)
+        total_hive_usd = sum(Decimal(str(quote.hive_usd)) for quote in good_quotes)
+        total_hbd_usd = sum(Decimal(str(quote.hbd_usd)) for quote in good_quotes)
+        total_btc_usd = sum(Decimal(str(quote.btc_usd)) for quote in good_quotes)
+        total_hive_hbd = sum(Decimal(str(quote.hive_hbd)) for quote in good_quotes)
+        count = Decimal(len(good_quotes))
+
+        avg_hive_usd = total_hive_usd / count
+        avg_hbd_usd = total_hbd_usd / count
+        avg_btc_usd = total_btc_usd / count
+        avg_hive_hbd = total_hive_hbd / count
 
         # get the latest fetch date of the quotes in good_quotes
         fetch_dates = [quote.fetch_date for quote in good_quotes]
@@ -748,10 +787,10 @@ class AllQuotes(BaseModel):
         )
 
     @property
-    def hive_hbd(self) -> float:
+    def hive_hbd(self) -> Decimal:
         if HiveInternalMarket.__name__ in self.quotes:
             return self.quotes[HiveInternalMarket.__name__].hive_hbd
-        hive_hbd = 0.0
+        hive_hbd = Decimal(0)
         count = 0
         for service_name, quote in self.quotes.items():
             if quote.hive_hbd:
@@ -771,13 +810,13 @@ def hive_rates_db_record(quote) -> HiveRatesDB:
     """
     return HiveRatesDB(
         timestamp=quote.fetch_date,
-        hive_usd=quote.hive_usd,
-        hbd_usd=quote.hbd_usd,
-        btc_usd=quote.btc_usd,
+        hive_usd=Decimal(str(quote.hive_usd)),
+        hbd_usd=Decimal(str(quote.hbd_usd)),
+        btc_usd=Decimal(str(quote.btc_usd)),
         sats_hive=quote.sats_hive_p,
         sats_usd=quote.sats_usd,
         sats_hbd=quote.sats_hbd_p,
-        hive_hbd=quote.hive_hbd,
+        hive_hbd=Decimal(str(quote.hive_hbd)),
     )
 
 
@@ -840,10 +879,11 @@ class CoinGecko(QuoteService):
                 if response.status_code == 200:
                     pri = response.json()
                     quote_response = QuoteResponse(
-                        hive_usd=pri["hive"]["usd"],
-                        hbd_usd=pri["hive_dollar"]["usd"],
-                        btc_usd=pri["bitcoin"]["usd"],
-                        hive_hbd=pri["hive"]["usd"] / pri["hive_dollar"]["usd"],
+                        hive_usd=Decimal(str(pri["hive"]["usd"])),
+                        hbd_usd=Decimal(str(pri["hive_dollar"]["usd"])),
+                        btc_usd=Decimal(str(pri["bitcoin"]["usd"])),
+                        hive_hbd=Decimal(str(pri["hive"]["usd"]))
+                        / Decimal(str(pri["hive_dollar"]["usd"])),
                         raw_response=pri,
                         source=self.__class__.__name__,
                         fetch_date=datetime.now(tz=timezone.utc),
@@ -923,9 +963,9 @@ class Binance(QuoteService):
                 medians[ticker["symbol"]] = median
 
             hive_usd = medians["HIVEUSDT"]
-            hbd_usd = 1
+            hbd_usd = Decimal(1)
             btc_usd = medians["BTCUSDT"]
-            hive_hbd = hive_usd / hbd_usd
+            hive_hbd = Decimal(str(hive_usd)) / hbd_usd
 
             # calc hive to btc price based on hiveusdt and btcusdt
             hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
@@ -933,10 +973,10 @@ class Binance(QuoteService):
             logger.debug(f"{ICON} Binance Hive to BTC price : {hive_sats:.1f}")
 
             quote_response = QuoteResponse(
-                hive_usd=hive_usd,
+                hive_usd=Decimal(str(hive_usd)),
                 hbd_usd=hbd_usd,
-                btc_usd=btc_usd,
-                hive_hbd=hive_hbd,
+                btc_usd=Decimal(str(btc_usd)),
+                hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=ticker_info,
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
@@ -993,12 +1033,12 @@ class CoinMarketCap(QuoteService):
                 HBD_USD = quote["USD"]["price"]
                 quote = resp_json["data"][cmc_ids["BTC_USD"]]["quote"]
                 BTC_USD = quote["USD"]["price"]
-                Hive_HBD = Hive_USD / HBD_USD
+                Hive_HBD = Decimal(str(Hive_USD)) / Decimal(str(HBD_USD))
                 quote_response = QuoteResponse(
-                    hive_usd=Hive_USD,
-                    hbd_usd=HBD_USD,
-                    btc_usd=BTC_USD,
-                    hive_hbd=Hive_HBD,
+                    hive_usd=Decimal(str(Hive_USD)),
+                    hbd_usd=Decimal(str(HBD_USD)),
+                    btc_usd=Decimal(str(BTC_USD)),
+                    hive_hbd=Decimal(str(Hive_HBD)),
                     raw_response=resp_json,
                     source=self.__class__.__name__,
                     fetch_date=datetime.now(tz=timezone.utc),
@@ -1033,10 +1073,10 @@ class HiveInternalMarket(QuoteService):
             hive_hbd = hive_quote.hive_hbd if hive_quote.hive_hbd else 0
             raw_response = hive_quote.raw_response
             quote_response = QuoteResponse(
-                hive_usd=0,
-                hbd_usd=0,
-                btc_usd=0,
-                hive_hbd=hive_hbd,
+                hive_usd=Decimal(0),
+                hbd_usd=Decimal(0),
+                btc_usd=Decimal(0),
+                hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=raw_response,
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),

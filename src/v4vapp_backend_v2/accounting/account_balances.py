@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, List, Mapping, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
@@ -177,7 +178,7 @@ async def account_balance_printout(
     COL_SHORT_ID = 15
     COL_LEDGER_TYPE = 11
 
-    total_usd: float = 0.0
+    total_usd: Decimal = Decimal(0)
     total_msats: int = 0
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:

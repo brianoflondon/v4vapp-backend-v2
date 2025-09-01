@@ -1,5 +1,6 @@
 import textwrap
 from datetime import datetime, timezone
+from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, Self
 
@@ -169,7 +170,9 @@ class LedgerEntry(BaseModel):
         description="Type of the operation, defaults to 'ledger_entry'",
     )
 
-    model_config = ConfigDict()
+    model_config = ConfigDict(
+        json_encoders={Decimal: str},  # Serialize Decimal as float for JSON
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -476,9 +479,11 @@ class LedgerEntry(BaseModel):
         """
         self.db_checks()
         try:
-            ans = await InternalConfig.db["ledger"].insert_one(
-                document=self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True),
-            )
+            # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
+            document = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
+            document = self._convert_decimals_for_mongo(document)
+
+            ans = await InternalConfig.db["ledger"].insert_one(document=document)
             logger.debug(f"Ledger Entry saved: {self.group_id}")
             logger.debug(f"\n{self}", extra={"notification": False, **self.log_extra})
 
@@ -496,6 +501,21 @@ class LedgerEntry(BaseModel):
                 extra={"notification": True, **self.log_extra},
             )
             raise LedgerEntryCreationException(f"Error saving ledger entry: {e}") from e
+
+    def _convert_decimals_for_mongo(self, document: dict) -> dict:
+        """
+        Recursively converts Decimal objects to floats for MongoDB compatibility.
+        MongoDB BSON encoder cannot handle Decimal objects directly, but can handle floats.
+        Converting to float maintains calculation capability while accepting minor precision loss.
+        """
+        if isinstance(document, dict):
+            return {k: self._convert_decimals_for_mongo(v) for k, v in document.items()}
+        elif isinstance(document, list):
+            return [self._convert_decimals_for_mongo(item) for item in document]
+        elif isinstance(document, Decimal):
+            return float(document)
+        else:
+            return document
 
     def draw_t_diagram(self) -> str:
         """
