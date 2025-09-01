@@ -170,10 +170,10 @@ async def keepsats(
     return {
         "hive_accname": hive_accname,
         "net_msats": account_balance.msats,
-        "net_hive": account_balance.conv_total.hive,
-        "net_usd": account_balance.conv_total.usd,
-        "net_hbd": account_balance.conv_total.hbd,
-        "net_sats": account_balance.conv_total.sats,
+        "net_hive": account_balance.hive,
+        "net_usd": account_balance.usd,
+        "net_hbd": account_balance.hbd,
+        "net_sats": account_balance.sats,
         "in_progress_sats": 0,
         "all_transactions": [],
     }
