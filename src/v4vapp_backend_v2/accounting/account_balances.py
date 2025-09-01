@@ -21,7 +21,9 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_sum_credit_debit_pipeline,
 )
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
@@ -154,6 +156,7 @@ async def account_balance_printout(
             account=account, as_of_date=as_of_date, age=age
         )
     units = set(ledger_account_details.balances.keys())
+    quote = await TrackedBaseModel.update_quote()
 
     title_line = f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC"
     output = ["_" * max_width]
@@ -166,10 +169,6 @@ async def account_balance_printout(
         output.append("=" * max_width)
         return "\n".join(output), ledger_account_details
 
-    # Use pre-computed overall totals from ledger_account_details
-    total_usd = ledger_account_details.conv_total.usd or 0.0
-    total_sats = ledger_account_details.conv_total.sats or 0.0
-
     COL_TS = 12
     COL_DESC = 54
     COL_DEBIT = 11
@@ -178,11 +177,14 @@ async def account_balance_printout(
     COL_SHORT_ID = 15
     COL_LEDGER_TYPE = 11
 
+    total_usd: float = 0.0
+    total_msats: int = 0
+
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
             continue
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
-        conversion_factor = 1000 if unit.upper() == "MSATS" else 1
+        conversion_factor = 1 if unit.upper() == "MSATS" else 1
 
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
@@ -235,29 +237,24 @@ async def account_balance_printout(
                         memo = truncate_text(lightning_memo(row.user_memo), 60)
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
-            # Use pre-computed per-unit totals from ledger_account_details
-            final_balance = ledger_account_details.balances_net.get(unit, 0)
-            final_conv_balance = ledger_account_details.balances_totals.get(
-                unit, ConvertedSummary()
-            )
-            total_hive = final_conv_balance.hive or 0.0
-            total_hbd = final_conv_balance.hbd or 0.0
-            total_usd_for_unit = final_conv_balance.usd or 0.0
-            total_sats_for_unit = final_conv_balance.sats or 0.0
-            total_msats = final_conv_balance.msats or 0
-
-            output.append("-" * max_width)
-            output.append(
-                f"{'Converted':<10} "
-                f"{total_hive:>15,.3f} HIVE "
-                f"{total_hbd:>12,.3f} HBD "
-                f"{total_usd_for_unit:>12,.3f} USD "
-                f"{total_sats_for_unit:>12,.0f} SATS "
-                f"{total_msats:>16,.0f} msats"
-            )
+        # Perform a conversion with the current quote for this Currency unit
+        final_balance = ledger_account_details.balances_net.get(unit, 0)
+        if unit in [Currency.HIVE, Currency.HBD]:
+            final_balance = round(final_balance, 3)
         else:
-            total_usd_for_unit = 0.0
-            total_sats_for_unit = 0.0
+            final_balance = int(final_balance)
+        conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
+        output.append("-" * max_width)
+        output.append(
+            f"{'Converted':<10} "
+            f"{conversion.hive:>15,.3f} HIVE "
+            f"{conversion.hbd:>12,.3f} HBD "
+            f"{conversion.usd:>12,.3f} USD "
+            f"{conversion.sats:>12,.0f} SATS "
+            f"{conversion.msats:>16,.0f} msats"
+        )
+        total_usd += conversion.usd
+        total_msats += conversion.msats
 
         output.append("-" * max_width)
         display_balance = (
@@ -269,11 +266,9 @@ async def account_balance_printout(
             balance_fmt = f"{display_balance:,.3f}"
         output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
 
-        # No longer summing here—using pre-computed totals
-
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
-    output.append(f"Total SATS: {total_sats:>17,.0f} SATS")
+    output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
     output.append(title_line)
 
     output.append("=" * max_width + "\n")

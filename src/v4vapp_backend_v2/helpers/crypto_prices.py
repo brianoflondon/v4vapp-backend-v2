@@ -169,12 +169,12 @@ class QuoteResponse(BaseModel):
         error_details: Dict[str, Any] = {},
         **kwargs,
     ) -> None:
-        super().__init__()
-        self.hive_usd = round(hive_usd, 4)
-        self.hbd_usd = round(hbd_usd, 4)
-        self.hive_usd = round(hive_usd, 4)
-        self.btc_usd = round(btc_usd, 2)
-        self.hive_hbd = round(hive_hbd, 4)
+        super().__init__(**kwargs)
+        self.hive_usd = round(hive_usd, 6)
+        self.hbd_usd = round(hbd_usd, 6)
+        self.hive_usd = round(hive_usd, 6)
+        self.btc_usd = round(btc_usd, 6)
+        self.hive_hbd = round(hive_hbd, 6)
         self.raw_response = raw_response
         self.source = source
         self.fetch_date = fetch_date

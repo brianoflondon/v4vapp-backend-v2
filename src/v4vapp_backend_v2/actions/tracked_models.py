@@ -361,7 +361,7 @@ class TrackedBaseModel(BaseModel):
     @classmethod
     async def update_quote(
         cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
-    ) -> None:
+    ) -> QuoteResponse:
         """
         Asynchronously updates the last quote for the class.
 
@@ -382,6 +382,7 @@ class TrackedBaseModel(BaseModel):
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
             cls.last_quote = all_quotes.quote
+        return cls.last_quote
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
