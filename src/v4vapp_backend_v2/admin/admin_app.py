@@ -14,10 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2 import __version__ as project_version
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 
 
@@ -173,6 +176,41 @@ class AdminApp:
                     # keep original dict on any formatting error
                     pass
                 hive_balances[acc] = balances_norm
+
+            # Check customer deposits balance for server account
+            server_balance_check = {"status": "unknown", "icon": "❓"}
+            if server_id in hive_balances and "error" not in hive_balances[server_id]:
+                try:
+                    # Get customer deposits balance
+                    customer_deposits_account = AssetAccount(
+                        name="Customer Deposits Hive", sub=server_id
+                    )
+                    deposits_details = await one_account_balance(customer_deposits_account)
+
+                    # Get balances with tolerance
+                    hive_deposits = deposits_details.balances_net.get(Currency.HIVE, 0.0)
+                    hbd_deposits = deposits_details.balances_net.get(Currency.HBD, 0.0)
+
+                    hive_actual = hive_balances[server_id].get("HIVE", 0.0)
+                    hbd_actual = hive_balances[server_id].get("HBD", 0.0)
+
+                    # Check with tolerance
+                    tolerance = 0.001
+                    hive_match = abs(hive_deposits - hive_actual) <= tolerance
+                    hbd_match = abs(hbd_deposits - hbd_actual) <= tolerance
+
+                    if hive_match and hbd_match:
+                        server_balance_check = {"status": "match", "icon": "✅"}
+                    else:
+                        server_balance_check = {"status": "mismatch", "icon": "❌"}
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to check customer deposits balance: {e}",
+                        extra={"notification": False},
+                    )
+                    server_balance_check = {"status": "error", "icon": "⚠️"}
+
             return self.templates.TemplateResponse(
                 "dashboard.html",
                 {
@@ -185,6 +223,7 @@ class AdminApp:
                         "project_version": project_version,
                         "config_file": self.config.config_filename,
                         "server_account": server_id,
+                        "server_balance_check": server_balance_check,
                     },
                 },
             )
