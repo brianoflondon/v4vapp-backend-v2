@@ -3,7 +3,7 @@ from typing import List
 
 from colorama import Fore, Style
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance, keepsats_balance_printout
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount, RevenueAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_any import load_tracked_object
@@ -51,9 +51,7 @@ async def custom_json_internal_transfer(
     if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
 
-    net_msats, account_balance = await keepsats_balance(
-        cust_id=keepsats_transfer.from_account
-    )
+    net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)
     keepsats_transfer.msats = (
         keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
     )
@@ -97,7 +95,9 @@ async def custom_json_internal_transfer(
         or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
     )
     description = f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
-    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    ledger_type = (
+        LedgerType.CUSTOM_JSON_TRANSFER if not fee_transfer else LedgerType.CUSTOM_JSON_FEE
+    )
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,

@@ -38,6 +38,7 @@ class LedgerType(StrEnum):
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
+    CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
 
     WITHDRAW_LIGHTNING = "withdraw_l"
