@@ -185,7 +185,7 @@ async def account_balance_printout(
         if unit not in units:
             continue
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
-        conversion_factor = 1 if unit.upper() == "MSATS" else 1
+        conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
 
         output.append(f"\nUnit: {display_unit}")
         output.append("-" * 10)
