@@ -13,8 +13,11 @@ class PeriodResult(BaseModel):
     usd: float = 0.0
     limit_hours: int = 0
     limit_sats: int = 0
-    limit_ok: bool = False
     details: List[LedgerEntry] | None = None
+
+    @property
+    def limit_ok(self) -> bool:
+        return self.limit_percent <= 100
 
     def limit_text(self, period: str, cust_id: str) -> str:
         ok_str = "ok" if self.limit_ok else "exceeded"
@@ -26,7 +29,7 @@ class PeriodResult(BaseModel):
     @property
     def limit_percent(self) -> int:
         if self.limit_sats and self.limit_sats > 0:
-            return min(100, int((self.sats / self.limit_sats) * 100))
+            return int((self.sats / self.limit_sats) * 100)
         return 0
 
 

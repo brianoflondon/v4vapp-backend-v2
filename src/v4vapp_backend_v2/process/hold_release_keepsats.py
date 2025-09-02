@@ -8,7 +8,9 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
-async def hold_keepsats(amount_msats: int, cust_id: str, tracked_op: TrackedAny) -> LedgerEntry:
+async def hold_keepsats(
+    amount_msats: int, cust_id: str, tracked_op: TrackedAny, fee: bool = False
+) -> LedgerEntry:
     """
     Creates and saves a ledger entry representing the withdrawal of Keepsats from a customer's liability account to the treasury.
     Args:
@@ -20,7 +22,7 @@ async def hold_keepsats(amount_msats: int, cust_id: str, tracked_op: TrackedAny)
     Raises:
         Any exceptions raised by CryptoConversion.get_quote() or LedgerEntry.save().
     """
-
+    fee_str = "-fee" if fee else ""
     debit_conversion = CryptoConversion(conv_from=Currency.MSATS, value=amount_msats)
     await debit_conversion.get_quote()
     ledger_type = LedgerType.HOLD_KEEPSATS
@@ -29,7 +31,7 @@ async def hold_keepsats(amount_msats: int, cust_id: str, tracked_op: TrackedAny)
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}-{ledger_type.value}{fee_str}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
@@ -48,9 +50,10 @@ async def hold_keepsats(amount_msats: int, cust_id: str, tracked_op: TrackedAny)
     return withdraw_ledger_entry
 
 
-async def release_keepsats(tracked_op: TrackedAny) -> LedgerEntry | None:
+async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerEntry | None:
     ledger_type = LedgerType.HOLD_KEEPSATS
-    group_id = f"{tracked_op.group_id}-{ledger_type.value}"
+    fee_str = "-fee" if fee else ""
+    group_id = f"{tracked_op.group_id}-{ledger_type.value}{fee_str}"
     existing_entry_raw = await LedgerEntry.collection().find_one(
         filter={"group_id": group_id},
     )

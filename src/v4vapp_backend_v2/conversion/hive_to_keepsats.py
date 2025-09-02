@@ -91,7 +91,7 @@ async def conversion_hive_to_keepsats(
     conv_result = await calc_hive_to_keepsats(tracked_op=tracked_op, msats=msats, quote=quote)
 
     # Reserve the fees amount
-    await hold_keepsats(conv_result.fee_conv.msats, cust_id, tracked_op)
+    await hold_keepsats(conv_result.fee_conv.msats, cust_id, tracked_op=tracked_op, fee=True)
 
     from_currency = conv_result.from_currency
     logger.info(f"{tracked_op.group_id} {conv_result.log_str}")

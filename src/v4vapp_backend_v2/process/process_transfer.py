@@ -37,6 +37,12 @@ class HiveTransferError(Exception):
     pass
 
 
+class ConversionLimits(HiveTransferError):
+    """Custom exception for conversion limit errors."""
+
+    pass
+
+
 async def follow_on_transfer(
     tracked_op: TrackedTransferWithCustomJson, nobroadcast: bool = False
 ) -> None:
@@ -126,26 +132,6 @@ async def follow_on_transfer(
     cust_id = tracked_op.cust_id
     amount = Amount("0.001 HIVE")
 
-    # MARK: Conversion Hive/HBD to Keepsats
-    if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
-        # This is a conversion of Hive/HBD and deposit Lightning Keepsats
-        # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
-        logger.info(
-            f"Detected keepsats operation in memo: {tracked_op.d_memo}",
-            extra={"notification": False, **tracked_op.log_extra},
-        )
-        user_limits_text = await check_user_limits(tracked_op.conv.sats, tracked_op.cust_id)
-        if user_limits_text:
-            raise HiveTransferError(f"{user_limits_text}")
-        await conversion_hive_to_keepsats(
-            server_id=server_id,
-            cust_id=cust_id,
-            tracked_op=tracked_op,
-            msats=0,
-            nobroadcast=nobroadcast,
-        )
-        return
-
     return_details = HiveReturnDetails(
         tracked_op=tracked_op,
         original_memo=tracked_op.d_memo,
@@ -155,11 +141,31 @@ async def follow_on_transfer(
         pay_to_cust_id=cust_id,
         nobroadcast=nobroadcast,
     )
+    release_hold = True  # Default to releasing the hold at the end.
     pay_req: PayReq | None = None
     lnd_config = InternalConfig().config.lnd_config
     lnd_client = LNDClient(connection_name=lnd_config.default)
-    release_hold = True  # Default to releasing the hold at the end.
     try:
+        # MARK: Conversion Hive/HBD to Keepsats
+        if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
+            # This is a conversion of Hive/HBD and deposit Lightning Keepsats
+            # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
+            logger.info(
+                f"Detected keepsats operation in memo: {tracked_op.d_memo}",
+                extra={"notification": False, **tracked_op.log_extra},
+            )
+            user_limits_text = await check_user_limits(tracked_op.conv.sats, tracked_op.cust_id)
+            if user_limits_text:
+                raise HiveTransferError(f"{user_limits_text}")
+            await conversion_hive_to_keepsats(
+                server_id=server_id,
+                cust_id=cust_id,
+                tracked_op=tracked_op,
+                msats=0,
+                nobroadcast=nobroadcast,
+            )
+            return
+
         pay_req = await decode_incoming_and_checks(tracked_op=tracked_op, lnd_client=lnd_client)
         # Important: we ignore Keepsats status for now, first we check amounts and try to pay a lightning invoice.
         # If there is no invoice we will skip to just depositing all the Hive.

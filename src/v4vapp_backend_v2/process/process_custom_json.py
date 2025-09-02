@@ -191,7 +191,7 @@ async def custom_json_internal_transfer(
         if keepsats_transfer.parent_id:
             parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
             if parent_op:
-                await release_keepsats(tracked_op=parent_op)
+                await release_keepsats(tracked_op=parent_op, fee=True)
 
     if return_details:
         trx = await reply_with_hive(
