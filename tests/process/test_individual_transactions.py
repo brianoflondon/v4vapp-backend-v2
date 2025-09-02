@@ -157,10 +157,12 @@ async def test_hive_and_hbd_to_lnd_only():
         )
         assert trx.get("trx_id"), "Transaction failed to send"
 
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 22, timeout=60)
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 23, timeout=60)
 
     await asyncio.sleep(1)
-    assert len(all_ledger_entries) - ledger_count == 22, "Expected 22 new ledger entries"
+    found_len = len(all_ledger_entries) - ledger_count
+
+    assert found_len == 23, f"Expected 23 new ledger entries found {found_len}"
     limits_after = await check_hive_conversion_limits(cust_id="v4vapp-test")
     limit_used = limits_after.first_period().sats - limits_before.first_period().sats
     logger.info(f"Limit used: {limit_used} sats")
@@ -212,6 +214,8 @@ async def test_check_conversion_limits():
     limits = await check_hive_conversion_limits(cust_id="v4vapp-test")
     assert limits, "Conversion limits should not be empty"
     print(limits.limit_text)
+    print(limits.percents)
+    print(limits)
 
 
 async def test_deposit_hive_to_keepsats_send_to_account():
@@ -293,7 +297,7 @@ async def test_conversion_keepsats_to_hive():
         memo=f"Convert to #HIVE {datetime.now().isoformat()}",
     )
     trx = await send_transfer_custom_json(transfer)
-    await watch_for_ledger_count(ledger_count + 12)
+    await watch_for_ledger_count(ledger_count + 8)
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 

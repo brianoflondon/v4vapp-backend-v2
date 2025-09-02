@@ -23,6 +23,12 @@ class PeriodResult(BaseModel):
         else:
             return f"Lightning conversions for {cust_id} in the last {period} hours: {self.sats:,.0f} sats"
 
+    @property
+    def limit_percent(self) -> int:
+        if self.limit_sats and self.limit_sats > 0:
+            return min(100, int((self.sats / self.limit_sats) * 100))
+        return 0
+
 
 class LimitCheckResult(BaseModel):
     cust_id: str = ""
@@ -37,7 +43,7 @@ class LimitCheckResult(BaseModel):
         lines = [f"Limit Check for Customer ID: {self.cust_id}"]
         for period, result in self.periods.items():
             lines.append(f"  Period: {period}")
-            lines.append(f"    Limit OK: {result.limit_ok}")
+            lines.append(f"    Limit OK: {result.limit_ok} ({result.limit_percent}%)")
             lines.append(f"    Limit Hours: {result.limit_hours}")
             lines.append(f"    Limit Sats: {result.limit_sats}")
             lines.append(f"    Sats: {result.sats}")
@@ -63,3 +69,15 @@ class LimitCheckResult(BaseModel):
         if self.periods:
             return next(iter(self.periods.values()))
         return PeriodResult()
+
+    @property
+    def percents(self) -> List[int]:
+        return [result.limit_percent for result in self.periods.values()]
+
+    @property
+    def sats(self) -> List[int]:
+        return [result.sats for result in self.periods.values()]
+
+    @property
+    def sats_list_str(self) -> List[str]:
+        return [f"{sats:,}" for sats in self.sats]

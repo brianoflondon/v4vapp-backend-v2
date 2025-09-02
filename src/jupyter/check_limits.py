@@ -5,7 +5,6 @@ from pprint import pprint
 
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
-    get_account_lightning_conv,
     keepsats_balance_printout,
     one_account_balance,
 )
@@ -17,38 +16,38 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
-async def get_limits():
-    cust_id = "v4vapp.qrc"
-    age = timedelta(hours=60)
-    ans = await get_account_lightning_conv(cust_id=cust_id, age=age)
-    pprint(ans.sats)
-    # Example usage of check_hive_conversion_limits
-    limits = await check_hive_conversion_limits(cust_id, line_items=True)
+# async def get_limits():
+#     cust_id = "v4vapp.qrc"
+#     age = timedelta(hours=60)
+#     ans = await get_account_lightning_conv(cust_id=cust_id, age=age)
+#     pprint(ans.sats)
+#     # Example usage of check_hive_conversion_limits
+#     limits = await check_hive_conversion_limits(cust_id, line_items=True)
 
-    for limit in limits:
-        print("Limit OK:", limit.limit_ok)
-        print("Spend Summary:")
-        # pprint(limit.conv_summary)
-        print("Total Sats:", limit.total_sats)
-        print("Total Msats:", limit.total_msats)
+#     for limit in limits:
+#         print("Limit OK:", limit.limit_ok)
+#         print("Spend Summary:")
+#         # pprint(limit.conv_summary)
+#         print("Total Sats:", limit.total_sats)
+#         print("Total Msats:", limit.total_msats)
 
-    for limit in limits:
-        print(limit.output_text)
+#     for limit in limits:
+#         print(limit.output_text)
 
-    limit_ok = all(limit.limit_ok for limit in limits)
-    print("All limits OK:", limit_ok)
+#     limit_ok = all(limit.limit_ok for limit in limits)
+#     print("All limits OK:", limit_ok)
 
-    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
-    balance = await one_account_balance(account=account)
-    pprint(balance)
+#     account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
+#     balance = await one_account_balance(account=account)
+#     pprint(balance)
 
 
-async def count_hours():
-    for minutes in range(0, 60):
-        age = timedelta(seconds=minutes * 60)
-        ans = await get_account_lightning_conv(cust_id="v4vapp-test", age=age)
-        print(f"Minutes: {minutes}, Sats: {ans.sats}, Msats: {ans.msats}")
-        await asyncio.sleep(0.1)
+# async def count_hours():
+#     for minutes in range(0, 60):
+#         age = timedelta(seconds=minutes * 60)
+#         ans = await get_account_lightning_conv(cust_id="v4vapp-test", age=age)
+#         print(f"Minutes: {minutes}, Sats: {ans.sats}, Msats: {ans.msats}")
+#         await asyncio.sleep(0.1)
 
 
 async def main():

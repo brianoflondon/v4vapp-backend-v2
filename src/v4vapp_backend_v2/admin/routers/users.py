@@ -11,9 +11,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from v4vapp_backend_v2.accounting.account_balances import keepsats_balance, list_all_accounts
+from v4vapp_backend_v2.accounting.account_balances import (
+    check_hive_conversion_limits,
+    keepsats_balance,
+    list_all_accounts,
+)
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
 router = APIRouter()
 
@@ -27,6 +32,29 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
     global templates, nav_manager
     templates = tmpl
     nav_manager = nav
+
+
+def format_sats_for_label(sats: int) -> str:
+    """Format sats for display in labels (e.g., 400000 -> '400k', 1200000 -> '1.2M')"""
+    if sats >= 1_000_000:
+        return f"{sats / 1_000_000:.1f}M"
+    elif sats >= 1_000:
+        return f"{sats // 1_000}k"
+    else:
+        return str(sats)
+
+
+def get_limit_entries():
+    """Get lightning rate limits from V4VConfig and format them with labels"""
+    lightning_rate_limits = V4VConfig().data.lightning_rate_limits
+    return [
+        {
+            "hours": limit.hours,
+            "sats": limit.sats,
+            "label": f"{limit.hours}h ({format_sats_for_label(limit.sats)})",
+        }
+        for limit in lightning_rate_limits
+    ]
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -63,6 +91,7 @@ async def users_page(request: Request):
                 cust_id=account.sub, as_of_date=datetime.now(tz=timezone.utc)
             )
             balance_sats = net_msats // 1000  # Convert msats to sats
+            check_limits = await check_hive_conversion_limits(cust_id=account.sub)
 
             # Format the balance for display
             if balance_sats > 0:
@@ -78,6 +107,8 @@ async def users_page(request: Request):
                     "balance_sats": balance_sats,
                     "balance_sats_fmt": balance_sats_fmt,
                     "has_transactions": balance_sats != 0 or bool(account_details.balances),
+                    "limit_percents": check_limits.percents,
+                    "limit_sats": check_limits.sats_list_str,
                 }
             )
         except Exception as e:
@@ -96,7 +127,9 @@ async def users_page(request: Request):
     total_users = len(users_data)
     active_users = len([u for u in users_data if u["has_transactions"]])
     total_positive_balance = sum(
-        u["balance_sats"] for u in users_data if u["balance_sats"] and u["balance_sats"] > 0
+        u["balance_sats"]
+        for u in users_data
+        if u.get("balance_sats") and u["balance_sats"] > 0  # Use .get() for safety
     )
     error_count = len([u for u in users_data if u.get("error")])
 
@@ -115,6 +148,7 @@ async def users_page(request: Request):
             "title": "Users",
             "nav_items": nav_items,
             "users_data": users_data,
+            "limit_entries": get_limit_entries(),
             "summary": {
                 "total_users": total_users,
                 "active_users": active_users,

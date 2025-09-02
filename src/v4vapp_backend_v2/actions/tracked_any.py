@@ -4,6 +4,7 @@ from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -46,6 +47,7 @@ def get_tracked_any_type(value: Any) -> str:
             "recurrent_transfer",
             "fill_recurrent_transfer",
             "custom_json",
+            "account_update2",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -82,7 +84,8 @@ TrackedAny = Annotated[
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
     | Annotated[Invoice, Tag("invoice")]
     | Annotated[Payment, Tag("payment")]
-    | Annotated[CustomJson, Tag("custom_json")],
+    | Annotated[CustomJson, Tag("custom_json")]
+    | Annotated[AccountUpdate2, Tag("account_update2")],
     Discriminator(get_tracked_any_type),
 ]
 
