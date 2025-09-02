@@ -290,24 +290,10 @@ async def conversion_keepsats_to_hive(
         pay_to_cust_id=cust_id,
         amount=tracked_op.change_amount,
         nobroadcast=nobroadcast,
+        clean=is_clean_memo(lightning_memo),
     )
 
     await reply_with_hive(details, nobroadcast=nobroadcast)
-
-    # Thinking... the fee has already been transferred out of the customer's account by the initial transfer.
-    # This is not THE SAME as the hive_to_keepsats because the fee is sent as prt of the initiation of the process
-    # So the fee is already in the server_id's VSC Liability account.
-    # transfer_fee = KeepsatsTransfer(
-    #     from_account=cust_id,
-    #     to_account=server_id,
-    #     msats=conv_result.fee_conv.msats,
-    #     memo=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id} #Fee #from_keepsats",
-    #     parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
-    # )
-    # trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)
-    # logger.info(
-    #     f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
-    # )
 
     # MARK: Reclassify VSC Hive
     # This reclassification should happen AFTER Hive is successfully SENT.

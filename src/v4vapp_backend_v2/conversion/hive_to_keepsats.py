@@ -188,8 +188,14 @@ async def conversion_hive_to_keepsats(
     tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
     end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
 
+    if "⚡️" in tracked_op.lightning_memo:
+        lightning_paid = f"Your Lightning Invoice of {conv_result.net_to_receive_conv.msats / 1000:,.0f} has been paid. | "
+    else:
+        lightning_paid = ""
+
     if not is_clean_memo(tracked_op.lightning_memo):
         tracked_op.change_memo = (
+            f"{lightning_paid}"
             f"Deposit {conv_result.to_convert_amount} to "
             f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
             f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
