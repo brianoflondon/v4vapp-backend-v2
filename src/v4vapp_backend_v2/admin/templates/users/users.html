@@ -34,6 +34,16 @@
                             </thead>
                             <tbody>
                                 {% for user in users_data %}
+                                {% if not user.limit_ok %}
+                                <tr class="table-row-limit-not-ok">
+                                    <td></td>
+                                    <td colspan="{{ limit_entries|length  }}" class="text-center">
+                                        <small style="margin: 0; font-size: 0.75rem;">{{ user.limit }} {{
+                                            user.next_limit_expiry }}</small>
+                                    </td>
+                                    <td colspan="3"></td>
+                                </tr>
+                                {% endif %}
                                 <tr>
                                     <td>
                                         <strong>

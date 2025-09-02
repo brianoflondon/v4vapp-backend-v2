@@ -1,20 +1,18 @@
 import asyncio
 import os
-from datetime import timedelta
+from datetime import datetime, timezone
 from pprint import pprint
 
 from v4vapp_backend_v2.accounting.account_balances import (
-    check_hive_conversion_limits,
+    get_next_limit_expiry,
     keepsats_balance_printout,
-    one_account_balance,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 
 # async def get_limits():
 #     cust_id = "v4vapp.qrc"
@@ -82,7 +80,18 @@ async def main():
     results = await cursor.to_list(length=None)
     pprint(results[0])
     limit_check = LimitCheckResult.model_validate(results[0]) if results else None
-    print(limit_check)
+    if limit_check:
+        print(limit_check)
+        print(limit_check.next_limit_expiry)
+    expiry_info = await get_next_limit_expiry(cust_id)
+    if expiry_info:
+        expiry, sats_freed = expiry_info
+        expires_in = expiry - datetime.now(tz=timezone.utc)
+        print(
+            f"Next limit expires in: {format_time_delta(expires_in)}, freeing {sats_freed:,.0f} sats"
+        )
+    else:
+        print("No active limits or transactions")
 
 
 if __name__ == "__main__":

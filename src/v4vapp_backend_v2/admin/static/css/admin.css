@@ -213,3 +213,22 @@ body {
     background-color: var(--bs-secondary-bg) !important;
     color: var(--bs-body-color) !important;
 }
+
+.table-row-limit-not-ok {
+    border-top: 1px solid rgba(0, 0, 0, 0.125);
+    border-bottom: none;
+}
+
+[data-bs-theme="dark"] .table-row-limit-not-ok {
+    border-top: 1px solid rgba(255, 255, 255, 0.125);
+}
+
+.table-row-limit-not-ok td {
+    padding: 0;
+    padding-bottom: 1pt;
+    margin: 0;
+    line-height: 1;
+    border: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+}

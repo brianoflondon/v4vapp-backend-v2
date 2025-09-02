@@ -108,7 +108,9 @@ async def users_page(request: Request):
                     "balance_sats_fmt": balance_sats_fmt,
                     "has_transactions": balance_sats != 0 or bool(account_details.balances),
                     "limit_percents": check_limits.percents,
+                    "limit_ok": check_limits.limit_ok,
                     "limit_sats": check_limits.sats_list_str,
+                    "next_limit_expiry": check_limits.next_limit_expiry,
                 }
             )
         except Exception as e:

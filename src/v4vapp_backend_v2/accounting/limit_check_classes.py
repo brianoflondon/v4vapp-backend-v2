@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict, List
 
 from pydantic import BaseModel
@@ -36,6 +37,9 @@ class PeriodResult(BaseModel):
 class LimitCheckResult(BaseModel):
     cust_id: str = ""
     periods: Dict[str, PeriodResult] = {}
+    next_limit_expiry: str = ""
+    expiry: datetime | None = None
+    sats_freed: int | None = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -60,6 +64,10 @@ class LimitCheckResult(BaseModel):
                 for entry in result.details:
                     lines.append(f"      - {entry}")
         return "\n".join(lines)
+
+    @property
+    def limit_ok(self) -> bool:
+        return all(result.limit_ok for result in self.periods.values())
 
     @property
     def limit_text(self) -> str:

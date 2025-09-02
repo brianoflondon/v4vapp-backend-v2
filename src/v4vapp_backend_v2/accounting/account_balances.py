@@ -20,7 +20,12 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, truncate_text
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    format_time_delta,
+    lightning_memo,
+    truncate_text,
+)
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
 UNIT_TOLERANCE = {
@@ -670,7 +675,62 @@ async def check_hive_conversion_limits(
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
     limit_check = LimitCheckResult.model_validate(results[0]) if results else LimitCheckResult()
+    if not limit_check.limit_ok:
+        expiry_info = await get_next_limit_expiry(cust_id)
+        if expiry_info:
+            limit_check.expiry, limit_check.sats_freed = expiry_info
+            expires_in = limit_check.expiry - datetime.now(tz=timezone.utc)
+            limit_check.next_limit_expiry = f"Next limit expires in: {format_time_delta(expires_in)}, freeing {limit_check.sats_freed:,.0f} sats"
+
     return limit_check
+
+
+async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
+    """
+    Determines when the next rate limit will expire for a given customer and the amount that will be freed.
+    This looks at the first (shortest) rate limit period and finds the oldest transaction
+    within that period. The expiry time is when that transaction will be outside the limit window,
+    and the amount freed is the sats value of that transaction.
+
+    Args:
+        cust_id (str): The customer ID to check the limit expiry for.
+
+    Returns:
+        Tuple[datetime, int] | None: A tuple of (expiry_datetime, sats_freed), or None if no limits or no transactions.
+    """
+    lightning_rate_limits = V4VConfig().data.lightning_rate_limits
+    if not lightning_rate_limits:
+        return None
+
+    first_limit = min(lightning_rate_limits, key=lambda x: x.hours)
+
+    pipeline = limit_check_pipeline(cust_id=cust_id, details=True, extra_spend_sats=0)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list(length=None)
+
+    if not results:
+        return None
+
+    result = results[0]
+    periods = result.get("periods", {})
+    first_period_key = str(first_limit.hours)
+
+    if first_period_key not in periods:
+        return None
+
+    period_data = periods[first_period_key]
+    details = period_data.get("details", [])
+
+    if not details:
+        return None
+
+    # Find the oldest transaction
+    oldest_entry = min(details, key=lambda x: x["timestamp"])
+    oldest_ts = oldest_entry["timestamp"]
+    sats_freed = oldest_entry["credit_conv"]["msats"] // 1000  # Convert msats to sats
+
+    expiry = oldest_ts + timedelta(hours=first_limit.hours)
+    return expiry, sats_freed
 
 
 async def keepsats_balance(
