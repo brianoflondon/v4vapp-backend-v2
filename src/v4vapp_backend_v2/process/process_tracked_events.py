@@ -17,6 +17,7 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
 from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
+from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -66,10 +67,10 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             )
             return []
 
-        if isinstance(tracked_op, BlockMarker):
+        if isinstance(tracked_op, BlockMarker) or isinstance(tracked_op, AccountUpdate2):
             # This shouldn't be arrived at.
             logger.warning(
-                "BlockMarker is not a valid operation.",
+                "BlockMarker/AccountUpdate2 is not a valid operation.",
                 extra={"notification": False, **tracked_op.log_extra},
             )
             return []

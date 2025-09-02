@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import List
 
@@ -61,6 +62,8 @@ async def custom_json_internal_transfer(
     if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
         fee_transfer = True
 
+    # This delay helps make sure we only process this after any inbound sats are in the right place
+    await asyncio.sleep(1)
     # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
     if net_msats + 1_000 < keepsats_transfer.msats and not fee_transfer:
         message = f"Insufficient Keepsats balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."

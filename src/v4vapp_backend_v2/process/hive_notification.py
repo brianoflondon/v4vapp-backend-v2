@@ -79,7 +79,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     else:
         memo = details.reason_str if details.reason_str else "No reason provided"
 
-    memo += f" | § {details.tracked_op.short_id}{MEMO_FOOTER}"
+    memo += f" | § {details.tracked_op.short_id}"
+
+    if not details.clean:
+        memo += f"{MEMO_FOOTER}"
 
     hive_client, server_account_name = await get_verified_hive_client(nobroadcast=nobroadcast)
 
