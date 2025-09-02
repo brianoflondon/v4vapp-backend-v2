@@ -11,27 +11,16 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     ConvertedSummary,
     LedgerAccountDetails,
     LedgerConvSummary,
-    LightningLimitSummary,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import (
-    AssetAccount,
-    LedgerAccount,
-    LiabilityAccount,
-)
-from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
-    filter_sum_credit_debit_pipeline,
-)
+from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    format_time_delta,
-    lightning_memo,
-    truncate_text,
-)
-from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, truncate_text
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 
 UNIT_TOLERANCE = {
@@ -604,65 +593,65 @@ async def ledger_pipeline_result(
     return ans
 
 
-async def get_account_lightning_conv(
-    cust_id: str = "",
-    as_of_date: datetime | None = None,
-    age: timedelta = timedelta(hours=4),
-    line_items: bool = True,
-) -> LedgerConvSummary:
-    """
-    Retrieves the lightning conversion for a specific customer as of a given date.
-    This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
-    i.e. conversions from HIVE/HBD to SATS.
-    THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
+# async def get_account_lightning_conv(
+#     cust_id: str = "",
+#     as_of_date: datetime | None = None,
+#     age: timedelta = timedelta(hours=4),
+#     line_items: bool = True,
+# ) -> LedgerConvSummary:
+#     """
+#     Retrieves the lightning conversion for a specific customer as of a given date.
+#     This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
+#     i.e. conversions from HIVE/HBD to SATS.
+#     THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
 
-    Args:
-        account (LedgerAccount): The account for which to retrieve the lightning spend.
-        as_of_date (datetime, optional): The date up to which to calculate the spend. Defaults to the current UTC time.
+#     Args:
+#         account (LedgerAccount): The account for which to retrieve the lightning spend.
+#         as_of_date (datetime, optional): The date up to which to calculate the spend. Defaults to the current UTC time.
 
-    Returns:
-        Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
-    """
-    if as_of_date is None:
-        as_of_date = datetime.now(tz=timezone.utc)
-    hive_config = InternalConfig().config.hive
-    server_id = InternalConfig().server_id
-    # This account is the transit point through which all keepsats and conversions happen.
-    account = AssetAccount(
-        name="Customer Deposits Hive",
-        sub=server_id,
-    )
+#     Returns:
+#         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
+#     """
+#     if as_of_date is None:
+#         as_of_date = datetime.now(tz=timezone.utc)
+#     hive_config = InternalConfig().config.hive
+#     server_id = InternalConfig().server_id
+#     # This account is the transit point through which all keepsats and conversions happen.
+#     account = AssetAccount(
+#         name="Customer Deposits Hive",
+#         sub=server_id,
+#     )
 
-    pipeline = filter_sum_credit_debit_pipeline(
-        account=account,
-        cust_id=cust_id,
-        age=age,
-        as_of_date=as_of_date,
-        ledger_types=[
-            LedgerType.CONV_HIVE_TO_KEEPSATS,
-            LedgerType.CONV_KEEPSATS_TO_HIVE,
-            LedgerType.CONV_HIVE_TO_LIGHTNING,
-            LedgerType.CONV_LIGHTNING_TO_HIVE,
-        ],
-        line_items=line_items,
-    )
-    ans = await ledger_pipeline_result(
-        cust_id=cust_id,
-        age=age,
-        account=account,
-        pipeline=pipeline,
-        as_of_date=as_of_date,
-    )
-    return ans
+#     pipeline = filter_sum_credit_debit_pipeline(
+#         account=account,
+#         cust_id=cust_id,
+#         age=age,
+#         as_of_date=as_of_date,
+#         ledger_types=[
+#             LedgerType.CONV_HIVE_TO_KEEPSATS,
+#             LedgerType.CONV_KEEPSATS_TO_HIVE,
+#             LedgerType.CONV_HIVE_TO_LIGHTNING,
+#             LedgerType.CONV_LIGHTNING_TO_HIVE,
+#         ],
+#         line_items=line_items,
+#     )
+#     ans = await ledger_pipeline_result(
+#         cust_id=cust_id,
+#         age=age,
+#         account=account,
+#         pipeline=pipeline,
+#         as_of_date=as_of_date,
+#     )
+#     return ans
 
 
 async def check_hive_conversion_limits(
-    hive_accname: str, extra_spend_msats: int = 0, line_items: bool = False
-) -> List[LightningLimitSummary]:
+    cust_id: str, extra_spend_msats: int = 0, line_items: bool = False
+) -> LimitCheckResult:
     """
     Checks if a Hive account's recent Lightning conversions are within configured rate limits.
     Args:
-        hive_accname (str): The Hive account name to check conversion limits for.
+        cust_id (str): The Hive account name to check conversion limits for.
         extra_spend_sats (int, optional): Additional satoshis to consider in the limit check. Defaults to 0.
         line_items (bool, optional): Whether to include line item details in the conversion summary. Defaults to False.
     Returns:
@@ -674,38 +663,14 @@ async def check_hive_conversion_limits(
         - The function checks conversions for each configured limit window and determines if the account is within limits.
     """
     extra_spend_sats = extra_spend_msats // 1000  # Convert msats to sats
-    v4v_config = V4VConfig()
-    lightning_rate_limits = v4v_config.data.lightning_rate_limits
-    ans = []
-    if not lightning_rate_limits:
-        logger.warning(
-            "Lightning rate limits are not configured. Skipping lightning spend checks.",
-            extra={"notification": False, "hive_accname": hive_accname},
-        )
-        return []
 
-    as_of_date = datetime.now(tz=timezone.utc)
-    for limit in lightning_rate_limits:
-        age = timedelta(hours=limit.hours)
-        limit_timedelta = timedelta(hours=limit.hours)
-        limit_timedelta_str = format_time_delta(
-            limit_timedelta, fractions=True, just_days_or_hours=True
-        )
-        lightning_conv = await get_account_lightning_conv(
-            as_of_date=as_of_date, cust_id=hive_accname, age=age, line_items=line_items
-        )
-        limit_summary = LightningLimitSummary(
-            conv_summary=lightning_conv,
-            total_sats=lightning_conv.sats,
-            total_msats=lightning_conv.msats,
-            output_text=(
-                f"Lightning conversions for {hive_accname} in the last {limit_timedelta_str} : "
-                f"{lightning_conv.sats:,.0f} sats (limit: {limit.sats:,.0f} sats)\n"
-            ),
-            limit_ok=(lightning_conv.sats + extra_spend_sats) <= limit.sats,
-        )
-        ans.append(limit_summary)
-    return ans
+    pipeline = limit_check_pipeline(
+        cust_id=cust_id, details=False, extra_spend_sats=extra_spend_sats
+    )
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list(length=None)
+    limit_check = LimitCheckResult.model_validate(results[0]) if results else LimitCheckResult()
+    return limit_check
 
 
 async def keepsats_balance(

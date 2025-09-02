@@ -132,7 +132,7 @@ async def test_hive_and_hbd_to_lnd_only():
     # await clear_and_reset()
 
     ledger_count = await get_ledger_count()
-    limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    limits_before = await check_hive_conversion_limits(cust_id="v4vapp-test")
     invoice_value_sat = 2_222
 
     for currency in [Currency.HBD, Currency.HIVE]:
@@ -161,8 +161,8 @@ async def test_hive_and_hbd_to_lnd_only():
 
     await asyncio.sleep(1)
     assert len(all_ledger_entries) - ledger_count == 22, "Expected 22 new ledger entries"
-    limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
-    limit_used = limits_after[0].total_sats - limits_before[0].total_sats
+    limits_after = await check_hive_conversion_limits(cust_id="v4vapp-test")
+    limit_used = limits_after.first_period().sats - limits_before.first_period().sats
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= 2 * invoice_value_sat, "Total sats should increase after the transaction"
 
@@ -180,7 +180,7 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     # await test_just_clear()
     net_msats_before, balance_before = await keepsats_balance_printout(cust_id="v4vapp.qrc")
     ledger_count = await get_ledger_count()
-    limits_before = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    limits_before = await check_hive_conversion_limits(cust_id="v4vapp-test")
 
     invoice_value_sat = 1_234
 
@@ -195,8 +195,8 @@ async def test_hive_to_lnd_and_lnd_to_hive():
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 11, timeout=120)
 
     await asyncio.sleep(1)
-    limits_after = await check_hive_conversion_limits(hive_accname="v4vapp-test")
-    limit_used = limits_after[0].total_sats - limits_before[0].total_sats
+    limits_after = await check_hive_conversion_limits(cust_id="v4vapp-test")
+    limit_used = limits_after.first_period().sats - limits_before.first_period().sats
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= invoice_value_sat, "Total sats should increase after the transaction"
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
@@ -209,10 +209,9 @@ async def test_check_conversion_limits():
     and asserts that the limits are greater than 0.
     """
 
-    limits = await check_hive_conversion_limits(hive_accname="v4vapp-test")
+    limits = await check_hive_conversion_limits(cust_id="v4vapp-test")
     assert limits, "Conversion limits should not be empty"
-    for limit in limits:
-        print(limit.output_text)
+    print(limits.limit_text)
 
 
 async def test_deposit_hive_to_keepsats_send_to_account():

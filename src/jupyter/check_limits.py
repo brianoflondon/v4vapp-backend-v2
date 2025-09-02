@@ -58,21 +58,21 @@ async def main():
     # Example usage of get_account_lightning_conv
     db_conn = DBConn()
     await db_conn.setup_database()
-    # await count_hours()
-    await get_limits()
+    # # await count_hours()
+    # await get_limits()
 
-    amount_msats = 3_000_000
+    # amount_msats = 3_000_000
+
+    # cust_id = "v4vapp-test"
+    # # account_printout_str, account_details = await get_account_balance_printout(
+    # #     account=LiabilityAccount(name="VSC Liability", sub=cust_id), line_items=False
+    # # )
+
+    # # print(account_printout_str)
+    # # pprint(account_details)
 
     cust_id = "v4vapp-test"
-    # account_printout_str, account_details = await get_account_balance_printout(
-    #     account=LiabilityAccount(name="VSC Liability", sub=cust_id), line_items=False
-    # )
-
-    # print(account_printout_str)
-    # pprint(account_details)
-
-    cust_id = "v4vapp-test"
-
+    limit_empty = LimitCheckResult()
     print("-------------- Keepsats balance ----------------")
     net_sats, account_balance = await keepsats_balance_printout(cust_id=cust_id, line_items=False)
     logger.info(InternalConfig.db)

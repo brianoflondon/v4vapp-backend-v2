@@ -4,7 +4,7 @@ from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field, model_validator
+from pydantic import BaseModel, Field, ValidationError, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult
@@ -168,10 +168,6 @@ class LedgerEntry(BaseModel):
     op_type: str = Field(
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
-    )
-
-    model_config = ConfigDict(
-        json_encoders={Decimal: str},  # Serialize Decimal as float for JSON
     )
 
     def __init__(self, **data):

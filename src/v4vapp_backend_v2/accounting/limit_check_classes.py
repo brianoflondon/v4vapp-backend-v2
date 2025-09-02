@@ -6,12 +6,13 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 
 
 class PeriodResult(BaseModel):
-    hbd: float
-    hive: float
-    msats: int
-    sats: int
-    usd: float
-    limit_sats: int | None = None
+    hbd: float = 0.0
+    hive: float = 0.0
+    msats: int = 0
+    sats: int = 0
+    usd: float = 0.0
+    limit_hours: int = 0
+    limit_sats: int = 0
     limit_ok: bool = False
     details: List[LedgerEntry] | None = None
 
@@ -24,22 +25,26 @@ class PeriodResult(BaseModel):
 
 
 class LimitCheckResult(BaseModel):
-    cust_id: str
-    periods: Dict[str, PeriodResult]
+    cust_id: str = ""
+    periods: Dict[str, PeriodResult] = {}
 
     def __init__(self, **data):
         super().__init__(**data)
+        # Sort the periods dictionary
+        self.periods = dict(sorted(self.periods.items(), key=lambda x: int(x[0])))
 
     def __str__(self):
         lines = [f"Limit Check for Customer ID: {self.cust_id}"]
         for period, result in self.periods.items():
             lines.append(f"  Period: {period}")
+            lines.append(f"    Limit OK: {result.limit_ok}")
+            lines.append(f"    Limit Hours: {result.limit_hours}")
+            lines.append(f"    Limit Sats: {result.limit_sats}")
             lines.append(f"    Sats: {result.sats}")
             lines.append(f"    Msats: {result.msats}")
             lines.append(f"    USD: {result.usd:.2f}")
             lines.append(f"    HBD: {result.hbd:.2f}")
             lines.append(f"    Hive: {result.hive:.2f}")
-            lines.append(f"    Limit Sats: {result.limit_sats}")
             lines.append(result.limit_text(period, self.cust_id))
             if result.details:
                 lines.append(f"    Details ({len(result.details)} entries):")
@@ -47,8 +52,14 @@ class LimitCheckResult(BaseModel):
                     lines.append(f"      - {entry}")
         return "\n".join(lines)
 
+    @property
     def limit_text(self) -> str:
         lines = [f"Limit Check Summary for Customer ID: {self.cust_id}"]
         for period, result in self.periods.items():
             lines.append(f"  {result.limit_text(period, self.cust_id)}")
         return "\n".join(lines)
+
+    def first_period(self) -> PeriodResult:
+        if self.periods:
+            return next(iter(self.periods.values()))
+        return PeriodResult()

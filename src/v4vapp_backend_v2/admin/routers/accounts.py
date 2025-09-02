@@ -105,6 +105,7 @@ async def get_user_balance_get(
         # Default parameters for GET request
         line_items_bool = True
         user_memos_bool = True
+        customer_grouping_bool = False
 
         # Construct the account string for VSC Liability account
         account_string = f"VSC Liability (Liability) - Sub: {acc_name}"
@@ -116,14 +117,22 @@ async def get_user_balance_get(
         as_of_date = datetime.now(tz=timezone.utc)
         age = timedelta(seconds=0)  # No age for GET requests
 
-        # Get the balance printout
-        printout, details = await account_balance_printout_grouped_by_customer(
-            account=account,
-            line_items=line_items_bool,
-            user_memos=user_memos_bool,
-            as_of_date=as_of_date,
-            age=age,
-        )
+        if customer_grouping_bool:
+            printout, details = await account_balance_printout_grouped_by_customer(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
+        else:
+            printout, details = await account_balance_printout(
+                account=account,
+                line_items=line_items_bool,
+                user_memos=user_memos_bool,
+                as_of_date=as_of_date,
+                age=age,
+            )
 
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
 

@@ -3,7 +3,7 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.account_balances import (
     check_hive_conversion_limits,
-    keepsats_balance_printout,
+    keepsats_balance,
 )
 from v4vapp_backend_v2.actions.lnurl_decode import LnurlException, decode_any_lightning_string
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransfer, TrackedTransferWithCustomJson
@@ -476,12 +476,12 @@ async def check_amount_sent(
     surplus_msats = tracked_op.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
         if tracked_op.unit == Currency.HIVE:
-            surplus_hive = abs(round(surplus_msats / 1_000 / tracked_op.conv.sats_hive, 3))
+            surplus_hive = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hive), 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hive:,.3f} HIVE"
             )
         elif tracked_op.unit == Currency.HBD:
-            surplus_hbd = abs(round(surplus_msats / 1_000 / tracked_op.conv.sats_hbd, 3))
+            surplus_hbd = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hbd), 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hbd:,.3f} HBD"
             )
@@ -503,12 +503,18 @@ async def check_user_limits(extra_spend_msats: int, cust_id: str) -> str:
 
     """
     limit_check = await check_hive_conversion_limits(
-        hive_accname=cust_id, extra_spend_msats=extra_spend_msats
+        cust_id=cust_id, extra_spend_msats=extra_spend_msats
     )
-    for limit in limit_check:
-        if not limit.limit_ok:
-            logger.warning(limit.output_text, extra={"notification": False})
-            return limit.output_text
+    if not limit_check:
+        return "User limits could not be determined."
+
+    for period_key, period_result in limit_check.periods.items():
+        if not period_result.limit_ok:
+            logger.warning(
+                period_result.limit_text(period_key, limit_check.cust_id),
+                extra={"notification": False},
+            )
+            return period_result.limit_text(period_key, limit_check.cust_id)
     return ""
 
 
@@ -516,8 +522,8 @@ async def check_keepsats_balance(extra_spend_msats: int, cust_id: str) -> str:
     """
     Asynchronously checks whether the user has sufficient Keepsats balance for a payment request.
     """
-    net_msats, keepsats_balance = await keepsats_balance(cust_id=cust_id)
-    if not keepsats_balance.balances.get(Currency.MSATS):
+    net_msats, balance = await keepsats_balance(cust_id=cust_id)
+    if not balance.balances.get(Currency.MSATS):
         raise HiveTransferError(
             f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"
         )

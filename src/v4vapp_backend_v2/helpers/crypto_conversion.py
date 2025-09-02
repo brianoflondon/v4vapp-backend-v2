@@ -55,10 +55,6 @@ class CryptoConv(BaseModel):
         None, description="The date when the conversion was fetched"
     )
 
-    model_config = ConfigDict(
-        json_encoders={Decimal: str},  # Serialize Decimal as string for JSON
-    )
-
     UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
         "hive": 0.003,
         "hbd": 0.002,

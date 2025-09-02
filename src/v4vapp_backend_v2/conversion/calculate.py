@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from tabulate import tabulate
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -34,8 +34,6 @@ class ConversionResult(BaseModel):
     balance: Decimal = Decimal(0)
     original_msats: Decimal = Decimal(0)
     original_msats_conv: CryptoConv | None = None
-
-    model_config = ConfigDict(json_encoders={Decimal: str})
 
     def _fmt_value(self, value: Decimal | int, currency: Currency, padded: bool = False) -> str:
         """

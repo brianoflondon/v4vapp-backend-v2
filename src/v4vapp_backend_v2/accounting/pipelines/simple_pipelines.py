@@ -68,110 +68,110 @@ def filter_by_account_as_of_date_query(
     return query
 
 
-def filter_sum_credit_debit_pipeline(
-    account: LedgerAccount | None = None,
-    cust_id: str | None = None,
-    as_of_date: datetime = datetime.now(tz=timezone.utc),
-    ledger_types: list[LedgerType] | None = None,
-    age: timedelta | None = None,
-    line_items: bool = False,
-) -> List[Mapping[str, Any]]:
-    """
-    Creates a MongoDB aggregation pipeline to filter ledger entries by account, date, ledger types, and age,
-    then computes the sum of credit and debit amounts in various currencies.
+# def filter_sum_credit_debit_pipeline(
+#     account: LedgerAccount | None = None,
+#     cust_id: str | None = None,
+#     as_of_date: datetime = datetime.now(tz=timezone.utc),
+#     ledger_types: list[LedgerType] | None = None,
+#     age: timedelta | None = None,
+#     line_items: bool = False,
+# ) -> List[Mapping[str, Any]]:
+#     """
+#     Creates a MongoDB aggregation pipeline to filter ledger entries by account, date, ledger types, and age,
+#     then computes the sum of credit and debit amounts in various currencies.
 
-    The pipeline uses MongoDB's $facet operator to run two parallel aggregation pipelines:
+#     The pipeline uses MongoDB's $facet operator to run two parallel aggregation pipelines:
 
-    by_ledger_type: Groups documents by their ledger_type field
-    overall: Groups all matching documents together
-    Each group calculates the same set of totals for credits and debits this is somewhat redundant as credis and
-    debits should always be equal, but it allows for more granular analysis if needed.
+#     by_ledger_type: Groups documents by their ledger_type field
+#     overall: Groups all matching documents together
+#     Each group calculates the same set of totals for credits and debits this is somewhat redundant as credis and
+#     debits should always be equal, but it allows for more granular analysis if needed.
 
-    Args:
-        account (LedgerAccount | None): The ledger account to filter by. If None, no account filtering is applied.
-        as_of_date (datetime): The date up to which entries are considered. Defaults to the current UTC datetime.
-        ledger_types (list[LedgerType] | None): List of ledger types to filter by. If None, all types are included.
-        age (timedelta | None): Optional age filter for entries. If None, no age filtering is applied.
-        line_items (bool): If True, includes line items in the output. Defaults to False.
+#     Args:
+#         account (LedgerAccount | None): The ledger account to filter by. If None, no account filtering is applied.
+#         as_of_date (datetime): The date up to which entries are considered. Defaults to the current UTC datetime.
+#         ledger_types (list[LedgerType] | None): List of ledger types to filter by. If None, all types are included.
+#         age (timedelta | None): Optional age filter for entries. If None, no age filtering is applied.
+#         line_items (bool): If True, includes line items in the output. Defaults to False.
 
-    Returns:
-        List[Mapping[str, Any]]: A MongoDB aggregation pipeline that filters and groups ledger entries,
-        returning the total sums for credit and debit in HIVE, HBD, SATS, MSATS, and USD.
-    """
-    if isinstance(account, str):
-        # If account is a string, convert it to a LedgerAccount object
-        account = LedgerAccount.from_string(account)
-    if not isinstance(age, timedelta):
-        if isinstance(age, int | float):
-            # If age is a number, convert it to a timedelta
-            age = timedelta(seconds=age)
+#     Returns:
+#         List[Mapping[str, Any]]: A MongoDB aggregation pipeline that filters and groups ledger entries,
+#         returning the total sums for credit and debit in HIVE, HBD, SATS, MSATS, and USD.
+#     """
+#     if isinstance(account, str):
+#         # If account is a string, convert it to a LedgerAccount object
+#         account = LedgerAccount.from_string(account)
+#     if not isinstance(age, timedelta):
+#         if isinstance(age, int | float):
+#             # If age is a number, convert it to a timedelta
+#             age = timedelta(seconds=age)
 
-    query = filter_by_account_as_of_date_query(
-        account=account,
-        cust_id=cust_id,
-        as_of_date=as_of_date,
-        ledger_types=ledger_types,
-        age=age,
-    )
+#     query = filter_by_account_as_of_date_query(
+#         account=account,
+#         cust_id=cust_id,
+#         as_of_date=as_of_date,
+#         ledger_types=ledger_types,
+#         age=age,
+#     )
 
-    facet_sections = {
-        # Group by ledger_type
-        "by_ledger_type": [
-            {
-                "$group": {
-                    "_id": "$ledger_type",  # Group by ledger_type
-                    # Sum fields from credit_conv
-                    "credit_total_hive": {"$sum": "$credit_conv.hive"},
-                    "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
-                    "credit_total_sats": {"$sum": "$credit_conv.sats"},
-                    "credit_total_msats": {"$sum": "$credit_conv.msats"},
-                    "credit_total_usd": {"$sum": "$credit_conv.usd"},
-                    # Sum fields from debit_conv
-                    "debit_total_hive": {"$sum": "$debit_conv.hive"},
-                    "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
-                    "debit_total_sats": {"$sum": "$debit_conv.sats"},
-                    "debit_total_msats": {"$sum": "$debit_conv.msats"},
-                    "debit_total_usd": {"$sum": "$debit_conv.usd"},
-                }
-            }
-        ],
-        # Calculate overall totals across all matching documents
-        "total": [
-            {
-                "$group": {
-                    "_id": "total",  # Use "total" as identifier for overall group
-                    # Sum fields from credit_conv
-                    "credit_total_hive": {"$sum": "$credit_conv.hive"},
-                    "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
-                    "credit_total_sats": {"$sum": "$credit_conv.sats"},
-                    "credit_total_msats": {"$sum": "$credit_conv.msats"},
-                    "credit_total_usd": {"$sum": "$credit_conv.usd"},
-                    # Sum fields from debit_conv
-                    "debit_total_hive": {"$sum": "$debit_conv.hive"},
-                    "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
-                    "debit_total_sats": {"$sum": "$debit_conv.sats"},
-                    "debit_total_msats": {"$sum": "$debit_conv.msats"},
-                    "debit_total_usd": {"$sum": "$debit_conv.usd"},
-                }
-            }
-        ],
-    }
-    if line_items:
-        # If line_items is True, add a section to include detailed line items
-        # This section will project the relevant fields for each ledger entry
-        # and sort them by timestamp.
-        facet_sections["line_items"] = [
-            {"$project": {"_id": 0}},
-            {"$sort": {"timestamp": 1}},
-        ]
+#     facet_sections = {
+#         # Group by ledger_type
+#         "by_ledger_type": [
+#             {
+#                 "$group": {
+#                     "_id": "$ledger_type",  # Group by ledger_type
+#                     # Sum fields from credit_conv
+#                     "credit_total_hive": {"$sum": "$credit_conv.hive"},
+#                     "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
+#                     "credit_total_sats": {"$sum": "$credit_conv.sats"},
+#                     "credit_total_msats": {"$sum": "$credit_conv.msats"},
+#                     "credit_total_usd": {"$sum": "$credit_conv.usd"},
+#                     # Sum fields from debit_conv
+#                     "debit_total_hive": {"$sum": "$debit_conv.hive"},
+#                     "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
+#                     "debit_total_sats": {"$sum": "$debit_conv.sats"},
+#                     "debit_total_msats": {"$sum": "$debit_conv.msats"},
+#                     "debit_total_usd": {"$sum": "$debit_conv.usd"},
+#                 }
+#             }
+#         ],
+#         # Calculate overall totals across all matching documents
+#         "total": [
+#             {
+#                 "$group": {
+#                     "_id": "total",  # Use "total" as identifier for overall group
+#                     # Sum fields from credit_conv
+#                     "credit_total_hive": {"$sum": "$credit_conv.hive"},
+#                     "credit_total_hbd": {"$sum": "$credit_conv.hbd"},
+#                     "credit_total_sats": {"$sum": "$credit_conv.sats"},
+#                     "credit_total_msats": {"$sum": "$credit_conv.msats"},
+#                     "credit_total_usd": {"$sum": "$credit_conv.usd"},
+#                     # Sum fields from debit_conv
+#                     "debit_total_hive": {"$sum": "$debit_conv.hive"},
+#                     "debit_total_hbd": {"$sum": "$debit_conv.hbd"},
+#                     "debit_total_sats": {"$sum": "$debit_conv.sats"},
+#                     "debit_total_msats": {"$sum": "$debit_conv.msats"},
+#                     "debit_total_usd": {"$sum": "$debit_conv.usd"},
+#                 }
+#             }
+#         ],
+#     }
+#     if line_items:
+#         # If line_items is True, add a section to include detailed line items
+#         # This section will project the relevant fields for each ledger entry
+#         # and sort them by timestamp.
+#         facet_sections["line_items"] = [
+#             {"$project": {"_id": 0}},
+#             {"$sort": {"timestamp": 1}},
+#         ]
 
-    pipeline: List[Mapping[str, Any]] = [
-        {"$match": query},  # Apply the filtering criteria
-        {"$facet": facet_sections},
-        {"$sort": {"timestamp": 1}},  # Sort by timestamp
-    ]
+#     pipeline: List[Mapping[str, Any]] = [
+#         {"$match": query},  # Apply the filtering criteria
+#         {"$facet": facet_sections},
+#         {"$sort": {"timestamp": 1}},  # Sort by timestamp
+#     ]
 
-    return pipeline
+#     return pipeline
 
 
 # Modify the limit_check_pipeline function to include cust_id in the output
@@ -251,6 +251,7 @@ def limit_check_pipeline(
                         "usd": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumUSD", 0]},
                         "hive": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumHIVE", 0]},
                         "hbd": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumHBD", 0]},
+                        "limit_hours": f"{limit.hours}",
                         "limit_sats": f"{limit.sats}",
                         "limit_ok": {"$lt": [{"$add": ["$sats", extra_spend_sats]}, limit.sats]},
                         **(

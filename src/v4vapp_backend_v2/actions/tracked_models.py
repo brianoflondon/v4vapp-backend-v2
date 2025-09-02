@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
@@ -92,10 +92,6 @@ class TrackedBaseModel(BaseModel):
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
     # Controls whether model_dump uses aliases (applies recursively to nested models)
     dump_by_alias: ClassVar[bool] = True
-
-    model_config = ConfigDict(
-        json_encoders={Decimal: str},  # Serialize Decimal as string for JSON
-    )
 
     def __init__(self, **data: Dict[str, Any]) -> None:
         """
