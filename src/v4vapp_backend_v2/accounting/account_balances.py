@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from pprint import pprint
 from typing import Any, List, Mapping, Tuple
 
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
@@ -602,7 +601,6 @@ async def ledger_pipeline_result(
             )
         for item in entry.get("line_items", []):
             ans.ledger_entries.append(item)
-            pprint(item)
     return ans
 
 
@@ -628,13 +626,11 @@ async def get_account_lightning_conv(
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     hive_config = InternalConfig().config.hive
-    server_account, treasury_account, funding_account, exchange_account = (
-        hive_config.all_account_names
-    )
+    server_id = InternalConfig().server_id
     # This account is the transit point through which all keepsats and conversions happen.
     account = AssetAccount(
         name="Customer Deposits Hive",
-        sub=server_account,
+        sub=server_id,
     )
 
     pipeline = filter_sum_credit_debit_pipeline(

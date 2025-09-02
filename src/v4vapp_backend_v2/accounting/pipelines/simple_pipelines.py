@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigRateLimits
 
 
 def filter_by_account_as_of_date_query(
@@ -170,6 +171,99 @@ def filter_sum_credit_debit_pipeline(
         {"$sort": {"timestamp": 1}},  # Sort by timestamp
     ]
 
+    return pipeline
+
+
+# Modify the limit_check_pipeline function to include cust_id in the output
+def limit_check_pipeline(
+    cust_id: str,
+    extra_spend_sats: int = 0,
+    lightning_rate_limits: List[V4VConfigRateLimits] | None = None,
+    details: bool = False,
+) -> List[Mapping[str, Any]]:
+    if lightning_rate_limits is None:
+        lightning_rate_limits = V4VConfig().data.lightning_rate_limits
+
+    # Ensure the list is sorted by hours ascending
+    V4VConfig().data.check_and_sort_rate_limits()
+
+    max_hours = V4VConfig().data.max_rate_limit_hours
+    start_date = datetime.now(tz=timezone.utc) - timedelta(hours=max_hours)
+
+    top_level_match = {
+        "ledger_type": {"$in": ["h_conv_k", "k_conv_h"]},
+        "cust_id": cust_id,
+        "timestamp": {"$gte": start_date},
+    }
+
+    # Dynamically generate facet sections
+    facet_dict = {}
+    for i, limit in enumerate(lightning_rate_limits):
+        facet_name = f"{limit.hours}"
+        group_stage = {
+            "_id": None,
+            "totalCreditConvSumMSATS": {"$sum": "$credit_conv.msats"},
+            "totalCreditConvSumSATS": {"$sum": "$credit_conv.sats"},
+            "totalCreditConvSumUSD": {"$sum": "$credit_conv.usd"},
+            "totalCreditConvSumHIVE": {"$sum": "$credit_conv.hive"},
+            "totalCreditConvSumHBD": {"$sum": "$credit_conv.hbd"},
+        }
+        if details:
+            group_stage["details"] = {"$push": "$$ROOT"}
+
+        if i < len(lightning_rate_limits) - 1:
+            # Add $match for time range
+            facet_dict[facet_name] = [
+                {
+                    "$match": {
+                        "$expr": {
+                            "$gte": [
+                                "$timestamp",
+                                {
+                                    "$dateSubtract": {
+                                        "startDate": "$$NOW",
+                                        "unit": "hour",
+                                        "amount": limit.hours,
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                },
+                {"$group": group_stage},
+            ]
+        else:
+            # No $match for the last (longest) period
+            facet_dict[facet_name] = [{"$group": group_stage}]
+
+    # Generate the pipeline dynamically
+    pipeline: List[Mapping[str, Any]] = [
+        {"$match": top_level_match},
+        {"$facet": facet_dict},
+        {"$project": {name: {"$first": f"${name}"} for name in facet_dict}},
+        {
+            "$project": {
+                "cust_id": cust_id,
+                "periods": {
+                    f"{limit.hours}": {
+                        "msats": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumMSATS", 0]},
+                        "sats": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumSATS", 0]},
+                        "usd": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumUSD", 0]},
+                        "hive": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumHIVE", 0]},
+                        "hbd": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumHBD", 0]},
+                        "limit_sats": f"{limit.sats}",
+                        "limit_ok": {"$lt": [{"$add": ["$sats", extra_spend_sats]}, limit.sats]},
+                        **(
+                            {"details": {"$ifNull": [f"${f'{limit.hours}'}.details", []]}}
+                            if details
+                            else {}
+                        ),
+                    }
+                    for limit in lightning_rate_limits
+                },
+            }
+        },
+    ]
     return pipeline
 
 

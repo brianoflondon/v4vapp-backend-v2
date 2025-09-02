@@ -84,6 +84,29 @@ class V4VConfigData(BaseModel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.check_and_sort_rate_limits()
+
+    def check_and_sort_rate_limits(self) -> tuple[bool, int]:
+        """
+        Checks if lightning_rate_limits is sorted in ascending order by hours.
+        If not, sorts it in place.
+        Returns a tuple: (was_sorted, max_hours)
+        """
+        rate_limits = self.lightning_rate_limits
+        was_sorted = all(
+            rate_limits[i].hours <= rate_limits[i + 1].hours for i in range(len(rate_limits) - 1)
+        )
+        if not was_sorted:
+            rate_limits.sort(key=lambda rl: rl.hours)
+        max_hours = max((rl.hours for rl in rate_limits), default=0)
+        return was_sorted, max_hours
+
+    @property
+    def max_rate_limit_hours(self) -> int:
+        """
+        Returns the maximum hours from the lightning_rate_limits.
+        """
+        return max((rl.hours for rl in self.lightning_rate_limits), default=0)
 
 
 class V4VConfig:

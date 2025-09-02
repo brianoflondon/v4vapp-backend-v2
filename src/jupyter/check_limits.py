@@ -10,12 +10,15 @@ from v4vapp_backend_v2.accounting.account_balances import (
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
 async def get_limits():
-    cust_id = "v4vapp-test"
+    cust_id = "v4vapp.qrc"
     age = timedelta(hours=60)
     ans = await get_account_lightning_conv(cust_id=cust_id, age=age)
     pprint(ans.sats)
@@ -75,10 +78,12 @@ async def main():
     logger.info(InternalConfig.db)
     print(f"Net: sats for account {cust_id}: {net_sats}")
 
-    # pprint(account_balance.model_dump())
-    # ans, tolerance = await check_balance_sheet_mongodb()
-    # print("Balance Sheet Check Result:", ans)
-    # print("Balance Sheet Check Tolerance:", tolerance)
+    pipeline = limit_check_pipeline(cust_id=cust_id, details=False)
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    results = await cursor.to_list(length=None)
+    pprint(results[0])
+    limit_check = LimitCheckResult.model_validate(results[0]) if results else None
+    print(limit_check)
 
 
 if __name__ == "__main__":
