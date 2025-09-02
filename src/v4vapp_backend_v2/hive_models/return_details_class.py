@@ -49,6 +49,7 @@ class HiveReturnDetails(BaseModel):
     msats: int | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
+    clean: bool = False
 
     @property
     def log_extra(self) -> dict:
