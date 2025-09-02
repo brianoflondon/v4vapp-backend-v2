@@ -375,7 +375,7 @@ def db_monitor_pipelines(
         {
             "$match": {
                 "operationType": {"$ne": "delete"},
-                "fullDocument.type": {"$ne": "block_marker"},
+                "fullDocument.type": {"$nin": ["block_marker", "account_update2"]},
                 "fullDocument.timestamp": date_query,
             }
         },
