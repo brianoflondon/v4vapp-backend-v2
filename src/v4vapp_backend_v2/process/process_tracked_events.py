@@ -11,6 +11,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryDuplicateException,
     LedgerEntryException,
 )
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -188,12 +189,14 @@ async def process_lightning_invoice(
         await invoice.save()
     if "funding" in invoice.memo.lower():
         # Treat this as an incoming Owner's loan Funding to Treasury Lightning
+        ledger_type = LedgerType.FUNDING
         ledger_entry = LedgerEntry(
             group_id=invoice.group_id,
             short_id=invoice.short_id,
             description=invoice.memo,
             timestamp=invoice.timestamp,
             op_type=invoice.op_type,
+            ledger_type=ledger_type,
             cust_id=invoice.cust_id or node_name,
             debit=AssetAccount(name="Treasury Lightning", sub=node_name),
             debit_unit=Currency.MSATS,

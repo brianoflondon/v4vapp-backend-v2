@@ -23,6 +23,8 @@ class LedgerType(StrEnum):
 
     UNSET = "unset"  # Default value for unset ledger type
 
+    FUNDING = "funding"  # Funding from Owner to Treasury
+
     CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
     CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
 
@@ -71,7 +73,8 @@ class LedgerType(StrEnum):
     TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
     LIMIT_ORDER_CREATE = "limit_or"
-    FILL_ORDER = "fill_or"
+    FILL_ORDER_SELL = "fill_or_s"
+    FILL_ORDER_BUY = "fill_or_b"
 
     @property
     def printout(self) -> str:

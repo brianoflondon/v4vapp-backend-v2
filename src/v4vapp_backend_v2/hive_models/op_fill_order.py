@@ -2,11 +2,12 @@ from nectar.amount import Amount
 from pydantic import Field
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 from .amount_pyd import AmountPyd
 
@@ -20,6 +21,7 @@ class FillOrder(OpBase):
     open_pays: AmountPyd
     debit_conv: CryptoConv = CryptoConv()
     credit_conv: CryptoConv = CryptoConv()
+    cust_id: CustIDType = Field("", description="Customer ID determined from to/from fields")
 
     completed_order: bool = Field(
         default=False,
@@ -62,6 +64,7 @@ class FillOrder(OpBase):
             )
         # Set the log_internal string to None to force it to be generated
         self.log_internal = self._log_internal()
+        self.cust_id = self.get_cust_id()
 
     def _log_internal(self) -> str:
         if self.log_internal:
@@ -107,6 +110,11 @@ class FillOrder(OpBase):
     @property
     def notification_str(self) -> str:
         return f"{self._log_internal()} {self.markdown_link}"
+
+    def get_cust_id(self) -> CustIDType:
+        if InternalConfig().server_id in [self.current_owner, self.open_owner]:
+            return InternalConfig().server_id
+        return self.current_owner
 
     @property
     def ledger_str(self) -> str:

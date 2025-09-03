@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 from .amount_pyd import AmountPyd
 from .op_base import OpBase, OpRealm
@@ -22,6 +23,7 @@ class LimitOrderCreate(OpBase):
     min_to_receive: AmountPyd
     orderid: int
     owner: str
+    cust_id: CustIDType = Field("", description="Customer ID determined from to/from fields")
 
     # Used to store the amount remaining to be filled when doing math
     amount_remaining: AmountPyd | None = Field(None, alias="amount_remaining")
@@ -46,6 +48,7 @@ class LimitOrderCreate(OpBase):
                     f"{icon} Open orders: {len(LimitOrderCreate.open_order_ids)}",
                     extra={"open_order_ids": LimitOrderCreate.open_order_ids},
                 )
+        self.cust_id = self.owner
 
     @property
     def is_watched(self) -> bool:

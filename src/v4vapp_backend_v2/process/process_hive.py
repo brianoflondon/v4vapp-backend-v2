@@ -70,10 +70,10 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
             ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
             return [ledger_entry] if ledger_entry else []
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):
-            ledger_entry = await process_create_fill_order_op(
+            ledger_entries = await process_create_fill_order_op(
                 limit_fill_order=op, nobroadcast=nobroadcast
             )
-            return [ledger_entry] if ledger_entry else []
+            return ledger_entries
         elif isinstance(op, CustomJson):
             ledger_entries = await process_custom_json(custom_json=op, nobroadcast=nobroadcast)
             return ledger_entries
@@ -268,23 +268,12 @@ async def process_transfer_op(
 
 async def process_create_fill_order_op(
     limit_fill_order: Union[LimitOrderCreate, FillOrder], nobroadcast: bool = False
-) -> LedgerEntry:
+) -> List[LedgerEntry]:  # Changed return type to List[LedgerEntry]
     """
-    Processes the create or fill order operation and creates a ledger entry if applicable.
-
-    This method handles various types of orders, including limit orders and fill orders. It ensures that
-    appropriate debit and credit accounts are assigned based on the order type. If a ledger entry with
-    the same group_id already exists, the operation is skipped.
-
-    Returns:
-        LedgerEntry: The created or existing ledger entry, or None if no entry is created.
+    Processes the create or fill order operation and creates ledger entries if applicable.
+    For fill orders, creates two entries: one for the buyer and one for the seller.
     """
-    ledger_entry = LedgerEntry(
-        group_id=limit_fill_order.group_id,
-        short_id=limit_fill_order.short_id,
-        timestamp=limit_fill_order.timestamp,
-        op_type=limit_fill_order.op_type,
-    )
+    ledger_entries = []  # Use a list to hold multiple entries
     if isinstance(limit_fill_order, LimitOrderCreate):
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
@@ -296,6 +285,12 @@ async def process_create_fill_order_op(
                 quote=quote,
                 timestamp=limit_fill_order.timestamp,
             )
+        ledger_entry = LedgerEntry(
+            group_id=limit_fill_order.group_id,
+            short_id=limit_fill_order.short_id,
+            timestamp=limit_fill_order.timestamp,
+            op_type=limit_fill_order.op_type,
+        )
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
         ledger_entry.credit = AssetAccount(
             name="Customer Deposits Hive", sub=limit_fill_order.owner
@@ -307,6 +302,8 @@ async def process_create_fill_order_op(
             limit_fill_order.amount_to_sell.amount_decimal
         )
         ledger_entry.debit_conv = ledger_entry.credit_conv = limit_fill_order.conv
+        ledger_entry.cust_id = limit_fill_order.cust_id
+        ledger_entries.append(ledger_entry)
     elif isinstance(limit_fill_order, FillOrder):
         logger.info(
             f"Fill order operation: {limit_fill_order.open_orderid} {limit_fill_order.current_owner}"
@@ -329,24 +326,63 @@ async def process_create_fill_order_op(
                 quote=quote,
                 timestamp=limit_fill_order.timestamp,
             )
-        ledger_entry.debit = AssetAccount(
-            name="Customer Deposits Hive", sub=limit_fill_order.current_owner
+        # Entry 1: Buyer side
+        ledger_type = LedgerType.FILL_ORDER_BUY
+        buyer_entry = LedgerEntry(
+            group_id=f"{limit_fill_order.group_id}-{ledger_type}",
+            short_id=limit_fill_order.short_id,
+            timestamp=limit_fill_order.timestamp,
+            op_type=limit_fill_order.op_type,
+            ledger_type=ledger_type,
+            cust_id=limit_fill_order.cust_id,
+            description=f"Fill order buyer: {limit_fill_order.current_owner} pays {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
+            debit=AssetAccount(
+                name="Customer Deposits Hive", sub=limit_fill_order.current_owner
+            ),  # Buyer debits their deposits for HIVE paid
+            debit_unit=limit_fill_order.open_pays.unit,  # HIVE
+            debit_amount=limit_fill_order.open_pays.amount_decimal,
+            debit_conv=limit_fill_order.debit_conv,
+            credit=AssetAccount(
+                name="Escrow Hive", sub=limit_fill_order.current_owner
+            ),  # Buyer credits escrow for HBD received
+            credit_unit=limit_fill_order.current_pays.unit,  # HBD
+            credit_amount=limit_fill_order.current_pays.amount_decimal,
+            credit_conv=limit_fill_order.credit_conv,
         )
-        ledger_entry.credit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.current_owner)
-        ledger_entry.description = limit_fill_order.ledger_str
-        ledger_entry.ledger_type = LedgerType.FILL_ORDER
-        ledger_entry.debit_unit = limit_fill_order.open_pays.unit  # HIVE (received)
-        ledger_entry.credit_unit = limit_fill_order.current_pays.unit  # HBD (given)
-        ledger_entry.debit_amount = limit_fill_order.open_pays.amount_decimal  # 25.052 HIVE
-        ledger_entry.credit_amount = limit_fill_order.current_pays.amount_decimal  # 6.738 HBD
-        ledger_entry.debit_conv = limit_fill_order.debit_conv  # Conversion for HIVE
-        ledger_entry.credit_conv = limit_fill_order.credit_conv  # Conversion for HBD
+        ledger_entries.append(buyer_entry)
+
+        # Entry 2: Seller side
+        ledger_type = LedgerType.FILL_ORDER_SELL
+        seller_entry = LedgerEntry(
+            group_id=f"{limit_fill_order.group_id}-{ledger_type}",
+            short_id=limit_fill_order.short_id,
+            timestamp=limit_fill_order.timestamp,
+            op_type=limit_fill_order.op_type,
+            ledger_type=ledger_type,
+            cust_id=limit_fill_order.cust_id,
+            description=f"Fill order seller: {limit_fill_order.open_owner} receives {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit}",
+            debit=AssetAccount(
+                name="Escrow Hive", sub=limit_fill_order.open_owner
+            ),  # Seller debits escrow for HBD delivered
+            debit_unit=limit_fill_order.current_pays.unit,  # HBD
+            debit_amount=limit_fill_order.current_pays.amount_decimal,
+            debit_conv=limit_fill_order.credit_conv,  # Use credit_conv for seller's debit (HBD)
+            credit=AssetAccount(
+                name="Customer Deposits Hive", sub=limit_fill_order.open_owner
+            ),  # Seller credits deposits for HIVE received
+            credit_unit=limit_fill_order.open_pays.unit,  # HIVE
+            credit_amount=limit_fill_order.open_pays.amount_decimal,
+            credit_conv=limit_fill_order.debit_conv,  # Use debit_conv for seller's credit (HIVE)
+        )
+        ledger_entries.append(seller_entry)
     else:
         logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
-    ledger_entry.cust_id = 
-    await ledger_entry.save()
-    return ledger_entry
+    # Save all entries
+    for entry in ledger_entries:
+        await entry.save()
+
+    return ledger_entries  # Return the list
 
 
 # MARK: CustomJson Operations
