@@ -19,11 +19,11 @@ class Feature(BaseModel):
 
 # Model for HopHint (nested within RouteHint)
 class HopHint(BaseModel):
-    node_id: str
-    chan_id: str
-    fee_base_msat: int
-    fee_proportional_millionths: int
-    cltv_expiry_delta: int
+    node_id: str = ""
+    chan_id: str = ""
+    fee_base_msat: int = 0
+    fee_proportional_millionths: int = 0
+    cltv_expiry_delta: int = 0
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

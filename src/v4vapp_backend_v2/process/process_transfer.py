@@ -269,7 +269,7 @@ async def follow_on_transfer(
             return_details.amount = getattr(
                 tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
             )
-        return_details.reason_str = f"{e}"
+        return_details.reason_str = f"Lightning error: {e}"
         logger.error(
             return_details.reason_str,
             extra={"notification": False, **tracked_op.log_extra},

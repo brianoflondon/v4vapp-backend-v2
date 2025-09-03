@@ -47,7 +47,7 @@ async def custom_json_internal_transfer(
     """
     # This is a transfer between two accounts
     logger.info(
-        f"Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+        f"{custom_json.short_id} Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     )
     if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
@@ -62,32 +62,35 @@ async def custom_json_internal_transfer(
     if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
         fee_transfer = True
 
-    # This delay helps make sure we only process this after any inbound sats are in the right place
-    await asyncio.sleep(1)
     # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
-    if net_msats + 1_000 < keepsats_transfer.msats and not fee_transfer:
-        message = f"Insufficient Keepsats balance for transfer: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
-        logger.warning(message)
-        # Sending this to follow_on_transfer which will deal with the balance failure and send notification
-        return_details = HiveReturnDetails(
-            tracked_op=custom_json,
-            original_memo=keepsats_transfer.memo,
-            reason_str=message,
-            action=ReturnAction.CHANGE,
-            pay_to_cust_id=keepsats_transfer.from_account,
-            nobroadcast=nobroadcast,
-        )
-        trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
-        logger.info(
-            f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
-            extra={
-                "notification": False,
-                "trx": trx,
-                **custom_json.log_extra,
-                **return_details.log_extra,
-            },
-        )
-        raise InsufficientBalanceError(message)
+    if net_msats + 1_000 < keepsats_transfer.msats:
+        message = f"Insufficient Keepsats balance for {'fee' if fee_transfer else 'transfer'}: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+        if fee_transfer:
+            logger.info(message)
+        # The order in which refunds arrive from payment, and fees are taken is not always predictable
+        # ALWAYS account for fees when processing refunds
+        if not fee_transfer:
+            logger.warning(message)
+            # Sending this to follow_on_transfer which will deal with the balance failure and send notification
+            return_details = HiveReturnDetails(
+                tracked_op=custom_json,
+                original_memo=keepsats_transfer.memo,
+                reason_str=message,
+                action=ReturnAction.CHANGE,
+                pay_to_cust_id=keepsats_transfer.from_account,
+                nobroadcast=nobroadcast,
+            )
+            trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
+            logger.info(
+                f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
+                extra={
+                    "notification": False,
+                    "trx": trx,
+                    **custom_json.log_extra,
+                    **return_details.log_extra,
+                },
+            )
+            raise InsufficientBalanceError(message)
 
     debit_credit_amount = keepsats_transfer.msats
 

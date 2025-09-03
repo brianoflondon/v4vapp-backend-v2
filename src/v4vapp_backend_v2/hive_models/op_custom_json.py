@@ -202,7 +202,8 @@ class CustomJson(OpBase):
         """
         if not self.memo:
             return 0
-        pattern = r"Fee for Keepsats (\d+(?:,\d{3})*) sats for [\w-]+ #Fee"
+        # Updated pattern to be more flexible with username format and ignore everything after #Fee
+        pattern = r"Fee for Keepsats (\d+(?:,\d{3})*) sats for [^#]+ #Fee"
         match = re.search(pattern, self.memo)
         if match:
             sats_str = match.group(1)
