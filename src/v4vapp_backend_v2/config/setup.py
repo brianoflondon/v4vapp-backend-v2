@@ -48,6 +48,7 @@ class BaseConfig(BaseModel):
 
 class AdminConfig(BaseConfig):
     highlight_users: List[str] = []
+    public_api_host: str = ""
 
 
 class LoggingConfig(BaseConfig):

@@ -1,8 +1,10 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from pprint import pprint
 from typing import List
 
+import httpx
 from nectar.account import Account
 from nectar.hive import Hive
 from pydantic import BaseModel, Field, model_validator
@@ -287,6 +289,7 @@ class V4VConfig:
                 f"Settings in Hive changed: {trx.get('trx_id')}",
                 extra={**self.log_extra, "trx": trx},
             )
+            asyncio.create_task(self._update_public_api_server())
             return
         except Exception as ex:
             logger.error(
@@ -294,6 +297,24 @@ class V4VConfig:
                 extra={"hive_config": new_meta, **self.log_extra},
             )
             return
+
+    async def _update_public_api_server(self) -> None:
+        """
+        Asynchronously triggers a configuration reload on the public API server.
+        If the `public_api_host` is defined in the internal configuration, this method sends a GET request
+        to the `/v1/reload_config` endpoint of the public API server to prompt it to reload its configuration.
+        Any HTTP errors encountered during the request are logged.
+        Raises:
+            None directly, but logs errors if the HTTP request fails.
+        """
+        
+        if public_api_host := InternalConfig().config.admin_config.public_api_host:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{public_api_host}/v1/reload_config")
+                    response.raise_for_status()
+            except httpx.HTTPError as e:
+                logger.error(f"Error updating public API server: {e}")
 
     def _get_posting_metadata(self) -> dict | None:
         """
