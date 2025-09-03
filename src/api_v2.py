@@ -263,7 +263,8 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
     net_msats, account_balance = await keepsats_balance(
         cust_id=convert.hive_accname, line_items=False
     )
-    if net_msats < convert.sats * 1_000:
+    # Add one sat
+    if net_msats + 1_000 < convert.sats * 1_000:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
