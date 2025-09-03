@@ -23,6 +23,7 @@ from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConf
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
@@ -417,7 +418,8 @@ async def main_async_start(use_resume: bool = True):
     )
     db_conn = DBConn()
     await db_conn.setup_database()
-    await LockStr.clear_all_locks()  # Clear any existing locks before starting
+    # await LockStr.clear_all_locks()  # Clear any existing locks before starting
+    await resend_transactions()
 
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
