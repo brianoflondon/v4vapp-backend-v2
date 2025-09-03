@@ -75,6 +75,7 @@ class LedgerType(StrEnum):
     LIMIT_ORDER_CREATE = "limit_or"
     FILL_ORDER_SELL = "fill_or_s"
     FILL_ORDER_BUY = "fill_or_b"
+    FILL_ORDER_NET = "fill_or_n"
 
     @property
     def printout(self) -> str:
