@@ -140,30 +140,8 @@ async def process_transfer_op(
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
     ledger_entry.cust_id = hive_transfer.cust_id
 
-    # MARK: Server to customer account withdrawal
-    if hive_transfer.from_account == server_account:
-        customer = hive_transfer.to_account
-        server = hive_transfer.from_account
-        ledger_entry.debit = LiabilityAccount("VSC Liability", sub=customer)
-        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.description = f"Withdrawal: {base_description}"
-        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
-
-    # MARK: Customer account to server account deposit
-    elif hive_transfer.to_account == server_account:
-        customer = hive_transfer.from_account
-        server = hive_transfer.to_account
-        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
-        ledger_entry.credit = LiabilityAccount("VSC Liability", sub=customer)
-        ledger_entry.description = f"Deposit: {base_description}"
-        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
-        # Now we need to see if we can take action for this invoice
-        # This will be handled in a separate task
-        follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
-
     # MARK: Server to Treasury
-    elif (
+    if (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
@@ -226,6 +204,28 @@ async def process_transfer_op(
     ):
         # TODO: #110 Implement the system for expense accounts
         raise NotImplementedError("External expense accounts not implemented yet")
+    # MARK: Server to customer account withdrawal
+    elif hive_transfer.from_account == server_account:
+        customer = hive_transfer.to_account
+        server = hive_transfer.from_account
+        ledger_entry.debit = LiabilityAccount("VSC Liability", sub=customer)
+        ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.description = f"Withdrawal: {base_description}"
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
+        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
+
+    # MARK: Customer account to server account deposit
+    elif hive_transfer.to_account == server_account:
+        customer = hive_transfer.from_account
+        server = hive_transfer.to_account
+        ledger_entry.debit = AssetAccount(name="Customer Deposits Hive", sub=server)
+        ledger_entry.credit = LiabilityAccount("VSC Liability", sub=customer)
+        ledger_entry.description = f"Deposit: {base_description}"
+        ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
+        # Now we need to see if we can take action for this invoice
+        # This will be handled in a separate task
+        follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)
+
     else:
         logger.info(
             f"Transfer between two different accounts: {hive_transfer.from_account} -> {hive_transfer.to_account}"
@@ -249,12 +249,13 @@ async def process_transfer_op(
                 extra={"notification": False, **hive_transfer.log_extra, **ledger_entry.log_extra},
             )
             raise LedgerEntryException(message)
+    # After any hive Transactions we can try to resend
+    await resend_transactions()
     if follow_on_task:
         # If there is a follow-on task, we need to run it in the background
         try:
             await follow_on_task
             # In addition to processing, check if there are any pending transactions
-            await resend_transactions()
         except LedgerEntryDuplicateException as e:
             logger.warning(f"Follow-on task duplicate entry: {e}", extra={"notification": False})
         except HiveTransferError as e:
@@ -343,6 +344,8 @@ async def process_create_fill_order_op(
     else:
         logger.error(f"Unsupported operation type: {type(limit_fill_order)}")
         raise LedgerEntryCreationException("Unsupported operation type.")
+    ledger_entry.cust_id = 
+    await ledger_entry.save()
     return ledger_entry
 
 
