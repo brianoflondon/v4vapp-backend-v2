@@ -14,7 +14,7 @@
                     <small class="text-muted">Users with VSC Liability accounts and their current balances</small>
                     <div class="mt-2">
                         <strong>Limits:</strong> {% for entry in limit_entries %}{{ entry.label }}{% if not loop.last %}
-                        | {% endif %}{% endfor %} sats
+                        | {% endif %}{% endfor %}
                     </div>
                 </div>
                 <div class="card-body">
@@ -56,7 +56,7 @@
                                     {% for percent in user.limit_percents %}
                                     <td class="text-center">
                                         <span class="me-2">{{ percent }}%</span>
-                                        <small class="text-muted">{{ user.limit_sats[loop.index0] }} sats</small>
+                                        <small class="text-muted">{{ user.limit_sats[loop.index0] }}</small>
                                     </td>
                                     {% endfor %}
                                     <td class="text-end">
