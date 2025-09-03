@@ -22,6 +22,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 
 @asynccontextmanager
@@ -177,6 +178,9 @@ class AdminApp:
                     pass
                 hive_balances[acc] = balances_norm
 
+            # Fetch pending transactions
+            pending_transactions = await PendingTransaction.list_all_str()
+
             # Check customer deposits balance for server account
             server_balance_check = {"status": "unknown", "icon": "❓"}
             if server_id in hive_balances and "error" not in hive_balances[server_id]:
@@ -218,6 +222,7 @@ class AdminApp:
                     "title": "Admin Dashboard",
                     "nav_items": nav_items,
                     "hive_balances": hive_balances,
+                    "pending_transactions": pending_transactions,
                     "admin_info": {
                         "version": "1.0.0",
                         "project_version": project_version,

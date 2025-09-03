@@ -126,11 +126,58 @@
                 </div>
                 {% endif %}
 
+                <!-- Pending Transactions Warning -->
+                {% if pending_transactions %}
+                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                    <strong>⚠️ Pending Transactions</strong>
+                    <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
+                        data-bs-target="#pendingTransactionsModal">
+                        View Details ({{ pending_transactions|length }})
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
                 <!-- Main content area -->
                 {% block content %}{% endblock %}
             </main>
         </div>
     </div>
+
+    <!-- Pending Transactions Modal -->
+    {% if pending_transactions %}
+    <div class="modal fade" id="pendingTransactionsModal" tabindex="-1" aria-labelledby="pendingTransactionsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pendingTransactionsModalLabel">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        Pending Transactions ({{ pending_transactions|length }})
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">The following transactions are pending and require attention:</p>
+                    <div class="list-group">
+                        {% for transaction in pending_transactions %}
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1">
+                                    <code class="text-break">{{ transaction }}</code>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

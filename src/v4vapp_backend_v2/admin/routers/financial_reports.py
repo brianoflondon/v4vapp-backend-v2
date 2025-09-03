@@ -24,6 +24,7 @@ from v4vapp_backend_v2.accounting.profit_and_loss import (
     profit_and_loss_printout,
 )
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ async def financial_reports_page(request: Request):
             "request": request,
             "title": "Financial Reports",
             "nav_items": nav_items,
+            "pending_transactions": await PendingTransaction.list_all_str(),
             "breadcrumbs": [
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -89,6 +91,7 @@ async def balance_sheet_page(request: Request):
                 "nav_items": nav_items,
                 "balance_sheet_text": balance_sheet_currencies_str,
                 "balance_sheet_data": balance_sheet_for_template,
+                "pending_transactions": await PendingTransaction.list_all(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -106,6 +109,7 @@ async def balance_sheet_page(request: Request):
                 "nav_items": nav_items,
                 "error": str(e),
                 "report_type": "Balance Sheet",
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -136,6 +140,7 @@ async def profit_loss_page(request: Request):
                 "nav_items": nav_items,
                 "profit_loss_text": profit_loss_str,
                 "profit_loss_data": pl_report,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -153,6 +158,7 @@ async def profit_loss_page(request: Request):
                 "nav_items": nav_items,
                 "error": str(e),
                 "report_type": "Profit & Loss",
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -214,6 +220,7 @@ async def complete_report_page(
                 "account_balances": account_balances,
                 "ledger_entries_text": ledger_entries_text,
                 "include_ledger_entries": include_ledger_entries,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
@@ -231,6 +238,7 @@ async def complete_report_page(
                 "nav_items": nav_items,
                 "error": str(e),
                 "report_type": "Complete Financial Report",
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},

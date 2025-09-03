@@ -19,6 +19,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
 
@@ -151,6 +152,7 @@ async def users_page(request: Request):
             "nav_items": nav_items,
             "users_data": users_data,
             "limit_entries": get_limit_entries(),
+            "pending_transactions": await PendingTransaction.list_all_str(),
             "summary": {
                 "total_users": total_users,
                 "active_users": active_users,

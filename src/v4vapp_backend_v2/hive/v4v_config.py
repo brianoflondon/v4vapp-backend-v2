@@ -307,11 +307,15 @@ class V4VConfig:
         Raises:
             None directly, but logs errors if the HTTP request fails.
         """
-        
+
         if public_api_host := InternalConfig().config.admin_config.public_api_host:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(f"{public_api_host}/v1/reload_config")
+                    logger.info(
+                        f"Config updated on {public_api_host}: {response.status_code}",
+                        extra={"response": response.json()},
+                    )
                     response.raise_for_status()
             except httpx.HTTPError as e:
                 logger.error(f"Error updating public API server: {e}")

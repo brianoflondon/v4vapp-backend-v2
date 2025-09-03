@@ -162,6 +162,11 @@ class PendingTransaction(PendingBase):
         return [cls(**doc) for doc in all_pending]
 
     @classmethod
+    async def list_all_str(cls) -> list[str]:
+        all_pending = await cls.list_all()
+        return [str(pending) for pending in all_pending]
+
+    @classmethod
     async def total_pending(cls) -> Dict[str, Amount]:
         all_pending = await cls.list_all()
         totals: Dict[str, Amount] = {}
@@ -183,6 +188,13 @@ class PendingTransaction(PendingBase):
         return None
 
     def __str__(self) -> str:
+        """
+        Returns a string representation of the PendingTransaction instance, including
+        its id, source and destination accounts, amount, and memo.
+        """
+        return f"{self.from_account} -> {self.to_account}, {self.amount}, {self.memo}"
+
+    def __repr__(self) -> str:
         """
         Returns a string representation of the PendingTransaction instance, including
         its id, source and destination accounts, amount, and memo.

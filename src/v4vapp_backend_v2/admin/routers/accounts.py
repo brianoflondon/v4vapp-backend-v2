@@ -18,6 +18,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
 
@@ -73,6 +74,9 @@ async def accounts_page(request: Request):
 
     nav_items = nav_manager.get_navigation_items("/admin/accounts")
 
+    # Fetch pending transactions
+    pending_transactions = await PendingTransaction.list_all_str()
+
     return templates.TemplateResponse(
         "accounts/accounts.html",
         {
@@ -80,6 +84,7 @@ async def accounts_page(request: Request):
             "title": "Account Balances",
             "nav_items": nav_items,
             "accounts_by_type": accounts_by_type,
+            "pending_transactions": pending_transactions,
             "breadcrumbs": [
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Accounts", "url": "/admin/accounts"},
@@ -201,6 +206,7 @@ async def get_user_balance_get(
                 "as_of_date": as_of_date,
                 "age_hours": 0,
                 "accounts_by_type": accounts_by_type,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
@@ -219,6 +225,7 @@ async def get_user_balance_get(
                 "nav_items": nav_items,
                 "error": str(e),
                 "account_string": f"VSC Liability (Liability) - Sub: {acc_name}",
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
@@ -359,6 +366,7 @@ async def get_user_balance(
                 "as_of_date": as_of_date,
                 "age_hours": age_hours,
                 "accounts_by_type": accounts_by_type,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
@@ -377,6 +385,7 @@ async def get_user_balance(
                 "nav_items": nav_items,
                 "error": str(e),
                 "account_string": f"VSC Liability (Liability) - Sub: {acc_name}",
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
@@ -514,6 +523,7 @@ async def get_account_balance(
                 "as_of_date": as_of_date,
                 "age_hours": age_hours,
                 "accounts_by_type": accounts_by_type,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},
@@ -532,6 +542,7 @@ async def get_account_balance(
                 "nav_items": nav_items,
                 "error": str(e),
                 "account_string": account_string,
+                "pending_transactions": await PendingTransaction.list_all_str(),
                 "breadcrumbs": [
                     {"name": "Admin", "url": "/admin"},
                     {"name": "Accounts", "url": "/admin/accounts"},

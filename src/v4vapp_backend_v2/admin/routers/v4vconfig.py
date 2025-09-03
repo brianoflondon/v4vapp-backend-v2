@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigData, V4VConfigRateLimits
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 # Setup router and templates
 router = APIRouter()
@@ -67,6 +68,7 @@ async def v4vconfig_dashboard(request: Request):
                 "config": config.data,
                 "timestamp": config.timestamp,
                 "server_account": config.server_accname,
+                "pending_transactions": await PendingTransaction.list_all_str(),
             },
         )
 
@@ -212,6 +214,7 @@ async def update_v4vconfig_form(
                 "nav_items": nav_items,
                 "error": f"Validation error: {e}",
                 "back_url": "/admin/v4vconfig",
+                "pending_transactions": await PendingTransaction.list_all_str(),
             },
         )
     except Exception as e:
@@ -225,6 +228,7 @@ async def update_v4vconfig_form(
                 "nav_items": nav_items,
                 "error": str(e),
                 "back_url": "/admin/v4vconfig",
+                "pending_transactions": await PendingTransaction.list_all_str(),
             },
         )
 
