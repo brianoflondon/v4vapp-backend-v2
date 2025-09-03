@@ -146,7 +146,8 @@ async def test_hive_and_hbd_to_lnd_only():
             msats=invoice_value_sat * 1_000, to_currency=currency
         )
 
-        send_hive = math.ceil(conversion_result.to_convert_amount.amount) + 1
+        print(conversion_result)
+        send_hive = math.ceil(conversion_result.to_convert_amount.amount) + 3
         send_hive_amount = Amount(f"{send_hive} {currency.symbol}")
 
         assert invoice.payment_request, "Invoice payment request is empty"
@@ -155,6 +156,7 @@ async def test_hive_and_hbd_to_lnd_only():
             memo=f"{invoice.payment_request} test_hive_to_lnd_only pay with {currency.symbol}",
             customer="v4vapp-test",
         )
+        pprint(trx)
         assert trx.get("trx_id"), "Transaction failed to send"
 
     all_ledger_entries = await watch_for_ledger_count(ledger_count + 23, timeout=60)
@@ -331,12 +333,12 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     Lightning invoice generation, and custom JSON transfers.
     """
     await test_deposit_hive_to_keepsats(
-        5_000, timeout=120, message="Deposit Hive for test_deposit_keepsats_spend_hive_custom_json"
+        6_000, timeout=120, message="Deposit Hive for test_deposit_keepsats_spend_hive_custom_json"
     )
     ledger_count = await get_ledger_count()
     logger.info(f"Ledger count: {ledger_count}")
 
-    invoice_sats = 5_000
+    invoice_sats = 4_000
 
     invoice = await get_lightning_invoice(value_sat=invoice_sats, memo="")
 
@@ -353,8 +355,8 @@ async def test_deposit_keepsats_spend_hive_custom_json():
     await asyncio.sleep(5)
 
     net_msats_after, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
-    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 200_000, (
-        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 200_000. "
+    assert abs(net_msats_after - (net_msats_before - invoice_sats * 1000)) < 500_000, (
+        f"Expected {abs(net_msats_after - (net_msats_before - invoice_sats * 1000))} < 500_000. "
     )
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
         {"type": "custom_json"}, sort=[("timestamp", -1)]

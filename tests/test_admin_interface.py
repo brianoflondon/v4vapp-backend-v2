@@ -9,14 +9,26 @@ import pytest
 from fastapi.testclient import TestClient
 
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
+from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
-@pytest.fixture
-def admin_client():
+@pytest.fixture(scope="function")
+async def admin_client():
     """Create a test client for the admin app"""
+    InternalConfig(config_filename="devhive.config.yaml")  # Ensure config is loaded
+    db_conn = DBConn()
+    await db_conn.setup_database()
     app = create_admin_app(config_filename="devhive.config.yaml")
     return TestClient(app)
 
+@pytest.fixture(autouse=True)
+def mock_db(mocker):
+    """Mock DB calls to avoid event loop issues in tests."""
+    mocker.patch(
+        "v4vapp_backend_v2.hive_models.pending_transaction_class.PendingTransaction.list_all_str",
+        return_value=[],
+    )
 
 class TestAdminEndpoints:
     """Test all admin endpoints"""
@@ -79,7 +91,7 @@ class TestAdminEndpoints:
         if response.status_code == 200:
             assert response.headers.get("content-type") == "image/x-icon"
 
-    def test_user_balance_endpoint(self, admin_client):
+    def test_user_balance_endpoint(self, admin_client, mocker):
         """Test direct user balance endpoint"""
         # Test GET version
         response = admin_client.get("/admin/accounts/balance/user/v4vapp-test")

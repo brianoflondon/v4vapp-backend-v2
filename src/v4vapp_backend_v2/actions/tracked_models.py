@@ -1,7 +1,6 @@
 import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
@@ -14,7 +13,7 @@ from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, 
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, snake_case
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 ICON = "🔄"
@@ -304,7 +303,7 @@ class TrackedBaseModel(BaseModel):
             update.pop("replies", None)  # Remove empty replies list if it exists
 
         # Convert Decimal objects to floats for MongoDB compatibility
-        update = self._convert_decimals_for_mongo(update)
+        update = convert_decimals(update)
 
         update = {
             "$set": update,
@@ -317,21 +316,6 @@ class TrackedBaseModel(BaseModel):
             error_code=f"db_save_error_{self.collection_name}",
             context=f"{self.collection_name}:{self.group_id_p}",
         )
-
-    def _convert_decimals_for_mongo(self, document: dict) -> dict:
-        """
-        Recursively converts Decimal objects to floats for MongoDB compatibility.
-        MongoDB BSON encoder cannot handle Decimal objects directly, but can handle floats.
-        Converting to float maintains calculation capability while accepting minor precision loss.
-        """
-        if isinstance(document, dict):
-            return {k: self._convert_decimals_for_mongo(v) for k, v in document.items()}
-        elif isinstance(document, list):
-            return [self._convert_decimals_for_mongo(item) for item in document]
-        elif isinstance(document, Decimal):
-            return float(document)
-        else:
-            return document
 
     def tracked_type(self) -> str:
         """

@@ -256,4 +256,6 @@ async def get_lightning_invoice(
             extra={"add_invoice_response_dict": add_invoice_response_dict},
         )
         return response
-        return response
+
+
+# Last line

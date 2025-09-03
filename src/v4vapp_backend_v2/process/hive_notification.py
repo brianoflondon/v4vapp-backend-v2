@@ -66,7 +66,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if details.tracked_op.change_amount:
             amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
         else:
-            logger.warning(
+            logger.info(
                 "No change amount found in tracked operation, using default amount.",
                 extra={"notification": False, **details.tracked_op.log_extra},
             )

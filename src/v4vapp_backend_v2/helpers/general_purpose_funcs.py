@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Generator
 
 
@@ -48,6 +49,34 @@ def cap_camel_case(snake_str: str) -> str:
     """
     camel_case_word = camel_case(snake_str)
     return camel_case_word[0].upper() + camel_case_word[1:]
+
+
+# MARK: Database
+
+
+def convert_decimals(obj):
+    """
+    Recursively converts all Decimal instances within a nested structure (dicts, lists) to floats.
+
+    Args:
+        obj: The input object, which can be a dict, list, Decimal, or any other type.
+
+    Returns:
+        The input object with all Decimal instances converted to floats. The structure of dicts and lists is preserved.
+
+    Example:
+        >>> from decimal import Decimal
+        >>> convert_decimals({'a': Decimal('1.1'), 'b': [Decimal('2.2'), 3]})
+        {'a': 1.1, 'b': [2.2, 3]}
+    """
+    if isinstance(obj, dict):
+        return {k: convert_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals(item) for item in obj]
+    elif isinstance(obj, Decimal):
+        return float(obj)  # Or str(obj) if you want string precision
+    else:
+        return obj
 
 
 # MARK: Date & Time

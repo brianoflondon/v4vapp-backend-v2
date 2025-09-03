@@ -18,7 +18,7 @@ from v4vapp_backend_v2.database.db_retry import (
     summarize_write_result,  # optional pretty log
 )
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -668,7 +668,7 @@ class AllQuotes(BaseModel):
             context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document = record.model_dump()
-            document = self._convert_decimals_for_mongo(document)
+            document = convert_decimals(document)
 
             # Do not await: runs in background
             task = asyncio.create_task(
@@ -687,21 +687,6 @@ class AllQuotes(BaseModel):
                 extra={"notification": False},
             )
         return record
-
-    def _convert_decimals_for_mongo(self, document: dict) -> dict:
-        """
-        Recursively converts Decimal objects to floats for MongoDB compatibility.
-        MongoDB BSON encoder cannot handle Decimal objects directly, but can handle floats.
-        Converting to float maintains calculation capability while accepting minor precision loss.
-        """
-        if isinstance(document, dict):
-            return {k: self._convert_decimals_for_mongo(v) for k, v in document.items()}
-        elif isinstance(document, list):
-            return [self._convert_decimals_for_mongo(item) for item in document]
-        elif isinstance(document, Decimal):
-            return float(document)
-        else:
-            return document
 
     @property
     def collection_name(self) -> str:
