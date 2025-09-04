@@ -3157,6 +3157,15 @@ wheels = [
 ]
 
 [[package]]
+name = "types-tabulate"
+version = "0.9.0.20241207"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/43/16030404a327e4ff8c692f2273854019ed36718667b2993609dc37d14dd4/types_tabulate-0.9.0.20241207.tar.gz", hash = "sha256:ac1ac174750c0a385dfd248edc6279fa328aaf4ea317915ab879a2ec47833230", size = 8195, upload-time = "2024-12-07T02:54:42.554Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/86/a9ebfd509cbe74471106dffed320e208c72537f9aeb0a55eaa6b1b5e4d17/types_tabulate-0.9.0.20241207-py3-none-any.whl", hash = "sha256:b8dad1343c2a8ba5861c5441370c3e35908edd234ff036d4298708a1d4cf8a85", size = 8307, upload-time = "2024-12-07T02:54:41.031Z" },
+]
+
+[[package]]
 name = "types-toml"
 version = "0.10.8.20240310"
 source = { registry = "https://pypi.org/simple" }
@@ -3289,6 +3298,7 @@ dependencies = [
     { name = "toml" },
     { name = "typer" },
     { name = "types-pyyaml" },
+    { name = "types-tabulate" },
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
@@ -3347,6 +3357,7 @@ requires-dist = [
     { name = "toml", specifier = ">=0.10.2,<1.0.0" },
     { name = "typer", specifier = "==0.16.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20240917,<7.0.0" },
+    { name = "types-tabulate", specifier = ">=0.9.0.20241207" },
     { name = "uvicorn", specifier = ">=0.35.0" },
     { name = "watchdog", specifier = ">=6.0.0,<7.0.0" },
 ]

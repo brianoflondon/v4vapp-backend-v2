@@ -13,7 +13,12 @@ from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_kee
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
-from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount, account_hive_balances
+from v4vapp_backend_v2.hive.hive_extras import (
+    HiveConversionLimits,
+    HiveNotEnoughHiveInAccount,
+    HiveTransferError,
+    account_hive_balances,
+)
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
@@ -29,18 +34,6 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
-
-
-class HiveTransferError(Exception):
-    """Custom exception for Hive transfer errors."""
-
-    pass
-
-
-class ConversionLimits(HiveTransferError):
-    """Custom exception for conversion limit errors."""
-
-    pass
 
 
 async def follow_on_transfer(
@@ -442,7 +435,7 @@ async def decode_incoming_and_checks(
             result = await check_user_limits(pay_req.value_msat, tracked_op.cust_id)
 
     if result:
-        raise HiveTransferError(result)
+        raise HiveConversionLimits(result)
 
     return pay_req
 

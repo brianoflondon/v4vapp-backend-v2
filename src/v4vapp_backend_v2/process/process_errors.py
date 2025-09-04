@@ -43,23 +43,19 @@ class CustomJsonToLightningError(HiveLightningError):
     pass
 
 
+class CustomJsonAuthorizationError(HiveLightningError):
+    """
+    Custom exception for errors related to CustomJson authorization.
+    This can be used to handle specific cases where the authorization fails.
+    """
+
+    pass
+
+
 class InsufficientBalanceError(HiveLightningError):
     """
     Custom exception for errors related to insufficient balance.
     This can be used to handle specific cases where an account does not have enough funds for a transfer.
     """
-
-    pass
-
-
-
-class HiveToKeepsatsConversionError(Exception):
-    """Custom exception for Hive to Keepsats conversion errors."""
-
-    pass
-
-
-class WrongCurrencyError(HiveToKeepsatsConversionError):
-    """Custom exception for wrong currency errors."""
 
     pass

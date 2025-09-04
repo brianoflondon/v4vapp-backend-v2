@@ -22,6 +22,7 @@ from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import (
+    CustomJsonAuthorizationError,
     CustomJsonToLightningError,
     InsufficientBalanceError,
 )
@@ -30,7 +31,7 @@ from v4vapp_backend_v2.process.process_transfer import follow_on_transfer
 
 
 # MARK: CustomJson Operations
-async def process_custom_json(
+async def process_custom_json_func(
     custom_json: CustomJson, nobroadcast: bool = False
 ) -> List[LedgerEntry]:
     """
@@ -46,7 +47,13 @@ async def process_custom_json(
     server_id = InternalConfig().server_id
     if custom_json.cj_id in ["v4vapp_notification", "v4vapp_dev_notification"]:
         logger.info(f"Notification CustomJson: {custom_json.json_data.memo}")
-        return None
+        return []
+
+    if not custom_json.authorized:
+        message = f"CustomJson operation not authorized. {custom_json.from_account} not in {custom_json.required_auths}"
+        logger.warning(message, extra={"notification": False, **custom_json.log_extra})
+        raise CustomJsonAuthorizationError(message)
+
     if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         keepsats_transfer.msats = (

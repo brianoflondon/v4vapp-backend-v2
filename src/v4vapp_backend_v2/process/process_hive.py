@@ -17,7 +17,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
-from v4vapp_backend_v2.process.process_custom_json import process_custom_json
+from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
 from v4vapp_backend_v2.process.process_errors import HiveLightningError
 from v4vapp_backend_v2.process.process_orders import process_create_fill_order_op
 from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
@@ -72,7 +72,9 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
             )
             return ledger_entries
         elif isinstance(op, CustomJson):
-            ledger_entries = await process_custom_json(custom_json=op, nobroadcast=nobroadcast)
+            ledger_entries = await process_custom_json_func(
+                custom_json=op, nobroadcast=nobroadcast
+            )
             return ledger_entries
         return []
 

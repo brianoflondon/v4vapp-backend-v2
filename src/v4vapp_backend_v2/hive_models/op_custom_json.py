@@ -31,6 +31,11 @@ class CustomJson(OpBase):
     required_auths: List[str]
     required_posting_auths: List[str]
 
+    authorized: bool = Field(
+        default=False,
+        description="Is the operation authorized (`required_auths` matches the `from_account` or server account names)",
+    )
+
     cust_id: CustIDType = Field(
         default="", description="Customer ID determined from the `required_auths` field"
     )
@@ -84,6 +89,10 @@ class CustomJson(OpBase):
                         in InternalConfig().config.hive.server_account_names
                     ):
                         self.cust_id = self.json_data.from_account
+                        self.authorized = True
+                    else:
+                        self.cust_id = InternalConfig().server_id
+                        self.authorized = False
 
                 if self.conv is not None and self.conv.is_unset():
                     if (

@@ -37,6 +37,7 @@
         "routerrpc",
         "routerstub",
         "setex",
+        "tablefmt",
         "typer",
         "Unpatch",
         "unvoted",

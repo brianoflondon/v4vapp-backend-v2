@@ -122,6 +122,18 @@ class HiveSomeOtherRPCException(HiveTransferError):
     pass
 
 
+class HiveToKeepsatsConversionError(HiveTransferError):
+    """Custom exception for Hive to Keepsats conversion errors."""
+
+    pass
+
+
+class HiveConversionLimits(HiveTransferError):
+    """Custom exception for conversion limit errors."""
+
+    pass
+
+
 # TODO: #28 Tidy up the calls to redis sync for good nodes and hive internal market
 def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args, **kwargs) -> Hive:
     """

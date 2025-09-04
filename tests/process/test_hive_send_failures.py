@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime
 from pprint import pprint
 from random import choice, uniform
 from timeit import default_timer as timeit
@@ -13,6 +14,7 @@ from tests.utils import (
     get_lightning_invoice,
     watch_for_ledger_count,
 )
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.hive.hive_extras import (
@@ -211,6 +213,42 @@ def random_amount() -> Amount:
     value = round(uniform(0.05, 0.1), 3)
     symbol = choice(["HIVE", "HBD"])
     return Amount(f"{value:.3f} {symbol}")
+
+
+async def test_send_wrong_authorization_custom_json():
+    hive_client = await get_verified_hive_client_for_accounts(["v4vapp.qrc"])
+
+    ledger_count = await get_ledger_count()
+    logger.info(f"Ledger count: {ledger_count}")
+
+    invoice_sats = 4_000
+
+    invoice = await get_lightning_invoice(value_sat=invoice_sats, memo="")
+
+    net_msats_before, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+    transfer = KeepsatsTransfer(
+        from_account="v4vapp-test",
+        to_account="devser.v4vapp",
+        memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
+    )
+    trx = hive_client.custom_json(
+        id="v4vapp_dev_transfer",
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        required_auths=["v4vapp.qrc"],
+    )
+
+    pprint(trx)
+    await asyncio.sleep(3)
+    # no impact on ledger the ledger will be untouched.
+
+    last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+        {"type": "custom_json"}, sort=[("timestamp", -1)]
+    )
+    last_hive_op = CustomJson.model_validate(last_hive_op)
+    assert last_hive_op.authorized is False, "Expected last_hive_op to be unauthorized"
+
+    ledger_count_after = await get_ledger_count()
+    assert ledger_count_after == ledger_count, "Expected ledger count to remain unchanged"
 
 
 @pytest.mark.skip

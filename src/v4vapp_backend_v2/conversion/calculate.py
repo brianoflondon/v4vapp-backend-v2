@@ -9,9 +9,9 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.hive.hive_extras import HiveToKeepsatsConversionError
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
-from v4vapp_backend_v2.process.process_errors import HiveToKeepsatsConversionError
 
 
 class ConversionResult(BaseModel):
