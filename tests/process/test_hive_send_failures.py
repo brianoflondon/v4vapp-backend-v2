@@ -216,6 +216,21 @@ def random_amount() -> Amount:
 
 
 async def test_send_wrong_authorization_custom_json():
+    """
+    Test that sending a custom_json transaction with incorrect authorization does not affect the ledger.
+
+    This test performs the following steps:
+    1. Obtains a verified Hive client for the specified account.
+    2. Retrieves and logs the current ledger count.
+    3. Generates a Lightning invoice.
+    4. Checks the current Keepsats balance.
+    5. Constructs a KeepsatsTransfer and sends a custom_json transaction with required_auths set to the test account.
+    6. Waits for the transaction to process.
+    7. Verifies that the last Hive operation of type 'custom_json' is unauthorized.
+    8. Asserts that the ledger count remains unchanged after the transaction.
+
+    Ensures that unauthorized custom_json transactions do not impact the ledger state.
+    """
     hive_client = await get_verified_hive_client_for_accounts(["v4vapp.qrc"])
 
     ledger_count = await get_ledger_count()
@@ -249,6 +264,44 @@ async def test_send_wrong_authorization_custom_json():
 
     ledger_count_after = await get_ledger_count()
     assert ledger_count_after == ledger_count, "Expected ledger count to remain unchanged"
+
+
+# async def test_bad_account_list():
+#     hive_client = await get_verified_hive_client_for_accounts(["v4vapp.qrc"])
+
+#     ledger_count = await get_ledger_count()
+#     logger.info(f"Ledger count: {ledger_count}")
+
+#     invoice_sats = 1_000
+
+#     invoice = await get_lightning_invoice(value_sat=invoice_sats, memo="")
+
+#     net_msats_before, balance = await keepsats_balance_printout(cust_id="v4vapp-test")
+#     transfer = KeepsatsTransfer(
+#         from_account="v4vapp.qrc",
+#         to_account="bbittrex",
+#         sats=invoice_sats,
+#         memo=f"Give some sats to bad actor {datetime.now().isoformat()}",
+#     )
+
+#     trx = hive_client.custom_json(
+#         id="v4vapp_dev_transfer",
+#         json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+#         required_auths=["v4vapp.qrc"],
+#     )
+
+#     pprint(trx)
+#     await asyncio.sleep(10)
+#     # no impact on ledger the ledger will be untouched.
+
+#     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
+#         {"type": "custom_json"}, sort=[("timestamp", -1)]
+#     )
+#     last_hive_op = CustomJson.model_validate(last_hive_op)
+#     assert last_hive_op.authorized is False, "Expected last_hive_op to be unauthorized"
+
+#     ledger_count_after = await get_ledger_count()
+#     assert ledger_count_after == ledger_count, "Expected ledger count to remain unchanged"
 
 
 @pytest.mark.skip

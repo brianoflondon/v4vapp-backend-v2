@@ -77,7 +77,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                     if failure:
                         logger.info(
                             f"Successfully fetched witness details for {hive_accname} after retrying with {url}",
-                            extra={"notification": True},
+                            extra={"notification": False},
                         )
 
                     return WitnessDetails.model_validate(answer)

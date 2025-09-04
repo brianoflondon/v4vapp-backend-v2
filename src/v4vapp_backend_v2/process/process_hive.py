@@ -12,6 +12,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.bad_actors_list import check_not_development_accounts
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -64,6 +65,13 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
     # MARK: Transfers or Recurrent Transfers
     try:
         if isinstance(op, TransferBase):
+            if await check_not_development_accounts([op.from_account, op.to_account]):
+                logger.error(
+                    f"Development account check failed for: {op.from_account}, {op.to_account}",
+                    extra={"notification": True, **op.log_extra},
+                )
+                return []
+
             ledger_entry = await process_transfer_op(hive_transfer=op, nobroadcast=nobroadcast)
             return [ledger_entry] if ledger_entry else []
         elif isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder):

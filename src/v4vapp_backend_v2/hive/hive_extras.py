@@ -19,7 +19,10 @@ from nectarbase.operations import Transfer
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
-from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
+from v4vapp_backend_v2.helpers.bad_actors_list import (
+    check_bad_hive_accounts,
+    check_not_development_accounts,
+)
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
@@ -130,6 +133,18 @@ class HiveToKeepsatsConversionError(HiveTransferError):
 
 class HiveConversionLimits(HiveTransferError):
     """Custom exception for conversion limit errors."""
+
+    pass
+
+
+class HiveAccountNameOnExchangesList(HiveTransferError):
+    """Custom exception for when a Hive account name is found on exchanges list."""
+
+    pass
+
+
+class HiveDevelopmentAccountError(HiveTransferError):
+    """Custom exception for development-related errors."""
 
     pass
 
@@ -500,8 +515,8 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    acc_name: str, amount: Amount, nobroadcast: bool = False
-) -> None:
+    from_account: str, to_account: str, amount: Amount, nobroadcast: bool = False
+) -> bool:
     """
     Perform full validations, raise errors if a failure
 
@@ -520,9 +535,15 @@ async def perform_transfer_checks(
         perform the transfer.
 
     """
-    bad_accounts_list = await get_bad_hive_accounts()
-    if acc_name in bad_accounts_list:
-        raise HiveAccountNameOnExchangesList(f"{acc_name} is on bad accounts list")
+    if await check_not_development_accounts([from_account, to_account]):
+        raise HiveDevelopmentAccountError(
+            f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
+        )
+    if await check_bad_hive_accounts([from_account, to_account]):
+        raise HiveAccountNameOnExchangesList(
+            f"{from_account} or {to_account} is on bad accounts list"
+        )
+    return True
 
 
 async def send_transfer_bulk(
@@ -700,7 +721,8 @@ async def send_transfer(
     if not account:
         raise ValueError("Invalid account")
     await perform_transfer_checks(
-        acc_name=from_account,
+        from_account=from_account,
+        to_account=to_account,
         amount=amount,
         nobroadcast=nobroadcast,
     )

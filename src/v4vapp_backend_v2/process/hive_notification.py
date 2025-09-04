@@ -7,6 +7,7 @@ from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.hive.hive_extras import (
+    CustomJsonSendError,
     HiveTransferError,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
@@ -93,29 +94,39 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     return_amount_msat = 0
     trx: Dict[str, Any] = {}
     reply_type = ReplyType.UNKNOWN
+    error_message = ""
     if details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION:
         reply_type = ReplyType.TRANSFER
-        trx = await send_transfer(
-            hive_client=hive_client,
-            from_account=server_account_name,
-            to_account=details.pay_to_cust_id,  # Repay to the original sender
-            amount=amount,
-            memo=memo,
-        )
+        trx = {}
         try:
-            op_dict = trx["operations"][0][1]  # type: dict
-            return_amount = Amount(op_dict["amount"])
-        except (KeyError, IndexError):
-            return_amount = Amount("0.001 HIVE")
-        if not return_amount:
-            return_amount = Amount("0.001 HIVE")
-        await TransferBase.update_quote()
-        details.tracked_op.change_conv = CryptoConversion(
-            conv_from=return_amount.symbol,
-            amount=return_amount,
-            quote=TransferBase.last_quote,
-        ).conversion
-        return_amount_msat = details.tracked_op.change_conv.msats
+            trx = await send_transfer(
+                hive_client=hive_client,
+                from_account=server_account_name,
+                to_account=details.pay_to_cust_id,  # Repay to the original sender
+                amount=amount,
+                memo=memo,
+            )
+        except HiveTransferError as e:
+            error_message = f"Failed to send Hive transfer: {e}"
+            logger.error(
+                error_message,
+                extra={"notification": True, **details.tracked_op.log_extra},
+            )
+        if not error_message:
+            try:
+                op_dict = trx["operations"][0][1]  # type: dict
+                return_amount = Amount(op_dict["amount"])
+            except (KeyError, IndexError):
+                return_amount = Amount("0.001 HIVE")
+            if not return_amount:
+                return_amount = Amount("0.001 HIVE")
+            await TransferBase.update_quote()
+            details.tracked_op.change_conv = CryptoConversion(
+                conv_from=return_amount.symbol,
+                amount=return_amount,
+                quote=TransferBase.last_quote,
+            ).conversion
+            return_amount_msat = details.tracked_op.change_conv.msats
 
     # Custom JSONs are used for notifications and do not have a sats amount
     elif details.tracked_op.op_type == "custom_json":
@@ -133,14 +144,21 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             custom_json_id = "v4vapp_dev_transfer"
         else:
             custom_json_id = "v4vapp_dev_notification"
-        trx = await send_custom_json(
-            json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
-            send_account=server_account_name,
-            active=True,
-            id=custom_json_id,
-            hive_client=hive_client,
-        )
-        return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+        try:
+            trx = await send_custom_json(
+                json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
+                send_account=server_account_name,
+                active=True,
+                id=custom_json_id,
+                hive_client=hive_client,
+            )
+            return_amount_msat = 0  # Custom JSON does not have a return amount in msats
+        except CustomJsonSendError as e:
+            error_message = f"Failed to send Hive custom_json: {e}"
+            logger.error(
+                error_message,
+                extra={"notification": True, **notification.log_extra},
+            )
 
     if details.tracked_op and trx:
         reason = f"Reply for operation {details.tracked_op.group_id}: {trx.get('trx_id', '')}"
@@ -157,8 +175,17 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             "Updated tracked_op with reply",
             extra={"notification": False, **details.tracked_op.log_extra},
         )
-
-    return trx
+        return trx
+    elif details.tracked_op and error_message:
+        details.tracked_op.add_reply(
+            reply_id="",
+            reply_type=ReplyType.HIVE_ERROR,
+            reply_msat=0,
+            reply_error=error_message,
+            reply_message="Error sending Hive reply",
+        )
+        await details.tracked_op.save()
+    return {}
 
 
 async def send_notification_custom_json(

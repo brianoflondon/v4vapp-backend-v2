@@ -403,6 +403,7 @@ class DevelopmentConfig(BaseModel):
 
     enabled: bool = False
     env_var: str = "V4VAPP_DEV_MODE"
+    allowed_hive_accounts: List[str] = []
 
 
 class Config(BaseModel):

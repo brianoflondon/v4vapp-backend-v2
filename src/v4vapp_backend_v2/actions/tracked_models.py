@@ -25,6 +25,7 @@ class ReplyType(StrEnum):
     PAYMENT = "payment"
     CUSTOM_JSON = "custom_json"
     LEDGER_ERROR = "ledger_error"
+    HIVE_ERROR = "hive_error"
     UNKNOWN = "unknown"
 
 
