@@ -1,0 +1,837 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    .balance-printout {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        max-height: 70vh;
+        border: 1px solid var(--bs-border-color);
+    }
+
+    .account-summary {
+        background-color: var(--bs-secondary-bg);
+        border-radius: 8px;
+        padding: 0.5rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .account-summary-left {
+        flex: 1;
+    }
+
+    .account-summary-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .account-summary-title {
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .balance-display {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .balance-item {
+        background-color: var(--card-bg);
+        border-radius: 6px;
+        padding: 0.5rem;
+        border-left: 4px solid var(--v4v-primary);
+        min-width: 120px;
+        text-align: center;
+        padding-right: 2rem;
+    }
+
+    .balance-label {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--v4v-secondary);
+        margin-bottom: 0.25rem;
+    }
+
+    .balance-value {
+        font-size: 1.1rem;
+        font-weight: bold;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        color: var(--bs-body-color);
+    }
+
+    .account-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.25rem 0.5rem;
+        background-color: var(--card-bg);
+        border-radius: 4px;
+        border-left: 3px solid var(--v4v-primary);
+        font-size: 0.8rem;
+    }
+
+    .detail-label {
+        font-weight: 600;
+        color: var(--v4v-secondary);
+    }
+
+    .detail-value {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        color: var(--bs-body-color);
+    }
+
+    /* Checked state: use fallback if CSS variable is missing and force knob color for visibility */
+    .form-check-input:checked {
+        background-color: var(--v4v-primary, #2563eb) !important;
+        border-color: var(--v4v-primary, #2563eb) !important;
+        color: var(--v4v-primary, #2563eb) !important;
+    }
+
+    /* Some Bootstrap versions render the switch knob with ::before, others with ::after. Force a visible light-blue knob. */
+    .form-check-input:checked::before,
+    .form-check-input:checked::after {
+        background-color: #87CEEB !important;
+        /* light blue knob */
+        background-image: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Ensure the input is positioned so pseudo-elements align correctly */
+    .form-switch .form-check-input {
+        position: relative;
+    }
+
+    .form-check-input:focus {
+        border-color: var(--v4v-primary, #2563eb);
+        box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.15);
+    }
+
+    .form-select:focus {
+        border-color: var(--v4v-primary);
+        box-shadow: 0 0 0 0.25rem rgba(var(--v4v-primary-rgb), 0.25);
+    }
+
+    #accountSelector {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.9rem;
+    }
+
+    #accountSelector optgroup {
+        font-weight: bold;
+        color: var(--v4v-secondary);
+    }
+
+    #accountSelector option {
+        font-weight: normal;
+        padding: 0.5rem;
+    }
+
+    .spinner-border {
+        width: 2rem;
+        height: 2rem;
+    }
+
+    #loadingIndicator {
+        background-color: var(--bs-light);
+        border-radius: 8px;
+        margin: 1rem;
+    }
+
+    #accountSelectorCard {
+        transition: all 0.3s ease;
+    }
+
+    .btn-refresh-spinning .bi-arrow-clockwise {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    #quickSubFilter {
+        background-color: var(--bs-secondary-bg);
+    }
+
+    .form-select.border-success {
+        border-color: #28a745 !important;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+        transition: all 0.3s ease;
+    }
+
+    option[style*="display: none"] {
+        display: none !important;
+    }
+
+    @media (max-width: 768px) {
+        .balance-printout {
+            font-size: 0.75rem;
+            padding: 1rem;
+        }
+
+        .account-details {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group" role="group">
+    <a href="/admin/accounts" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>
+        Back to Accounts
+    </a>
+    <button type="button" class="btn btn-outline-secondary" onclick="toggleAccountSelector()"
+        title="Quick switch account (Ctrl+K or Cmd+K)">
+        <i class="bi bi-arrow-left-right me-1"></i>
+        Quick Switch
+    </button>
+    <button type="button" class="btn btn-outline-success" onclick="refreshBalance()"
+        title="Refresh the current balance report (F5 or Ctrl+R)" id="refreshBtn">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        Refresh
+    </button>
+    <button type="button" class="btn btn-outline-primary" onclick="downloadReport()">
+        <i class="bi bi-download me-1"></i>
+        Download
+    </button>
+    <button type="button" class="btn btn-outline-info" onclick="copyToClipboard()">
+        <i class="bi bi-clipboard me-1"></i>
+        Copy
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Account Summary -->
+    <div class="account-summary">
+        <div class="balance-item">
+            <div class="account-summary-header">
+                <h5 class="account-summary-title">
+                    <i class="bi bi-calculator me-2"></i>
+                    {{ account.sub }}
+                </h5>
+            </div>
+            <div class="balance-value">{{ "{:,}".format(details.sats or 0) }} SATS</div>
+        </div>
+
+        <div class="account-summary-left">
+            <div class="account-summary-header">
+                <h5 class="account-summary-title">
+                    <i class="bi bi-bank2 me-2"></i>
+                    {{ account.name }}
+                    {% if account.sub %}
+                    <small class="text-muted">- {{ account.sub }}</small>
+                    {% endif %}
+                    {% if account.contra %}
+                    <span class="badge bg-warning ms-2">Contra</span>
+                    {% endif %}
+                </h5>
+            </div>
+
+            <div class="account-details">
+                <div class="detail-item">
+                    <span class="detail-label">Type:</span>
+                    <span class="detail-value">{{ account.account_type.value }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Sub:</span>
+                    <span class="detail-value">{{ account.sub if account.sub else 'None' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Report Date:</span>
+                    <span class="detail-value">{{ as_of_date.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+                </div>
+                {% if age_hours and age_hours > 0 %}
+                <div class="detail-item">
+                    <span class="detail-label">Age Filter:</span>
+                    <span class="detail-value">{{ age_hours }} hours</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Selector -->
+    <div class="card mb-3" id="accountSelectorCard" style="display: none;">
+        <div class="card-header">
+            <h6 class="card-title mb-0">
+                <i class="bi bi-arrow-left-right me-2"></i>
+                Switch Account
+            </h6>
+        </div>
+        <div class="card-body">
+            <form id="accountSelectorForm" method="post" action="/admin/accounts/balance">
+                <input type="hidden" name="line_items" value="{{ 'true' if line_items else 'false' }}">
+                <input type="hidden" name="user_memos" value="{{ 'true' if user_memos else 'false' }}">
+                <input type="hidden" name="customer_grouping" value="{{ 'true' if customer_grouping else 'false' }}">
+                <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
+                <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
+
+                <div class="row">
+                    <div class="col-md-4">
+                        <label for="quickSubFilter" class="form-label">
+                            <i class="bi bi-funnel me-1"></i>
+                            Filter by Sub
+                        </label>
+                        <select class="form-select" id="quickSubFilter" onchange="filterQuickSwitchBySub()">
+                            <option value="">All Sub Accounts</option>
+                            {% set all_subs = [] %}
+                            {% for account_type, accounts in accounts_by_type.items() %}
+                            {% for acc in accounts %}
+                            {% if acc.sub and acc.sub not in all_subs %}
+                            {% set _ = all_subs.append(acc.sub) %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% for sub in all_subs|sort %}
+                            <option value="{{ sub }}" {{ 'selected' if sub==account.sub else '' }}>{{ sub }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="accountSelector" class="form-label">
+                            <i class="bi bi-folder2-open me-1"></i>
+                            Select Account
+                        </label>
+                        <select class="form-select" name="account_string" id="accountSelector"
+                            onchange="switchAccount()">
+                            <option value="">Select an account...</option>
+                            {% for account_type, accounts in accounts_by_type.items() %}
+                            <optgroup label="{{ account_type }}">
+                                {% for acc in accounts %}
+                                <option value="{{ acc.__str__() }}" data-sub="{{ acc.sub if acc.sub else '' }}"
+                                    data-type="{{ account_type }}" {{ 'selected' if acc.__str__()==account_string
+                                    else '' }}>
+                                    {{ acc.name }}{% if acc.sub %} - {{ acc.sub }}{% endif %}
+                                    {% if acc.contra %} (Contra){% endif %}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            Load
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Balance Controls -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <h6 class="card-title mb-0">
+                <i class="bi bi-sliders me-2"></i>
+                Display Options
+            </h6>
+        </div>
+        <div class="card-body">
+            <form id="balanceOptionsForm" method="post" action="/admin/accounts/balance">
+                <input type="hidden" name="account_string" value="{{ account_string }}">
+                <input type="hidden" name="as_of_date_str" value="{{ as_of_date.isoformat() if as_of_date else '' }}">
+                <input type="hidden" name="age_hours" value="{{ age_hours if age_hours else 0 }}">
+
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="lineItemsSwitch" name="line_items"
+                                value="true" {{ 'checked' if line_items else '' }} onchange="updateBalanceReport()">
+                            <label class="form-check-label" for="lineItemsSwitch">
+                                <i class="bi bi-list-ul me-1"></i>
+                                Show Line Items
+                            </label>
+                        </div>
+                        <small class="text-muted">Display individual transaction lines</small>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="userMemosSwitch" name="user_memos"
+                                value="true" {{ 'checked' if user_memos else '' }} onchange="updateBalanceReport()">
+                            <label class="form-check-label" for="userMemosSwitch">
+                                <i class="bi bi-chat-quote me-1"></i>
+                                Show User Memos
+                            </label>
+                        </div>
+                        <small class="text-muted">Display user memo information</small>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="customerGroupingSwitch"
+                                name="customer_grouping" value="true" {{ 'checked' if customer_grouping else '' }}
+                                onchange="updateBalanceReport()">
+                            <label class="form-check-label" for="customerGroupingSwitch">
+                                <i class="bi bi-people me-1"></i>
+                                Group by Customer
+                            </label>
+                        </div>
+                        <small class="text-muted">Group transactions by customer ID within dates</small>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- Balance Report -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-text me-2"></i>
+                    Balance Report
+                    <small class="text-muted ms-2">
+                        (Line Items: {{ 'Yes' if line_items else 'No' }},
+                        User Memos: {{ 'Yes' if user_memos else 'No' }},
+                        Customer Grouping: {{ 'Yes' if customer_grouping else 'No' }})
+                    </small>
+                </h5>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#rawData" aria-expanded="false" aria-controls="rawData">
+                        <i class="bi bi-code-square me-1"></i>
+                        Show Raw Data
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="loadingIndicator" class="text-center p-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="mt-2">Recalculating balance...</div>
+                </div>
+                <div class="balance-printout" id="balancePrintout">{{ printout }}</div>
+            </div>
+        </div>
+
+        <!-- Raw Data (Collapsible) -->
+        <div class="collapse mt-3" id="rawData">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-code-square me-1"></i>
+                        Raw Account Balance Data (JSON)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <pre class="bg-dark text-light p-3 rounded"
+                        style="font-size: 0.875rem; max-height: 400px; overflow-y: auto;"><code>{{ details | tojson(indent=2) }}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block extra_js %}
+    <script>
+        function toggleAccountSelector() {
+            const accountSelectorCard = document.getElementById('accountSelectorCard');
+            if (accountSelectorCard) {
+                if (accountSelectorCard.style.display === 'none') {
+                    accountSelectorCard.style.display = 'block';
+                    // Scroll to the selector and focus on it
+                    accountSelectorCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Focus on the select element after a short delay
+                    setTimeout(() => {
+                        document.getElementById('accountSelector').focus();
+                    }, 300);
+                } else {
+                    accountSelectorCard.style.display = 'none';
+                }
+            }
+        }
+
+        function refreshBalance() {
+            // Add spinning animation to refresh button
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.classList.add('btn-refresh-spinning');
+                refreshBtn.disabled = true;
+                refreshBtn.title = 'Refreshing...';
+                refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refreshing...';
+            }
+
+            // Show loading indicator
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const balancePrintout = document.getElementById('balancePrintout');
+
+            if (loadingIndicator && balancePrintout) {
+                loadingIndicator.style.display = 'block';
+                balancePrintout.style.display = 'none';
+            }
+
+            // Use the existing balance options form to refresh with current settings
+            const form = document.getElementById('balanceOptionsForm');
+            if (form) {
+                // Create FormData from the existing form (which has current settings)
+                const formData = new FormData(form);
+
+                // Ensure checkboxes are handled properly
+                const lineItemsSwitch = document.getElementById('lineItemsSwitch');
+                const userMemosSwitch = document.getElementById('userMemosSwitch');
+                const customerGroupingSwitch = document.getElementById('customerGroupingSwitch');
+
+                if (lineItemsSwitch) {
+                    formData.set('line_items', lineItemsSwitch.checked ? 'true' : 'false');
+                }
+                if (userMemosSwitch) {
+                    formData.set('user_memos', userMemosSwitch.checked ? 'true' : 'false');
+                }
+                if (customerGroupingSwitch) {
+                    formData.set('customer_grouping', customerGroupingSwitch.checked ? 'true' : 'false');
+                }
+
+                // For refresh, zero out the as_of_date_str to get current time
+                formData.set('as_of_date_str', '');
+
+                // Submit via fetch to update content dynamically
+                fetch('/admin/accounts/balance', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.text())
+                    .then(html => {
+                        // Parse the response HTML to extract the new printout
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newPrintout = doc.getElementById('balancePrintout');
+
+                        if (newPrintout && balancePrintout) {
+                            balancePrintout.innerHTML = newPrintout.innerHTML;
+                        }
+
+                        // Update the header status text
+                        const statusText = doc.querySelector('.card-title small.text-muted');
+                        if (statusText) {
+                            const currentStatusText = document.querySelector('.card-title small.text-muted');
+                            if (currentStatusText) {
+                                currentStatusText.innerHTML = statusText.innerHTML;
+                            }
+                        }
+
+                        // Update the Report Date in the account details
+                        const newDetailItems = doc.querySelectorAll('.detail-item');
+                        const currentDetailItems = document.querySelectorAll('.detail-item');
+
+                        newDetailItems.forEach((newItem, index) => {
+                            const label = newItem.querySelector('.detail-label');
+                            if (label && label.textContent.trim() === 'Report Date:' && currentDetailItems[index]) {
+                                const newDateValue = newItem.querySelector('.detail-value');
+                                const currentDateValue = currentDetailItems[index].querySelector('.detail-value');
+                                if (newDateValue && currentDateValue) {
+                                    currentDateValue.textContent = newDateValue.textContent;
+                                }
+                            }
+                        });
+
+                        // Hide loading indicator
+                        if (loadingIndicator && balancePrintout) {
+                            loadingIndicator.style.display = 'none';
+                            balancePrintout.style.display = 'block';
+                        }
+
+                        // Remove spinning animation
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('btn-refresh-spinning');
+                            refreshBtn.disabled = false;
+                            refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
+                            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error refreshing balance:', error);
+
+                        // Hide loading indicator and show error
+                        if (loadingIndicator && balancePrintout) {
+                            loadingIndicator.style.display = 'none';
+                            balancePrintout.style.display = 'block';
+                            balancePrintout.innerHTML = '<div class="text-danger p-3">Error refreshing report. Please try again.</div>';
+                        }
+
+                        // Remove spinning animation
+                        if (refreshBtn) {
+                            refreshBtn.classList.remove('btn-refresh-spinning');
+                            refreshBtn.disabled = false;
+                            refreshBtn.title = 'Refresh balance report (F5 or Ctrl+R)';
+                            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+                        }
+                    });
+            } else {
+                // Fallback: reload the page
+                window.location.reload();
+            }
+        }
+
+        function switchAccount() {
+            const accountSelector = document.getElementById('accountSelector');
+            const selectedAccount = accountSelector.value;
+
+            if (selectedAccount) {
+                // Show loading indicator
+                const loadingIndicator = document.getElementById('loadingIndicator');
+                const balancePrintout = document.getElementById('balancePrintout');
+
+                if (loadingIndicator && balancePrintout) {
+                    loadingIndicator.style.display = 'block';
+                    balancePrintout.style.display = 'none';
+                }
+
+                // Submit the form
+                document.getElementById('accountSelectorForm').submit();
+            }
+        }
+
+        function filterQuickSwitchBySub() {
+            const subFilter = document.getElementById('quickSubFilter').value;
+            const accountSelect = document.getElementById('accountSelector');
+            const options = accountSelect.querySelectorAll('option');
+            const optgroups = accountSelect.querySelectorAll('optgroup');
+
+            // Reset selection
+            accountSelect.value = '';
+
+            // If no filter, show all options
+            if (!subFilter) {
+                options.forEach(option => {
+                    option.style.display = '';
+                });
+                optgroups.forEach(optgroup => {
+                    optgroup.style.display = '';
+                });
+                return;
+            }
+
+            // Track which optgroups have visible options
+            const visibleOptgroups = new Set();
+            let matchingOptions = [];
+
+            // Filter options by sub account
+            options.forEach(option => {
+                const optionSub = option.getAttribute('data-sub');
+                const optionType = option.getAttribute('data-type');
+
+                if (option.value === '') {
+                    // Keep the "Select an account..." option
+                    option.style.display = '';
+                } else if (optionSub === subFilter) {
+                    option.style.display = '';
+                    visibleOptgroups.add(optionType);
+                    matchingOptions.push(option);
+                } else {
+                    option.style.display = 'none';
+                }
+            });
+
+            // Show/hide optgroups based on whether they have visible options
+            optgroups.forEach(optgroup => {
+                const label = optgroup.label; // Account type from label
+                if (visibleOptgroups.has(label)) {
+                    optgroup.style.display = '';
+                } else {
+                    optgroup.style.display = 'none';
+                }
+            });
+
+            // If only one matching option, auto-select it
+            if (matchingOptions.length === 1) {
+                accountSelect.value = matchingOptions[0].value;
+                // Add visual feedback
+                accountSelect.classList.add('border-success');
+                setTimeout(() => {
+                    accountSelect.classList.remove('border-success');
+                }, 2000);
+            }
+        }
+
+        function updateBalanceReport() {
+            const form = document.getElementById('balanceOptionsForm');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const balancePrintout = document.getElementById('balancePrintout');
+
+            // Show loading indicator
+            loadingIndicator.style.display = 'block';
+            balancePrintout.style.display = 'none';
+
+            // Create FormData from the form
+            const formData = new FormData(form);
+
+            // Ensure unchecked checkboxes are handled properly
+            if (!document.getElementById('lineItemsSwitch').checked) {
+                formData.set('line_items', 'false');
+            }
+            if (!document.getElementById('userMemosSwitch').checked) {
+                formData.set('user_memos', 'false');
+            }
+            if (!document.getElementById('customerGroupingSwitch').checked) {
+                formData.set('customer_grouping', 'false');
+            }
+
+            // Submit the form via fetch
+            fetch('/admin/accounts/balance', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.text())
+                .then(html => {
+                    // Parse the response HTML to extract the new printout
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newPrintout = doc.getElementById('balancePrintout');
+
+                    if (newPrintout) {
+                        // Update the printout content
+                        balancePrintout.innerHTML = newPrintout.innerHTML;
+
+                        // Update the header status text
+                        const statusText = doc.querySelector('.card-title small.text-muted');
+                        if (statusText) {
+                            const currentStatusText = document.querySelector('.card-title small.text-muted');
+                            if (currentStatusText) {
+                                currentStatusText.innerHTML = statusText.innerHTML;
+                            }
+                        }
+                    }
+
+                    // Hide loading indicator
+                    loadingIndicator.style.display = 'none';
+                    balancePrintout.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error updating balance report:', error);
+
+                    // Hide loading indicator and show error
+                    loadingIndicator.style.display = 'none';
+                    balancePrintout.style.display = 'block';
+                    balancePrintout.innerHTML = '<div class="text-danger p-3">Error updating report. Please try again.</div>';
+                });
+        }
+
+        // Ensure user memos is always false when line items are disabled
+        function enforceUserMemosState() {
+            const lineSwitch = document.getElementById('lineItemsSwitch');
+            const memosSwitch = document.getElementById('userMemosSwitch');
+            if (!lineSwitch || !memosSwitch) return;
+
+            if (!lineSwitch.checked) {
+                // Turn off memos and disable the control so user cannot re-enable it
+                memosSwitch.checked = false;
+                memosSwitch.disabled = true;
+            } else {
+                // Re-enable memos when line items are enabled
+                memosSwitch.disabled = false;
+            }
+        }
+
+        function downloadReport() {
+            const content = document.getElementById('balancePrintout').textContent;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `balance_report_{{ account.name.replace(' ', '_') }}_{{ account.sub.replace(' ', '_') if account.sub else 'no_sub' }}_{{ as_of_date.strftime('%Y%m%d_%H%M%S') }}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        function copyToClipboard() {
+            const content = document.getElementById('balancePrintout').textContent;
+            navigator.clipboard.writeText(content).then(function () {
+                // Show success message
+                const btn = event.target.closest('button');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-success');
+
+                setTimeout(function () {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-info');
+                }, 2000);
+            }, function (err) {
+                console.error('Could not copy text: ', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        // Auto-scroll to top of balance report when page loads
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('balancePrintout').scrollTop = 0;
+
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function (e) {
+                // Ctrl/Cmd + K to toggle account selector
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    toggleAccountSelector();
+                }
+                // F5 or Ctrl/Cmd + R to refresh balance
+                else if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'r')) {
+                    e.preventDefault();
+                    refreshBalance();
+                }
+            });
+
+            // Initialize and enforce the dependency: user memos depends on line items
+            enforceUserMemosState();
+
+            // Also attach a change listener to enforce when the line items switch is toggled
+            const lineSwitch = document.getElementById('lineItemsSwitch');
+            if (lineSwitch) {
+                lineSwitch.addEventListener('change', function () {
+                    enforceUserMemosState();
+                });
+            }
+
+            // Initialize raw data toggle button
+            initializeRawDataToggle();
+        });
+
+        function initializeRawDataToggle() {
+            const rawDataToggle = document.querySelector('[data-bs-target="#rawData"]');
+            const rawDataCollapse = document.getElementById('rawData');
+
+            if (rawDataToggle && rawDataCollapse) {
+                // Update button text when collapse state changes
+                rawDataCollapse.addEventListener('shown.bs.collapse', function () {
+                    rawDataToggle.innerHTML = '<i class="bi bi-code-square me-1"></i>Hide Raw Data';
+                });
+
+                rawDataCollapse.addEventListener('hidden.bs.collapse', function () {
+                    rawDataToggle.innerHTML = '<i class="bi bi-code-square me-1"></i>Show Raw Data';
+                });
+            }
+        }
+    </script>
+    {% endblock %}

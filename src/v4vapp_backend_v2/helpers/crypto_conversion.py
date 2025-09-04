@@ -8,9 +8,26 @@ from typing import Any, ClassVar
 from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+
+
+class CryptoConvV1(BaseModel):
+    conv_from: Currency = Currency.HIVE
+    sats: float = 0.0
+    HIVE: float = 0.0
+    HBD: float = 0.0
+    USD: float = 0.0
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        if not self.HIVE and not self.HBD and not self.USD:
+            self.sats = data.get("sats", 0.0)
+            self.HIVE = data.get("hive", 0.0)
+            self.HBD = data.get("hbd", 0.0)
+            self.USD = data.get("usd", 0.0)
 
 
 class CryptoConv(BaseModel):
@@ -18,28 +35,24 @@ class CryptoConv(BaseModel):
     Simple dictionary to store the conversion values.
     """
 
-    hive: float = Field(0.0, description="Converted value in HIVE")
-    hbd: float = Field(0.0, description="Converted value in HBD")
-    usd: float = Field(0.0, description="Converted value in USD")
+    hive: Decimal = Field(Decimal(0), description="Converted value in HIVE")
+    hbd: Decimal = Field(Decimal(0), description="Converted value in HBD")
+    usd: Decimal = Field(Decimal(0), description="Converted value in USD")
     sats: int = Field(0, description="Converted value in Sats")
     msats: int = Field(0, description="Converted value in milliSats")
     msats_fee: int = Field(0, description="Service fee in milliSats")
-    btc: float = Field(0.0, description="Converted value in Bitcoin")
-    sats_hive: float = Field(0.0, description="Sats per HIVE")
-    sats_hbd: float = Field(0.0, description="Sats per HBD")
+    btc: Decimal = Field(Decimal(0), description="Converted value in Bitcoin")
+    sats_hive: Decimal = Field(Decimal(0), description="Sats per HIVE")
+    sats_hbd: Decimal = Field(Decimal(0), description="Sats per HBD")
     conv_from: Currency = Field(
         Currency.HIVE, description="The currency from which the conversion is made"
     )
-    value: float = Field(0.0, description="The original value before conversion")
+    value: Decimal = Field(Decimal(0), description="The original value before conversion")
     source: str = Field(
         "CryptoConv", description="The source of the quote used for this conversion"
     )
     fetch_date: datetime | None = Field(
         None, description="The date when the conversion was fetched"
-    )
-
-    model_config = ConfigDict(
-        use_enum_values=True,  # Serializes enum as its value
     )
 
     UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
@@ -58,8 +71,8 @@ class CryptoConv(BaseModel):
         self,
         recalc_conv_from: Currency | None = None,
         conv_from: Currency | None = None,
-        value: float | None = None,
-        converted_value: float | None = None,
+        value: float | Decimal | None = None,
+        converted_value: float | Decimal | None = None,
         timestamp: datetime | None = None,
         quote: QuoteResponse | None = None,
         **data: Any,
@@ -94,12 +107,12 @@ class CryptoConv(BaseModel):
             if quote and quote.sats_usd > 0:
                 data["source"] = quote.source
                 data["fetch_date"] = quote.fetch_date or datetime.now(tz=timezone.utc)
-                data["sats_hive"] = quote.sats_hive
-                data["sats_hbd"] = quote.sats_hbd
-                data["sats"] = int(data["hive"] * quote.sats_hive)
+                data["sats_hive"] = quote.sats_hive_p
+                data["sats_hbd"] = quote.sats_hbd_p
+                data["sats"] = int(Decimal(data["hive"]) * quote.sats_hive_p)
                 data["msats"] = int(data["sats"] * 1000)
                 data["btc"] = data["msats"] / 100_000_000_000
-                data["usd"] = round(data["sats"] / (quote.sats_usd), 6)
+                data["usd"] = round(data["sats"] / float(quote.sats_usd_p), 6)
 
         super().__init__(**data)
         # If msats is not set, calculate it from the other values
@@ -114,16 +127,16 @@ class CryptoConv(BaseModel):
         rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
         values = self.model_dump()
         for key in values:
-            if key not in rate_fields and isinstance(values[key], (int, float)):
+            if key not in rate_fields and isinstance(values[key], (int, float, Decimal)):
                 values[key] = -values[key]
         return self.__class__(**values)
 
     def __mul__(self, other):
-        if isinstance(other, (int, float)):
+        if isinstance(other, (int, float, Decimal)):
             values = self.model_dump()
             rate_fields = {"sats_hive", "sats_hbd", "conv_from", "source", "fetch_date"}
             for key in values:
-                if key not in rate_fields and isinstance(values[key], (int, float)):
+                if key not in rate_fields and isinstance(values[key], (int, float, Decimal)):
                     values[key] = values[key] * other
             return self.__class__(**values)
         return NotImplemented
@@ -271,34 +284,94 @@ class CryptoConv(BaseModel):
         """
         return Amount(f"{self.hbd:.3f} HBD")
 
+    def value_in(self, currency: Currency) -> Decimal | int:
+        """
+        Returns the conversion value in the specified currency.
+        This is useful when creating LedgerEntries with more decimal places than
+        Amount for hive and hbd.
+
+        Args:
+            currency (Currency): The currency to convert to.
+
+        Returns:
+            Decimal | int: The conversion value in the specified currency.
+        """
+        if currency == Currency.HIVE:
+            return self.hive
+        elif currency == Currency.HBD:
+            return self.hbd
+        elif currency == Currency.MSATS:
+            return self.msats
+        elif currency == Currency.SATS:
+            return self.sats
+        elif currency == Currency.USD:
+            return self.usd
+        elif currency == Currency.BTC:
+            return self.btc
+
+        return self.hive
+
+    def amount(self, currency: Currency) -> Amount:
+        """
+        Returns the conversion value in the original currency as an Amount object.
+
+        Returns:
+            Amount: The conversion value in the original currency.
+        """
+        if self.conv_from == Currency.HIVE:
+            return self.amount_hive
+        elif self.conv_from == Currency.HBD:
+            return self.amount_hbd
+        elif currency == Currency.HIVE:
+            return self.amount_hive
+        elif currency == Currency.HBD:
+            return self.amount_hbd
+
+        return self.amount_hive
+
+    def v1(self) -> CryptoConvV1:
+        """
+        Converts the current instance to a CryptoConvV1 instance.
+
+        Returns:
+            CryptoConvV1: The converted instance.
+        """
+        return CryptoConvV1(
+            conv_from=self.conv_from,
+            sats=self.sats,
+            HIVE=self.hive,
+            HBD=self.hbd,
+            USD=self.usd,
+        )
+
 
 class CryptoConversion(BaseModel):
     conv_from: Currency = Currency.HIVE
-    value: float = 0.0
+    value: Decimal = Decimal(0)
     original: Any = None
     quote: QuoteResponse = QuoteResponse()
     fetch_date: datetime | None = None
 
     # Cached computed fields
-    hive: float = 0.0
-    hbd: float = 0.0
-    usd: float = 0.0
-    sats: float = 0
+    hive: Decimal = Decimal(0)
+    hbd: Decimal = Decimal(0)
+    usd: Decimal = Decimal(0)
+    sats: int = 0
     msats: int = 0
-    btc: float = 0.0
+    btc: Decimal = Decimal(0)
     msats_fee: int = 0
 
     # model_config = ConfigDict(
     #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
     # )
-    model_config = ConfigDict(
-        use_enum_values=True,  # Serializes enum as its value
-    )
+    # model_config = ConfigDict(
+    #     json_encoders={Decimal: str},  # Serialize Decimal as string for JSON
+    # )
 
     def __init__(
         self,
         amount: Amount | AmountPyd | None = None,
-        value: float | int = 0.0,
+        value: float | int | Decimal = 0.0,
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,
         **kwargs,
@@ -313,15 +386,15 @@ class CryptoConversion(BaseModel):
         ):
             amount_here = kwargs.get("amount", amount)
             self.conv_from = Currency(amount_here.symbol.lower())
-            self.value = amount_here.amount
+            self.value = Decimal(str(amount_here.amount))
             self.original = amount_here
             if isinstance(amount_here, AmountPyd):
-                self.value = amount_here.amount_decimal
+                self.value = Decimal(amount_here.amount_decimal)
         elif conv_from:
             if isinstance(conv_from, str):
                 self.conv_from = Currency(conv_from.lower())
             self.conv_from = conv_from
-            self.value = value
+            self.value = Decimal(str(value))
 
         if quote:
             self.quote = quote
@@ -358,31 +431,35 @@ class CryptoConversion(BaseModel):
             elif self.conv_from == Currency.SATS:
                 self.msats = int(self.value * 1000)
             elif self.conv_from == Currency.HIVE:
-                self.msats = int(self.value * self.quote.sats_hive_p * 1000)
+                self.msats = int(Decimal(self.value) * self.quote.sats_hive_p * 1000)
             elif self.conv_from == Currency.HBD:
-                self.msats = int(self.value * self.quote.sats_hbd_p * 1000)
+                self.msats = int(Decimal(self.value) * self.quote.sats_hbd_p * 1000)
             elif self.conv_from == Currency.USD:
-                self.msats = int(self.value * self.quote.sats_usd_p * 1000)
+                self.msats = int(Decimal(self.value) * self.quote.sats_usd_p * 1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 
             # Step 2: Derive sats from msats
-            self.sats = round(self.msats / 1000, 0)
+            self.sats = int(round(self.msats / 1000, 0))
 
             # Step 3: Derive all other values from msats
-            self.btc = self.msats / 100_000_000_000  # msats to BTC (1 BTC = 10^11 msats)
-            self.usd = round(self.msats / (self.quote.sats_usd_p * 1000.0), 6)
-            self.hbd = round(self.msats / (self.quote.sats_hbd_p * 1000.0), 6)
-            self.hive = round(self.msats / (self.quote.sats_hive_p * 1000.0), 5)
+            self.btc = Decimal(self.msats) / Decimal(
+                100_000_000_000
+            )  # msats to BTC (1 BTC = 10^11 msats)
+            self.usd = Decimal(str(round(self.msats / (self.quote.sats_usd_p * Decimal(1000)), 6)))
+            self.hbd = Decimal(str(round(self.msats / (self.quote.sats_hbd_p * Decimal(1000)), 6)))
+            self.hive = Decimal(
+                str(round(self.msats / (self.quote.sats_hive_p * Decimal(1000)), 5))
+            )
             self.msats_fee = msats_fee(self.msats)
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
             self.msats = 0
             self.sats = 0
-            self.btc = 0.0
-            self.usd = 0.0
-            self.hbd = 0.0
-            self.hive = 0.0
+            self.btc = Decimal(0)
+            self.usd = Decimal(0)
+            self.hbd = Decimal(0)
+            self.hive = Decimal(0)
             self.msats_fee = 0
 
     @property
@@ -409,16 +486,16 @@ class CryptoConversion(BaseModel):
     def c_dict(self) -> dict[str, Any]:
         """Return a dictionary of all conversions."""
         return {
-            Currency.HIVE: self.hive,
-            Currency.HBD: self.hbd,
-            Currency.USD: self.usd,
-            Currency.SATS: self.sats,
-            Currency.BTC: self.btc,
-            Currency.MSATS: self.msats,
-            "sats_hive": self.quote.sats_hive,
-            "sats_hbd": self.quote.sats_hbd,
+            Currency.HIVE: float(self.hive),
+            Currency.HBD: float(self.hbd),
+            Currency.USD: float(self.usd),
+            Currency.SATS: float(self.sats),
+            Currency.BTC: float(self.btc),
+            Currency.MSATS: float(self.msats),
+            "sats_hive": float(self.quote.sats_hive_p),  # type: ignore computed field
+            "sats_hbd": float(self.quote.sats_hbd_p),  # type: ignore computed field
             "conv_from": self.conv_from,
-            "value": self.value,
+            "value": float(self.value),
         }
 
 
@@ -436,4 +513,5 @@ if __name__ == "__main__":
     print(json.dumps(conv.c_dict, indent=2, default=str))
     print(json.dumps(conv.conversion.model_dump(), indent=2, default=str))
     asyncio.run(conv.get_quote(use_cache=False))
+    print(f"Fetch date: {conv.fetch_date}")
     print(f"Fetch date: {conv.fetch_date}")

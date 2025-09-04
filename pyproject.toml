@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "0.4.5"
+version = "0.4.19"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -33,6 +33,10 @@ dependencies = [
     "bech32>=1.2.0",
     "pandas>=2.3.1",
     "pymongo>=4.13.2",
+    "tabulate>=0.9.0",
+    "fastapi[standard]>=0.116.1",
+    "uvicorn>=0.35.0",
+    "types-tabulate>=0.9.0.20241207",
 ]
 
 [dependency-groups]

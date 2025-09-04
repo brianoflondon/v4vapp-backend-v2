@@ -1,8 +1,8 @@
 import asyncio
+import contextlib
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
-from pprint import pprint
 from typing import Annotated, Any, List
 
 import typer
@@ -158,23 +158,47 @@ async def check_dest_alias(
             matching_payment = lnd_events_group.get_payment_by_pre_image(pre_image)
             if matching_payment:
                 if matching_payment.payment_request:
-                    dest_alias = await get_node_alias_from_pay_request(
+                    return await fetch_dest_alias_from_request(
                         matching_payment.payment_request, lnd_client
                     )
-                    return dest_alias
                 else:
                     return "Keysend"
     # Keysend payments outgoing do not have a payment request
     if isinstance(htlc_event, lnrpc.Payment):
         if htlc_event.payment_request:
-            dest_alias = await get_node_alias_from_pay_request(
-                htlc_event.payment_request, lnd_client
-            )
-            return dest_alias
+            return await fetch_dest_alias_from_request(htlc_event.payment_request, lnd_client)
         else:
             return "Keysend"
 
     return ""
+
+
+async def fetch_dest_alias_from_request(payment_request: str, lnd_client: LNDClient) -> str:
+    """
+    Safely fetch node alias from a payment request string. Returns 'Unknown' on failure.
+
+    Args:
+        payment_request: The BOLT-11 payment request string.
+        lnd_client: The LND client instance used for RPC.
+
+    Returns:
+        The resolved node alias as a string, or 'Unknown' if lookup failed.
+    """
+    try:
+        dest_alias = await get_node_alias_from_pay_request(payment_request, lnd_client)
+        return dest_alias
+    except LNDConnectionError as e:
+        logger.warning(
+            f"{getattr(lnd_client, 'icon', '')} Could not fetch dest alias (connection): {e}",
+            extra={"notification": False},
+        )
+        return "Unknown"
+    except Exception as e:
+        logger.warning(
+            f"{getattr(lnd_client, 'icon', '')} Could not fetch dest alias: {e}",
+            extra={"notification": False},
+        )
+        return "Unknown"
 
 
 async def remove_event_group(
@@ -182,16 +206,13 @@ async def remove_event_group(
 ) -> None:
     """
     Asynchronously removes an event from the specified LndEventsGroup after a delay.
-
-    Args:
-        event (EventItem): The event to be removed from the group.
-        lnd_events_group (LndEventsGroup): The group from which the event will be
-            removed.
-
-    Returns:
-        None
     """
-    await asyncio.sleep(10)
+    # Exit early on shutdown; otherwise delay up to 10s before cleanup
+    try:
+        await asyncio.wait_for(shutdown_event.wait(), timeout=10)
+        return
+    except asyncio.TimeoutError:
+        pass
     lnd_events_group.remove_group(htlc_event)
 
 
@@ -210,21 +231,18 @@ async def db_store_invoice(
     Returns:
         None
     """
-
     try:
         invoice_pyd = Invoice(htlc_event)
+        await invoice_pyd.update_conv()
+        ans = await invoice_pyd.save()
+        logger.info(
+            f"{lnd_client.icon}{DATABASE_ICON} "
+            f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
+            extra={"db_ans": ans.raw_result, **invoice_pyd.log_extra},
+        )
     except Exception as e:
         logger.warning(e)
         return
-    query = {"r_hash": invoice_pyd.r_hash}
-    invoice_dict = invoice_pyd.model_dump(exclude_none=True, exclude_unset=True, exclude={"conv"})
-    update = {"$set": invoice_dict}
-    ans = await Invoice.collection().update_one(filter=query, update=update, upsert=True)
-    logger.debug(
-        f"{lnd_client.icon}{DATABASE_ICON} "
-        f"New invoice recorded: {invoice_pyd.add_index:>6} {invoice_pyd.r_hash}",
-        extra={"db_ans": ans.raw_result, "invoice": invoice_dict},
-    )
 
 
 async def db_store_payment(
@@ -250,23 +268,24 @@ async def db_store_payment(
             fill_cache=True,
             col_pub_keys="pub_keys",
         )
+        await payment_pyd.update_conv()
+        ans = await payment_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
             f"Storing payment: {htlc_event.payment_index} "
-            f"{payment_pyd.route_str}"
+            f"{payment_pyd.route_str}",
+            extra={"db_ans": ans.raw_result, **payment_pyd.log_extra},
         )
-        query = {"payment_hash": payment_pyd.payment_hash}
-        payment_dict = payment_pyd.model_dump(
-            exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
-        )
-        update = {"$set": payment_dict}
-        ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
-        logger.info(
-            f"{lnd_client.icon}{DATABASE_ICON} "
-            f"New payment recorded: {payment_pyd.payment_index:>6} "
-            f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
-            extra={"db_ans": ans.raw_result, "payment": payment_dict},
-        )
+        # query = {"payment_hash": payment_pyd.payment_hash}
+        # payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
+        # update = {"$set": payment_dict}
+        # ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
+        # logger.info(
+        #     f"{lnd_client.icon}{DATABASE_ICON} "
+        #     f"New payment recorded: {payment_pyd.payment_index:>6} "
+        #     f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
+        #     extra={"db_ans": ans.raw_result, "payment": payment_dict},
+        # )
     except Exception as e:
         logger.info(e)
         return
@@ -304,7 +323,20 @@ async def payment_report(
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
     pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
-    dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
+    try:
+        dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
+    except LNDConnectionError as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
+            extra={"notification": False},
+        )
+        dest_alias = "Unknown"
+    except Exception as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch dest alias: {e}",
+            extra={"notification": False},
+        )
+        dest_alias = "Unknown"
     in_flight_time = get_in_flight_time(creation_date)
     # in_flight_time = format_time_delta(datetime.now(tz=timezone.utc) - creation_date)
     logger.info(
@@ -366,7 +398,12 @@ async def invoices_loop(
     else:
         add_index = 0
         settle_index = 0
-        await asyncio.sleep(10)
+        # Don’t block shutdown for 10s if the DB is empty
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=10)
+            return
+        except asyncio.TimeoutError:
+            pass
 
     request_sub = lnrpc.InvoiceSubscription(
         add_index=int(add_index) if add_index is not None else 0,
@@ -380,7 +417,7 @@ async def invoices_loop(
                 call_name="SubscribeInvoices",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 await TrackedBaseModel.update_quote()
                 lnrpc_invoice: lnrpc.Invoice
                 async_publish(
@@ -403,7 +440,7 @@ async def invoices_loop(
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            raise e
+            return
         except Exception as e:
             logger.exception(e)
             pass
@@ -419,7 +456,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
                 call_name="TrackPayments",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 lnrpc_payment: lnrpc.Payment
                 await TrackedBaseModel.update_quote()
                 async_publish(
@@ -442,7 +479,7 @@ async def payments_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup)
             raise e
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
-            raise e
+            return
         except Exception as e:
             logger.exception(e)
             pass
@@ -458,7 +495,7 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
                 call_name="SubscribeHtlcEvents",
             ):
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    return
                 htlc_event: routerrpc.HtlcEvent
                 async_publish(
                     event_name=Events.HTLC_EVENT,
@@ -486,6 +523,41 @@ async def htlc_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGro
             pass
 
 
+async def get_channel_display_name(
+    chan_id: int | None,
+    lnd_client: LNDClient,
+    lnd_events_group: LndEventsGroup,
+) -> str:
+    """
+    Get the display name for a channel ID, with fallback to direct lookup if not cached.
+
+    Args:
+        chan_id: The channel ID to look up
+        lnd_client: The LND client for direct lookups
+        lnd_events_group: The events group containing cached channel names
+
+    Returns:
+        The channel name or 'Unknown' if not found
+    """
+    if not chan_id:
+        return "Unknown"
+
+    # First try to get from cache
+    cached_name = lnd_events_group.channel_names.get(int(chan_id))
+    if cached_name and isinstance(cached_name, str):
+        return cached_name
+
+    # If not in cache, try direct lookup
+    try:
+        channel_name_obj = await get_channel_name(
+            channel_id=int(chan_id),
+            lnd_client=lnd_client,
+        )
+        return channel_name_obj.name if channel_name_obj else "Unknown"
+    except Exception:
+        return "Unknown"
+
+
 async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEventsGroup) -> None:
     """Subscribe to channel events from LND"""
     request = lnrpc.ChannelEventSubscription()
@@ -505,23 +577,78 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                 # - INACTIVE_CHANNEL
                 # - PENDING_OPEN_CHANNEL
 
-                event_type = channel_event.type
+                decoded_event = MessageToDict(channel_event, preserving_proto_field_name=True)
+                logger.info("Channel event received", extra={"channel_event": decoded_event})
 
                 # Process the different event types
-                if hasattr(channel_event, "open_channel"):
-                    channel = channel_event.open_channel
+                if "open_channel" in decoded_event:
+                    channel = decoded_event["open_channel"]
                     await fill_channel_names(lnd_client, lnd_events_group)
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
                     logger.info(
-                        f"{lnd_client.icon} Channel opened: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
-                        extra={"notification": True},
+                        f"{lnd_client.icon} Channel opened: {chan_id} {channel_name}",
+                        extra={
+                            "notification": True,
+                        },
                     )
 
-                elif hasattr(channel_event, "closed_channel"):
-                    channel = channel_event.closed_channel
+                elif "closed_channel" in decoded_event:
+                    channel = decoded_event["closed_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
                     logger.info(
-                        f"{lnd_client.icon} Channel closed: {channel.chan_id} "
-                        f"{lnd_events_group.channel_names.get(channel.chan_id, 'Unknown')}",
+                        f"{lnd_client.icon} Channel closed: {chan_id} {channel_name}",
+                        extra={"notification": True},
+                    )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+                elif "active_channel" in decoded_event:
+                    channel = decoded_event["active_channel"]
+                    # Active channel events might not have chan_id, so we need to handle this
+                    chan_id = channel.get("chan_id")
+                    if chan_id:
+                        channel_name = await get_channel_display_name(
+                            chan_id, lnd_client, lnd_events_group
+                        )
+                        logger.info(
+                            f"{lnd_client.icon} Channel active: {chan_id} {channel_name}",
+                            extra={"notification": True},
+                        )
+                    else:
+                        # Handle case where chan_id is not available
+                        funding_txid = channel.get("funding_txid_bytes", "Unknown")
+                        logger.info(
+                            f"{lnd_client.icon} Channel active: funding_txid={funding_txid}",
+                            extra={"notification": True},
+                        )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+                elif "inactive_channel" in decoded_event:
+                    channel = decoded_event["inactive_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    funding_txid = channel.get("funding_txid_bytes", "Unknown")
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
+                    logger.info(
+                        f"{lnd_client.icon} Channel inactive: {chan_id} {channel_name} {funding_txid}",
+                        extra={"notification": True},
+                    )
+                    await fill_channel_names(lnd_client, lnd_events_group)
+
+                elif "pending_open_channel" in decoded_event:
+                    channel = decoded_event["pending_open_channel"]
+                    chan_id = channel.get("chan_id", 0)
+                    channel_name = await get_channel_display_name(
+                        chan_id, lnd_client, lnd_events_group
+                    )
+                    logger.info(
+                        f"{lnd_client.icon} Pending channel open: {chan_id} {channel_name}",
                         extra={"notification": True},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
@@ -622,6 +749,8 @@ async def read_all_invoices(lnd_client: LNDClient) -> None:
         total_invoices = 0
         logger.info(f"{lnd_client.icon} Reading all invoices...")
         while True:
+            if shutdown_event.is_set():
+                return
             request = lnrpc.ListInvoiceRequest(
                 pending_only=False,
                 index_offset=index_offset,
@@ -717,6 +846,8 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
         total_payments = 0
         logger.info(f"{lnd_client.icon} Reading all payments...")
         while True:
+            if shutdown_event.is_set():
+                return
             request = lnrpc.ListPaymentsRequest(
                 include_incomplete=True,
                 index_offset=index_offset,
@@ -907,7 +1038,12 @@ async def synchronize_db(
         read_all_invoices(lnd_client),
         read_all_payments(lnd_client),
     ]
-    await asyncio.sleep(delay)
+    # Allow early exit during initial delay
+    try:
+        await asyncio.wait_for(shutdown_event.wait(), timeout=delay)
+        return
+    except asyncio.TimeoutError:
+        pass
     await asyncio.gather(*sync_tasks)
 
 
@@ -921,9 +1057,11 @@ async def main_async_start(connection_name: str) -> None:
         None
     """
     lnd_client = None
+    running_tasks: list[asyncio.Task] = []
     try:
         db_conn = DBConn()
         await db_conn.setup_database()
+        await TrackedBaseModel.update_quote()
         # Get the current event loop
         loop = asyncio.get_event_loop()
 
@@ -956,66 +1094,93 @@ async def main_async_start(connection_name: str) -> None:
             async_subscribe(Events.LND_INVOICE, invoice_report)
             async_subscribe(Events.LND_PAYMENT, payment_report)
             async_subscribe(Events.HTLC_EVENT, htlc_event_report)
-            await TrackedBaseModel.update_quote()
 
-            tasks = [
-                invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+            running_tasks = [
+                asyncio.create_task(
+                    invoices_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="invoices_loop",
+                ),
+                asyncio.create_task(
+                    payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="payments_loop",
+                ),
             ]
 
-            # If we haven't synced for a long time, do the sync first to avoid massive
-            # load on the database
+            # If we haven't synced for a long time, do the sync first to avoid massive DB load
             pause_for_sync = await pause_for_database_sync()
             if pause_for_sync:
+                # Run sync now (blocking) before starting the rest
                 await synchronize_db(lnd_client, delay=0)
             else:
-                tasks.append(synchronize_db(lnd_client, delay=10))
-            tasks += [
-                htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
-                check_for_shutdown(),
+                # Schedule sync as a cancellable task
+                running_tasks.append(
+                    asyncio.create_task(
+                        synchronize_db(lnd_client, delay=10),
+                        name="synchronize_db",
+                    )
+                )
+
+            running_tasks += [
+                asyncio.create_task(
+                    htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="htlc_events_loop",
+                ),
+                asyncio.create_task(
+                    channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
+                    name="channel_events_loop",
+                ),
             ]
-            await asyncio.gather(*tasks)
-            InternalConfig().shutdown()
+
+            # Wait for shutdown signal, then cancel streams immediately
+            await shutdown_event.wait()
+            for t in running_tasks:
+                t.cancel()
+            # Don’t hang forever; bound the wait
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*running_tasks, return_exceptions=True), timeout=5
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Timed out waiting for stream tasks to cancel; continuing shutdown."
+                )
+            # REMOVE premature shutdown here (it prevents goodbye notification)
+            # InternalConfig().shutdown()
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("👋 Received signal to stop. Exiting...")
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
 
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            logger.error(
-                f"{lnd_client.icon} Irregular shutdown in LND Monitor {e}",
-                extra={"error": e},
-            )
-            if hasattr(lnd_client, "channel") and lnd_client.channel:
-                await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
             await asyncio.sleep(0.2)
             raise e
 
     finally:
-        # Cancel all tasks except the current one
+        # Ensure channel is closed with a timeout
         if lnd_client and hasattr(lnd_client, "channel") and lnd_client.channel:
-            await lnd_client.channel.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(lnd_client.channel.close(), timeout=3)
         icon = hasattr(lnd_client, "icon") and lnd_client.icon if lnd_client else ""
         logger.info(
             f"{icon} ✅ LND gRPC client shutting down. "
             f"Monitoring node: {connection_name}. Version: {__version__}",
             extra={"notification": True},
         )
-        InternalConfig.notification_lock = True
-        # Ensure all pending notifications are sent
-        if hasattr(InternalConfig, "notification_loop"):
-            while InternalConfig.notification_lock:
-                logger.info("Waiting for notification loop to complete...")
-                await asyncio.sleep(0.5)  # Allow pending notifications to complete
-        current_task = asyncio.current_task()
-        tasks = [task for task in asyncio.all_tasks() if task is not current_task]
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Let notifications flush before tearing down logging/redis
+        await asyncio.sleep(1)
+        InternalConfig().shutdown()
+
+
+# helper to bound notification wait
+async def _wait_notifications():
+    while getattr(InternalConfig, "notification_lock", False):
+        await asyncio.sleep(0.2)
 
 
 async def pause_for_database_sync() -> bool:

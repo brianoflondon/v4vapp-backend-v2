@@ -63,7 +63,17 @@ class KeepsatsTransfer(BaseModel):
     to_account: AccNameType = Field("", alias="hive_accname_to")
     sats: int | None = Field(
         None,
+        ge=0,
         description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
+    )
+    msats: int | None = Field(
+        None,
+        ge=0,
+        description=(
+            "The amount of millisatoshis being transferred. "
+            "Used for more precise amounts, especially in invoices. "
+            "Mutually exclusive with sats, if both are present, msats will decide the value."
+        ),
     )
     memo: str = Field("", description="The memo which comes in from the transfer")
     pay_result: PayResult | None = None
@@ -73,8 +83,14 @@ class KeepsatsTransfer(BaseModel):
     parent_id: str | None = Field(
         None, description="The short ID of the parent transaction, if applicable"
     )
-    HIVE: float | None = None
-    HBD: float | None = None
+    hive: float | None = Field(
+        default=None,
+        description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
+    )
+    hbd: float | None = Field(
+        default=None,
+        description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
+    )
     invoice_message: str | None = Field(
         None,
         description="Used specifically for invoice messages, when requesting an invoice from a foreign service, this comment will be sent",
@@ -85,6 +101,15 @@ class KeepsatsTransfer(BaseModel):
     def __init__(self, **data: Any):
         if data.get("memo", None) is None:
             data["memo"] = ""
+        if data.get("msats") is not None and data.get("sats") is None:
+            # If both sats and msats are provided, use msats for the amount
+            data["sats"] = int(data["msats"]) // 1_000
+        if data.get("sats") is None and data.get("msats") is None:
+            data["sats"] = 0
+            data["msats"] = 0
+        if data.get("sats") is not None and data.get("msats") is None:
+            data["sats"] = int(data["sats"])
+            data["msats"] = data["sats"] * 1_000
         super().__init__(**data)
 
     @property
@@ -117,8 +142,8 @@ class KeepsatsTransfer(BaseModel):
             "sats": self.sats,
             "memo": self.memo,
             "invoice_message": self.invoice_message,
-            "HIVE": self.HIVE,
-            "HBD": self.HBD,
+            "HIVE": self.hive,
+            "HBD": self.hbd,
             "parent_id": self.parent_id,
             "pay_result": self.pay_result.model_dump(exclude_none=True, exclude_unset=True)
             if self.pay_result

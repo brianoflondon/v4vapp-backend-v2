@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pandas as pd
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerType
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
@@ -11,7 +11,7 @@ from v4vapp_backend_v2.config.setup import logger
 
 
 async def get_ledger_entries(
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime | None = None,
     filter_by_account: LedgerAccount | None = None,
     cust_id: str | None = None,
     filter_by_ledger_types: list[LedgerType] | None = None,
@@ -37,6 +37,9 @@ async def get_ledger_entries(
         - If filter_by_account is provided, matches entries where either the debit or credit side
           corresponds to the specified account name and sub-account.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     query = filter_by_account_as_of_date_query(
         account=filter_by_account,
         cust_id=cust_id,
@@ -63,7 +66,7 @@ async def get_ledger_entries(
 
 
 async def get_ledger_dataframe(
-    as_of_date: datetime = datetime.now(tz=timezone.utc) + timedelta(hours=1),
+    as_of_date: datetime | None = None,
     filter_by_account: LedgerAccount | None = None,
 ) -> pd.DataFrame:
     """
@@ -93,6 +96,9 @@ async def get_ledger_dataframe(
             - credit_account_type: The type of the credit account.
             - credit_sub: The sub-account of the credit account.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     ledger_entries = await get_ledger_entries(
         as_of_date=as_of_date, filter_by_account=filter_by_account
     )

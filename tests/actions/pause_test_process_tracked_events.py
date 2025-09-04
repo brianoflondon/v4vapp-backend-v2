@@ -15,15 +15,15 @@ import pytest
 from bson import json_util
 from nectar.hive import Hive
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryDuplicateException
-from v4vapp_backend_v2.actions.hive_to_lnd import (
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerEntryDuplicateException
+from v4vapp_backend_v2.actions.depreciated_hive_to_lnd import (
     HiveToLightningError,
     complete_hive_to_lightning,
     lightning_payment_sent,
     process_hive_to_lightning,
     return_hive_transfer,
 )
-from v4vapp_backend_v2.actions.process_tracked_events import (
+from v4vapp_backend_v2.process.process_tracked_events import (
     TrackedAny,
     process_tracked_event,
     tracked_any_filter,

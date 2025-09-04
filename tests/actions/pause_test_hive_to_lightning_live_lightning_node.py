@@ -14,12 +14,12 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_printout,
     generate_balance_sheet_pandas_from_accounts,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, get_ledger_entry
-from v4vapp_backend_v2.actions.hive_to_lnd import (
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, get_ledger_entry
+from v4vapp_backend_v2.actions.depreciated_hive_to_lnd import (
     HiveToLightningError,
     process_hive_to_lightning,
 )
-from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
+from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db import MongoDBClient, get_mongodb_client_defaults

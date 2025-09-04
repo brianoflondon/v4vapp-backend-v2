@@ -2,7 +2,7 @@ import re
 from enum import StrEnum
 from typing import Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 # Define Account Types as a StrEnum for validation
@@ -32,7 +32,7 @@ class LedgerAccount(BaseModel):
         False, description="Indicates if this is a contra account (default: False) Contra"
     )
 
-    model_config = ConfigDict(use_enum_values=True)
+    # model_config = ConfigDict(use_enum_values=True)
 
     def __repr__(self) -> str:
         contra_str = " (Contra)" if self.contra else ""
@@ -107,6 +107,7 @@ class AssetAccount(LedgerAccount):
         "Escrow Hive",
         "Treasury Hive",
         "Treasury Lightning",
+        "Treasury Keepsats",
         "Exchange Deposits Hive",
         "Exchange Deposits Lightning",
         "Converted Hive Offset",
@@ -149,8 +150,8 @@ class LiabilityAccount(LedgerAccount):
     """
 
     name: Literal[
-        "Customer Liability",
         "Keepsats Hold",
+        "VSC Liability",
         "Owner Loan Payable (funding)",
     ] = Field(..., description="Specific liability account name")
     account_type: Literal[AccountType.LIABILITY] = Field(
@@ -258,7 +259,7 @@ LedgerAccountAny = Union[
 if __name__ == "__main__":
     # Example usage
     asset_account = AssetAccount(name="Customer Deposits Hive", sub="v4vapp")
-    liability_account = LiabilityAccount(name="Customer Liability", sub="Sub-account 2")
+    liability_account = LiabilityAccount(name="VSC Liability", sub="Sub-account 2")
     equity_account = EquityAccount(name="Owner's Capital", sub="Sub-account 3")
     revenue_account = RevenueAccount(name="Fee Income", sub="Sub-account 4")
     expense_account = ExpenseAccount(name="Hosting Expenses Privex", sub="Sub-account 5")

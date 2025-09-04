@@ -137,7 +137,9 @@ class OpBase(TrackedBaseModel):
         ):
             self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
         if op_type := data.get("type") or data.get("op_type"):
-            self.realm = op_realm(op_type)
+            if isinstance(op_type, dict):
+                raise ValueError(f"op_type must be a string, got dict: {op_type}")
+            self.realm = op_realm(str(op_type))
         else:
             raise ValueError(f"Unknown op_type for realm: {op_type}")
 

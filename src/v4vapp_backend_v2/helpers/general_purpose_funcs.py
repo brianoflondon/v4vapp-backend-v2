@@ -1,8 +1,7 @@
 import re
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Generator
-
-from v4vapp_backend_v2.helpers.crypto_prices import Currency
 
 
 # MARK: General Text
@@ -50,6 +49,34 @@ def cap_camel_case(snake_str: str) -> str:
     """
     camel_case_word = camel_case(snake_str)
     return camel_case_word[0].upper() + camel_case_word[1:]
+
+
+# MARK: Database
+
+
+def convert_decimals(obj):
+    """
+    Recursively converts all Decimal instances within a nested structure (dicts, lists) to floats.
+
+    Args:
+        obj: The input object, which can be a dict, list, Decimal, or any other type.
+
+    Returns:
+        The input object with all Decimal instances converted to floats. The structure of dicts and lists is preserved.
+
+    Example:
+        >>> from decimal import Decimal
+        >>> convert_decimals({'a': Decimal('1.1'), 'b': [Decimal('2.2'), 3]})
+        {'a': 1.1, 'b': [2.2, 3]}
+    """
+    if isinstance(obj, dict):
+        return {k: convert_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals(item) for item in obj]
+    elif isinstance(obj, Decimal):
+        return float(obj)  # Or str(obj) if you want string precision
+    else:
+        return obj
 
 
 # MARK: Date & Time
@@ -147,23 +174,6 @@ def detect_keepsats(memo: str) -> bool:
     return False
 
 
-def currency_to_receive(memo: str) -> Currency:
-    """
-    Detects the currency to receive based on the memo.
-    Args:
-        memo (str): The memo to check.
-    Returns:
-        Currency: The detected currency, defaults to HIVE if not found.
-    """
-    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
-        return Currency.SATS
-    if "#hbd" in memo.lower():
-        return Currency.HBD
-    if "#hive" in memo.lower():
-        return Currency.HIVE
-    return Currency.HIVE  # Default to HIVE if no specific currency is detected
-
-
 def detect_paywithsats(memo: str) -> bool:
     """
     Detects if the given memo contains the phrase '#paywithsats'.
@@ -243,33 +253,48 @@ def process_clean_memo(
     memo: str,
 ) -> str:
     """
-    Cleans and processes a memo string by removing the '#clean' tag and handling special cases.
-    If the memo contains '#clean' (case-insensitive), the function:
-    - Removes the '#clean' tag and trims whitespace.
-    - If `detect_keepsats(memo)` returns True:
-        - Keeps only the part before the first ' | ' separator.
-        - Appends ' | #sats' to the message.
-        - If a transaction code matching 'v4v-<word>' exists, appends it as ' | <transaction_code>'.
-    - If `detect_keepsats(memo)` returns False:
-        - Keeps only the part before the first ' | ' separator.
-        - Removes the '#clean' tag and trims whitespace.
+    Cleans and processes a memo string by performing several transformations:
+    1. Removes the first word (typically a Hive account name).
+    2. Strips specified hashtags (e.g., '#v4vapp') from the message.
+    3. Removes leading '- ' or '| ' if present.
+    4. If the message is identified as a 'clean memo' (via is_clean_memo), further processes:
+        - If detect_keepsats returns True, removes content after ' | ', strips '#clean', appends ' | #sats',
+          and adds a transaction code if detected (e.g., 'v4v-xxxx').
+        - Otherwise, removes content after ' | ' and strips '#clean'.
     Args:
-        memo (str): The input memo string to be cleaned and processed.
+        memo (str): The original memo string to be cleaned and processed.
     Returns:
         str: The cleaned and processed memo string.
     """
+    if memo.startswith("lnbc"):
+        return memo
     message = memo
-    if is_clean_memo(memo):
-        if detect_keepsats(memo):
-            message = memo.split(" | ")[0]
+    # Strip the Hive account name from the message:
+    s = " "
+    message = s.join(message.split()[1:])
+
+    # Remove #tags
+    remove = ["#v4vapp"]
+    for r in remove:
+        message = message.replace(r, "").strip()
+
+    if message.startswith("- ") or message.startswith("| "):
+        message = message[2:]
+
+    if message.endswith(" |"):
+        message = message[:-2]
+
+    if is_clean_memo(message):
+        if detect_keepsats(message):
+            message = message.split(" | ")[0]
             message = message.replace("#clean", "").strip()
             message = f"{message} | #sats"
             # Detect special case of POS v4vapp looking the #
-            transaction_checkCode = re.findall(r"v4v-\w+", memo)
+            transaction_checkCode = re.findall(r"v4v-\w+", message)
             if transaction_checkCode:
                 message = f"{message} | {transaction_checkCode[0]}"
         else:
-            message = memo.split(" | ")[0]
+            message = message.split(" | ")[0]
             message = message.replace("#clean", "").strip()
 
     return message
@@ -395,7 +420,7 @@ def sanitize_markdown_v2(text: str) -> str:
         str: The sanitized text ready for MarkdownV2 parsing.
     """
     # MarkdownV2 reserved characters that need escaping
-    reserved_chars = r"([_*[\]()~`#+-.!|{}>])"
+    reserved_chars = r"([_*[\]()~`#+=.!|{}>-])"
 
     # Step 1: Extract and preserve URLs in [text](url) links
     link_pattern = r"\[([^\]]*)\]\(([^)]+)\)"

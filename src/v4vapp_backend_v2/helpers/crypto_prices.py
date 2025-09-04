@@ -2,16 +2,23 @@ import asyncio
 import pickle
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from timeit import default_timer as timer
 from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -26,17 +33,18 @@ SATS_PER_BTC = 100_000_000  # 100 million Satoshis per Bitcoin
 TESTING_CACHE_TIMES = {
     "CoinGecko": 360,
     "Binance": 360,
-    "CoinMarketCap": 360,
+    "CoinMarketCap": 1800,
     "HiveInternalMarket": 360,
+    "Global": 180,
 }
 
 CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
-    "CoinMarketCap": 180,
+    "CoinMarketCap": 1800,
     "HiveInternalMarket": 60,
+    "Global": 60,
 }
-
 
 DB_RATES_COLLECTION: str = "rates"  # Collection name for storing rates in the database
 
@@ -45,13 +53,34 @@ DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
 ICON = "💱"
 
 
-class Currency(StrEnum):
-    HIVE = "hive"
-    HBD = "hbd"
-    USD = "usd"
-    SATS = "sats"
-    MSATS = "msats"
-    BTC = "btc"
+def _log_rates_insert_done(t: asyncio.Task) -> None:
+    try:
+        res = t.result()
+        # summarize_write_result is optional; remove if not available
+        try:
+            msg = summarize_write_result(res)
+        except Exception:
+            msg = str(res)
+        logger.debug(f"{ICON} Rates insert completed: {msg}")
+    except Exception as e:
+        logger.warning(f"{ICON} Rates insert task failed: {e}", extra={"notification": False})
+
+
+def currency_to_receive(memo: str) -> Currency:
+    """
+    Detects the currency to receive based on the memo.
+    Args:
+        memo (str): The memo to check.
+    Returns:
+        Currency: The detected currency, defaults to HIVE if not found.
+    """
+    if not memo or "#sats" in memo.lower() or "#keepsats" in memo.lower():
+        return Currency.SATS
+    if "#hbd" in memo.lower():
+        return Currency.HBD
+    if "#hive" in memo.lower():
+        return Currency.HIVE
+    return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
 class CurrencyPair(StrEnum):
@@ -70,22 +99,24 @@ class HiveRatesDB(BaseModel):
 
     Attributes:
         timestamp (datetime): The timestamp when the rates were fetched.
-        hive_usd (float): The exchange rate of HIVE to USD.
-        btc_usd (float): The exchange rate of BTC to USD.
-        sats_hive (float): The exchange rate of Satoshi to HIVE.
-        sats_usd (float): The exchange rate of Satoshi to USD.
-        sats_hbd (float): The exchange rate of Satoshi to HBD.
-        hive_hbd (float): The exchange rate of HIVE to HBD.
+        hive_usd (Decimal): The exchange rate of HIVE to USD.
+        btc_usd (Decimal): The exchange rate of BTC to USD.
+        sats_hive (Decimal): The exchange rate of Satoshi to HIVE.
+        sats_usd (Decimal): The exchange rate of Satoshi to USD.
+        sats_hbd (Decimal): The exchange rate of Satoshi to HBD.
+        hive_hbd (Decimal): The exchange rate of HIVE to HBD.
     """
 
     timestamp: datetime
-    hive_usd: float
-    hbd_usd: float
-    btc_usd: float
-    hive_hbd: float
-    sats_hive: float
-    sats_usd: float
-    sats_hbd: float
+    hive_usd: Decimal
+    hbd_usd: Decimal
+    btc_usd: Decimal
+    hive_hbd: Decimal
+    sats_hive: Decimal
+    sats_usd: Decimal
+    sats_hbd: Decimal
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
 
 
 # Define the annotated type
@@ -114,10 +145,10 @@ class QuoteResponse(BaseModel):
         age (int): Calculates the age of the quote in seconds.
     """
 
-    hive_usd: float = 0
-    hbd_usd: float = 0
-    btc_usd: float = 0
-    hive_hbd: float = 0
+    hive_usd: Decimal = Decimal(0)
+    hbd_usd: Decimal = Decimal(0)
+    btc_usd: Decimal = Decimal(0)
+    hive_hbd: Decimal = Decimal(0)
     raw_response: RawResponseType = Field(
         default={},
         description="The raw response to queries for this quote as received from the source",
@@ -128,12 +159,14 @@ class QuoteResponse(BaseModel):
     error: str = ""
     error_details: Dict[str, Any] = {}
 
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
     def __init__(
         self,
-        hive_usd: float = 0,
-        hbd_usd: float = 0,
-        btc_usd: float = 0,
-        hive_hbd: float = 0,
+        hive_usd: Decimal | float | str = Decimal(0),
+        hbd_usd: Decimal | float | str = Decimal(0),
+        btc_usd: Decimal | float | str = Decimal(0),
+        hive_hbd: Decimal | float | str = Decimal(0),
         raw_response: RawResponseType = {},
         source: str = "",
         fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
@@ -141,89 +174,108 @@ class QuoteResponse(BaseModel):
         error_details: Dict[str, Any] = {},
         **kwargs,
     ) -> None:
-        super().__init__()
-        self.hive_usd = round(hive_usd, 4)
-        self.hbd_usd = round(hbd_usd, 4)
-        self.hive_usd = round(hive_usd, 4)
-        self.btc_usd = round(btc_usd, 2)
-        self.hive_hbd = round(hive_hbd, 4)
+        super().__init__(**kwargs)
+        self.hive_usd = Decimal(str(hive_usd)) if hive_usd != Decimal(0) else Decimal(0)
+        self.hbd_usd = Decimal(str(hbd_usd)) if hbd_usd != Decimal(0) else Decimal(0)
+        self.btc_usd = Decimal(str(btc_usd)) if btc_usd != Decimal(0) else Decimal(0)
+        self.hive_hbd = Decimal(str(hive_hbd)) if hive_hbd != Decimal(0) else Decimal(0)
         self.raw_response = raw_response
         self.source = source
         self.fetch_date = fetch_date
         self.error = error
         self.error_details = error_details
 
+    @property
+    def is_unset(self) -> bool:
+        """
+        Check if the quote is unset (i.e., not fetched or invalid).
+
+        Returns:
+            bool: True if the quote is unset, False otherwise.
+        """
+        if self.btc_usd == 0:
+            return True
+        return False
+
     @computed_field
-    def sats_hive(self) -> float:
+    def sats_hive(self) -> Decimal:
         """
         Calculate the number of Satoshis equivalent to one HIVE.
         Computed property so included in model_dump
         Returns:
-            float: The number of Satoshis per HIVE, rounded to 4 decimal places.
+            Decimal: The number of Satoshis per HIVE, quantized to 6 decimal places.
         """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hive_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hive_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_hive_p(self) -> float:
+    def sats_hive_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools.
         Returns:
-            float: The value of sats_hive.
+            Decimal: The value of sats_hive.
         """
         if self.btc_usd == 0:
-            # raise ValueError("btc_usd cannot be zero")
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hive_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hive_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @computed_field
-    def sats_hbd(self) -> float:
+    def sats_hbd(self) -> Decimal:
         """
         Calculate the number of Satoshis equivalent to one HBD (Hive Backed Dollar).
         Computed property so included in model_dump
         Returns:
-            float: The number of Satoshis per HBD, rounded to 4 decimal places.
+            Decimal: The number of Satoshis per HBD, quantized to 6 decimal places.
         """
         if self.btc_usd == 0:
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hbd_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hbd_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_hbd_p(self) -> float:
+    def sats_hbd_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools.
         Returns:
-            float: The value of sats_hbd.
+            Decimal: The value of sats_hbd.
         """
         if self.btc_usd == 0:
-            return 0.0
-        sats_per_usd = SATS_PER_BTC / self.btc_usd
-        return round(sats_per_usd * self.hbd_usd, 4)
+            return Decimal(0)
+        sats_per_usd = Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))
+        return (sats_per_usd * Decimal(str(self.hbd_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_usd(self) -> float:
+    def sats_usd(self) -> Decimal:
         """
         Calculate Satoshis per USD based on btc_usd.
         Computed property so included in model_dump
         """
         if self.btc_usd == 0:
-            return 0.0
-        return round(SATS_PER_BTC / self.btc_usd, 4)
+            return Decimal(0)
+        return (Decimal(SATS_PER_BTC) / Decimal(str(self.btc_usd))).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
 
     @property
-    def sats_usd_p(self) -> float:
+    def sats_usd_p(self) -> Decimal:
         """
         Helper Property to help with type checking because `@computed_field`
         is not recognized by some tools. Added for consistency with other properties.
         Returns:
-            float: The value of sats_usd.
+            Decimal: The value of sats_usd.
         """
         return self.sats_usd
 
@@ -284,13 +336,59 @@ class AllQuotes(BaseModel):
     """
 
     quotes: Dict[str, QuoteResponse] = {}
+    quote: QuoteResponse = QuoteResponse()
     fetch_date: datetime = datetime.now(tz=timezone.utc)
     source: str = ""
+    redis_hit: bool = False
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_store_timestamp: ClassVar[datetime | None] = None
 
-    def get_binance_quote(self) -> QuoteResponse:
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+    def get_one_quote(self) -> QuoteResponse:
+        """
+        Get the authoritative quote based on rules.
+
+        This method retrieves the authoritative quote from available sources based on
+        predefined rules. If a valid quote from Binance is available, it is returned.
+        If HiveInternalMarket is also available, its hive_hbd attribute is included in
+        the response. If no valid quote from Binance is found, an average quote is
+        calculated and returned.
+
+        Returns:
+            QuoteResponse: The authoritative quote or an error message if no valid
+            quote is found.
+
+        Side Effect:
+            Updates the self.quote object
+        """
+        if self.quotes:
+            if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
+                quote = self.quotes[Binance.__name__]
+                # If HiveInternalMarket is available, use its hive_hbd value
+                if (
+                    HiveInternalMarket.__name__ in self.quotes
+                    and not self.quotes[HiveInternalMarket.__name__].error
+                    and self.quotes[HiveInternalMarket.__name__].hive_hbd > 0
+                ):
+                    quote_dict = quote.model_dump()
+                    quote_dict["hive_hbd"] = self.quotes[HiveInternalMarket.__name__].hive_hbd
+                    quote = QuoteResponse.model_validate(quote_dict)
+                self.quote = quote
+                self.source = Binance.__name__
+                return quote
+            else:
+                # If Binance is not available, calculate average from other sources
+                avg_quote = self.calculate_average_quote()
+                if avg_quote:
+                    self.quote = avg_quote
+                    self.source = "Average"
+                    return avg_quote
+
+        return QuoteResponse(error="No valid quote found")
+
+    async def get_binance_quote(self) -> QuoteResponse:
         """
         Get the quote from Binance. Special non async call for use in Transfer init
 
@@ -306,8 +404,28 @@ class AllQuotes(BaseModel):
     async def get_all_quotes(
         self, use_cache: bool = True, timeout: float = 60.0, store_db: bool = True
     ) -> None:
+        """
+        Asynchronously fetches cryptocurrency quotes from multiple services, with optional caching, timeout, and database storage.
+        Args:
+            use_cache (bool, optional): If True, attempts to use cached quotes before fetching new data. Defaults to True.
+            timeout (float, optional): Maximum time in seconds to wait for all quote services to respond. Defaults to 60.0.
+            store_db (bool, optional): If True, stores the fetched quotes in the database. Defaults to True.
+        Returns:
+            None
+        Side Effects:
+            - Updates self.quotes with the latest quote data or error responses.
+            - Updates self.fetch_date with the current fetch timestamp.
+            - Logs detailed information and errors during the fetching process.
+            - Stores quotes in Redis cache and optionally in the database.
+        Raises:
+            asyncio.TimeoutError: If fetching quotes exceeds the specified timeout.
+            Exception: If any quote service raises an exception during fetching.
+        Note:
+            Errors from individual services are logged and included in the quote responses.
+        """
         start = timer()
         global_cache = await self.check_global_cache()
+        logger.info(f"{ICON} Global rate check cache hit: {global_cache}, use_cache: {use_cache}")
         if use_cache and global_cache:
             logger.debug(
                 f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
@@ -325,7 +443,7 @@ class AllQuotes(BaseModel):
             async with asyncio.timeout(timeout):
                 logger.debug(f"{ICON} Fetching quotes with timeout of {timeout} seconds")
                 async with asyncio.TaskGroup() as tg:
-                    tasks: dict[str, asyncio.Task] = {
+                    tasks = {
                         service.__class__.__name__: tg.create_task(service.get_quote(use_cache))
                         for service in all_services
                     }
@@ -361,13 +479,69 @@ class AllQuotes(BaseModel):
                     f"{ICON} Error in quote from {quote.source}: {quote.error}",
                     extra={"notification": False, **quote.log_data},
                 )
+        self.get_one_quote()
         self.fetch_date = self.quote.fetch_date
         AllQuotes.fetch_date_class = self.fetch_date
+        self.quote = self.get_one_quote()
+        self.redis_hit = False
         redis_client = InternalConfig.redis
         cache_data_pickle = pickle.dumps(self.global_quote_pack())
-        redis_client.setex("all_quote_class_quote", time=60, value=cache_data_pickle)
+        cache_times = (
+            TESTING_CACHE_TIMES if InternalConfig().config.development.enabled else CACHE_TIMES
+        )
+        redis_client.setex(
+            "all_quote_class_quote", time=cache_times["Global"], value=cache_data_pickle
+        )
         if store_db:
             await self.db_store_quote()
+
+    def global_quote_pack(self) -> Dict[str, Any]:
+        """
+        Pack the global quotes into a dictionary format.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the packed global quotes.
+        """
+        return {
+            "quotes": self.all_quotes_filtered(),
+            "fetch_date": self.fetch_date.isoformat() if self.fetch_date else None,
+            "source": self.source,
+        }
+
+    def all_quotes_filtered(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Filter out quotes with errors and return the remaining valid quotes.
+
+        Returns:
+            Dict[str, QuoteResponse]: A dictionary containing only the valid quotes
+            without errors.
+        """
+        no_error_quotes = {}
+        for service_name, quote in self.quotes.items():
+            if not quote.error:
+                quote_dict = quote.model_dump(exclude={"raw_response"})
+                # Ensure fetch_date is serialized as ISO string
+                if "fetch_date" in quote_dict and hasattr(quote_dict["fetch_date"], "isoformat"):
+                    quote_dict["fetch_date"] = quote_dict["fetch_date"].isoformat()
+                no_error_quotes[service_name] = quote_dict
+        return no_error_quotes
+
+    def unpack_quotes(self, cache_data: Dict[str, Any]) -> Dict[str, QuoteResponse]:
+        """
+        Unpack the quotes from the cached data, handling datetime conversion.
+
+        Returns:
+            Dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
+        """
+        quotes = {}
+        for service_name, quote_data in cache_data.get("quotes", {}).items():
+            # Convert ISO string back to datetime if needed
+            if "fetch_date" in quote_data and isinstance(quote_data["fetch_date"], str):
+                quote_data["fetch_date"] = datetime.fromisoformat(
+                    quote_data["fetch_date"].replace("Z", "+00:00")
+                )
+            quotes[service_name] = QuoteResponse.model_validate(quote_data)
+        return quotes
 
     async def check_global_cache(self) -> bool:
         """
@@ -380,54 +554,86 @@ class AllQuotes(BaseModel):
         cache_data_pickle = redis_client.get("all_quote_class_quote")
         if cache_data_pickle:
             cache_data = pickle.loads(cache_data_pickle)
-            self.fetch_date = cache_data["fetch_date"]
+            # Handle fetch_date conversion
+            if "fetch_date" in cache_data:
+                if isinstance(cache_data["fetch_date"], str):
+                    self.fetch_date = datetime.fromisoformat(
+                        cache_data["fetch_date"].replace("Z", "+00:00")
+                    )
+                else:
+                    self.fetch_date = cache_data["fetch_date"]
             self.quotes = self.unpack_quotes(cache_data)
+            self.get_one_quote()
             self.source = cache_data["source"]
+            self.redis_hit = True
             return True
+        self.redis_hit = False
         return False
 
-    def global_quote_pack(self) -> Dict[str, Any]:
+    def legacy_api_format(self) -> dict[str, Any]:
         """
-        Pack the global quotes into a dictionary format.
+        Format cryptocurrency quotes in a compact, flat structure for API responses.
 
         Returns:
-            Dict[str, Any]: A dictionary containing the packed global quotes.
+            dict: A dictionary with cryptocurrency exchange rates and metadata.
         """
-        return {
-            "quotes": self.all_quotes_filtered(),
-            "fetch_date": self.fetch_date,
-            "source": self.source,
+        # Get the authoritative quote (usually from Binance unless error)
+        quote = self.get_one_quote()
+
+        # Calculate sats per USD
+        sats_usd = Decimal(SATS_PER_BTC) / quote.btc_usd if quote.btc_usd else Decimal(0)
+
+        # Collect any errors from services
+        fetch_errors = []
+        for service_name, service_quote in self.quotes.items():
+            if service_quote.error:
+                fetch_errors.append(f"{service_name}: {service_quote.error}")
+
+        # Determine if this was a Redis hit - simplistic approach
+        age = quote.age
+
+        # Build the formatted output
+        result = {
+            "BTC_USD": quote.btc_usd,
+            "sats_USD": sats_usd,
+            "HBD_USD": quote.hbd_usd,
+            "HiveMarket_HBD_USD": quote.hbd_usd,  # Same as HBD_USD unless you have a specific source
+            "Hive_USD": quote.hive_usd,
+            "Hive_HBD": quote.hive_hbd,
+            "sats_Hive": quote.sats_hive,
+            "sats_HBD": quote.sats_hbd,
+            "Hive_sats": float(Decimal(1) / quote.sats_hive_p) if quote.sats_hive_p else 0,
+            "HBD_sats": float(Decimal(1) / quote.sats_hbd_p) if quote.sats_hbd_p else 0,
+            "fetch_error": fetch_errors,
+            "last_fetch": quote.fetch_date.isoformat(),
+            "fetch_time": age,  # Using age as a proxy for fetch time
+            "conversion": None,  # Add conversion logic if needed
+            "redis_hit": self.redis_hit,
         }
 
-    def all_quotes_filtered(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Filter out quotes with errors and return the remaining valid quotes.
-
-        Returns:
-            Dict[str, QuoteResponse]: A dictionary containing only the valid quotes
-            without errors.
-        """
-        no_error_quotes = {
-            service_name: quote.model_dump(exclude={"raw_response"})
-            for service_name, quote in self.quotes.items()
-            if not quote.error
-        }
-        return no_error_quotes
-
-    def unpack_quotes(self, cache_data: Dict[str, Any]) -> Dict[str, QuoteResponse]:
-        """
-        Unpack the quotes from the AllQuotes instance.
-
-        Returns:
-            Dict[str, QuoteResponse]: A dictionary containing the unpacked quotes.
-        """
-        return {
-            service_name: QuoteResponse.model_validate(quote_data)
-            for service_name, quote_data in cache_data.get("quotes", {}).items()
-        }
+        return result
 
     # MARK: DB Store Quote
-    async def db_store_quote(self):
+
+    def db_hive_rates_db_record(self) -> HiveRatesDB:
+        """
+        Create a HiveRatesDB record from the current quote data.
+
+        Returns:
+            HiveRatesDB: The database record representing the current quote.
+        """
+        return HiveRatesDB(
+            timestamp=self.fetch_date,
+            hive_usd=Decimal(str(self.quote.hive_usd)),
+            hbd_usd=Decimal(str(self.quote.hbd_usd)),
+            btc_usd=Decimal(str(self.quote.btc_usd)),
+            sats_hive=self.quote.sats_hive_p,
+            sats_usd=self.quote.sats_usd,
+            sats_hbd=self.quote.sats_hbd_p,
+            hive_hbd=Decimal(str(self.quote.hive_hbd)),
+        )
+
+    async def db_store_quote(self, store_db: bool = True) -> HiveRatesDB:
         """
         Store cryptocurrency quotes in the database.
 
@@ -446,34 +652,41 @@ class AllQuotes(BaseModel):
         Returns:
             None
         """
+        record = self.db_hive_rates_db_record()
+        if not store_db:
+            return record
         if (
             AllQuotes.db_store_timestamp
             and self.fetch_date - AllQuotes.db_store_timestamp
             < timedelta(seconds=DB_RATES_MIN_INTERVAL)
         ):
-            logger.info(
-                f"{ICON} Skipping database store, last store was {AllQuotes.db_store_timestamp} seconds ago"
-            )
-            return
+            delta = format_time_delta(datetime.now(tz=timezone.utc) - AllQuotes.db_store_timestamp)
+            logger.info(f"{ICON} Skipping database store, last store was {delta} ago")
+            return record
         try:
-            record = HiveRatesDB(
-                timestamp=self.fetch_date,
-                hive_usd=self.quote.hive_usd,
-                hbd_usd=self.quote.hbd_usd,  # Assuming sats_hbd is used for hbd_usd
-                btc_usd=self.quote.btc_usd,
-                sats_hive=self.quote.sats_hive_p,
-                sats_usd=self.quote.sats_usd,
-                sats_hbd=self.quote.sats_hbd_p,
-                hive_hbd=self.quote.hive_hbd,
-            )
-            db_ans = await AllQuotes.collection().insert_one(document=record.model_dump())
-            logger.debug(f"{ICON} Inserted combined rates into database: {db_ans}")
             AllQuotes.db_store_timestamp = self.fetch_date
+            context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
+            # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
+            document = record.model_dump()
+            document = convert_decimals(document)
+
+            # Do not await: runs in background
+            task = asyncio.create_task(
+                mongo_call(
+                    lambda: AllQuotes.collection().insert_one(document=document),
+                    error_code="mongodb_rates_insert",
+                    context=context,
+                ),
+                name=f"rates_insert:{self.fetch_date.isoformat()}",
+            )
+            task.add_done_callback(_log_rates_insert_done)
+            return record
         except Exception as e:
             logger.warning(
                 f"{ICON} Failed to insert rates into database: {e}",
                 extra={"notification": False},
             )
+        return record
 
     @property
     def collection_name(self) -> str:
@@ -494,37 +707,6 @@ class AllQuotes(BaseModel):
             AsyncCollection: The collection where quotes are stored.
         """
         return InternalConfig.db[DB_RATES_COLLECTION]
-
-    @property
-    def quote(self) -> QuoteResponse:
-        """
-        Get the authoritative quote based on rules.
-
-        This method retrieves the authoritative quote from available sources based on
-        predefined rules. If a valid quote from Binance is available, it is returned.
-        If HiveInternalMarket is also available, its hive_hbd attribute is included in
-        the response. If no valid quote from Binance is found, an average quote is
-        calculated and returned.
-
-        Returns:
-            QuoteResponse: The authoritative quote or an error message if no valid
-            quote is found.
-
-        """
-        if self.quotes:
-            if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
-                self.source = Binance.__name__
-                ans = self.quotes[Binance.__name__]
-                if HiveInternalMarket.__name__ in self.quotes:
-                    ans.hive_hbd = self.hive_hbd
-                return ans
-            else:
-                self.source = "average"
-                average = self.calculate_average_quote()
-                if average:
-                    return average
-
-        return QuoteResponse(error="No valid quote found")
 
     def calculate_average_quote(self) -> QuoteResponse | None:
         """
@@ -560,10 +742,16 @@ class AllQuotes(BaseModel):
             return None
         self.source = ", ".join([quote.source for quote in good_quotes])
 
-        avg_hive_usd = sum(quote.hive_usd for quote in good_quotes) / len(good_quotes)
-        avg_hbd_usd = sum(quote.hbd_usd for quote in good_quotes) / len(good_quotes)
-        avg_btc_usd = sum(quote.btc_usd for quote in good_quotes) / len(good_quotes)
-        avg_hive_hbd = sum(quote.hive_hbd for quote in good_quotes) / len(good_quotes)
+        total_hive_usd = sum(Decimal(str(quote.hive_usd)) for quote in good_quotes)
+        total_hbd_usd = sum(Decimal(str(quote.hbd_usd)) for quote in good_quotes)
+        total_btc_usd = sum(Decimal(str(quote.btc_usd)) for quote in good_quotes)
+        total_hive_hbd = sum(Decimal(str(quote.hive_hbd)) for quote in good_quotes)
+        count = Decimal(len(good_quotes))
+
+        avg_hive_usd = total_hive_usd / count
+        avg_hbd_usd = total_hbd_usd / count
+        avg_btc_usd = total_btc_usd / count
+        avg_hive_hbd = total_hive_hbd / count
 
         # get the latest fetch date of the quotes in good_quotes
         fetch_dates = [quote.fetch_date for quote in good_quotes]
@@ -572,7 +760,6 @@ class AllQuotes(BaseModel):
             if fetch_dates
             else datetime.now(tz=timezone.utc)
         )
-
         return QuoteResponse(
             hive_usd=avg_hive_usd,
             hbd_usd=avg_hbd_usd,
@@ -585,10 +772,10 @@ class AllQuotes(BaseModel):
         )
 
     @property
-    def hive_hbd(self) -> float:
+    def hive_hbd(self) -> Decimal:
         if HiveInternalMarket.__name__ in self.quotes:
             return self.quotes[HiveInternalMarket.__name__].hive_hbd
-        hive_hbd = 0.0
+        hive_hbd = Decimal(0)
         count = 0
         for service_name, quote in self.quotes.items():
             if quote.hive_hbd:
@@ -597,6 +784,25 @@ class AllQuotes(BaseModel):
         if count == 0:
             raise ValueError("No valid Hive HBD price found")
         return hive_hbd / count
+
+
+def hive_rates_db_record(quote) -> HiveRatesDB:
+    """
+    Create a HiveRatesDB record from the current quote data.
+
+    Returns:
+        HiveRatesDB: The database record representing the current quote.
+    """
+    return HiveRatesDB(
+        timestamp=quote.fetch_date,
+        hive_usd=Decimal(str(quote.hive_usd)),
+        hbd_usd=Decimal(str(quote.hbd_usd)),
+        btc_usd=Decimal(str(quote.btc_usd)),
+        sats_hive=quote.sats_hive_p,
+        sats_usd=quote.sats_usd,
+        sats_hbd=quote.sats_hbd_p,
+        hive_hbd=Decimal(str(quote.hive_hbd)),
+    )
 
 
 class QuoteServiceError(Exception):
@@ -658,10 +864,11 @@ class CoinGecko(QuoteService):
                 if response.status_code == 200:
                     pri = response.json()
                     quote_response = QuoteResponse(
-                        hive_usd=pri["hive"]["usd"],
-                        hbd_usd=pri["hive_dollar"]["usd"],
-                        btc_usd=pri["bitcoin"]["usd"],
-                        hive_hbd=pri["hive"]["usd"] / pri["hive_dollar"]["usd"],
+                        hive_usd=Decimal(str(pri["hive"]["usd"])),
+                        hbd_usd=Decimal(str(pri["hive_dollar"]["usd"])),
+                        btc_usd=Decimal(str(pri["bitcoin"]["usd"])),
+                        hive_hbd=Decimal(str(pri["hive"]["usd"]))
+                        / Decimal(str(pri["hive_dollar"]["usd"])),
                         raw_response=pri,
                         source=self.__class__.__name__,
                         fetch_date=datetime.now(tz=timezone.utc),
@@ -741,9 +948,9 @@ class Binance(QuoteService):
                 medians[ticker["symbol"]] = median
 
             hive_usd = medians["HIVEUSDT"]
-            hbd_usd = 1
+            hbd_usd = Decimal(1)
             btc_usd = medians["BTCUSDT"]
-            hive_hbd = hive_usd / hbd_usd
+            hive_hbd = Decimal(str(hive_usd)) / hbd_usd
 
             # calc hive to btc price based on hiveusdt and btcusdt
             hive_sats = (medians["HIVEUSDT"] / medians["BTCUSDT"]) * 1e8
@@ -751,10 +958,10 @@ class Binance(QuoteService):
             logger.debug(f"{ICON} Binance Hive to BTC price : {hive_sats:.1f}")
 
             quote_response = QuoteResponse(
-                hive_usd=hive_usd,
+                hive_usd=Decimal(str(hive_usd)),
                 hbd_usd=hbd_usd,
-                btc_usd=btc_usd,
-                hive_hbd=hive_hbd,
+                btc_usd=Decimal(str(btc_usd)),
+                hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=ticker_info,
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
@@ -811,12 +1018,12 @@ class CoinMarketCap(QuoteService):
                 HBD_USD = quote["USD"]["price"]
                 quote = resp_json["data"][cmc_ids["BTC_USD"]]["quote"]
                 BTC_USD = quote["USD"]["price"]
-                Hive_HBD = Hive_USD / HBD_USD
+                Hive_HBD = Decimal(str(Hive_USD)) / Decimal(str(HBD_USD))
                 quote_response = QuoteResponse(
-                    hive_usd=Hive_USD,
-                    hbd_usd=HBD_USD,
-                    btc_usd=BTC_USD,
-                    hive_hbd=Hive_HBD,
+                    hive_usd=Decimal(str(Hive_USD)),
+                    hbd_usd=Decimal(str(HBD_USD)),
+                    btc_usd=Decimal(str(BTC_USD)),
+                    hive_hbd=Decimal(str(Hive_HBD)),
                     raw_response=resp_json,
                     source=self.__class__.__name__,
                     fetch_date=datetime.now(tz=timezone.utc),
@@ -851,10 +1058,10 @@ class HiveInternalMarket(QuoteService):
             hive_hbd = hive_quote.hive_hbd if hive_quote.hive_hbd else 0
             raw_response = hive_quote.raw_response
             quote_response = QuoteResponse(
-                hive_usd=0,
-                hbd_usd=0,
-                btc_usd=0,
-                hive_hbd=hive_hbd,
+                hive_usd=Decimal(0),
+                hbd_usd=Decimal(0),
+                btc_usd=Decimal(0),
+                hive_hbd=Decimal(str(hive_hbd)),
                 raw_response=raw_response,
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
@@ -886,3 +1093,12 @@ def per_diff(a: float, b: float) -> float:
     if b == 0:
         return 0
     return ((a - b) / b) * 100
+
+
+# Last line
+
+# Last line
+
+# Last line
+
+# Last line

@@ -56,7 +56,7 @@ def convert_timestamp_to_datetime(timestamp: int | float) -> datetime:
 
 def convert_datetime_fields(
     item: dict[str, Any] | List[dict[str, Any]],
-) -> dict | List[dict[str, Any]]:
+) -> dict[str, Any] | List[dict[str, Any]]:
     """
     Converts timestamp fields in an item dictionary to datetime objects.
 
@@ -68,6 +68,10 @@ def convert_datetime_fields(
     - "settle_date"
     - "accept_time" (within each HTLC in the "htlcs" list)
     - "resolve_time" (within each HTLC in the "htlcs" list)
+    - "fetch_time" (within each HTLC in the "htlcs" list)
+    - "creation_time_ns" (converted from nanoseconds to seconds)
+    - "resolve_time_ns" (converted from nanoseconds to seconds)
+    - "attempt_time_ns" (converted from nanoseconds to seconds)
 
     Args:
         item (dict): The item dictionary containing timestamp fields.

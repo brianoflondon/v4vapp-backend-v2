@@ -1,20 +1,21 @@
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Dict, List, Optional, override
+from typing import Any, ClassVar, Dict, List, Optional, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.models.custom_records import DecodedCustomRecord, decode_all_custom_records
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 
 class PaymentStatus(StrEnum):
@@ -143,6 +144,9 @@ class Payment(TrackedBaseModel):
     cust_id: CustIDType | None = Field(
         default=None, description="Customer ID associated with the invoice"
     )
+
+    # Dump field names (not aliases) to MongoDB
+    dump_by_alias: ClassVar[bool] = False
 
     def __init__(self, lnrpc_payment: lnrpc.Payment | None = None, **data: Any) -> None:
         if lnrpc_payment and isinstance(lnrpc_payment, lnrpc.Payment):
@@ -441,10 +445,15 @@ class ListPaymentsResponse(BaseModel):
         if lnrpc_list_payments_response and isinstance(
             lnrpc_list_payments_response, lnrpc.ListPaymentsResponse
         ):
+            # always_print_fields_with_no_presence=True: forces serialization of fields that lack
+            # presence (repeated, maps, scalars) so missing lists become [] instead of absent
+            # (solves missing "invoices").
             list_payments_dict = MessageToDict(
-                lnrpc_list_payments_response, preserving_proto_field_name=True
+                lnrpc_list_payments_response,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
             )
-            list_payments_dict["invoices"] = [
+            list_payments_dict["payments"] = [
                 Payment.model_validate(payment) for payment in list_payments_dict["payments"]
             ]
             super().__init__(**list_payments_dict)

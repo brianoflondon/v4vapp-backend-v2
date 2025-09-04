@@ -14,6 +14,41 @@
             "justMyCode": false,
         },
         {
+            "name": "DEV API",
+            "type": "debugpy",
+            "consoleName": "DEV API",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/api_v2.py",
+            "args": [
+                "--config",
+                "devdocker.config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+        },
+        {
+            "name": "DEV Admin Interface",
+            "type": "debugpy",
+            "consoleName": "DEV Admin Interface",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/v4vapp_backend_v2/admin/run_admin.py",
+            "args": [
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--config",
+                "devhive.config.yaml",
+                "--log-level",
+                "debug"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
             "name": "DEV Hive Monitor devser devtre",
             "type": "debugpy",
             "consoleName": "DEV Hive Monitor",
@@ -196,7 +231,7 @@
             "program": "src/template_app.py",
             "args": [
                 "--config",
-                "config.yaml"
+                "devhive.config.yaml",
             ],
             "console": "integratedTerminal"
         },

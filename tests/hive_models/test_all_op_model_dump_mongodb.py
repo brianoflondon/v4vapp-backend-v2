@@ -9,6 +9,7 @@ from tests.load_data import load_hive_events
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -108,6 +109,7 @@ async def test_model_dump_mongodb(op_to_test):
                 model_instance.delta = timedelta(seconds=33)
                 model_instance.mean = timedelta(seconds=33)
             insert_op = model_instance.model_dump(by_alias=True)
+            insert_op = convert_decimals(insert_op)
             insert_ans = await db[collection_name].insert_one(
                 document=insert_op,
             )

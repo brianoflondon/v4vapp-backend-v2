@@ -8,6 +8,54 @@ services:
   #     # - ./.certs:/app/.certs
   #     - ./config:/app/config
 
+  api-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: v4vapp-backend:latest
+    ports:
+      - "0.0.0.0:8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./logs_docker/api:/app/logs
+    command: ["python", "src/api_v2.py", "--config", "devdocker.config.yaml"]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    depends_on:
+      - mongo-pytest-local
+      - redis-pytest-local
+    environment:
+      - PYTHONPATH=/app/src
+
+  admin-interface:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: v4vapp-backend:latest
+    ports:
+      - "0.0.0.0:8080:8080"
+    volumes:
+      - ./config:/app/config
+      - ./logs_docker/admin:/app/logs
+    command: [
+      "python", "src/v4vapp_backend_v2/admin/run_admin.py",
+      "--host", "0.0.0.0",
+      "--port", "8080",
+      "--config", "devdocker.config.yaml",
+      "--log-level", "debug"
+    ]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    depends_on:
+      - mongo-pytest-local
+      - redis-pytest-local
+    environment:
+      - PYTHONPATH=/app/src
+
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
     # to both be resolvable at the same time. This is a nightmare.
@@ -69,6 +117,9 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
+
+
+
 
   # voltage-node-monitor:
   #   depends_on:

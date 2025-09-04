@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title }} - V4VApp Admin{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', path='css/admin.css') }}" rel="stylesheet">
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar">
+                <div class="position-sticky pt-3">
+                    <div class="px-3 mb-4">
+                        <h4 class="text-white">🏠 V4VApp Admin</h4>
+                        <small class="text-white-50">Backend Administration</small>
+                    </div>
+
+                    <ul class="nav flex-column px-3">
+                        {% for item in nav_items %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if item.active %}active{% endif %}" href="{{ item.url }}">
+                                <span class="me-2">{{ item.icon }}</span>
+                                {{ item.name }}
+                                {% if item.badge %}
+                                <span class="badge bg-{{ item.badge_color }} ms-auto">{{ item.badge }}</span>
+                                {% endif %}
+                            </a>
+                            {% if item.description and item.active %}
+                            <small class="text-white-50 px-3 d-block">{{ item.description }}</small>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <hr class="my-3 mx-3" style="border-color: rgba(255, 255, 255, 0.2);">
+
+                    <ul class="nav flex-column px-3">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/docs" target="_blank">
+                                <span class="me-2">📚</span>
+                                API Docs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/health" target="_blank">
+                                <span class="me-2">❤️</span>
+                                Health Check
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link theme-toggle w-100 text-start" onclick="toggleTheme()"
+                                title="Toggle dark/light mode">
+                                <span class="me-2" id="theme-icon">🌙</span>
+                                <span id="theme-text">Dark Mode</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div
+                    class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <div>
+                        <h1 class="h2 mb-0">{{ title }}</h1>
+                        {% if breadcrumbs %}
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb mt-1">
+                                {% for crumb in breadcrumbs %}
+                                <li class="breadcrumb-item">
+                                    {% if loop.last %}
+                                    {{ crumb.name }}
+                                    {% else %}
+                                    <a href="{{ crumb.url }}" class="text-decoration-none">{{ crumb.name }}</a>
+                                    {% endif %}
+                                </li>
+                                {% endfor %}
+                            </ol>
+                        </nav>
+                        {% endif %}
+                    </div>
+
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        {% block page_actions %}{% endblock %}
+                    </div>
+                </div>
+
+                <!-- Flash messages -->
+                {% if request.query_params.get('success') %}
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Configuration updated successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                {% if request.query_params.get('refreshed') %}
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                    Configuration refreshed from Hive!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                {% if request.query_params.get('error') %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    An error occurred. Please try again.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                <!-- Pending Transactions Warning -->
+                {% if pending_transactions %}
+                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                    <strong>⚠️ Pending Transactions</strong>
+                    <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
+                        data-bs-target="#pendingTransactionsModal">
+                        View Details ({{ pending_transactions|length }})
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                <!-- Main content area -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Pending Transactions Modal -->
+    {% if pending_transactions %}
+    <div class="modal fade" id="pendingTransactionsModal" tabindex="-1" aria-labelledby="pendingTransactionsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pendingTransactionsModalLabel">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        Pending Transactions ({{ pending_transactions|length }})
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">The following transactions are pending and require attention:</p>
+                    <div class="list-group">
+                        {% for transaction in pending_transactions %}
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1">
+                                    <code class="text-break">{{ transaction }}</code>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom JS -->
+    <script>
+        // Dark mode functionality
+        function getStoredTheme() {
+            return localStorage.getItem('theme');
+        }
+
+        function setStoredTheme(theme) {
+            localStorage.setItem('theme', theme);
+        }
+
+        function getPreferredTheme() {
+            const storedTheme = getStoredTheme();
+            if (storedTheme) {
+                return storedTheme;
+            }
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function setTheme(theme) {
+            if (theme === 'auto') {
+                document.documentElement.setAttribute('data-bs-theme',
+                    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            } else {
+                document.documentElement.setAttribute('data-bs-theme', theme);
+            }
+            updateThemeUI(theme);
+        }
+
+        function updateThemeUI(theme) {
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+
+            if (!themeIcon || !themeText) return;
+
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+
+            if (theme === 'auto') {
+                themeIcon.textContent = '🔄';
+                themeText.textContent = 'Auto Mode';
+            } else if (currentTheme === 'dark') {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+            } else {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = getStoredTheme() || 'auto';
+            let newTheme;
+
+            if (currentTheme === 'auto') {
+                newTheme = 'light';
+            } else if (currentTheme === 'light') {
+                newTheme = 'dark';
+            } else {
+                newTheme = 'auto';
+            }
+
+            setStoredTheme(newTheme);
+            setTheme(newTheme);
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            setTheme(getPreferredTheme());
+
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+                const storedTheme = getStoredTheme();
+                if (storedTheme !== 'light' && storedTheme !== 'dark') {
+                    setTheme(getPreferredTheme());
+                }
+            });
+        });
+
+        // Auto-dismiss alerts after 5 seconds
+        setTimeout(function () {
+            var alerts = document.querySelectorAll('.alert-dismissible');
+            alerts.forEach(function (alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
+
+        // Form validation helper
+        function validateForm(formId) {
+            var form = document.getElementById(formId);
+            if (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            }
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>

@@ -107,7 +107,7 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 async def decode_any_lightning_string(
     input: str,
     zero_amount_invoice_send_msats: int = 0,
-    comment: str | None = None,
+    comment: str = "",
     lnd_client: LNDClient | None = None,
 ) -> PayReq:
     """
@@ -176,7 +176,8 @@ async def decode_any_lightning_string(
         logger.error(
             f"LnurlException: {ex}", extra={"notification": False, "lnurl_failure": str(ex)}
         )
-        raise LnurlException(failure={"error": str(ex)})
+        # Bare raise to avoid chaining exceptions
+        raise
 
     # Parse the query string from response.callback
     parsed_url = urlparse(str(response.callback))

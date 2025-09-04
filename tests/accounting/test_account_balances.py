@@ -9,15 +9,19 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import all_account_b
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
     all_account_balances,
-    get_keepsats_balance,
+    keepsats_balance,
     list_all_accounts,
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+
+"""
+The test data for this module must be up to date with any changes in the accounting models.
+"""
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +80,7 @@ async def test_account_details_pipeline():
     """
     Test the account details pipeline.
     """
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp.dev")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp.dev")
     pipeline = all_account_balances_pipeline(account)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
@@ -103,7 +107,7 @@ async def test_all_account_balances():
     assert isinstance(balances, AccountBalances)
 
     for item in balances.root:
-        print(item)
+        print(item.balances_printout())
         for currency, lines in item.balances.items():
             last_running_total = lines[-1].amount_running_total
             print(f"  Last Running Total: {last_running_total:,.2f}  {currency}")
@@ -111,7 +115,7 @@ async def test_all_account_balances():
 
 async def test_one_account_balances():
     """Test to get all account balances."""
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     balance = await one_account_balance(account=account)
     assert isinstance(balance, LedgerAccountDetails)
 
@@ -135,7 +139,7 @@ async def test_one_account_balances():
 
 
 async def test_get_account_balance_printout():
-    account = LiabilityAccount(name="Customer Liability", sub="v4vapp-test")
+    account = LiabilityAccount(name="VSC Liability", sub="v4vapp-test")
     result, details = await account_balance_printout(account, line_items=True)
     print(result)
     result, details = await account_balance_printout(account, line_items=False)
@@ -148,7 +152,7 @@ async def test_get_account_balance_printout():
 
 
 async def test_get_keepsats_balance():
-    cust_id = "v4vapp-test"
-    net_sats, details = await get_keepsats_balance(cust_id=cust_id)
-    pprint(details)
+    cust_id = "v4vapp.qrc"
+    net_sats, details = await keepsats_balance(cust_id=cust_id)
+    pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")

@@ -1,12 +1,14 @@
 import asyncio
+from pprint import pprint
 import signal
 import sys
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
 import typer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import (
     ConnectionFailure,
     NetworkTimeout,
@@ -15,13 +17,15 @@ from pymongo.errors import (
 )
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntryException
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
-from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDLockException
-from v4vapp_backend_v2.actions.process_tracked_events import process_tracked_event
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
+from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
+from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
 app = typer.Typer()
@@ -58,7 +62,7 @@ class ResumeToken(BaseModel):
     collection: str = Field("", description="Collection name for the change stream")
     redis_key: str = Field("", description="Redis key for storing the resume token")
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, collection: str, **data: Any):
         """
@@ -101,7 +105,7 @@ class ResumeToken(BaseModel):
         redis_client = InternalConfig.redis
         try:
             redis_client.delete(self.redis_key)
-            logger.info(f"Resume token deleted for collection '{self.collection}'")
+            logger.info(f"{ICON} Resume token deleted for collection '{self.collection}'")
         except Exception as e:
             logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
             raise e
@@ -120,7 +124,7 @@ class ResumeToken(BaseModel):
             if serialized_token:
                 self.data = eval(serialized_token)  # Deserialize the token # type: ignore
                 logger.info(
-                    f"Resume token retrieved for collection '{self.collection}'",
+                    f"{ICON} Resume token retrieved for collection '{self.collection}'",
                     extra={"resume_token": self.data},
                 )
                 return self.data
@@ -129,7 +133,7 @@ class ResumeToken(BaseModel):
                 return None
         except Exception as e:
             logger.error(f"Error retrieving resume token for collection '{self.collection}': {e}")
-            raise e
+            return None
 
 
 def ignore_changes(change: Mapping[str, Any]) -> bool:
@@ -149,19 +153,36 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
+    # logger.debug(
+    #     f"Change detected Operation type: {change.get('operationType', '')} {change.get('ns', {})}"
+    # )
 
-    # Check if "locked" is in either updatedFields or removedFields
-    if "locked" in updated_fields or "locked" in removed_fields:
-        return True
-    if "process_time" in updated_fields or "process_time" in removed_fields:
-        # If process_time is present ignore the change
-        return True
-    if (
-        "change_conv" in updated_fields
-        or "fee_conv" in updated_fields
-        or "replies" in updated_fields
-    ):
-        return True
+    if update_description or updated_fields or removed_fields:
+        print("update_descriptions")
+        pprint(update_description)
+        print("updated_fields")
+        pprint(updated_fields)
+        print("removed_fields")
+        pprint(removed_fields)
+
+    # Filter out custom_json sent purely for notifications
+    # if "json" in updated_fields:
+    #     if "notification" in updated_fields["json"]:
+    #         if updated_fields["json"]["notification"] is True:
+    #             return True
+
+    # # Check if "locked" is in either updatedFields or removedFields
+    # if "locked" in updated_fields or "locked" in removed_fields:
+    #     return True
+    # if "process_time" in updated_fields or "process_time" in removed_fields:
+    #     # If process_time is present ignore the change
+    #     return True
+    # if (
+    #     "change_conv" in updated_fields
+    #     or "fee_conv" in updated_fields
+    #     or "replies" in updated_fields
+    # ):
+    #     return True
     return False
 
 
@@ -178,46 +199,45 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     """
     # server_account_names = InternalConfig().config.hive.server_account_names
     full_document = change.get("fullDocument", {})
-    if not full_document:
-        logger.warning(
-            f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
-        )
-        return
-    try:
-        op = tracked_any_filter(full_document)
-    except ValueError as e:
-        logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
-        return
-    logger.info(f"Processing {op.group_id_query}")
-    while True:
-        try:
-            ledger_entries = await process_tracked_event(op)
-            logger.info(
-                f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
-                extra={"op": op},
-            )
-            for entry in ledger_entries:
-                logger.info(
-                    f"{ICON} Ledger Entry created: {entry.log_str}",
-                    extra={**entry.log_extra},
-                )
-            return
-        except ValueError as e:
-            logger.error(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
-            return
-        except NotImplementedError:
+    o_id = full_document.get("_id")
+    mongo_id = str(o_id) if o_id is not None else "unknown_id"
+    async with LockStr(mongo_id).locked(
+        timeout=None, blocking_timeout=None, request_details="db_monitor"
+    ):
+        if not full_document:
             logger.warning(
-                f"{ICON} Operation not implemented for {op.op_type} {op.group_id}",
-                extra={"notification": False},
+                f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
             )
-            logger.warning(f"{ICON} {op.log_str}", extra={"notification": False})
             return
-        except LedgerEntryException as e:
-            logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
+        try:
+            op = tracked_any_filter(full_document)
+        except ValueError as e:
+            logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
             return
-        except CustIDLockException as e:
-            logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
-            await asyncio.sleep(5)
+        logger.info(f"{ICON} Processing {op.group_id_query}")
+        while True:
+            try:
+                ledger_entries = await process_tracked_event(op)
+                logger.info(
+                    f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
+                    extra={"op": op},
+                )
+                return
+            except ValueError as e:
+                logger.exception(f"{ICON} Value error in process_tracked: {e}", extra={"error": e})
+                return
+            except NotImplementedError:
+                logger.warning(
+                    f"{ICON} Ignoring: {op.op_type} {op.short_id} {truncate_text(op.log_str, 40)}",
+                    extra={"notification": False},
+                )
+                return
+            except LedgerEntryException as e:
+                logger.warning(f"{ICON} Ledger entry error: {e}", extra={"notification": False})
+                return
+            except CustIDLockException as e:
+                logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
+                await asyncio.sleep(5)
 
 
 async def subscribe_stream(
@@ -225,7 +245,8 @@ async def subscribe_stream(
     pipeline: Sequence[Mapping[str, Any]] | None = None,
     use_resume=True,
     error_count: int = 0,
-):
+    error_code: str | None = None,
+) -> str | None:
     """
     Asynchronously subscribes to a stream and logs updates.
 
@@ -236,11 +257,11 @@ async def subscribe_stream(
     Returns:
         None
     """
-    logger.info(f"Subscribing to {collection_name} stream...")
+    logger.info(f"{ICON} Subscribing to {collection_name} stream...")
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-
+    error_code = ""
     collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
@@ -260,36 +281,53 @@ async def subscribe_stream(
             unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
             # The second argument (increment) is usually 0 for new watches
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
+            logger.warning(f"{ICON} {collection_name} stream started from 60s ago.")
 
         async with await collection.watch(**watch_kwargs) as stream:
-            if error_count > 0:
+            if error_code:
                 logger.info(
-                    f"{ICON} Reconnected to {collection_name} stream after {error_count} errors.",
-                    extra={"error_code_clear": "stream_error"},
+                    f"{ICON} {collection_name} stream error: {error_code}",
+                    extra={"notification": True, "error_code_clear": error_code},
                 )
-                error_code = 0
-            async for change in stream:
-                full_document = change.get("fullDocument") or {}
-                group_id = full_document.get("group_id", None) or ""
-                if ignore_changes(change):
-                    # If the change is a lock, we want to resume the stream
-                    # and not process the operation silently
-                    logger.debug(
-                        f"{ICON}🔒 Change detected in {collection_name} {group_id}",
-                        extra={"notification": False, "change": change},
-                    )
-                else:
-                    # Process the change if it is not a lock/unlock
+            error_code = f"db_monitor_{collection_name}"
+
+            # Close the stream immediately when shutdown is requested
+            async def _close_on_shutdown():
+                await shutdown_event.wait()
+                with suppress(Exception):
+                    await stream.close()
+
+            closer = asyncio.create_task(_close_on_shutdown())
+
+            try:
+                async for change in stream:
+                    if shutdown_event.is_set():
+                        logger.info(
+                            f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
+                        )
+                        break
+                    full_document = change.get("fullDocument") or {}
+                    group_id = full_document.get("group_id", None) or ""
                     logger.info(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
-                    asyncio.create_task(process_op(change=change, collection=collection_name))
-                resume.set_token(change.get("_id", {}))
-                if shutdown_event.is_set():
-                    logger.info(f"{ICON} Shutdown signal received. Exiting stream...")
-                    break
-                continue
+                    if ignore_changes(change):
+                        pass
+                    else:
+                        # Process the change if it is not a lock/unlock
+                        asyncio.create_task(process_op(change=change, collection=collection_name))
+                    resume.set_token(change.get("_id", {}))
+                    if shutdown_event.is_set():
+                        logger.info(
+                            f"{ICON} Shutdown requested; exiting {collection_name} stream loop."
+                        )
+                        break
+                    continue
+            finally:
+                closer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await closer
 
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
@@ -299,23 +337,28 @@ async def subscribe_stream(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
             extra={"notification": True},
         )
-        raise e
+        # Don’t re-raise; let caller’s cancellation proceed cleanly
+        return
 
     except OperationFailure as e:
-        logger.error(
+        error_code = f"db_monitor_{collection_name}"
+        error_count += 1
+        logger.warning(
             f"{ICON} {collection_name} Operation failure in stream subscription: {e}",
-            extra={"error": e, "notification": False},
+            extra={"error_code": error_code, "notification": False},
         )
         if "resume" in str(e):
-            logger.warning(
-                f"{ICON} {collection_name} Resume token error in stream subscription: {e}",
-                extra={"error": e, "notification": False},
-            )
             resume.delete_token()
-            asyncio.create_task(
-                subscribe_stream(collection_name=collection_name, pipeline=pipeline)
-            )
-            return
+            if not shutdown_event.is_set():
+                asyncio.create_task(
+                    subscribe_stream(
+                        collection_name=collection_name,
+                        pipeline=pipeline,
+                        error_count=error_count,
+                        error_code=error_code,
+                    )
+                )
+            return error_code
 
     except (
         ServerSelectionTimeoutError,
@@ -323,19 +366,24 @@ async def subscribe_stream(
         ConnectionFailure,
     ) as e:
         error_count += 1
+        error_code = f"db_monitor_{collection_name}"
         logger.error(
-            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {e}",
-            extra={"error_code": f"mongodb_stream_error_{collection_name}", "notification": True},
+            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {str(e)[:20]}",
+            extra={"error_code": error_code, "notification": True, "error": e},
         )
         # Wait before attempting to reconnect
         await asyncio.sleep(max(30 * error_count, 180))
         logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
-        asyncio.create_task(
-            subscribe_stream(
-                collection_name=collection_name, pipeline=pipeline, error_count=error_count
+        if not shutdown_event.is_set():
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name=collection_name,
+                    pipeline=pipeline,
+                    error_count=error_count,
+                    error_code=error_code,
+                )
             )
-        )
-        return
+        return error_code
 
     except Exception as e:
         logger.error(
@@ -371,7 +419,8 @@ async def main_async_start(use_resume: bool = True):
     )
     db_conn = DBConn()
     await db_conn.setup_database()
-    await CustID.clear_all_locks()  # Clear any existing locks before starting
+    # await LockStr.clear_all_locks()  # Clear any existing locks before starting
+    await resend_transactions()
 
     loop = asyncio.get_event_loop()
     # Register signal handlers for SIGTERM and SIGINT
@@ -382,32 +431,34 @@ async def main_async_start(use_resume: bool = True):
     )
     try:
         logger.info(f"{ICON} Database Monitor App started.")
-        # Simulate some work
-        while not shutdown_event.is_set():
-            tasks = [
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="invoices",
-                        pipeline=db_pipelines["invoices"],
-                        use_resume=use_resume,
-                    )
-                ),
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="payments",
-                        pipeline=db_pipelines["payments"],
-                        use_resume=use_resume,
-                    )
-                ),
-                asyncio.create_task(
-                    subscribe_stream(
-                        collection_name="hive_ops",
-                        pipeline=db_pipelines["hive_ops"],
-                        use_resume=use_resume,
-                    )
-                ),
-            ]
-            await asyncio.gather(*tasks)
+        # Start streams once and wait for shutdown_event; then cancel streams
+        tasks = [
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="invoices",
+                    pipeline=db_pipelines["invoices"],
+                    use_resume=use_resume,
+                )
+            ),
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="payments",
+                    pipeline=db_pipelines["payments"],
+                    use_resume=use_resume,
+                )
+            ),
+            asyncio.create_task(
+                subscribe_stream(
+                    collection_name="hive_ops",
+                    pipeline=db_pipelines["hive_ops"],
+                    use_resume=use_resume,
+                )
+            ),
+        ]
+        await shutdown_event.wait()
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
@@ -494,15 +545,4 @@ if __name__ == "__main__":
         logger.exception(e)
         sys.exit(1)
 
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
-        sys.exit(0)
-
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
-
-    except Exception as e:
-        logger.exception(e)
-        sys.exit(1)
+# --- IGNORE ---

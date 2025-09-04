@@ -4,12 +4,13 @@ from typing import Any, override
 from nectar.hive import Hive
 from pydantic import ConfigDict, Field
 
-from v4vapp_backend_v2.actions.cust_id_class import CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    detect_hbd,
     detect_keepsats,
     detect_paywithsats,
     find_short_id,
@@ -17,9 +18,10 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     seconds_only_time_diff,
 )
 from v4vapp_backend_v2.hive.hive_extras import decode_memo, process_user_memo
-from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 
 class TransferBase(OpBase):
@@ -114,7 +116,12 @@ class TransferBase(OpBase):
 
     @property
     def unit(self) -> Currency:
-        """Get the unit of the amount"""
+        """
+        Returns the currency unit associated with the transfer amount.
+        Returns:
+            Currency: The currency unit of the transfer amount.
+        """
+
         return self.amount.unit
 
     @property
@@ -234,6 +241,22 @@ class TransferBase(OpBase):
         return detect_keepsats(self.d_memo)
 
     @property
+    def paywithsats_to(self) -> AccName:
+        """
+        Returns the recipient of the 'paywithsats' operation if present.
+
+        Returns:
+            str: The recipient account name or an empty string.
+        """
+        if not self.d_memo:
+            return AccName("")
+        send_to = self.d_memo.split(" ")[0]
+        cust_id = AccName(send_to)
+        if cust_id.is_hive:
+            return cust_id
+        return AccName("")
+
+    @property
     def paywithsats(self) -> bool:
         """
         Checks if the transfer memo indicates a paywithsats operation.
@@ -257,6 +280,16 @@ class TransferBase(OpBase):
             - If 'paywithsats' is not enabled or the memo does not match the expected format, returns 0.
         """
         return paywithsats_amount(self.d_memo)
+
+    @property
+    def detect_hbd(self) -> bool:
+        """
+        Checks if the transfer is in HBD (Hive Backed Dollar).
+
+        Returns:
+            bool: True if the transfer is in HBD, False otherwise.
+        """
+        return detect_hbd(self.d_memo)
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """
@@ -314,9 +347,13 @@ class TransferBase(OpBase):
             "{to_account}:{from_account}".
         """
         hive_config = InternalConfig().config.hive
-        server_account, treasury_account, funding_account, exchange_account = (
-            hive_config.all_account_names
-        )
+        account_names = hive_config.all_account_names
+
+        # Defensive check - ensure we have exactly 4 account names
+        if not account_names or len(account_names) != 4:
+            return f"{self.to_account}->{self.from_account}"
+
+        server_account, treasury_account, funding_account, exchange_account = account_names
         expense_accounts = ["privex"]  # Hardcoded as in the original code
 
         from_acc = self.from_account

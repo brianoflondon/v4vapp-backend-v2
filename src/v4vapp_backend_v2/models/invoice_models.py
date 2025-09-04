@@ -1,25 +1,27 @@
 import re
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Dict, List, override
+from typing import Any, ClassVar, Dict, List, override
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.actions.cust_id_class import CustID, CustIDType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, LoggerFunction, logger
+from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
-from v4vapp_backend_v2.helpers.crypto_prices import Currency, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import currency_to_receive, format_time_delta
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse, currency_to_receive
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.models.custom_records import (
     DecodedCustomRecord,
     b64_decode,
     decode_all_custom_records,
 )
 from v4vapp_backend_v2.models.pydantic_helpers import BSONInt64, convert_datetime_fields
+from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
 # This is the regex for finding if a given message is an LND invoice to pay.
 # This looks for #v4vapp v4vapp
@@ -227,6 +229,9 @@ class Invoice(TrackedBaseModel):
         default=None, description="Expiry date of the invoice (creation_date + expiry)"
     )
 
+    # Dump field names (not aliases) to MongoDB
+    dump_by_alias: ClassVar[bool] = False
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, lnrpc_invoice: lnrpc.Invoice | None = None, **data: Any) -> None:
@@ -358,6 +363,33 @@ class Invoice(TrackedBaseModel):
         """
         return currency_to_receive(self.memo)
 
+    @property
+    def fixed_quote(self) -> FixedHiveQuote | None:
+        """
+        Returns the fixed quote for the invoice, if available.
+
+        Returns:
+            float | None: The fixed quote for the invoice, or None if not set.
+        """
+
+        pattern = r"#UUID\s+([a-f0-9]{6})"
+        match = re.search(pattern, self.memo)  # Use re.search instead of re.match
+
+        if match:
+            unique_id = match.group(1)  # Extract the captured group (the 6-char UUID)
+            try:
+                quote = FixedHiveQuote.check_quote(
+                    unique_id, self.value_msat // 1000
+                )  # Pass just the UUID string
+                if quote:
+                    return quote
+            except ValueError as e:
+                logger.info(f"Fixed quote expired or not found {unique_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking fixed quote for {unique_id}: {e}")
+
+        return None
+
     def fill_cust_id(self) -> None:
         """
         Extracts and returns the customer ID associated with the invoice, if available.
@@ -390,7 +422,7 @@ class Invoice(TrackedBaseModel):
                     logger.warning(f"Error decoding {value}: {e}", extra={"notification": False})
 
         if extracted_value:
-            self.cust_id = CustID(extracted_value)
+            self.cust_id = LockStr(extracted_value)
             if self.cust_id.startswith("@"):
                 self.cust_id = self.cust_id[1:]
             self.is_lndtohive = True
@@ -484,6 +516,17 @@ class Invoice(TrackedBaseModel):
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
         return age_text
 
+    @property
+    def d_memo(self) -> str:
+        """
+        Returns the memo associated with the invoice, or an empty string if no memo is set.
+        Provided for consistency with decoded memos in Hive.
+
+        Returns:
+            str: The memo text, or an empty string if memo is None or empty.
+        """
+        return self.memo if self.memo else ""
+
 
 class ListInvoiceResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -499,8 +542,13 @@ class ListInvoiceResponse(BaseModel):
         if lnrpc_list_invoice_response and isinstance(
             lnrpc_list_invoice_response, lnrpc.ListInvoiceResponse
         ):
+            # always_print_fields_with_no_presence=True: forces serialization of fields that lack
+            # presence (repeated, maps, scalars) so missing lists become [] instead of absent
+            # (solves missing "invoices").
             list_invoice_dict = MessageToDict(
-                lnrpc_list_invoice_response, preserving_proto_field_name=True
+                lnrpc_list_invoice_response,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
             )
             list_invoice_dict["invoices"] = [
                 Invoice.model_validate(invoice) for invoice in list_invoice_dict["invoices"]

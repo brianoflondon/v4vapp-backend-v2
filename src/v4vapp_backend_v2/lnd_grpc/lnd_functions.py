@@ -251,7 +251,7 @@ async def send_lightning_to_pay_req(
         ValidationError: If the payment response cannot be validated.
 
     Returns:
-        None
+        Payment: The payment object containing details of the sent payment.
     """
     if not lnd_client:
         raise ValueError("LNDClient instance is required")
@@ -323,9 +323,13 @@ async def send_lightning_to_pay_req(
             failure_reason = payment_dict.get("failure_reason", "Unknown Failure")
 
     except AioRpcError as e:
-        error_message = (f"{payment_id} Failed to send payment: {e}",)
+        error_message = f"{payment_id} Failed to send payment: {e}"
         if e.details() and "invoice expired" in str(e.details()).lower():
-            error_message = (f"{payment_id} Payment expired: {e.details()}",)
+            error_message = f"{payment_id} Payment expired: {e.details()}"
+        elif e.details() and "already paid" in str(e.details()).lower():
+            error_message = f"{payment_id} Payment already paid: {e.details()}"
+        elif e.details():
+            error_message = f"{payment_id} Payment failed: {e.details()}"
         raise LNDPaymentError(error_message)
 
     except Exception as e:

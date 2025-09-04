@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div
+        class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ title }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadReport()">
+                    <i class="fas fa-download me-1"></i>Download Complete Report
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="printReport()">
+                    <i class="fas fa-print me-1"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Options Form -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-cog me-2"></i>Report Options
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/admin/financial-reports/complete-report">
+                        <div class="row align-items-end">
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include_ledger_entries"
+                                        name="include_ledger_entries" value="true" {% if include_ledger_entries
+                                        %}checked{% endif %}>
+                                    <label class="form-check-label" for="include_ledger_entries">
+                                        Include Ledger Entries (Warning: This may be very large)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-refresh me-1"></i>Update Report
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <div class="btn-group" role="group" aria-label="Report sections">
+                <button type="button" class="btn btn-outline-primary" onclick="scrollToSection('balance-sheet')">
+                    <i class="fas fa-balance-scale me-1"></i>Balance Sheet
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="scrollToSection('profit-loss')">
+                    <i class="fas fa-chart-line me-1"></i>Profit & Loss
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="scrollToSection('account-balances')">
+                    <i class="fas fa-list me-1"></i>Account Balances
+                </button>
+                {% if include_ledger_entries and ledger_entries_text %}
+                <button type="button" class="btn btn-outline-warning" onclick="scrollToSection('ledger-entries')">
+                    <i class="fas fa-list-alt me-1"></i>Ledger Entries
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Sheet Section -->
+    <div class="row mb-4" id="balance-sheet">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-balance-scale me-2"></i>Balance Sheet
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light p-3 rounded"
+                        style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto;">
+                        {{ balance_sheet_text }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profit & Loss Section -->
+    <div class="row mb-4" id="profit-loss">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Profit & Loss
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light p-3 rounded"
+                        style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto;">
+                        {{ profit_loss_text }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Balances Section -->
+    <div class="row mb-4" id="account-balances">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>All Account Balances
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if account_balances %}
+                    {% for account_data in account_balances %}
+                    <div class="mb-4">
+                        <h6 class="text-primary">
+                            {{ account_data.account.name }}
+                            {% if account_data.account.sub %}
+                            - {{ account_data.account.sub }}
+                            {% endif %}
+                            <small class="text-muted">({{ account_data.account.account_type }})</small>
+                        </h6>
+                        <div class="bg-light p-3 rounded"
+                            style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto;">
+                            {{ account_data.printout }}</div>
+                    </div>
+                    {% if not loop.last %}
+                    <hr>
+                    {% endif %}
+                    {% endfor %}
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No account balances available.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ledger Entries Section (if requested) -->
+    {% if include_ledger_entries and ledger_entries_text %}
+    <div class="row mb-4" id="ledger-entries">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list-alt me-2"></i>All Ledger Entries
+                    </h5>
+                    <p class="text-muted small mb-0">Warning: This section may be very large and take time to load.</p>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light p-3 rounded"
+                        style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; overflow-x: auto; max-height: 600px; overflow-y: auto;">
+                        {{ ledger_entries_text }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-12">
+            <a href="/admin/financial-reports" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Reports
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    function scrollToSection(sectionId) {
+        document.getElementById(sectionId).scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+
+    function downloadReport() {
+        // Create a simple text report
+        const now = new Date();
+        const timestamp = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') + '-' +
+            String(now.getMinutes()).padStart(2, '0') + '-' +
+            String(now.getSeconds()).padStart(2, '0');
+
+        // Get rendered text (escaped/newlines preserved)
+        const balanceSheetText = `{{ balance_sheet_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+        const profitLossText = `{{ profit_loss_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+
+        // Build account balances text if present
+        let accountBalancesText = '';
+        {% if account_balances %}
+        {% for acc in account_balances %}
+        accountBalancesText += `{{ acc.printout | replace('\n', '\\n') | replace('"', '\\"') }}` + '\n' + '-'.repeat(40) + '\n';
+        {% endfor %}
+        {% endif %}
+
+        // Include ledger entries text if present
+        let ledgerEntriesText = '';
+        {% if include_ledger_entries and ledger_entries_text %}
+        ledgerEntriesText = `{{ ledger_entries_text | replace('\n', '\\n') | replace('"', '\\"') }}`;
+        {% endif %}
+
+        let reportContent = 'COMPLETE FINANCIAL REPORT\n';
+        reportContent += '='.repeat(80) + '\n\n';
+        reportContent += 'Generated: ' + now.toISOString() + '\n\n';
+        reportContent += 'BALANCE SHEET\n';
+        reportContent += '-'.repeat(40) + '\n';
+        reportContent += balanceSheetText + '\n\n';
+        reportContent += 'PROFIT & LOSS\n';
+        reportContent += '-'.repeat(40) + '\n';
+        reportContent += profitLossText + '\n\n';
+        reportContent += 'ACCOUNT BALANCES\n';
+        reportContent += '-'.repeat(40) + '\n';
+        reportContent += accountBalancesText + '\n';
+        {% if include_ledger_entries and ledger_entries_text %}
+        reportContent += '\nLEDGER ENTRIES\n';
+        reportContent += '-'.repeat(40) + '\n';
+        reportContent += ledgerEntriesText + '\n\n';
+        {% endif %}
+
+        const blob = new Blob([reportContent], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'complete_financial_report_' + timestamp + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function printReport() {
+        window.print();
+    }
+</script>
+
+<style>
+    @media print {
+
+        .btn-toolbar,
+        .btn-group,
+        .card-header button {
+            display: none !important;
+        }
+
+        .container-fluid {
+            max-width: none !important;
+        }
+    }
+</style>
+{% endblock %}

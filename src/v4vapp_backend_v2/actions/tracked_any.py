@@ -4,13 +4,14 @@ from pydantic import BaseModel, Discriminator, Tag, ValidationError
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
@@ -46,6 +47,7 @@ def get_tracked_any_type(value: Any) -> str:
             "recurrent_transfer",
             "fill_recurrent_transfer",
             "custom_json",
+            "account_update2",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -82,7 +84,8 @@ TrackedAny = Annotated[
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
     | Annotated[Invoice, Tag("invoice")]
     | Annotated[Payment, Tag("payment")]
-    | Annotated[CustomJson, Tag("custom_json")],
+    | Annotated[CustomJson, Tag("custom_json")]
+    | Annotated[AccountUpdate2, Tag("account_update2")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -90,6 +93,23 @@ TrackedTransfer = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")],
+    Discriminator(get_tracked_any_type),
+]
+
+TrackedTransferWithCustomJson = Annotated[
+    Annotated[Transfer, Tag("transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
+    | Annotated[CustomJson, Tag("custom_json")],
+    Discriminator(get_tracked_any_type),
+]
+
+TrackedTransferKeepsatsToHive = Annotated[
+    Annotated[Invoice, Tag("invoice")]
+    | Annotated[Transfer, Tag("transfer")]
+    | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
+    | Annotated[CustomJson, Tag("custom_json")],
     Discriminator(get_tracked_any_type),
 ]
 
@@ -124,7 +144,7 @@ async def load_tracked_object(tracked_obj: TrackedAny | str) -> TrackedAny | Non
                 answer = DiscriminatedTracked.model_validate(value)
                 return answer.value
         else:
-            collections = [Invoice.collection_name, Payment.collection_name]
+            collections = [Invoice().collection_name, Payment().collection_name]
             for collection_name in collections:
                 query = TrackedBaseModel.short_id_query(short_id=short_id)
                 result = await db[collection_name].find_one(filter=query)
@@ -181,26 +201,26 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
         ) from e
 
 
-def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
-    """
-    Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
+# def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
+#     """
+#     Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
 
-    Removes the '_id' field from the input dictionary if present, then attempts to validate
-    the object using the TrackedTransfer model. If validation is successful, returns
-    the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
+#     Removes the '_id' field from the input dictionary if present, then attempts to validate
+#     the object using the TrackedTransfer model. If validation is successful, returns
+#     the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
 
-    Args:
-        tracked (dict[str, Any]): The tracked object to validate and filter.
+#     Args:
+#         tracked (dict[str, Any]): The tracked object to validate and filter.
 
-    Returns:
-        TrackedTransfer: The validated tracked object of type TrackedTransfer.
+#     Returns:
+#         TrackedTransfer: The validated tracked object of type TrackedTransfer.
 
-    Raises:
-        ValueError: If the object cannot be validated as a TrackedTransfer.
-    """
-    tracked_any = tracked_any_filter(tracked)
-    if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
-        return tracked_any
-    raise ValueError(
-        f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
-    )
+#     Raises:
+#         ValueError: If the object cannot be validated as a TrackedTransfer.
+#     """
+#     tracked_any = tracked_any_filter(tracked)
+#     if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
+#         return tracked_any
+#     raise ValueError(
+#         f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
+#     )

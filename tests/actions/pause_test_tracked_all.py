@@ -26,8 +26,8 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     balance_sheet_printout,
     generate_balance_sheet_pandas_from_accounts,
 )
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry, LedgerEntryException
-from v4vapp_backend_v2.actions.process_tracked_events import (
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerEntryException
+from v4vapp_backend_v2.process.process_tracked_events import (
     TrackedAny,
     process_tracked_event,
 )

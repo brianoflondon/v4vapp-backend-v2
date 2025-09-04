@@ -1,0 +1,234 @@
+:root {
+    --v4v-primary: #2563eb;
+    --v4v-secondary: #64748b;
+    --v4v-success: #10b981;
+    --v4v-warning: #f59e0b;
+    --v4v-danger: #ef4444;
+    --v4v-info: #06b6d4;
+
+    /* Light mode colors */
+    --bs-body-bg: #ffffff;
+    --bs-body-color: #212529;
+    --bs-secondary-bg: #f8fafc;
+    --bs-tertiary-bg: #e2e8f0;
+    --bs-border-color: #dee2e6;
+    --bs-link-color: var(--v4v-primary);
+    --sidebar-bg: linear-gradient(135deg, var(--v4v-primary) 0%, #1e40af 100%);
+    --card-bg: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --rate-limit-bg: #f8fafc;
+}
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #1a202c;
+    --bs-body-color: #e2e8f0;
+    --bs-secondary-bg: #2d3748;
+    --bs-tertiary-bg: #4a5568;
+    --bs-border-color: #4a5568;
+    --bs-link-color: #60a5fa;
+    --sidebar-bg: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+    --card-bg: #2d3748;
+    --input-bg: #4a5568;
+    --input-border: #718096;
+    --rate-limit-bg: #2d3748;
+}
+
+body {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.sidebar {
+    min-height: 100vh;
+    background: var(--sidebar-bg);
+    color: white;
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    margin: 2px 0;
+    transition: all 0.3s ease;
+}
+
+.sidebar .nav-link:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar .nav-link.active {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.main-content {
+    background-color: var(--bs-secondary-bg);
+    min-height: 100vh;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    background-color: var(--card-bg);
+    color: var(--bs-body-color);
+}
+
+.form-control, .form-select {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--bs-body-color);
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: var(--input-bg);
+    border-color: var(--v4v-primary);
+    color: var(--bs-body-color);
+    box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.25);
+}
+
+.navbar-brand {
+    font-weight: 600;
+    color: var(--v4v-primary) !important;
+}
+
+.breadcrumb {
+    background: none;
+    padding: 0;
+}
+
+.breadcrumb-item+.breadcrumb-item::before {
+    content: "›";
+    color: var(--v4v-secondary);
+}
+
+.breadcrumb-item a {
+    color: var(--bs-link-color);
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-open {
+    background-color: var(--v4v-success);
+}
+
+.status-closed {
+    background-color: var(--v4v-danger);
+}
+
+.status-warning {
+    background-color: var(--v4v-warning);
+}
+
+.config-section {
+    margin-bottom: 2rem;
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--v4v-secondary);
+}
+
+.rate-limit-row {
+    margin-bottom: 10px;
+    padding: 15px;
+    background: var(--rate-limit-bg);
+    border-radius: 8px;
+    border-left: 4px solid var(--v4v-info);
+}
+
+.alert {
+    border: none;
+    border-radius: 12px;
+}
+
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.nav-pills .nav-link {
+    border-radius: 8px;
+}
+
+.theme-toggle {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.2rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.theme-toggle:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.border-bottom {
+    border-color: var(--bs-border-color) !important;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+    }
+}
+
+/* Dark mode specific adjustments */
+[data-bs-theme="dark"] .text-muted {
+    color: #a0aec0 !important;
+}
+
+[data-bs-theme="dark"] .border {
+    border-color: var(--bs-border-color) !important;
+}
+
+[data-bs-theme="dark"] .list-group-item {
+    background-color: var(--card-bg);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
+/* Make .bg-light readable in dark theme (override Bootstrap's light bg) */
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-border-color) !important;
+}
+
+/* Fix financial reports content backgrounds in dark mode */
+[data-bs-theme="dark"] .bg-light pre,
+[data-bs-theme="dark"] .bg-light code {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+.table-row-limit-not-ok {
+    border-top: 1px solid rgba(0, 0, 0, 0.125);
+    border-bottom: none;
+}
+
+[data-bs-theme="dark"] .table-row-limit-not-ok {
+    border-top: 1px solid rgba(255, 255, 255, 0.125);
+}
+
+.table-row-limit-not-ok td {
+    padding: 0;
+    padding-bottom: 1pt;
+    margin: 0;
+    line-height: 1;
+    border: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+}

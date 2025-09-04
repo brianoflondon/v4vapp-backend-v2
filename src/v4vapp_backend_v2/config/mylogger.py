@@ -259,9 +259,10 @@ class NotificationFilter(logging.Filter):
                                       'notification' attribute and it is True.
                                       Otherwise, returns False.
         """
+        ic = InternalConfig()
         if hasattr(record, "name"):
             package_name = record.name.split(".")[0]
-            if package_name in InternalConfig().config.logging.log_notification_silent:
+            if package_name in ic.config.logging.log_notification_silent:
                 # If the module is in the suppression list, do not send to Notification
                 return False
 

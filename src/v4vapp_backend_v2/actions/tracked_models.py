@@ -1,19 +1,32 @@
-import asyncio
+import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
-from timeit import default_timer as timer
+from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
+from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, snake_case
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
+
+ICON = "🔄"
+
+
+class ReplyType(StrEnum):
+    TRANSFER = "transfer"
+    INVOICE = "invoice"
+    PAYMENT = "payment"
+    CUSTOM_JSON = "custom_json"
+    LEDGER_ERROR = "ledger_error"
+    HIVE_ERROR = "hive_error"
+    UNKNOWN = "unknown"
 
 
 class ReplyModel(BaseModel):
@@ -23,7 +36,7 @@ class ReplyModel(BaseModel):
     """
 
     reply_id: str | None = Field("", description="Reply to the operation, if any", exclude=False)
-    reply_type: str | None = Field(
+    reply_type: ReplyType | None = Field(
         None,
         description="Transaction type of the reply, i.e. 'transfer' 'invoice' 'payment'",
         exclude=False,
@@ -47,26 +60,18 @@ class ReplyModel(BaseModel):
         :param data: The data to initialize the model with.
         """
         super().__init__(**data)
-        # TODO: We could automatically determine the reply_type based on the reply_id
-        self.reply_id = data.get("reply_id", "")
-        self.reply_type = data.get("reply_type", None)
-        self.reply_msat = data.get("reply_msat", 0)
-        self.reply_error = data.get("reply_error", None)
-        self.reply_message = data.get("reply_message", None)
-
-    model_config = ConfigDict(use_enum_values=True)
 
 
 class TrackedBaseModel(BaseModel):
-    replies: List[ReplyModel] = Field(
-        default_factory=list,
+    replies: List[ReplyModel] | None = Field(
+        None,
         description="List of replies to the operation",
         exclude=False,
     )
 
-    conv: CryptoConv = Field(CryptoConv(), description="Conversion object for the transaction")
+    conv: CryptoConv | None = Field(None, description="Conversion object for the transaction")
     fee_conv: CryptoConv | None = Field(
-        CryptoConv(),
+        None,
         description="Conversion object for fees associated with this transaction if any",
     )
     change_amount: AmountPyd | None = Field(
@@ -74,13 +79,21 @@ class TrackedBaseModel(BaseModel):
         description="Amount of change associated with this transaction if any",
     )
     change_conv: CryptoConv | None = Field(
-        CryptoConv(),
+        None,
         description="Conversion object for any returned change associated with this transaction if any",
     )
-    process_time: float = Field(0, description="Time in (s) it took to process this transaction")
+    change_memo: str | None = Field(
+        None,
+        description="Message associated with any change in this transaction if any",
+    )
+    process_time: float | None = Field(
+        None, description="Time in (s) it took to process this transaction"
+    )
     last_quote: ClassVar[QuoteResponse] = QuoteResponse()
+    # Controls whether model_dump uses aliases (applies recursively to nested models)
+    dump_by_alias: ClassVar[bool] = True
 
-    def __init__(self, **data):
+    def __init__(self, **data: Dict[str, Any]) -> None:
         """
         Initialize the TrackedBaseModel with the provided data.
 
@@ -96,61 +109,7 @@ class TrackedBaseModel(BaseModel):
         :param short_id: The short ID to search for.
         :return: A dictionary representing the query.
         """
-        return {"group_id": {"$regex": f"^{short_id}"}}  # Match the full short_id
-
-    async def __aenter__(self) -> "TrackedBaseModel":
-        """
-        Acquires an async lock and returns the current instance.
-
-        This method is intended to be used as part of an async context manager
-        protocol. Upon entering the context, it ensures that the necessary lock is
-        acquired before proceeding, waiting up to 10 seconds for the lock.
-
-        Returns:
-            TrackedBaseModel: The current instance with the lock acquired.
-        """
-        start = timer()
-        # stack = inspect.stack()
-        # logger.info(f"Locking   operation {self.name()} {self.group_id_p}")
-        # if await self.locked:
-        #     logger.warning(
-        #         f"Operation {self.name()} {self.group_id_p} is already locked, waiting for unlock",
-        #         extra={"notification": False},
-        #     )
-        #     print(stack[1].function, stack[1].filename, stack[1].lineno)
-        #     unlocked = await self.wait_for_lock(timeout=60)
-        #     if not unlocked:
-        #         logger.warning(
-        #             f"Timeout waiting for lock to be released for operation {self.name()} {self.group_id_p}",
-        #             extra={"notification": False},
-        #         )
-        #         await self.unlock_op()
-        #         print(stack[1].function, stack[1].filename, stack[1].lineno)
-        #         raise TimeoutError("Timeout waiting for lock to be released.")
-        # await self.lock_op()
-        logger.info(
-            f"Operation {self.name()} {self.group_id_p} locked in {timer() - start:.2f} seconds",
-            extra={"notification": False},
-        )
-        return self
-
-    async def __aexit__(
-        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
-    ) -> None:
-        """
-        Async context manager exit method.
-        This method is called when exiting the context. It ensures that any necessary cleanup is performed,
-        such as unlocking operations by calling `self.unlock_op()`. It receives exception information if an exception
-        was raised within the context.
-        Args:
-            exc_type (type[BaseException] | None): The type of exception raised, if any.
-            exc_val (BaseException | None): The exception instance raised, if any.
-            exc_tb (Any): The traceback object associated with the exception, if any.
-        Returns:
-            None
-        """
-        logger.info(f"Unlocking operation {self.name()} {self.group_id_p}")
-        # await self.unlock_op()
+        return {"group_id": {"$regex": f"^{re.escape(short_id)}$"}}
 
     # MARK: Reply Management
 
@@ -160,12 +119,14 @@ class TrackedBaseModel(BaseModel):
 
         :return: A list of reply IDs.
         """
+        if not self.replies:
+            return []
         return [reply.reply_id for reply in self.replies if reply.reply_id]
 
     def add_reply(
         self,
         reply_id: str,
-        reply_type: str,
+        reply_type: ReplyType | None = None,
         reply_msat: int = 0,
         reply_message: str = "",
         reply_error: Any = None,
@@ -179,7 +140,7 @@ class TrackedBaseModel(BaseModel):
         """
         if reply_id and reply_id in self.reply_ids():
             logger.warning(
-                f"Reply with ID {reply_id} already exists in {self.name()}",
+                f"{ICON} Reply with ID {reply_id} already exists in {self.name()}",
                 extra={"notification": False},
             )
             raise ValueError(f"Reply with ID {reply_id} already exists")
@@ -190,6 +151,8 @@ class TrackedBaseModel(BaseModel):
             reply_message=reply_message,
             reply_error=reply_error,
         )
+        if not self.replies:
+            self.replies = []
         self.replies.append(reply)
 
     def get_reply(self, reply_id: str) -> ReplyModel | None:
@@ -199,6 +162,8 @@ class TrackedBaseModel(BaseModel):
         :param reply_id: The ID of the reply to retrieve.
         :return: The ReplyModel instance if found, otherwise None.
         """
+        if not self.replies:
+            return None
         for reply in self.replies:
             if reply.reply_id == reply_id:
                 return reply
@@ -210,6 +175,8 @@ class TrackedBaseModel(BaseModel):
 
         :return: A list of ReplyModel instances that have an error.
         """
+        if not self.replies:
+            return []
         return [reply for reply in self.replies if reply.reply_error is not None]
 
     def get_replies_by_type(self, reply_type: str) -> list[ReplyModel]:
@@ -219,6 +186,8 @@ class TrackedBaseModel(BaseModel):
         :param reply_type: The type of replies to retrieve.
         :return: A list of ReplyModel instances matching the specified type.
         """
+        if not self.replies:
+            return []
         return [reply for reply in self.replies if reply.reply_type == reply_type]
 
     @classmethod
@@ -290,109 +259,63 @@ class TrackedBaseModel(BaseModel):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    # MARK: Lock Management
-
-    async def wait_for_lock(self, timeout: int = 2) -> bool:
-        """
-        Waits for the operation to be unlocked within a specified timeout.
-
-        This method checks if the operation is locked and waits until it is
-        unlocked or the timeout is reached.
-
-        Args:
-            timeout (int): The maximum time to wait for the lock to be released, in seconds.
-
-        Returns:
-            bool: True if the operation was unlocked, False if the timeout was reached.
-        """
-        # TODO: #113 Make this much more efficient in the way it handles the db
-        start_time = timer()
-        while await self.locked:
-            if (timer() - start_time) > timeout:
-                return False
-            await asyncio.sleep(0.5)
-        return True
-
-    @property
-    async def locked(self) -> bool:
-        """
-        Returns the locked status of the operation.
-
-        This method checks if the operation is currently locked, which
-        indicates that it is being processed and should not be modified
-        or accessed by other threads or processes.
-
-        Returns:
-            bool: True if the operation is locked, False otherwise.
-        """
-        result: dict[str, Any] | None = await InternalConfig.db[self.collection_name].find_one(
-            filter=self.group_id_query,
-            projection={"locked": True},
-        )
-        if result:
-            return result.get("locked", False)
-        return False
-
-    async def lock_op(self) -> UpdateResult:
-        """
-        Locks the operation to prevent concurrent processing.
-
-        This method sets the `locked` attribute to True, indicating that
-        the operation is currently being processed and should not be
-        modified or accessed by other threads or processes.
-
-        Returns:
-            None
-        """
-        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update={"$set": {"locked": True}},
-        )
-        return ans
-
-    async def unlock_op(self) -> UpdateResult:
-        """
-        Unlocks the operation to allow concurrent processing.
-
-        This method sets the `locked` attribute to False, indicating that
-        the operation is no longer being processed and can be modified
-        or accessed by other threads or processes.
-
-        Returns:
-            None
-        """
-        # Remember my update_one already has the $set
-        ans: UpdateResult = await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update={"$unset": {"locked": ""}},
-            upsert=True,
-        )
-        return ans
-
     async def save(
-        self, exclude_unset: bool = False, exclude_none: bool = True, **kwargs: Any
+        self,
+        exclude_unset: bool = False,
+        exclude_none: bool = True,
+        mongo_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> UpdateResult:
         """
-        Saves the current state of the operation to the database.
+        Asynchronously saves the current state of the model to the MongoDB database.
 
-        This method should be overridden in subclasses to provide the
-        specific saving logic for the operation.
+        `exclude_unset` should nearly always be FALSE. This is to ensure default values
+        are included in the update.
 
-        Returns:
-            UpdateResult | None: The result of the update operation, or None if no database client is available.
+        This method serializes the model's data and performs an update operation on the
+        corresponding MongoDB collection. It handles connection errors with automatic
+        retries and logs relevant events. Subclasses may override this method to provide
+        custom saving logic.
+
+        Args:
+            exclude_unset (bool, optional): If True, fields that were not explicitly set will be excluded from the update. Defaults to False.
+            exclude_none (bool, optional): If True, fields with value None will be excluded from the update. Defaults to True.
+            mongo_kwargs (dict[str, Any], optional): Additional keyword arguments for the MongoDB update operation. Defaults to {}.
+            **kwargs (Any): Additional keyword arguments passed to the model serialization.
+
+            UpdateResult: The result of the MongoDB update operation.
+
+        Raises:
+            DuplicateKeyError: If a duplicate key error occurs during the update.
+            ServerSelectionTimeoutError: If the MongoDB server cannot be reached.
+            NetworkTimeout: If a network timeout occurs.
+            ConnectionFailure: If the connection to MongoDB fails.
+            Exception: For any other exceptions encountered during the save operation.
         """
+        if mongo_kwargs is None:
+            mongo_kwargs = {"upsert": True}
         update = self.model_dump(
-            exclude_unset=exclude_unset, exclude_none=exclude_none, by_alias=True, **kwargs
+            exclude_unset=exclude_unset,
+            exclude_none=exclude_none,
+            by_alias=self.dump_by_alias,
+            **kwargs,
         )
         if update.get("replies") == []:
             update.pop("replies", None)  # Remove empty replies list if it exists
+
+        # Convert Decimal objects to floats for MongoDB compatibility
+        update = convert_decimals(update)
+
         update = {
             "$set": update,
         }
-        return await InternalConfig.db[self.collection_name].update_one(
-            filter=self.group_id_query,
-            update=update,
-            upsert=True,
+        # Delegate retries and logging to the wrapper
+        return await mongo_call(
+            lambda: InternalConfig.db[self.collection_name].update_one(
+                filter=self.group_id_query, update=update, **mongo_kwargs
+            ),
+            error_code=f"db_save_error_{self.collection_name}",
+            context=f"{self.collection_name}:{self.group_id_p}",
         )
 
     def tracked_type(self) -> str:
@@ -443,7 +366,7 @@ class TrackedBaseModel(BaseModel):
     @classmethod
     async def update_quote(
         cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
-    ) -> None:
+    ) -> QuoteResponse:
         """
         Asynchronously updates the last quote for the class.
 
@@ -464,25 +387,7 @@ class TrackedBaseModel(BaseModel):
             all_quotes = AllQuotes()
             await all_quotes.get_all_quotes(use_cache=use_cache, store_db=store_db)
             cls.last_quote = all_quotes.quote
-
-    async def update_quote_conv(self, quote: QuoteResponse | None = None) -> None:
-        """
-        Asynchronously updates the last quote for the class.
-
-        If a quote is provided, it sets the last quote to the provided quote.
-        If no quote is provided, it fetches all quotes and sets the last quote
-        to the fetched quote.
-        Uses the new quote to update a `conv` object.
-
-        Args:
-            quote (QuoteResponse | None): The quote to update.
-                If None, fetches all quotes.
-
-        Returns:
-            None
-        """
-        await TrackedBaseModel.update_quote(quote)
-        await self.update_conv()
+        return cls.last_quote
 
     async def update_conv(self, quote: QuoteResponse | None = None) -> None:
         """

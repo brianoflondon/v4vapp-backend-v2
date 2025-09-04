@@ -252,10 +252,10 @@
       "age": 0.013704
     },
     "HiveInternalMarket": {
-      "hive_usd": 0,
-      "hbd_usd": 0,
-      "btc_usd": 0,
-      "hive_hbd": 0.2411,
+      "hive_usd": "0",
+      "hbd_usd": "0",
+      "btc_usd": "0",
+      "hive_hbd": "0.2411",
       "raw_response": {
         "highest_bid": {
           "quote": {

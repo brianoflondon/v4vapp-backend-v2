@@ -1,9 +1,7 @@
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from colorama import Back, Fore, Style
-from yaml import safe_load
+from colorama import Fore, Style
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -11,9 +9,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -51,3 +47,5 @@ def test_logger_output(set_base_config_path: None):
     logger.info(Fore.GREEN + "This is an info message" + Style.RESET_ALL)
     logger.warning(Fore.YELLOW + "This is a warning message" + Style.RESET_ALL)
     logger.error(Fore.RED + "This is an error message" + Style.RESET_ALL)
+    logger.critical(f"{Fore.MAGENTA}This is a magenta message{Style.RESET_ALL}")
+    logger.critical("another message")

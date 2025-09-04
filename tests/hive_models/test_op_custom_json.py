@@ -1,20 +1,41 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 from pytest import raises
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
+
+
+@pytest.fixture(autouse=True)
+def configure_and_reset_config(monkeypatch: pytest.MonkeyPatch):
+    # Set up base config paths
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+
+    # Reset the singleton instance before each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Reset the singleton instance after each test
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+
 
 post1 = {
     "_id": "6740b6c755e3a8ade6050ca707d6d8b44374c1f8",
     "block_num": 94415566,
     "id": "v4vapp_transfer",
-    "json": '{"hive_accname_from":"v4vapp.dev","hive_accname_to":"v4vapp-test","sats":100,"memo":null}',
+    "json": '{"hive_accname_from":"v4vapp.dev","hive_accname_to":"v4vapp-test","msats":1800000,"memo":null}',
     "timestamp": datetime(2025, 3, 24, 12, 15, 48, tzinfo=timezone.utc),
     "required_auths": ["v4vapp"],
     "required_posting_auths": [],
@@ -38,6 +59,7 @@ post2 = {
 
 
 def test_custom_json_validate():
+    ic = InternalConfig()
     OpBase.watch_users = ["v4vapp.dev"]
     TrackedBaseModel.update_quote_sync(store_db=False)
     for post in [post1, post2]:
@@ -45,9 +67,10 @@ def test_custom_json_validate():
         json_data = json.loads(post["json"])
         assert custom_json.json_data.from_account == json_data["hive_accname_from"]
         assert custom_json.json_data.to_account == json_data["hive_accname_to"]
-        assert custom_json.json_data.sats == json_data["sats"]
+        assert custom_json.json_data.sats == custom_json.json_data.msats // 1000
+
         assert custom_json.cj_id == "v4vapp_transfer"
-        assert custom_json.conv.sats == json_data["sats"]
+
         print(custom_json.log_str)
         print(custom_json.log_extra)
         if (

@@ -1,15 +1,18 @@
+import asyncio
 import json
 from datetime import datetime, timezone
+from pprint import pprint
 from typing import List
 
+import httpx
 from nectar.account import Account
 from nectar.hive import Hive
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 # from helpers.cryptoprices import CryptoConversion, CryptoPrices
-from v4vapp_backend_v2.hive.hive_extras import get_hive_client
+from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_verified_hive_client
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
 
@@ -19,6 +22,16 @@ class V4VConfigRateLimits(BaseModel):
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
     sats: int = Field(0, description="Limit in satoshis for the rate limit.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_legacy_limit_field(cls, data):
+        """Handle legacy 'limit' field from Hive data and map it to 'sats'"""
+        if isinstance(data, dict) and "limit" in data and "sats" not in data:
+            # Map 'limit' to 'sats' for backward compatibility
+            data = data.copy()  # Don't modify original
+            data["sats"] = data.pop("limit")
+        return data
 
     def __repr__(self) -> str:
         return super().__repr__()
@@ -39,7 +52,7 @@ class V4VConfigData(BaseModel):
     )
     conv_fee_sats: int = Field(50, description="Conversion fee in satoshis for transactions.")
     minimum_invoice_payment_sats: int = Field(
-        500, description="Minimum invoice payment in satoshis."
+        250, description="Minimum invoice payment in satoshis."
     )
     maximum_invoice_payment_sats: int = Field(
         100_000, description="Maximum invoice payment in satoshis."
@@ -68,9 +81,34 @@ class V4VConfigData(BaseModel):
     )
     dynamic_fees_url: str = Field("", description="URL for dynamic fees.")
     dynamic_fees_permlink: str = Field("", description="Permlink for dynamic fees.")
+    # server_id: str = Field("", description="Server Hive Account.")
+    # treasury_id: str = Field("", description="Treasury Hive Account.")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.check_and_sort_rate_limits()
+
+    def check_and_sort_rate_limits(self) -> tuple[bool, int]:
+        """
+        Checks if lightning_rate_limits is sorted in ascending order by hours.
+        If not, sorts it in place.
+        Returns a tuple: (was_sorted, max_hours)
+        """
+        rate_limits = self.lightning_rate_limits
+        was_sorted = all(
+            rate_limits[i].hours <= rate_limits[i + 1].hours for i in range(len(rate_limits) - 1)
+        )
+        if not was_sorted:
+            rate_limits.sort(key=lambda rl: rl.hours)
+        max_hours = max((rl.hours for rl in rate_limits), default=0)
+        return was_sorted, max_hours
+
+    @property
+    def max_rate_limit_hours(self) -> int:
+        """
+        Returns the maximum hours from the lightning_rate_limits.
+        """
+        return max((rl.hours for rl in self.lightning_rate_limits), default=0)
 
 
 class V4VConfig:
@@ -89,6 +127,8 @@ class V4VConfig:
         if not hasattr(self, "_initialized"):
             self._initialized = True
             super().__init__(*args, **kwargs)
+            if not server_accname:
+                server_accname = InternalConfig().server_id
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()
@@ -132,7 +172,7 @@ class V4VConfig:
             )
             self.fetch()
 
-    def fetch(self) -> None:
+    def fetch(self) -> bool:
         """
         Synchronizes configuration data from the Hive blockchain.
 
@@ -150,6 +190,9 @@ class V4VConfig:
             Exception: Logs an error if there is an issue fetching or processing
                 the settings from the Hive blockchain.
 
+        Returns:
+            bool: True if the settings were successfully fetched and validated, False otherwise.
+
         Logging:
             - Logs an info message when settings are successfully fetched and validated.
             - Logs an info message if no settings are found for the given account.
@@ -161,7 +204,7 @@ class V4VConfig:
                 # Uses the default values and doesn't check Hive.
                 logger.info("No server account name provided, using default values.")
                 self.data = V4VConfigData()
-                return
+                return False
 
             metadata = self._get_posting_metadata()
             if metadata:
@@ -173,20 +216,23 @@ class V4VConfig:
                         f"Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
                     )
+                    return True
             else:
                 metadata = {}
                 logger.info(
                     f"No settings found in Hive. {self.server_accname}",
                 )
                 self.data = V4VConfigData()
+                return False
         except Exception as ex:
             self.data = V4VConfigData()
             logger.warning(
                 f"Error fetching settings from Hive: {ex} using default values.",
                 extra={"hive_config": self.data.model_dump()},
             )
+        return True if self.data else False
 
-    def put(self) -> None:
+    async def put(self, hive_client: Hive | None = None) -> None:
         """
         Updates the Hive configuration settings with the provided data.
 
@@ -205,7 +251,11 @@ class V4VConfig:
             - Logs a message if the settings in Hive do not need to change.
             - Logs a message with the transaction ID when the settings are successfully updated.
         """
-        acc = Account(self.server_accname, blockchain_instance=self.hive, lazy=True)
+        if not hive_client:
+            hive_client, server_id = await get_verified_hive_client()
+        else:
+            server_id = self.server_accname or InternalConfig().server_id
+        acc = Account(server_id, blockchain_instance=hive_client, lazy=True)
         existing_metadata = self._get_posting_metadata()
         if not existing_metadata:
             existing_metadata = {}
@@ -224,23 +274,51 @@ class V4VConfig:
         # If the settings are different, update them in Hive
         # and add the new settings to the metadata
         # Serialize the new settings
-        existing_metadata.pop(CONFIG_ROOT_KEY)
+
+        # Fix: Only pop the key if it exists
+        if CONFIG_ROOT_KEY in existing_metadata:
+            existing_metadata.pop(CONFIG_ROOT_KEY)
         new_meta = {**(existing_metadata or {}), CONFIG_ROOT_KEY: self.data.model_dump()}
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
         try:
+            logger.info("Updating Hive settings")
+            pprint(new_meta)
             trx = acc.update_account_jsonmetadata(new_meta)
             logger.info(
                 f"Settings in Hive changed: {trx.get('trx_id')}",
                 extra={**self.log_extra, "trx": trx},
             )
+            asyncio.create_task(self._update_public_api_server())
             return
         except Exception as ex:
             logger.error(
-                f"Error updating settings in Hive: {ex}",
+                f"Error updating settings in Hive: {ex} {ex.__class__.__name__}",
                 extra={"hive_config": new_meta, **self.log_extra},
             )
             return
+
+    async def _update_public_api_server(self) -> None:
+        """
+        Asynchronously triggers a configuration reload on the public API server.
+        If the `public_api_host` is defined in the internal configuration, this method sends a GET request
+        to the `/v1/reload_config` endpoint of the public API server to prompt it to reload its configuration.
+        Any HTTP errors encountered during the request are logged.
+        Raises:
+            None directly, but logs errors if the HTTP request fails.
+        """
+
+        if public_api_host := InternalConfig().config.admin_config.public_api_host:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{public_api_host}/v1/reload_config")
+                    logger.info(
+                        f"Config updated on {public_api_host}: {response.status_code}",
+                        extra={"response": response.json()},
+                    )
+                    response.raise_for_status()
+            except httpx.HTTPError as e:
+                logger.error(f"Error updating public API server: {e}")
 
     def _get_posting_metadata(self) -> dict | None:
         """

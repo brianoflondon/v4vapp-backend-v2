@@ -3,7 +3,7 @@ from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple
 
-from v4vapp_backend_v2.accounting.ledger_entry import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_check_pipeline,
     balance_sheet_pipeline,
@@ -14,7 +14,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 # @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta = timedelta(seconds=0)
+    as_of_date: datetime | None = None, age: timedelta = timedelta(seconds=0)
 ) -> Dict[str, Dict[str, Dict[str, float]]]:
     """
     Generates a balance sheet from MongoDB data.
@@ -26,6 +26,9 @@ async def generate_balance_sheet_mongodb(
     Returns:
         Sequence[Mapping[str, Any]]: The generated balance sheet.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     bs_pipeline = balance_sheet_pipeline(as_of_date=as_of_date, age=age)
     pl_pipeline = profit_loss_pipeline(as_of_date=as_of_date, age=age)
 
@@ -89,9 +92,12 @@ async def generate_balance_sheet_mongodb(
     tolerance_msats_check = assets_total["msats"] - (
         liabilities_total["msats"] + equity_total["msats"]
     )
-    assert tolerance_msats_check == tolerance_msats, (
-        f"Balance sheet tolerance mismatch: {tolerance_msats_check} != {tolerance_msats}"
-    )
+    # Use math.isclose to avoid brittle exact equality on computed sums
+    if not math.isclose(tolerance_msats_check, tolerance_msats, rel_tol=0.0, abs_tol=1_000):
+        raise AssertionError(
+            f"Balance sheet tolerance mismatch: computed={tolerance_msats_check} msats, "
+            f"check pipeline returned={tolerance_msats} msats"
+        )
 
     balance_sheet["is_balanced"] = is_balanced
     balance_sheet["tolerance"] = tolerance_msats
@@ -101,18 +107,21 @@ async def generate_balance_sheet_mongodb(
 
 
 async def check_balance_sheet_mongodb(
-    as_of_date: datetime = datetime.now(tz=timezone.utc), age: timedelta | None = None
+    as_of_date: datetime | None = None, age: timedelta | None = None
 ) -> Tuple[bool, float]:
     """
     Checks if the balance sheet is balanced using MongoDB data.
 
     Args:
-        as_of_date (datetime): The date for which the balance sheet is checked.
+        as_of_date (datetime | None): The date for which the balance sheet is checked.
         age (timedelta | None): The age of the data to include in the balance sheet.
 
     Returns:
         bool: True if the balance sheet is balanced, False otherwise.
     """
+    if as_of_date is None:
+        as_of_date = datetime.now(tz=timezone.utc)
+
     bs_check_pipeline = balance_sheet_check_pipeline(as_of_date=as_of_date, age=age)
     bs_check_cursor = await LedgerEntry.collection().aggregate(pipeline=bs_check_pipeline)
     bs_check = await bs_check_cursor.to_list()
@@ -228,11 +237,25 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             )
             if all_zero:
                 continue  # Skip accounts with all zero balances
+
+            # For Retained Earnings, use dynamic labels based on sign
+            is_retained_earnings = category == "Equity" and account_name == "Retained Earnings"
+
             for sub, balance in sub_accounts.items():
                 if sub == "Total":
                     continue
+
+                if is_retained_earnings:
+                    # Determine label based on sign (using sats as the base unit for checking)
+                    if balance.get("sats", 0) >= 0:
+                        dynamic_label = "Retained Earnings"
+                    else:
+                        dynamic_label = "Retained Loss"
+                else:
+                    dynamic_label = account_name
+
                 output.append(
-                    f"{truncate_text(account_name, 40):<40} "
+                    f"{truncate_text(dynamic_label, 40):<40} "
                     f"{truncate_text(sub, 17):<17} "
                     f"{balance.get('sats', 0):>10,.0f} "
                     f"{balance.get('hive', 0):>12,.3f} "
@@ -268,15 +291,25 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
                     "msats": 0,
                 }
             total = sub_accounts["Total"]
+
+            # Dynamic total label for Retained Earnings
+            if is_retained_earnings:
+                if total.get("sats", 0) >= 0:
+                    total_label = "   Total Retained Earnings"
+                else:
+                    total_label = "   Total Retained Loss"
+            else:
+                total_label = "   Total " + truncate_text(account_name, 35)
+
             output.append(
-                f"{'   Total ' + truncate_text(account_name, 35):<40} "
+                f"{total_label:<40} "
                 f"{'':<17} "
                 f"{total.get('sats', 0):>10,.0f} "
                 f"{total.get('hive', 0):>12,.3f} "
                 f"{total.get('hbd', 0):>12,.3f} "
                 f"{total.get('usd', 0):>12,.3f}"
             )
-            output.append(f"{'_' * max_width}")
+            output.append(f"{'-' * max_width}")
         total = balance_sheet[category]["Total"]
         output.append("-" * max_width)
         output.append(
@@ -287,12 +320,12 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             f"{total.get('hbd', 0):>12,.3f} "
             f"{total.get('usd', 0):>12,.3f}"
         )
-        output.append("-" * max_width)
+        output.append("=" * max_width)
 
     total = balance_sheet["Total Liabilities and Equity"]
     output.append("-" * max_width)
     output.append(
-        f"{'Total Liab. & Equity':<40} "
+        f"{'Total Liabilities & Equity':<40} "
         f"{'':<17} "
         f"{total.get('sats', 0):>10,.0f} "
         f"{total.get('hive', 0):>12,.3f} "

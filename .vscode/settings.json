@@ -7,6 +7,7 @@
         "ciphertext",
         "colorama",
         "convertbits",
+        "dedupe",
         "devhive",
         "devser",
         "devtre",
@@ -36,10 +37,12 @@
         "routerrpc",
         "routerstub",
         "setex",
+        "tablefmt",
         "typer",
         "Unpatch",
         "unvoted",
-        "urllib"
+        "urllib",
+        "vconfig"
     ],
     "python.testing.pytestArgs": [
         "tests",

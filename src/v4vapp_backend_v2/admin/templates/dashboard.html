@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block page_actions %}
+<div class="d-flex gap-2">
+    <a href="/admin/v4vconfig" class="btn btn-primary">
+        <i class="bi bi-gear me-1"></i>
+        V4V Config
+    </a>
+    <a href="/admin/docs" class="btn btn-outline-secondary" target="_blank">
+        <i class="bi bi-book me-1"></i>
+        API Docs
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Quick Stats -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-primary mb-2">👥</div>
+                <h5 class="card-title">Account Balances</h5>
+                <p class="card-text text-muted">View and manage account balances</p>
+                <a href="/admin/accounts" class="btn btn-primary btn-sm">View Accounts</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-info mb-2">�</div>
+                <h5 class="card-title">Financial Reports</h5>
+                <p class="card-text text-muted">Generate and view financial reports</p>
+                <a href="/admin/financial-reports" class="btn btn-info btn-sm" target="_blank">View Reports</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="h1 text-success mb-2">❤️</div>
+                <h5 class="card-title">System Health</h5>
+                <p class="card-text text-muted">Check system status</p>
+                <a href="/admin/health" class="btn btn-success btn-sm" target="_blank">Health Check</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Information -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🏠 System Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Admin Interface</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Admin Version:</strong> {{ admin_info.version }}</li>
+                            <li><strong>Project Version:</strong> {{ admin_info.project_version }}</li>
+                            <li><strong>Config File:</strong> <code>{{ admin_info.config_file }}</code></li>
+                            <li><strong>Server Account:</strong> <code>{{ admin_info.server_account }}</code> {{
+                                admin_info.server_balance_check.icon }}</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Hive Balances</h6>
+                        {% if hive_balances %}
+                        <div class="table-responsive">
+                            <table class="table table-borderless table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Account</th>
+                                        <th scope="col" class="text-end">HIVE</th>
+                                        <th scope="col" class="text-end">HBD</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for acc, balances in hive_balances.items() %}
+                                    <tr>
+                                        <td><strong>{{ acc }}</strong></td>
+                                        {% if balances.error %}
+                                        <td colspan="2" class="text-danger small">Error: {{ balances.error }}</td>
+                                        {% else %}
+                                        <td class="text-end">{{ balances.get('HIVE_fmt') or balances.get('hive_fmt') or
+                                            '0.000' }}</td>
+                                        <td class="text-end">{{ balances.get('HBD_fmt') or balances.get('hbd_fmt') or
+                                            '0.000' }}</td>
+                                        {% endif %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="small text-muted">No hive accounts configured.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🔗 Quick Links</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for item in nav_items %}
+                    {% if item.url != "/admin" %}
+                    <a href="{{ item.url }}"
+                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="me-2">{{ item.icon }}</span>
+                            {{ item.name }}
+                        </div>
+                        {% if item.badge %}
+                        <span class="badge bg-{{ item.badge_color }}">{{ item.badge }}</span>
+                        {% endif %}
+                    </a>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Getting Started -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">🚀 Getting Started</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="h1 text-primary">1️⃣</div>
+                            <h6>Configure V4VApp</h6>
+                            <p class="text-muted small">Set up your V4VApp configuration including fees, limits, and
+                                gateway settings.</p>
+                            <a href="/admin/v4vconfig" class="btn btn-outline-primary btn-sm">Configure Now</a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="h1 text-info">2️⃣</div>
+                            <h6>Monitor System</h6>
+                            <p class="text-muted small">Keep track of your system's health and performance metrics.</p>
+                            <a href="/admin/health" class="btn btn-outline-info btn-sm" target="_blank">Check Health</a>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="h1 text-success">3️⃣</div>
+                            <h6>Explore API</h6>
+                            <p class="text-muted small">Use the REST API for programmatic access to admin functions.</p>
+                            <a href="/admin/docs" class="btn btn-outline-success btn-sm" target="_blank">API Docs</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,19 +4,13 @@ import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from timeit import default_timer as timer
-from typing import Annotated, Any, Dict, List, Tuple
+from typing import Annotated, Dict, List, Tuple
 
 import typer
+from colorama import Fore, Style
 from nectar.amount import Amount
-
-# from colorama import Fore, Style
-from pymongo.errors import (
-    ConnectionFailure,
-    DuplicateKeyError,
-    NetworkTimeout,
-    ServerSelectionTimeoutError,
-)
-from pymongo.results import BulkWriteResult, UpdateResult
+from pymongo.errors import DuplicateKeyError
+from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
@@ -85,85 +79,36 @@ def handle_shutdown_signal():
 
 async def db_store_op(
     op: OpAny,
-    db_collection: str | None = None,
-    *args: Any,
-    **kwargs: Any,
-) -> List[BulkWriteResult | None] | UpdateResult:
+) -> UpdateResult | None:
     """
-    Stores a Hive transaction in the database.
+    Asynchronously stores a Hive transaction operation in the MongoDB database.
 
-    This function processes a Hive event and stores the corresponding transaction
-    in the MongoDB database. If the event type is a transfer operation, it converts
-    the amount using the provided quote or fetches all quotes if none is provided.
-    It then creates a HiveTransaction instance and updates the database with the
-    transaction details.
+    This function processes a Hive event operation and attempts to save it to the database.
+    It handles duplicate key errors, connection issues, and other exceptions, with automatic
+    retries on connection failures. The operation is upserted into the appropriate collection,
+    and logging is performed for errors and reconnections.
 
-    Args:
-        op (OpAny): The Hive event to process. Can be a
-            Transfer or CustomJson operation.
-        db_collection (str | None): The name of the MongoDB collection to use for
-            storing the transaction. If None, the default collection will be used.
-        *args (Any): Additional positional arguments.
-        **kwargs (Any): Additional keyword arguments.
+    Uses the OpAny Save method which is automatically an upsert.
 
-    Returns:
-        UpdateResult: The result of the database update operation.
+        op (OpAny): The Hive event operation to process and store.
 
-    Raises:
-        DuplicateKeyError: If a duplicate key error occurs during the database update.
-        Exception: For any other exceptions, logs the error with additional context.
+        UpdateResult | None: The result of the database update operation if successful,
+            or None/empty list if an error occurs.
     """
-    global COMMAND_LINE_WATCH_USERS, HIVE_DATABASE_CONNECTION, HIVE_DATABASE, HIVE_DATABASE_USER
-    db_collection = HIVE_OPS_COLLECTION if not db_collection else db_collection
-    while True:
-        error_count = 0
-        try:
-            collection = OpBase.collection()
-            db_ans = await collection.update_one(
-                filter=op.group_id_query,
-                update={
-                    "$set": op.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
-                },
-                upsert=True,
-            )
-            if error_count > 0:
-                logger.info(
-                    f"{icon} Reconnected to MongoDB after {error_count} errors",
-                    extra={"notification": True, "error_code_clear": "mongodb_save_error"},
-                )
-                logger.info(f"{icon} SAVED {op.log_str}")
-                error_count = 0
-            return db_ans
-        except DuplicateKeyError as e:
-            logger.info(
-                f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
-                extra={"notification": False, "error": e, **op.log_extra},
-            )
-            return []
+    try:
+        return await op.save(mongo_kwargs={"upsert": True})
 
-        except (
-            ServerSelectionTimeoutError,
-            NetworkTimeout,
-            ConnectionFailure,
-        ) as e:
-            error_count += 1
-            logger.error(
-                f"{icon} Error {error_count} MongoDB connection error, while trying to save: {e}",
-                extra={"error_code": "mongodb_save_error", "notification": True},
-            )
-            logger.warning(op.log_str, extra={"notification": False, **op.log_extra})
-            # Wait before attempting to reconnect
-            await asyncio.sleep(max(30 * error_count, 300))
-            logger.info(f"{icon} Attempting to reconnect to MongoDb")
+    except DuplicateKeyError as e:
+        logger.info(
+            f"DuplicateKeyError: {op.block_num} {op.trx_id} {op.op_in_trx}",
+            extra={"notification": False, "error": e, **op.log_extra},
+        )
+        return None
 
-        except Exception as e:
-            logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
-            logger.warning(
-                f"{icon} {op.log_str}",
-                extra={"notification": False, "error": e, **op.log_extra},
-            )
-            logger.exception(e, extra={"error": e, "notification": False, **op.log_extra})
-            return []
+    except Exception as e:
+        logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
+        logger.warning(f"{icon} {op.log_str}", extra={"notification": False, **op.log_extra})
+        return None
 
 
 async def balance_server_hbd_level(transfer: Transfer) -> None:
@@ -298,9 +243,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             await op.get_witness_details()
             op.mean, last_witness_timestamp = await witness_average_block_time(watch_witness)
             op.delta = op.timestamp - last_witness_timestamp
-            _ = await OpBase.collection().insert_one(
-                op.model_dump(),
-            )
+            await db_store_op(op)
             logger.info(
                 f"{icon} {op.log_str}",
                 extra={
@@ -419,7 +362,7 @@ async def all_ops_loop(
                 extra_bots: List[str] = []
                 db_store = False
                 if shutdown_event.is_set():
-                    raise asyncio.CancelledError("Docker Shutdown")
+                    raise asyncio.CancelledError("Shutdown requested")
                 new_block, marker = block_counter.inc(op.raw_op)
 
                 if watch_witnesses and isinstance(op, AccountWitnessVote):
@@ -443,7 +386,7 @@ async def all_ops_loop(
                 elif op.known_custom_json:
                     notification = True
                     if not op.conv:
-                        await op.update_quote_conv()
+                        await op.update_conv()
                     log_it = True
                     db_store = True
 
@@ -496,19 +439,25 @@ async def all_ops_loop(
 
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             logger.info(f"{icon} {e}: Stopping event listener.")
-            raise e
-
+            # Exit loop on cancellation
+            return
         except Exception as e:
             logger.exception(f"{icon} {e}", extra={"notification": False})
             raise e
-
         finally:
+            # Do not restart if we’re shutting down
+            if shutdown_event.is_set():
+                logger.info(f"{icon} Shutdown requested; exiting all_ops_loop.")
+                return
             logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {hive_client.rpc.url} no_preview",
+                f"{icon} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
                 extra={"notification": False},
             )
-            if hive_client.rpc:
-                hive_client.rpc.next()
+            if getattr(hive_client, "rpc", None):
+                try:
+                    hive_client.rpc.next()
+                except Exception:
+                    pass
             else:
                 logger.error(
                     f"{icon} Hive client not available, re-fetching new hive-client",
@@ -562,6 +511,9 @@ async def store_rates() -> None:
     Returns:
         None
     """
+    await asyncio.sleep(
+        10
+    )  # Initial sleep to avoid immediate execution and duplicate hits to check rates.
     try:
         while not shutdown_event.is_set():
             try:
@@ -615,13 +567,24 @@ async def main_async_start(
     logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
 
     try:
+        # Create tasks so we can cancel them on shutdown_event
         tasks = [
-            all_ops_loop(
-                watch_witnesses=watch_witnesses, watch_users=watch_users, start_block=start_block
+            asyncio.create_task(
+                all_ops_loop(
+                    watch_witnesses=watch_witnesses,
+                    watch_users=watch_users,
+                    start_block=start_block,
+                ),
+                name="all_ops_loop",
             ),
-            store_rates(),
+            asyncio.create_task(store_rates(), name="store_rates"),
         ]
-        await asyncio.gather(*tasks)
+        # Wait until shutdown is requested
+        await shutdown_event.wait()
+        # Cancel tasks and wait for them to finish
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
         raise e
@@ -630,7 +593,7 @@ async def main_async_start(
         logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
-        # Cancel all tasks except the current one
+        # Cancel all other tasks and exit cleanly
         current_task = asyncio.current_task()
         tasks = [task for task in asyncio.all_tasks() if task is not current_task]
         for task in tasks:
@@ -639,7 +602,7 @@ async def main_async_start(
         logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{icon} Clearing notifications")
         await asyncio.sleep(2)
-        InternalConfig().shutdown()  # Ensure proper cleanup after tests
+        InternalConfig().shutdown()
 
 
 @app.command()
@@ -730,7 +693,7 @@ def main(
     # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
-        f"{icon} ✅ Hive Monitor v2: {icon}. Version: {__version__}",
+        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     if not watch_users:

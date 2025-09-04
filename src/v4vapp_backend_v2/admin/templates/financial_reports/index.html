@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div
+        class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ title }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Available Financial Reports
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Select a financial report to view detailed information about your accounting data.
+                    </p>
+
+                    <div class="row g-3">
+                        <!-- Balance Sheet Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-balance-scale fa-3x text-primary"></i>
+                                    </div>
+                                    <h5 class="card-title">Balance Sheet</h5>
+                                    <p class="card-text text-muted">
+                                        View assets, liabilities, and equity across all currencies (SATS, HIVE, HBD,
+                                        USD).
+                                    </p>
+                                    <a href="/admin/financial-reports/balance-sheet" class="btn btn-primary">
+                                        <i class="fas fa-eye me-1"></i>View Balance Sheet
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Profit & Loss Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-chart-line fa-3x text-success"></i>
+                                    </div>
+                                    <h5 class="card-title">Profit & Loss</h5>
+                                    <p class="card-text text-muted">
+                                        Review revenue, expenses, and net income for the current period.
+                                    </p>
+                                    <a href="/admin/financial-reports/profit-loss" class="btn btn-success">
+                                        <i class="fas fa-chart-line me-1"></i>View P&L
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Complete Report Card -->
+                        <div class="col-md-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-file-alt fa-3x text-info"></i>
+                                    </div>
+                                    <h5 class="card-title">Complete Report</h5>
+                                    <p class="card-text text-muted">
+                                        Comprehensive report including balance sheet, P&L, and all account details.
+                                    </p>
+                                    <a href="/admin/financial-reports/complete-report" class="btn btn-info">
+                                        <i class="fas fa-file-alt me-1"></i>View Complete Report
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-12">
+                            <div class="alert alert-info" role="alert">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Note:</strong> All reports are generated in real-time from the current ledger
+                                data.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

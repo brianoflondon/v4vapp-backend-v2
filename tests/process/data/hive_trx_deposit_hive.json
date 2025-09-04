@@ -1,0 +1,87 @@
+{
+  "_id": {
+    "$oid": "6891af8edac5c3a11eb6ca89"
+  },
+  "trx_id": "a556a1e5472f5a67bf83accfdee475808fb327af",
+  "block_num": 98263541,
+  "op_in_trx": 1,
+  "realm": "real",
+  "amount": {
+    "amount": "15000",
+    "nai": "@@000000021",
+    "precision": 3
+  },
+  "conv": {
+    "hive": 15,
+    "hbd": 3.239999,
+    "usd": 3.239999,
+    "sats": 2835,
+    "msats": 2834767,
+    "msats_fee": 98191,
+    "btc": 0.00002834767,
+    "sats_hive": 188.9845,
+    "sats_hbd": 874.9283,
+    "conv_from": "hive",
+    "value": 15,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-08-05T07:14:11.639Z"
+    },
+    "in_limits": true
+  },
+  "cust_id": "v4vapp-test",
+  "d_memo": "deposit #sats",
+  "from": "v4vapp-test",
+  "group_id": "98263541_a556a1e5472f5a67bf83accfdee475808fb327af_1_real",
+  "link": "https://hivehub.dev/tx/a556a1e5472f5a67bf83accfdee475808fb327af",
+  "memo": "deposit #sats",
+  "timestamp": {
+    "$date": "2025-08-05T07:15:24.000Z"
+  },
+  "to": "devser.v4vapp",
+  "trx_num": 8,
+  "type": "transfer",
+  "change_conv": {
+    "hive": 0.00099,
+    "hbd": 0.000215,
+    "usd": 0.000215,
+    "sats": 0,
+    "msats": 188,
+    "msats_fee": 50003,
+    "btc": 1.88e-9,
+    "sats_hive": 188.9845,
+    "sats_hbd": 874.9283,
+    "conv_from": "hive",
+    "value": 0.001,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-08-05T07:14:11.639Z"
+    },
+    "in_limits": false
+  },
+  "extensions": [],
+  "fee_conv": {
+    "hive": 0,
+    "hbd": 0,
+    "usd": 0,
+    "sats": 0,
+    "msats": 0,
+    "msats_fee": 0,
+    "btc": 0,
+    "sats_hive": 0,
+    "sats_hbd": 0,
+    "conv_from": "hive",
+    "value": 0,
+    "source": "CryptoConv",
+    "in_limits": false
+  },
+  "process_time": 47.72364524498698,
+  "replies": [
+    {
+      "reply_id": "ac79abfcb9384e8107cbc5b3977de6d964f604af",
+      "reply_type": "transfer",
+      "reply_msat": 188,
+      "reply_message": "Return notification for operation 98263541_a556a1e5472f5a67bf83accfdee475808fb327af_1_real: ac79abfcb9384e8107cbc5b3977de6d964f604af"
+    }
+  ]
+}
