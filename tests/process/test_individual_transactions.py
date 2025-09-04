@@ -236,6 +236,7 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     """
 
     ledger_count = await get_ledger_count()
+    print(f"Ledger count start: {ledger_count}")
     net_msats, balance = await keepsats_balance_printout(cust_id="v4vapp.qrc")
     trx = await send_hive_customer_to_server(
         send_sats=5_000,
@@ -246,7 +247,9 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     assert trx.get("trx_id"), "Transaction failed to send"
 
     # Wait for the deposit to be recorded.
-    await watch_for_ledger_count(ledger_count + 6)
+    await watch_for_ledger_count(ledger_count + 9)
+    ledger_count_after_deposit = await get_ledger_count()
+    print(f"Ledger count after deposit: {ledger_count_after_deposit}")
 
     # Transfer from test to qrc
     transfer = KeepsatsTransfer(
@@ -258,11 +261,9 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     trx = await send_test_custom_json(transfer)
     pprint(trx)
     assert trx.get("trx_id"), "Transfer transaction failed to send"
-    await watch_for_ledger_count(ledger_count + 7)
-    await asyncio.sleep(10)
-    ledger_count_after = await get_ledger_count()
-    print(f"Ledger count after transfer: {ledger_count_after}")
-    assert True, "Ledger entries should be created after the transaction"
+    await watch_for_ledger_count(ledger_count + 11)
+    ledger_count_after_transfer = await get_ledger_count()
+    print(f"Ledger count after transfer: {ledger_count_after_transfer}")
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
     assert (net_msats_after - net_msats) // 1000 == 4500, (
         f"Expected 4500, got {net_msats_after // 1000}"

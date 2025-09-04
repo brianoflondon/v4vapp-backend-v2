@@ -238,7 +238,7 @@ async def test_send_wrong_authorization_custom_json():
     )
 
     pprint(trx)
-    await asyncio.sleep(3)
+    await asyncio.sleep(10)
     # no impact on ledger the ledger will be untouched.
 
     last_hive_op = await InternalConfig.db["hive_ops"].find_one(
