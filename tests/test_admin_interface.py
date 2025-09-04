@@ -313,6 +313,28 @@ class TestAdminEndpoints:
 class TestAdminTemplates:
     """Test template rendering and content"""
 
+    def test_users_template_structure(self, admin_client, mocker):
+        """Test users template has proper structure"""
+        # Mock the data fetching to provide mock user data for template rendering
+        mocker.patch(
+            "v4vapp_backend_v2.admin.admin_app.get_users_data",  # Adjust path if the function is elsewhere
+            return_value=mock_user_data,
+        )
+
+        response = admin_client.get("/admin/users")
+        assert response.status_code == 200
+        content = response.text
+
+        # Check for Bootstrap components
+        assert "card-header" in content
+        assert "table-responsive" in content
+        assert "badge" in content  # Status badges
+
+        # Check for summary statistics cards
+        assert "bg-light" in content
+        assert "Total Users" in content
+        assert "Active Users" in content
+
     def test_dashboard_template_elements(self, admin_client):
         """Test dashboard template contains all expected elements"""
         response = admin_client.get("/admin")
@@ -327,21 +349,6 @@ class TestAdminTemplates:
         assert "Users" in content
         assert "/admin" in content
         assert "/admin/users" in content
-
-    def test_users_template_structure(self, admin_client):
-        """Test users template has proper structure"""
-        response = admin_client.get("/admin/users")
-        content = response.text
-
-        # Check for Bootstrap components
-        assert "card-header" in content
-        assert "table-responsive" in content
-        assert "badge" in content  # Status badges
-
-        # Check for summary statistics cards
-        assert "bg-light" in content
-        assert "Total Users" in content
-        assert "Active Users" in content
 
     def test_template_inheritance(self, admin_client):
         """Test that templates properly inherit from base"""
