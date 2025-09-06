@@ -24,7 +24,7 @@ from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConf
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
-from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
+from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
 
 ICON = "🏆"
