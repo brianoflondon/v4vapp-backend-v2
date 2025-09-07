@@ -15,7 +15,8 @@ from nectar.memo import Memo
 from nectar.price import Price
 from nectar.transactionbuilder import TransactionBuilder
 from nectarapi.exceptions import UnhandledRPCError
-from nectarbase.operations import Transfer
+from nectarbase.operations import Custom_json as NectarCustomJson
+from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
@@ -261,6 +262,87 @@ def get_good_nodes() -> List[str]:
             InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
 
     return good_nodes
+
+
+async def get_verified_hive_client(
+    hive_role: HiveRoles = HiveRoles.server,
+    nobroadcast: bool = False,
+) -> Tuple[Hive, str]:
+    """
+    Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
+
+    Args:
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+        hive_role (HiveRoles, optional): The role to use for the Hive client. Defaults to HiveRoles.server.
+
+    Returns:
+        Tuple[Hive, str]: A tuple containing the initialized Hive client and the server account name.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
+    hive_config = InternalConfig().config.hive
+
+    hive_account = hive_config.get_hive_role_account(hive_role)
+
+    if not hive_account:
+        raise HiveToLightningError("Missing Hive server account configuration for repayment")
+
+    memo_key = hive_account.memo_key or ""
+    active_key = hive_account.active_key or ""
+    if not memo_key or not active_key:
+        raise HiveToLightningError("Missing Hive server account keys for repayment")
+
+    hive_client = get_hive_client(
+        keys=[
+            hive_account.memo_key,
+            hive_account.active_key,
+        ],
+        nobroadcast=nobroadcast,
+    )
+    return hive_client, hive_account.name
+
+
+async def get_verified_hive_client_for_accounts(
+    accounts: List[str],
+    nobroadcast: bool = False,
+) -> Hive:
+    """
+    Asynchronously obtains a verified Hive client instance for a list of accounts using server account credentials from the internal configuration.
+    This function checks the provided accounts against the internal Hive configuration and initializes a Hive client with the necessary keys.
+    If no keys are found for the provided accounts, it defaults to using the server account's memo and active keys.
+
+    Args:
+        accounts (List[str]): A list of Hive account names to verify.
+        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
+
+    Returns:
+        Hive: An initialized Hive client instance.
+
+    Raises:
+        HiveToLightningError: If the server account configuration or required keys are missing.
+    """
+    hive_config = InternalConfig().config.hive
+    hive_accounts = []
+    keys = []
+    for account in accounts:
+        if hive_config.hive_accs.get(account):
+            hive_account = hive_config.hive_accs[account]
+            hive_accounts.append(hive_account)
+            all_keys = hive_account.keys
+            if all_keys:
+                keys.extend(all_keys)
+    if not keys and hive_config.server_account:
+        keys = [
+            hive_config.server_account.memo_key,
+            hive_config.server_account.active_key,
+        ]
+
+    hive_client = get_hive_client(
+        keys=keys,
+        nobroadcast=nobroadcast,
+    )
+    return hive_client
 
 
 class HiveInternalQuote(BaseModel):
@@ -547,7 +629,8 @@ async def perform_transfer_checks(
 
 
 async def send_transfer_bulk(
-    transfer_list: List[PendingTransaction],
+    transfer_list: List[PendingTransaction] = [],
+    custom_json_list: List[PendingCustomJson] = [],
     hive_client: Hive | None = None,
     keys: List[str] = [],
     nobroadcast: bool = False,
@@ -580,7 +663,7 @@ async def send_transfer_bulk(
         raise ValueError(
             "nobroadcast is not supported if hive_client is passed, nobroadcast must be set in the hive_client"
         )
-    transfer = transfer_list[0]
+    # transfer = transfer_list[0]
     try:
         tx = TransactionBuilder(blockchain_instance=hive_client)
         for transfer in transfer_list:
@@ -590,45 +673,57 @@ async def send_transfer_bulk(
                 "amount": transfer.amount,
                 "memo": transfer.memo,
             }
-            tx.appendOps(Transfer(transfer_nectar))
+            tx.appendOps(NectarTransfer(transfer_nectar))
             tx.appendSigner(transfer.from_account, "active")
+        for custom_json in custom_json_list:
+            custom_json_nectar = {
+                "id": custom_json.cj_id,
+                "json": custom_json.json_data,
+                "required_auths": [custom_json.send_account],
+                "required_posting_auths": [],
+            }
+            tx.appendOps(NectarCustomJson(custom_json_nectar))
+            tx.appendSigner(custom_json.send_account, "active")
+
         # signed_tx = tx.sign()
         broadcast_tx = tx.broadcast()
         return broadcast_tx or {}
     except UnhandledRPCError as ex:
         # Handle insufficient funds
-        for arg in ex.args:
-            if "does not have sufficient funds" in arg:
-                raise HiveNotEnoughHiveInAccount(
-                    f"{transfer.from_account} Failure during send | "
-                    f"Not enough to pay {transfer.amount}  | "
-                    f"to: {transfer.to_account} | Hive error: {ex}",
-                    sending_amount=Amount(str(transfer.amount)),
-                )
-            if "Cannot transfer a negative amount" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{transfer.from_account} Failure during send | "
-                    f"Can't send negative or zero {transfer.amount}  | "
-                    f"to: {transfer.to_account} | Hive error: {ex}"
-                )
-            if "Duplicate transaction check failed" in arg:
-                raise HiveTryingToSendZeroOrNegativeAmount(
-                    f"{transfer.from_account} Failure during send | "
-                    f"Looks like we tried to send transaction twice | "
-                    f"{transfer.memo} | "
-                    f"{transfer.amount}  | "
-                    f"to: {transfer.to_account} | Hive error: {ex}"
-                )
-        else:
-            # trx = {"UnhandledRPCError": f"{ex}"}
-            logger.error(
-                f"UnhandledRPCError during send_transfer: {ex}",
-                extra={
-                    "notification": False,
-                    "transfer_list": transfer_list,
-                },
-            )
-            raise HiveSomeOtherRPCException(f"{ex}")
+        logger.error(
+            f"UnhandledRPCError during send_transfer: {ex}",
+            extra={
+                "notification": False,
+                "transfer_list": transfer_list,
+            },
+        )
+        raise HiveSomeOtherRPCException(f"{ex}")
+        # for arg in ex.args:
+        #     logger.error(arg)
+
+        # if "does not have sufficient funds" in arg:
+        #     raise HiveNotEnoughHiveInAccount(
+        #         f"{transfer.from_account} Failure during send | "
+        #         f"Not enough to pay {transfer.amount}  | "
+        #         f"to: {transfer.to_account} | Hive error: {ex}",
+        #         sending_amount=Amount(str(transfer.amount)),
+        #     )
+        # if "Cannot transfer a negative amount" in arg:
+        #     raise HiveTryingToSendZeroOrNegativeAmount(
+        #         f"{transfer.from_account} Failure during send | "
+        #         f"Can't send negative or zero {transfer.amount}  | "
+        #         f"to: {transfer.to_account} | Hive error: {ex}"
+        #     )
+        # if "Duplicate transaction check failed" in arg:
+        #     raise HiveTryingToSendZeroOrNegativeAmount(
+        #         f"{transfer.from_account} Failure during send | "
+        #         f"Looks like we tried to send transaction twice | "
+        #         f"{transfer.memo} | "
+        #         f"{transfer.amount}  | "
+        #         f"to: {transfer.to_account} | Hive error: {ex}"
+        #     )
+        # else:
+        #     # trx = {"UnhandledRPCError": f"{ex}"}
     except Exception as ex:
         logger.error(
             f"UnhandledRPCError during send_transfer: {ex}",
@@ -880,87 +975,6 @@ async def send_transfer(
             )
             raise HiveSomeOtherRPCException(f"{ex}")
     return {}
-
-
-async def get_verified_hive_client(
-    hive_role: HiveRoles = HiveRoles.server,
-    nobroadcast: bool = False,
-) -> Tuple[Hive, str]:
-    """
-    Asynchronously obtains a verified Hive client instance using server account credentials from the internal configuration.
-
-    Args:
-        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
-        hive_role (HiveRoles, optional): The role to use for the Hive client. Defaults to HiveRoles.server.
-
-    Returns:
-        Tuple[Hive, str]: A tuple containing the initialized Hive client and the server account name.
-
-    Raises:
-        HiveToLightningError: If the server account configuration or required keys are missing.
-    """
-    hive_config = InternalConfig().config.hive
-
-    hive_account = hive_config.get_hive_role_account(hive_role)
-
-    if not hive_account:
-        raise HiveToLightningError("Missing Hive server account configuration for repayment")
-
-    memo_key = hive_account.memo_key or ""
-    active_key = hive_account.active_key or ""
-    if not memo_key or not active_key:
-        raise HiveToLightningError("Missing Hive server account keys for repayment")
-
-    hive_client = get_hive_client(
-        keys=[
-            hive_account.memo_key,
-            hive_account.active_key,
-        ],
-        nobroadcast=nobroadcast,
-    )
-    return hive_client, hive_account.name
-
-
-async def get_verified_hive_client_for_accounts(
-    accounts: List[str],
-    nobroadcast: bool = False,
-) -> Hive:
-    """
-    Asynchronously obtains a verified Hive client instance for a list of accounts using server account credentials from the internal configuration.
-    This function checks the provided accounts against the internal Hive configuration and initializes a Hive client with the necessary keys.
-    If no keys are found for the provided accounts, it defaults to using the server account's memo and active keys.
-
-    Args:
-        accounts (List[str]): A list of Hive account names to verify.
-        nobroadcast (bool, optional): If True, disables broadcasting of transactions. Defaults to False.
-
-    Returns:
-        Hive: An initialized Hive client instance.
-
-    Raises:
-        HiveToLightningError: If the server account configuration or required keys are missing.
-    """
-    hive_config = InternalConfig().config.hive
-    hive_accounts = []
-    keys = []
-    for account in accounts:
-        if hive_config.hive_accs.get(account):
-            hive_account = hive_config.hive_accs[account]
-            hive_accounts.append(hive_account)
-            all_keys = hive_account.keys
-            if all_keys:
-                keys.extend(all_keys)
-    if not keys and hive_config.server_account:
-        keys = [
-            hive_config.server_account.memo_key,
-            hive_config.server_account.active_key,
-        ]
-
-    hive_client = get_hive_client(
-        keys=keys,
-        nobroadcast=nobroadcast,
-    )
-    return hive_client
 
 
 def process_user_memo(memo: str) -> str:

@@ -1,5 +1,6 @@
 from typing import List
 
+from colorama import Fore, Style
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -79,7 +80,9 @@ async def resend_pending_transactions() -> None:
     for pending in sending:
         try:
             trx = await send_pending(pending=pending, hive_client=hive_client)
-            logger.info(f"Resent pending transaction {pending}, trx: {trx.get('trx_id')}")
+            logger.info(
+                f"{Fore.GREEN}Resent pending transaction {pending}, trx: {trx.get('trx_id')}{Style.RESET_ALL}"
+            )
             await pending.delete()
         except Exception as e:
             logger.warning(f"Failed to resend pending transaction {pending}: {e}")
