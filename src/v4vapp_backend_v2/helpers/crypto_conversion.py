@@ -6,7 +6,7 @@ from math import isclose
 from typing import Any, ClassVar
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -55,7 +55,7 @@ class CryptoConv(BaseModel):
         None, description="The date when the conversion was fetched"
     )
 
-    @field_validator('hive', 'hbd', 'usd', 'btc', 'sats_hive', 'sats_hbd', 'value', mode='before')
+    @field_validator("hive", "hbd", "usd", "btc", "sats_hive", "sats_hbd", "value", mode="before")
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):
@@ -368,7 +368,7 @@ class CryptoConversion(BaseModel):
     btc: Decimal = Decimal(0)
     msats_fee: int = 0
 
-    @field_validator('value', 'hive', 'hbd', 'usd', 'btc', mode='before')
+    @field_validator("value", "hive", "hbd", "usd", "btc", mode="before")
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):

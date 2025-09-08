@@ -118,7 +118,16 @@ class HiveRatesDB(BaseModel):
 
     model_config = ConfigDict(json_encoders={Decimal: str})
 
-    @field_validator('hive_usd', 'hbd_usd', 'btc_usd', 'hive_hbd', 'sats_hive', 'sats_usd', 'sats_hbd', mode='before')
+    @field_validator(
+        "hive_usd",
+        "hbd_usd",
+        "btc_usd",
+        "hive_hbd",
+        "sats_hive",
+        "sats_usd",
+        "sats_hbd",
+        mode="before",
+    )
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):
@@ -168,7 +177,7 @@ class QuoteResponse(BaseModel):
 
     model_config = ConfigDict(json_encoders={Decimal: str})
 
-    @field_validator('hive_usd', 'hbd_usd', 'btc_usd', 'hive_hbd', mode='before')
+    @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", mode="before")
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):
