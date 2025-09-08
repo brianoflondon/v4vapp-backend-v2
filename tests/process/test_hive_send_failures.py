@@ -28,7 +28,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
 )
-from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
+from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)

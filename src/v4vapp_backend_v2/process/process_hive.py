@@ -21,7 +21,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
 from v4vapp_backend_v2.process.process_errors import HiveLightningError
 from v4vapp_backend_v2.process.process_orders import process_create_fill_order_op
-from v4vapp_backend_v2.process.process_resend_hive import resend_transactions
+from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
 
 # MARK: Hive Transaction Processing

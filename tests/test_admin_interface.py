@@ -10,6 +10,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -32,6 +33,25 @@ def mock_db(mocker):
         "v4vapp_backend_v2.hive_models.pending_transaction_class.PendingTransaction.list_all_str",
         return_value=[],
     )
+
+
+@pytest.fixture
+def mock_user_data():
+    """Mock user data for testing."""
+    return [
+        {
+            "sub": "brianoflondon",
+            "balance_sats": 1500000,
+            "status": "active",
+            "last_updated": "2023-01-01",
+        },
+        {
+            "sub": "testuser",
+            "balance_sats": -50000,
+            "status": "inactive",
+            "last_updated": "2023-01-02",
+        },
+    ]
 
 
 class TestAdminEndpoints:
@@ -79,8 +99,18 @@ class TestAdminEndpoints:
                 """Test users page with mocked data to ensure content renders"""
                 # Mock the database call to return mock data
                 mocker.patch(
-                    "v4vapp_backend_v2.admin.admin_app.get_users_data",  # Adjust to actual function
-                    return_value=mock_user_data,
+                    "v4vapp_backend_v2.admin.routers.users.list_all_accounts",
+                    return_value=[
+                        LiabilityAccount(name="VSC Liability", sub="brianoflondon"),
+                    ],
+                )
+                mocker.patch(
+                    "v4vapp_backend_v2.admin.routers.users.keepsats_balance",
+                    return_value=(1500000 * 1000, None),
+                )
+                mocker.patch(
+                    "v4vapp_backend_v2.admin.routers.users.check_hive_conversion_limits",
+                    return_value=None,
                 )
                 response = admin_client.get("/admin/users")
                 assert response.status_code == 200
@@ -256,10 +286,19 @@ class TestAdminEndpoints:
 
             def test_users_page_error_state(self, admin_client, mocker):
                 """Test users page with error data"""
-                error_data = [{"sub": "error_user", "balance_sats": None, "error": "DB Error"}]
                 mocker.patch(
-                    "v4vapp_backend_v2.admin.admin_app.get_users_data",  # Adjust to actual function
-                    return_value=error_data,
+                    "v4vapp_backend_v2.admin.routers.users.list_all_accounts",
+                    return_value=[
+                        LiabilityAccount(name="VSC Liability", sub="error_user"),
+                    ],
+                )
+                mocker.patch(
+                    "v4vapp_backend_v2.admin.routers.users.keepsats_balance",
+                    side_effect=Exception("DB Error"),
+                )
+                mocker.patch(
+                    "v4vapp_backend_v2.admin.routers.users.check_hive_conversion_limits",
+                    return_value=None,
                 )
                 response = admin_client.get("/admin/users")
                 assert response.status_code == 200
@@ -313,24 +352,33 @@ class TestAdminEndpoints:
 class TestAdminTemplates:
     """Test template rendering and content"""
 
-    def test_users_template_structure(self, admin_client, mocker):
+    def test_users_template_structure(self, admin_client, mocker, mock_user_data):
         """Test users template has proper structure"""
-        # Mock the data fetching to provide mock user data for template rendering
+        # Mock the functions used in users_page
         mocker.patch(
-            "v4vapp_backend_v2.admin.admin_app.get_users_data",  # Adjust path if the function is elsewhere
-            return_value=mock_user_data,
+            "v4vapp_backend_v2.admin.routers.users.list_all_accounts",
+            return_value=[
+                LiabilityAccount(name="VSC Liability", sub="brianoflondon"),
+                LiabilityAccount(name="VSC Liability", sub="testuser"),
+            ],
         )
-
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.keepsats_balance",
+            side_effect=[
+                (1500000 * 1000, None),  # msats for brianoflondon
+                (-50000 * 1000, None),  # msats for testuser
+            ],
+        )
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.users.check_hive_conversion_limits",
+            return_value=None,  # Mock as needed
+        )
         response = admin_client.get("/admin/users")
         assert response.status_code == 200
         content = response.text
-
-        # Check for Bootstrap components
         assert "card-header" in content
         assert "table-responsive" in content
-        assert "badge" in content  # Status badges
-
-        # Check for summary statistics cards
+        assert "badge" in content
         assert "bg-light" in content
         assert "Total Users" in content
         assert "Active Users" in content

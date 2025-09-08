@@ -155,7 +155,7 @@ async def main():
 
     customers = ["v4vapp-test", "v4vapp.qrc"]
     hive_client = await get_verified_hive_client_for_accounts(customers)
-    server = hive_config.get_hive_role_account(hive_role=HiveRoles.server).name
+    server = InternalConfig().server_id
 
     # pay with keepsats
     transfer_list = []
