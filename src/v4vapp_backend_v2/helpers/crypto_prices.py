@@ -9,7 +9,7 @@ from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
@@ -118,6 +118,13 @@ class HiveRatesDB(BaseModel):
 
     model_config = ConfigDict(json_encoders={Decimal: str})
 
+    @field_validator('hive_usd', 'hbd_usd', 'btc_usd', 'hive_hbd', 'sats_hive', 'sats_usd', 'sats_hbd', mode='before')
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
+
 
 # Define the annotated type
 RawResponseType = Annotated[Dict[str, Any] | List[Dict[str, Any]], "Raw response type"]
@@ -160,6 +167,13 @@ class QuoteResponse(BaseModel):
     error_details: Dict[str, Any] = {}
 
     model_config = ConfigDict(json_encoders={Decimal: str})
+
+    @field_validator('hive_usd', 'hbd_usd', 'btc_usd', 'hive_hbd', mode='before')
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
 
     def __init__(
         self,

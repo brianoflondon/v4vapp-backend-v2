@@ -6,7 +6,7 @@ from math import isclose
 from typing import Any, ClassVar
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, computed_field
 
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -54,6 +54,13 @@ class CryptoConv(BaseModel):
     fetch_date: datetime | None = Field(
         None, description="The date when the conversion was fetched"
     )
+
+    @field_validator('hive', 'hbd', 'usd', 'btc', 'sats_hive', 'sats_hbd', 'value', mode='before')
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
 
     UNIT_TOLERANCE: ClassVar[dict[str, float]] = {
         "hive": 0.003,
@@ -360,6 +367,13 @@ class CryptoConversion(BaseModel):
     msats: int = 0
     btc: Decimal = Decimal(0)
     msats_fee: int = 0
+
+    @field_validator('value', 'hive', 'hbd', 'usd', 'btc', mode='before')
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
 
     # model_config = ConfigDict(
     #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
