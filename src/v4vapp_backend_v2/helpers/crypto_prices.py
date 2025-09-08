@@ -13,10 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import (
-    mongo_call,
-    summarize_write_result,  # optional pretty log
-)
+from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
+from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, format_time_delta
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
@@ -116,8 +114,6 @@ class HiveRatesDB(BaseModel):
     sats_usd: Decimal
     sats_hbd: Decimal
 
-    model_config = ConfigDict(json_encoders={Decimal: str})
-
     @field_validator(
         "hive_usd",
         "hbd_usd",
@@ -175,7 +171,6 @@ class QuoteResponse(BaseModel):
     error: str = ""
     error_details: Dict[str, Any] = {}
 
-    model_config = ConfigDict(json_encoders={Decimal: str})
 
     @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", mode="before")
     @classmethod
@@ -366,8 +361,6 @@ class AllQuotes(BaseModel):
 
     fetch_date_class: ClassVar[datetime] = datetime.now(tz=timezone.utc)
     db_store_timestamp: ClassVar[datetime | None] = None
-
-    model_config = ConfigDict(json_encoders={Decimal: str})
 
     def get_one_quote(self) -> QuoteResponse:
         """

@@ -375,13 +375,6 @@ class CryptoConversion(BaseModel):
             return Decimal(str(v))
         return v
 
-    # model_config = ConfigDict(
-    #     arbitrary_types_allowed=True,  # Allow 'Amount' type from beem
-    # )
-    # model_config = ConfigDict(
-    #     json_encoders={Decimal: str},  # Serialize Decimal as string for JSON
-    # )
-
     def __init__(
         self,
         amount: Amount | AmountPyd | None = None,
