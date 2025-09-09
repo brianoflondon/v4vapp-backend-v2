@@ -98,6 +98,9 @@ async def users_data_api():
             balance_sats = net_msats // 1000  # Convert msats to sats
             check_limits = await check_hive_conversion_limits(cust_id=account.sub)
 
+            balance_usd = account_details.conv_total.usd
+            balance_usd_fmt = f"{balance_usd:,.2f}"
+
             # Format the balance for display
             if balance_sats > 0:
                 balance_sats_fmt = f"{balance_sats:,.0f}"
@@ -111,6 +114,8 @@ async def users_data_api():
                     "sub": account.sub,
                     "balance_sats": balance_sats,
                     "balance_sats_fmt": balance_sats_fmt,
+                    "balance_usd": balance_usd,
+                    "balance_usd_fmt": balance_usd_fmt,
                     "has_transactions": (balance_sats is not None and balance_sats != 0)
                     or len(account_details.balances) > 0,
                     "last_transaction_date": account_details.last_transaction_date.isoformat()

@@ -19,6 +19,7 @@
                             loop.last %} | {% endif %}{% endfor %}
                         </div>
                     </div>
+                    <!-- Controls and selectors -->
                     <div class="d-flex align-items-center">
                         <input type="text" id="search-input" class="form-control form-control-sm"
                             placeholder="Search users..." value="" style="width: 200px;">
@@ -32,11 +33,17 @@
                                 <option value="1month">1 month</option>
                             </select>
                         </div>
-                        <div class="form-check">
+                        <div class="form-check me-3">
                             <input class="form-check-input" type="checkbox" id="active-only">
                             <label class="form-check-label" for="active-only">
                                 Show only active users
                             </label>
+                        </div>
+                        <div class="ms-2">
+                            <select id="display-currency" class="form-select form-select-sm">
+                                <option value="SATS">SATS</option>
+                                <option value="USD">USD</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -97,7 +104,8 @@
                                     {% for entry in limit_entries %}
                                     <th scope="col" class="text-center">{{ entry.label }} (%)</th>
                                     {% endfor %}
-                                    <th scope="col" class="sortable text-end" data-sort="balance">Balance (SATS) <i
+                                    <th scope="col" class="sortable text-end" data-sort="balance">Balance (<span
+                                            id="balance-currency-label">SATS</span>) <i
                                             class="bi bi-chevron-expand"></i></th>
                                     <th scope="col" class="sortable text-end" data-sort="age">Age <i
                                             class="bi bi-chevron-expand"></i></th>
@@ -106,76 +114,7 @@
                                 </tr>
                             </thead>
                             <tbody id="users-tbody">
-                                {% if users_data %}
-                                {% for user in users_data %}
-                                {% if not user.limit_ok %}
-                                <tr class="table-row-limit-not-ok" data-sub="{{ user.sub }}">
-                                    <td></td>
-                                    <td colspan="{{ limit_entries|length  }}" class="text-center">
-                                        <small style="margin: 0; font-size: 0.75rem;">{{ user.limit }} {{
-                                            user.next_limit_expiry }}</small>
-                                    </td>
-                                    <td colspan="4"></td>
-                                </tr>
-                                {% endif %}
-                                <tr data-sub="{{ user.sub }}" data-balance="{{ user.balance_sats or 0 }}"
-                                    data-has-transactions="{{ user.has_transactions|lower }}"
-                                    data-error="{{ 'true' if user.error else 'false' }}"
-                                    data-last-transaction="{{ user.last_transaction_date }}"
-                                    data-last-transaction-age="{% if user.last_transaction_date %}{{ (now - user.last_transaction_date).days }}{% else %}999999{% endif %}">
-                                    <td>
-                                        <strong>
-                                            <a href="/admin/accounts/balance/user/{{ user.sub }}"
-                                                class="text-decoration-none">
-                                                {{ user.sub }}
-                                            </a>
-                                        </strong>
-                                    </td>
-                                    {% for percent in user.limit_percents %}
-                                    <td class="text-center">
-                                        <span class="me-2">{{ percent }}%</span>
-                                        <small class="text-muted">{{ user.limit_sats[loop.index0] }}</small>
-                                    </td>
-                                    {% endfor %}
-                                    <td class="text-end">
-                                        {% if user.balance_sats is not none %}
-                                        {% if user.balance_sats > 0 %}
-                                        <span class="text-success fw-bold">{{ user.balance_sats_fmt }}</span>
-                                        {% elif user.balance_sats < 0 %} <span class="text-danger fw-bold">{{
-                                            user.balance_sats_fmt }}</span>
-                                            {% else %}
-                                            <span class="text-muted">{{ user.balance_sats_fmt }}</span>
-                                            {% endif %}
-                                            {% else %}
-                                            <span class="text-warning">Error</span>
-                                            {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if user.last_transaction_date %}
-                                        {{ (now - user.last_transaction_date).days }} days
-                                        {% else %}
-                                        Never
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        {% if user.error %}
-                                        <span class="badge bg-danger">Error</span>
-                                        {% elif user.has_transactions %}
-                                        <span class="badge bg-success">Active</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">No Activity</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        <a href="/admin/accounts/balance/user/{{ user.sub }}"
-                                            class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye me-1"></i>
-                                            View Details
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                                {% endif %}
+                                <!-- Data will be populated by JavaScript -->
                             </tbody>
                         </table>
                     </div>
@@ -196,10 +135,13 @@
         const totalBalanceEl = document.getElementById('total-positive-balance');
         const errorCountEl = document.getElementById('error-count');
         const loadingOverlay = document.getElementById('loading-overlay');
+        const displayCurrencySelect = document.getElementById('display-currency');
+        const balanceCurrencyLabel = document.getElementById('balance-currency-label');
 
         let currentSort = { column: 'user', direction: 'asc' };
         let usersData = [];
         let currentNow = null;
+        let currentCurrency = 'SATS'; // Default currency
 
         // Load user data asynchronously
         async function loadUserData() {
@@ -292,7 +234,7 @@
                 // Add main user row
                 const row = document.createElement('tr');
                 row.setAttribute('data-sub', user.sub);
-                row.setAttribute('data-balance', user.balance_sats || 0);
+                row.setAttribute('data-balance', currentCurrency === 'SATS' ? (user.balance_sats || 0) : (user.balance_usd || 0));
                 row.setAttribute('data-has-transactions', (user.has_transactions || false).toString());
                 row.setAttribute('data-error', (user.error ? 'true' : 'false'));
                 row.setAttribute('data-last-transaction', user.last_transaction_date || '');
@@ -314,9 +256,15 @@
                     `).join('') : '<td colspan="4" class="text-center">-</td>'}
                     <td class="text-end">
                         ${user.balance_sats !== null && user.balance_sats !== undefined ?
-                        (user.balance_sats > 0 ? `<span class="text-success fw-bold">${user.balance_sats_fmt}</span>` :
-                            user.balance_sats < 0 ? `<span class="text-danger fw-bold">${user.balance_sats_fmt}</span>` :
-                                `<span class="text-muted">${user.balance_sats_fmt}</span>`) :
+                        (currentCurrency === 'SATS' ?
+                            (user.balance_sats > 0 ? `<span class="text-success fw-bold">${user.balance_sats_fmt}</span>` :
+                                user.balance_sats < 0 ? `<span class="text-danger fw-bold">${user.balance_sats_fmt}</span>` :
+                                    `<span class="text-muted">${user.balance_sats_fmt}</span>`) :
+                            (user.balance_usd !== null && user.balance_usd !== undefined ?
+                                (user.balance_usd > 0 ? `<span class="text-success fw-bold">$${user.balance_usd_fmt}</span>` :
+                                    user.balance_usd < 0 ? `<span class="text-danger fw-bold">$${user.balance_usd_fmt}</span>` :
+                                        `<span class="text-muted">$${user.balance_usd_fmt}</span>`) :
+                                '<span class="text-warning">Error</span>')) :
                         '<span class="text-warning">Error</span>'}
                     </td>
                     <td class="text-end">
@@ -362,8 +310,8 @@
                     aVal = a.sub.toLowerCase();
                     bVal = b.sub.toLowerCase();
                 } else if (column === 'balance') {
-                    aVal = a.balance_sats || 0;
-                    bVal = b.balance_sats || 0;
+                    aVal = currentCurrency === 'SATS' ? (a.balance_sats || 0) : (a.balance_usd || 0);
+                    bVal = currentCurrency === 'SATS' ? (b.balance_sats || 0) : (b.balance_usd || 0);
                 } else if (column === 'age') {
                     aVal = a.last_transaction_date ? Math.floor((currentNow - new Date(a.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
                     bVal = b.last_transaction_date ? Math.floor((currentNow - new Date(b.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
@@ -421,14 +369,26 @@
         function updateSummaries(data = usersData) {
             let totalUsers = data.length;
             let activeUsers = data.filter(u => u.has_transactions).length;
-            let totalPositiveBalance = data
-                .filter(u => u.balance_sats && u.balance_sats > 0)
-                .reduce((sum, u) => sum + u.balance_sats, 0);
+            let totalPositiveBalance = 0;
+            let totalPositiveBalanceFmt = '0';
+
+            if (currentCurrency === 'SATS') {
+                totalPositiveBalance = data
+                    .filter(u => u.balance_sats && u.balance_sats > 0)
+                    .reduce((sum, u) => sum + u.balance_sats, 0);
+                totalPositiveBalanceFmt = totalPositiveBalance > 0 ? formatBalance(totalPositiveBalance) : '0';
+            } else {
+                totalPositiveBalance = data
+                    .filter(u => u.balance_usd && u.balance_usd > 0)
+                    .reduce((sum, u) => sum + u.balance_usd, 0);
+                totalPositiveBalanceFmt = totalPositiveBalance > 0 ? `$${totalPositiveBalance.toFixed(2)}` : '$0.00';
+            }
+
             let errorCount = data.filter(u => u.error).length;
 
             totalUsersEl.textContent = totalUsers;
             activeUsersEl.textContent = activeUsers;
-            totalBalanceEl.textContent = totalPositiveBalance > 0 ? formatBalance(totalPositiveBalance) : '0';
+            totalBalanceEl.textContent = totalPositiveBalanceFmt;
             errorCountEl.textContent = errorCount;
         }
 
@@ -459,6 +419,14 @@
         searchInput.addEventListener('input', filterAndUpdate);
         activeOnlyCheckbox.addEventListener('change', filterAndUpdate);
         document.getElementById('active-period').addEventListener('change', filterAndUpdate);
+        displayCurrencySelect.addEventListener('change', function () {
+            currentCurrency = this.value;
+            balanceCurrencyLabel.textContent = currentCurrency;
+            console.log('Currency changed to:', currentCurrency);
+            console.log('Users data sample:', usersData[0]);
+            populateTable(usersData);
+            updateSummaries();
+        });
 
         // Load data initially
         loadUserData();
