@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
@@ -39,9 +40,55 @@
                         </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    {% if users_data %}
-                    <div class="table-responsive">
+                <div class="card-body mt-3">
+                    <!-- Summary Stats -->
+                    <div class="row mt-2 mb-5">
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-primary" id="total-users">0</div>
+                                    <small class="text-muted">Total Users</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-success" id="active-users">0</div>
+                                    <small class="text-muted">Active Users</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-info" id="total-positive-balance">0</div>
+                                    <small class="text-muted">Total Positive Balance</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="h4 text-warning" id="error-count">0</div>
+                                    <small class="text-muted">Errors</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive position-relative">
+                        <!-- Loading Overlay - positioned over the table area -->
+                        <div id="loading-overlay" class="table-loading-overlay">
+                            <div class="loading-content">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <div class="loading-text mt-3">
+                                    <h5>Loading VSC Liability Users...</h5>
+                                    <p class="text-muted">Fetching user balances and transaction data</p>
+                                </div>
+                            </div>
+                        </div>
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -52,11 +99,14 @@
                                     {% endfor %}
                                     <th scope="col" class="sortable text-end" data-sort="balance">Balance (SATS) <i
                                             class="bi bi-chevron-expand"></i></th>
+                                    <th scope="col" class="sortable text-end" data-sort="age">Age <i
+                                            class="bi bi-chevron-expand"></i></th>
                                     <th scope="col" class="text-center">Status</th>
                                     <th scope="col" class="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="users-tbody">
+                                {% if users_data %}
                                 {% for user in users_data %}
                                 {% if not user.limit_ok %}
                                 <tr class="table-row-limit-not-ok" data-sub="{{ user.sub }}">
@@ -65,13 +115,14 @@
                                         <small style="margin: 0; font-size: 0.75rem;">{{ user.limit }} {{
                                             user.next_limit_expiry }}</small>
                                     </td>
-                                    <td colspan="3"></td>
+                                    <td colspan="4"></td>
                                 </tr>
                                 {% endif %}
                                 <tr data-sub="{{ user.sub }}" data-balance="{{ user.balance_sats or 0 }}"
                                     data-has-transactions="{{ user.has_transactions|lower }}"
                                     data-error="{{ 'true' if user.error else 'false' }}"
-                                    data-last-transaction="{{ user.last_transaction_date }}">
+                                    data-last-transaction="{{ user.last_transaction_date }}"
+                                    data-last-transaction-age="{% if user.last_transaction_date %}{{ (now - user.last_transaction_date).days }}{% else %}999999{% endif %}">
                                     <td>
                                         <strong>
                                             <a href="/admin/accounts/balance/user/{{ user.sub }}"
@@ -99,6 +150,13 @@
                                             <span class="text-warning">Error</span>
                                             {% endif %}
                                     </td>
+                                    <td class="text-end">
+                                        {% if user.last_transaction_date %}
+                                        {{ (now - user.last_transaction_date).days }} days
+                                        {% else %}
+                                        Never
+                                        {% endif %}
+                                    </td>
                                     <td class="text-center">
                                         {% if user.error %}
                                         <span class="badge bg-danger">Error</span>
@@ -117,55 +175,11 @@
                                     </td>
                                 </tr>
                                 {% endfor %}
+                                {% endif %}
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- Summary Stats -->
-                    <div class="row mt-4">
-                        <div class="col-md-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <div class="h4 text-primary" id="total-users">{{ summary.total_users }}</div>
-                                    <small class="text-muted">Total Users</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <div class="h4 text-success" id="active-users">{{ summary.active_users }}</div>
-                                    <small class="text-muted">Active Users</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <div class="h4 text-info" id="total-positive-balance">{{
-                                        summary.total_positive_balance_fmt }}</div>
-                                    <small class="text-muted">Total Positive Balance</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <div class="h4 text-warning" id="error-count">{{ summary.error_count }}</div>
-                                    <small class="text-muted">Errors</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {% else %}
-                    <div class="text-center py-5">
-                        <div class="h1 text-muted mb-3">👥</div>
-                        <h4 class="text-muted">No VSC Liability Users Found</h4>
-                        <p class="text-muted">There are currently no users with VSC Liability accounts in the system.
-                        </p>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -181,8 +195,153 @@
         const activeUsersEl = document.getElementById('active-users');
         const totalBalanceEl = document.getElementById('total-positive-balance');
         const errorCountEl = document.getElementById('error-count');
+        const loadingOverlay = document.getElementById('loading-overlay');
 
         let currentSort = { column: 'user', direction: 'asc' };
+        let usersData = [];
+        let currentNow = null;
+
+        // Load user data asynchronously
+        async function loadUserData() {
+            try {
+                console.log('Starting to load user data...');
+                const response = await fetch('/admin/users/data');
+                console.log('Fetch response:', response);
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Received data:', data);
+
+                usersData = data.users_data;
+                currentNow = new Date(data.now);
+
+                // Populate the table
+                populateTable(usersData);
+
+                // Update summaries
+                updateSummaries();
+
+                // Add a delay to ensure user sees the loaded data before hiding overlay
+                setTimeout(function () {
+                    if (loadingOverlay) {
+                        loadingOverlay.style.opacity = '0';
+                        setTimeout(function () {
+                            loadingOverlay.style.display = 'none';
+                        }, 300);
+                    }
+                }, 500); // Increased delay to 500ms to show loaded data
+
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                // Hide loading overlay even on error
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                }
+                // Show error message in the table
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-5">
+                            <div class="h1 text-danger mb-3">⚠️</div>
+                            <h4 class="text-danger">Error Loading User Data</h4>
+                            <p class="text-muted">Failed to load user data. Please refresh the page to try again.</p>
+                            <p class="text-muted small">Error details: ${error.message}</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function populateTable(data) {
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                // Show empty state in the table
+                const emptyRow = document.createElement('tr');
+                emptyRow.innerHTML = `
+                    <td colspan="6" class="text-center py-5">
+                        <div class="h1 text-muted mb-3">👥</div>
+                        <h4 class="text-muted">No VSC Liability Users Found</h4>
+                        <p class="text-muted">There are currently no users with VSC Liability accounts in the system.</p>
+                    </td>
+                `;
+                tbody.appendChild(emptyRow);
+                return;
+            }
+
+            data.forEach(user => {
+                // Add limit warning row if needed
+                if (!user.limit_ok) {
+                    const limitRow = document.createElement('tr');
+                    limitRow.className = 'table-row-limit-not-ok';
+                    limitRow.setAttribute('data-sub', user.sub);
+                    limitRow.innerHTML = `
+                        <td></td>
+                        <td colspan="4" class="text-center">
+                            <small style="margin: 0; font-size: 0.75rem;">${user.limit_sats ? user.limit_sats.join(', ') : ''} ${user.next_limit_expiry || ''}</small>
+                        </td>
+                        <td></td>
+                    `;
+                    tbody.appendChild(limitRow);
+                }
+
+                // Add main user row
+                const row = document.createElement('tr');
+                row.setAttribute('data-sub', user.sub);
+                row.setAttribute('data-balance', user.balance_sats || 0);
+                row.setAttribute('data-has-transactions', (user.has_transactions || false).toString());
+                row.setAttribute('data-error', (user.error ? 'true' : 'false'));
+                row.setAttribute('data-last-transaction', user.last_transaction_date || '');
+                row.setAttribute('data-last-transaction-age', user.last_transaction_date ? Math.floor((currentNow - new Date(user.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999);
+
+                row.innerHTML = `
+                    <td>
+                        <strong>
+                            <a href="/admin/accounts/balance/user/${user.sub}" class="text-decoration-none">
+                                ${user.sub}
+                            </a>
+                        </strong>
+                    </td>
+                    ${user.limit_percents ? user.limit_percents.map((percent, index) => `
+                        <td class="text-center">
+                            <span class="me-2">${percent}%</span>
+                            <small class="text-muted">${user.limit_sats ? user.limit_sats[index] : ''}</small>
+                        </td>
+                    `).join('') : '<td colspan="4" class="text-center">-</td>'}
+                    <td class="text-end">
+                        ${user.balance_sats !== null && user.balance_sats !== undefined ?
+                        (user.balance_sats > 0 ? `<span class="text-success fw-bold">${user.balance_sats_fmt}</span>` :
+                            user.balance_sats < 0 ? `<span class="text-danger fw-bold">${user.balance_sats_fmt}</span>` :
+                                `<span class="text-muted">${user.balance_sats_fmt}</span>`) :
+                        '<span class="text-warning">Error</span>'}
+                    </td>
+                    <td class="text-end">
+                        ${user.last_transaction_date ?
+                        `${Math.floor((currentNow - new Date(user.last_transaction_date)) / (1000 * 60 * 60 * 24))} days` :
+                        'Never'}
+                    </td>
+                    <td class="text-center">
+                        ${user.error ?
+                        '<span class="badge bg-danger">Error</span>' :
+                        (user.has_transactions ?
+                            '<span class="badge bg-success">Active</span>' :
+                            '<span class="badge bg-secondary">No Activity</span>')}
+                    </td>
+                    <td class="text-center">
+                        <a href="/admin/accounts/balance/user/${user.sub}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye me-1"></i>
+                            View Details
+                        </a>
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
 
         function formatBalance(sats) {
             if (sats >= 1000000) {
@@ -195,31 +354,19 @@
         }
 
         function sortRows(column, direction) {
-            const rows = Array.from(tbody.querySelectorAll('tr[data-sub]'));
-            const limitRows = Array.from(tbody.querySelectorAll('tr.table-row-limit-not-ok'));
+            if (!usersData.length) return;
 
-            // Group rows by sub
-            const grouped = {};
-            rows.forEach(row => {
-                const sub = row.dataset.sub;
-                if (!grouped[sub]) grouped[sub] = { main: null, limit: null };
-                grouped[sub].main = row;
-            });
-            limitRows.forEach(row => {
-                const sub = row.dataset.sub;
-                if (grouped[sub]) grouped[sub].limit = row;
-            });
-
-            const groups = Object.values(grouped);
-
-            groups.sort((a, b) => {
+            usersData.sort((a, b) => {
                 let aVal, bVal;
                 if (column === 'user') {
-                    aVal = a.main.dataset.sub.toLowerCase();
-                    bVal = b.main.dataset.sub.toLowerCase();
+                    aVal = a.sub.toLowerCase();
+                    bVal = b.sub.toLowerCase();
                 } else if (column === 'balance') {
-                    aVal = parseInt(a.main.dataset.balance) || 0;
-                    bVal = parseInt(b.main.dataset.balance) || 0;
+                    aVal = a.balance_sats || 0;
+                    bVal = b.balance_sats || 0;
+                } else if (column === 'age') {
+                    aVal = a.last_transaction_date ? Math.floor((currentNow - new Date(a.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
+                    bVal = b.last_transaction_date ? Math.floor((currentNow - new Date(b.last_transaction_date)) / (1000 * 60 * 60 * 24)) : 999999;
                 }
 
                 if (direction === 'asc') {
@@ -229,21 +376,15 @@
                 }
             });
 
-            // Clear tbody
-            tbody.innerHTML = '';
-
-            // Append sorted groups
-            groups.forEach(group => {
-                if (group.limit) tbody.appendChild(group.limit);
-                tbody.appendChild(group.main);
-            });
+            populateTable(usersData);
         }
 
         function filterAndUpdate() {
+            if (!usersData.length) return;
+
             const searchTerm = searchInput.value.toLowerCase().trim();
             const activeOnly = activeOnlyCheckbox.checked;
             const activePeriod = document.getElementById('active-period').value;
-            const allRows = tbody.querySelectorAll('tr');
 
             // Calculate cutoff date for active period
             let cutoffDate = null;
@@ -258,54 +399,32 @@
                 }
             }
 
-            allRows.forEach(row => {
-                const sub = row.dataset.sub;
-                if (sub) {
-                    const matchesSearch = sub.toLowerCase().includes(searchTerm);
-                    const isActive = row.dataset.hasTransactions === 'true';
-                    const lastTx = row.dataset.lastTransaction;
-                    let matchesPeriod = true;
+            const filteredData = usersData.filter(user => {
+                const matchesSearch = user.sub.toLowerCase().includes(searchTerm);
+                const isActive = user.has_transactions;
+                let matchesPeriod = true;
 
-                    if (cutoffDate && lastTx) {
-                        const txDate = new Date(lastTx);
-                        matchesPeriod = txDate >= cutoffDate;
-                    } else if (cutoffDate && !lastTx) {
-                        matchesPeriod = false; // No transaction date, not active in period
-                    }
-
-                    const show = matchesSearch && (!activeOnly || isActive) && matchesPeriod;
-                    row.style.display = show ? '' : 'none';
-                } else {
-                    // For limit rows, show if the corresponding main row is shown
-                    const mainRow = row.nextElementSibling;
-                    if (mainRow && mainRow.dataset.sub) {
-                        row.style.display = mainRow.style.display;
-                    }
+                if (cutoffDate && user.last_transaction_date) {
+                    const txDate = new Date(user.last_transaction_date);
+                    matchesPeriod = txDate >= cutoffDate;
+                } else if (cutoffDate && !user.last_transaction_date) {
+                    matchesPeriod = false; // No transaction date, not active in period
                 }
+
+                return matchesSearch && (!activeOnly || isActive) && matchesPeriod;
             });
 
-            updateSummaries();
+            populateTable(filteredData);
+            updateSummaries(filteredData);
         }
 
-        function updateSummaries() {
-            const rows = tbody.querySelectorAll('tr[data-sub]');
-            let totalUsers = 0;
-            let activeUsers = 0;
-            let totalPositiveBalance = 0;
-            let errorCount = 0;
-
-            rows.forEach(row => {
-                if (row.style.display !== 'none') {
-                    totalUsers++;
-                    const hasTransactions = row.dataset.hasTransactions === 'true';
-                    const balance = parseInt(row.dataset.balance) || 0;
-                    const hasError = row.dataset.error === 'true';
-
-                    if (hasTransactions) activeUsers++;
-                    if (balance > 0) totalPositiveBalance += balance;
-                    if (hasError) errorCount++;
-                }
-            });
+        function updateSummaries(data = usersData) {
+            let totalUsers = data.length;
+            let activeUsers = data.filter(u => u.has_transactions).length;
+            let totalPositiveBalance = data
+                .filter(u => u.balance_sats && u.balance_sats > 0)
+                .reduce((sum, u) => sum + u.balance_sats, 0);
+            let errorCount = data.filter(u => u.error).length;
 
             totalUsersEl.textContent = totalUsers;
             activeUsersEl.textContent = activeUsers;
@@ -336,14 +455,55 @@
             });
         });
 
+        // Event listeners
         searchInput.addEventListener('input', filterAndUpdate);
         activeOnlyCheckbox.addEventListener('change', filterAndUpdate);
         document.getElementById('active-period').addEventListener('change', filterAndUpdate);
 
-        // Initial sort and update
-        sortRows(currentSort.column, currentSort.direction);
-        filterAndUpdate();
+        // Load data initially
+        loadUserData();
     });
 </script>
+
+<style>
+    .table-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.95);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+        backdrop-filter: blur(2px);
+        transition: opacity 0.3s ease-out;
+        border-radius: 0.375rem;
+    }
+
+    .table-loading-overlay .loading-content {
+        text-align: center;
+        padding: 2rem;
+        background-color: white;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .table-loading-overlay .loading-content .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+
+    .table-loading-overlay .loading-text h5 {
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+
+    .table-loading-overlay .loading-text p {
+        color: #6c757d;
+        margin-bottom: 0;
+    }
+</style>
 
 {% endblock %}

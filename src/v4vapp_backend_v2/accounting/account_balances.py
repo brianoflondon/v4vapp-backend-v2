@@ -17,7 +17,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -744,6 +744,7 @@ async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
     return expiry, sats_freed
 
 
+# @async_time_stats_decorator()
 async def keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime | None = None,

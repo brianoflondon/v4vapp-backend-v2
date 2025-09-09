@@ -5,7 +5,8 @@ Handles routes for displaying VSC Liability user accounts.
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from timeit import default_timer as timer
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -18,6 +19,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -58,9 +60,11 @@ def get_limit_entries():
     ]
 
 
-@router.get("/", response_class=HTMLResponse)
-async def users_page(request: Request):
-    """Main users page showing VSC Liability accounts"""
+@router.get("/data")
+async def users_data_api():
+    """API endpoint to fetch user data asynchronously"""
+    start = timer()
+    logger.info(f"Fetching users data at {datetime.now(tz=timezone.utc).isoformat()}")
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
 
@@ -84,7 +88,7 @@ async def users_page(request: Request):
     vsc_liability_accounts.sort(key=lambda x: x.sub)
 
     # Get balances for each account
-    users_data = []
+    users_data: List[dict[str, Any]] = []
     for account in vsc_liability_accounts:
         try:
             # Get the balance in msats and convert to sats
@@ -107,17 +111,22 @@ async def users_page(request: Request):
                     "sub": account.sub,
                     "balance_sats": balance_sats,
                     "balance_sats_fmt": balance_sats_fmt,
-                    "has_transactions": balance_sats != 0 or bool(account_details.balances),
+                    "has_transactions": (balance_sats is not None and balance_sats != 0)
+                    or len(account_details.balances) > 0,
                     "last_transaction_date": account_details.last_transaction_date.isoformat()
                     if account_details.last_transaction_date
                     else None,
                     "limit_percents": check_limits.percents,
                     "limit_ok": check_limits.limit_ok,
                     "limit_sats": check_limits.sats_list_str,
-                    "next_limit_expiry": check_limits.next_limit_expiry,
+                    "next_limit_expiry": check_limits.next_limit_expiry.isoformat()
+                    if check_limits.next_limit_expiry
+                    and isinstance(check_limits.next_limit_expiry, datetime)
+                    else check_limits.next_limit_expiry,
                 }
             )
         except Exception as e:
+            logger.warning(f"Exception processing account {account.sub}: {e}")
             # If balance lookup fails, still show the user but with error
             users_data.append(
                 {
@@ -130,13 +139,16 @@ async def users_page(request: Request):
                 }
             )
 
+    logger.info(f"Processed {len(users_data)} users in {timer() - start:.2f} seconds")
+
     # Calculate summary statistics
     total_users = len(users_data)
     active_users = len([u for u in users_data if u["has_transactions"]])
     total_positive_balance = sum(
-        u["balance_sats"]
+        balance
         for u in users_data
-        if u.get("balance_sats") and u["balance_sats"] > 0  # Use .get() for safety
+        if isinstance(u.get("balance_sats"), int) and u["balance_sats"] > 0
+        for balance in [u["balance_sats"]]
     )
     error_count = len([u for u in users_data if u.get("error")])
 
@@ -146,23 +158,47 @@ async def users_page(request: Request):
     else:
         total_positive_balance_fmt = "0"
 
+    result = {
+        "users_data": users_data,
+        "summary": {
+            "total_users": total_users,
+            "active_users": active_users,
+            "total_positive_balance": total_positive_balance,
+            "total_positive_balance_fmt": total_positive_balance_fmt,
+            "error_count": error_count,
+        },
+        "now": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+    logger.info(f"Returning result with {len(users_data)} users")
+    return result
+
+
+@router.get("/", response_class=HTMLResponse)
+async def users_page(request: Request):
+    """Main users page showing VSC Liability accounts - renders quickly with async data loading"""
+    if not templates or not nav_manager:
+        raise RuntimeError("Templates and navigation not initialized")
+
     nav_items = nav_manager.get_navigation_items("/admin/users")
 
+    # Return page with empty data - actual data will be loaded via JavaScript
     return templates.TemplateResponse(
         "users/users.html",
         {
             "request": request,
             "title": "Users",
             "nav_items": nav_items,
-            "users_data": users_data,
+            "users_data": [],  # Empty initially
             "limit_entries": get_limit_entries(),
             "pending_transactions": await PendingTransaction.list_all_str(),
+            "now": datetime.now(tz=timezone.utc),
             "summary": {
-                "total_users": total_users,
-                "active_users": active_users,
-                "total_positive_balance": total_positive_balance,
-                "total_positive_balance_fmt": total_positive_balance_fmt,
-                "error_count": error_count,
+                "total_users": 0,
+                "active_users": 0,
+                "total_positive_balance": 0,
+                "total_positive_balance_fmt": "0",
+                "error_count": 0,
             },
             "breadcrumbs": [
                 {"name": "Admin", "url": "/admin"},
@@ -170,3 +206,8 @@ async def users_page(request: Request):
             ],
         },
     )
+
+
+# Last line
+
+# Last line

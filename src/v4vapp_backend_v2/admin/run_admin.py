@@ -11,11 +11,11 @@ from pathlib import Path
 
 import uvicorn
 
+from v4vapp_backend_v2.admin.admin_app import create_admin_app
+
 # Add the src directory to the path
 src_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(src_dir))
-
-from v4vapp_backend_v2.admin.admin_app import create_admin_app
 
 
 def main():
@@ -133,4 +133,5 @@ if __name__ != "__main__":
 
 
 if __name__ == "__main__":
+    main()
     main()
