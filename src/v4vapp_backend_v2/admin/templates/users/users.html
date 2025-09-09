@@ -23,6 +23,14 @@
                             placeholder="Search users..." value="" style="width: 200px;">
                     </div>
                     <div class="d-flex align-items-center ms-3" style="flex: 0 0 50%;">
+                        <div class="me-3">
+                            <select id="active-period" class="form-select form-select-sm">
+                                <option value="all">ALL</option>
+                                <option value="6months">6 months</option>
+                                <option value="4months">4 months</option>
+                                <option value="1month">1 month</option>
+                            </select>
+                        </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="active-only">
                             <label class="form-check-label" for="active-only">
@@ -62,7 +70,8 @@
                                 {% endif %}
                                 <tr data-sub="{{ user.sub }}" data-balance="{{ user.balance_sats or 0 }}"
                                     data-has-transactions="{{ user.has_transactions|lower }}"
-                                    data-error="{{ 'true' if user.error else 'false' }}">
+                                    data-error="{{ 'true' if user.error else 'false' }}"
+                                    data-last-transaction="{{ user.last_transaction_date }}">
                                     <td>
                                         <strong>
                                             <a href="/admin/accounts/balance/user/{{ user.sub }}"
@@ -233,14 +242,38 @@
         function filterAndUpdate() {
             const searchTerm = searchInput.value.toLowerCase().trim();
             const activeOnly = activeOnlyCheckbox.checked;
+            const activePeriod = document.getElementById('active-period').value;
             const allRows = tbody.querySelectorAll('tr');
+
+            // Calculate cutoff date for active period
+            let cutoffDate = null;
+            if (activePeriod !== 'all') {
+                const now = new Date();
+                if (activePeriod === '1month') {
+                    cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                } else if (activePeriod === '4months') {
+                    cutoffDate = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000);
+                } else if (activePeriod === '6months') {
+                    cutoffDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+                }
+            }
 
             allRows.forEach(row => {
                 const sub = row.dataset.sub;
                 if (sub) {
                     const matchesSearch = sub.toLowerCase().includes(searchTerm);
                     const isActive = row.dataset.hasTransactions === 'true';
-                    const show = matchesSearch && (!activeOnly || isActive);
+                    const lastTx = row.dataset.lastTransaction;
+                    let matchesPeriod = true;
+
+                    if (cutoffDate && lastTx) {
+                        const txDate = new Date(lastTx);
+                        matchesPeriod = txDate >= cutoffDate;
+                    } else if (cutoffDate && !lastTx) {
+                        matchesPeriod = false; // No transaction date, not active in period
+                    }
+
+                    const show = matchesSearch && (!activeOnly || isActive) && matchesPeriod;
                     row.style.display = show ? '' : 'none';
                 } else {
                     // For limit rows, show if the corresponding main row is shown
@@ -305,6 +338,7 @@
 
         searchInput.addEventListener('input', filterAndUpdate);
         activeOnlyCheckbox.addEventListener('change', filterAndUpdate);
+        document.getElementById('active-period').addEventListener('change', filterAndUpdate);
 
         // Initial sort and update
         sortRows(currentSort.column, currentSort.direction);

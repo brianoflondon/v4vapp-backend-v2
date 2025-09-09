@@ -108,6 +108,9 @@ async def users_page(request: Request):
                     "balance_sats": balance_sats,
                     "balance_sats_fmt": balance_sats_fmt,
                     "has_transactions": balance_sats != 0 or bool(account_details.balances),
+                    "last_transaction_date": account_details.last_transaction_date.isoformat()
+                    if account_details.last_transaction_date
+                    else None,
                     "limit_percents": check_limits.percents,
                     "limit_ok": check_limits.limit_ok,
                     "limit_sats": check_limits.sats_list_str,
@@ -122,6 +125,7 @@ async def users_page(request: Request):
                     "balance_sats": None,
                     "balance_sats_fmt": "Error",
                     "has_transactions": False,
+                    "last_transaction_date": None,
                     "error": str(e),
                 }
             )

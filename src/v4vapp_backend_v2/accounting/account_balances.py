@@ -97,7 +97,7 @@ async def one_account_balance(
         logger.warning(f"No results for {account}", extra={"notification": False})
     clean_results = convert_datetime_fields(results)
     account_balance = AccountBalances.model_validate(clean_results)
-    return (
+    ledger_details = (
         account_balance.root[0]
         if (account_balance.root and len(account_balance.root) > 0)
         else LedgerAccountDetails(
@@ -107,6 +107,17 @@ async def one_account_balance(
             contra=account.contra,
         )
     )
+
+    # Find the most recent transaction date
+    if ledger_details.balances:
+        max_timestamp = None
+        for unit, balance_lines in ledger_details.balances.items():
+            for line in balance_lines:
+                if line.timestamp and (max_timestamp is None or line.timestamp > max_timestamp):
+                    max_timestamp = line.timestamp
+        ledger_details.last_transaction_date = max_timestamp
+
+    return ledger_details
 
 
 # @async_time_stats_decorator()

@@ -140,6 +140,7 @@ class LedgerAccountDetails(LedgerAccount):
     balances_net: Dict[Currency, int | float] = Field(
         default_factory=dict, description="Net balances for each currency"
     )
+    last_transaction_date: datetime | None = None
     hive: float = 0.0
     hbd: float = 0.0
     usd: float = 0.0
