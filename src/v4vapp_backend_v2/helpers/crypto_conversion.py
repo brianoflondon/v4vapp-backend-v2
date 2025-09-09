@@ -370,9 +370,11 @@ class CryptoConversion(BaseModel):
 
     @field_validator("value", "hive", "hbd", "usd", "btc", mode="before")
     @classmethod
-    def convert_to_decimal(cls, v):
+    def convert_to_decimal(cls, v) -> Decimal | Any:
         if isinstance(v, (int, float)):
             return Decimal(str(v))
+        if isinstance(v, Decimal):
+            return v
         return v
 
     def __init__(
@@ -384,8 +386,6 @@ class CryptoConversion(BaseModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if isinstance(value, Decimal):
-            value = float(value)
         if (
             isinstance(amount, Amount)
             or isinstance(amount, AmountPyd)

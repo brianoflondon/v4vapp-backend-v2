@@ -181,3 +181,4 @@ config/*config.yaml
 config/*config.json
 config/mongo-keyfile
 
+src/jupyter/data/*
