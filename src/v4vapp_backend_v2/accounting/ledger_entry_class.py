@@ -460,7 +460,7 @@ class LedgerEntry(BaseModel):
         if not self.is_completed:
             raise LedgerEntryCreationException("LedgerEntry is not completed.")
 
-    async def save(self) -> InsertOneResult:
+    async def save(self, ignore_duplicates: bool = False) -> InsertOneResult | None:
         """
         Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
         and once. If it is called again, it will raise a duplicate exception.
@@ -488,11 +488,15 @@ class LedgerEntry(BaseModel):
 
             return ans
         except DuplicateKeyError as e:
-            logger.warning(
-                f"Duplicate ledger entry detected: {e}",
-                extra={"notification": False, **self.log_extra},
-            )
-            raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
+            if not ignore_duplicates:
+                logger.warning(
+                    f"Duplicate ledger entry detected: {e}",
+                    extra={"notification": False, **self.log_extra},
+                )
+                raise LedgerEntryDuplicateException(f"Duplicate ledger entry detected: {e}")
+            else:
+                logger.debug("Duplicate ledger entry ignored.")
+                return None
 
         except Exception as e:
             logger.error(

@@ -4,6 +4,7 @@ from os.path import exists
 from typing import List, Set
 
 import httpx
+from aiocache import cached
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator
 
@@ -45,6 +46,7 @@ async def check_not_development_accounts(accounts: List[str]) -> bool:
     return False  # No error: dev OFF or all accounts allowed
 
 
+@cached(ttl=300)
 async def get_bad_hive_accounts() -> Set[str]:
     """
     Asynchronously retrieves a combined set of bad Hive account usernames.

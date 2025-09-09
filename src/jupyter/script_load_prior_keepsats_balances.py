@@ -4,6 +4,7 @@ from typing import List
 
 import aiofiles
 from bson import json_util
+from mongomock import DuplicateKeyError
 from pydantic import BaseModel, Field
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
@@ -11,6 +12,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.bad_actors_list import check_bad_hive_accounts, get_bad_hive_accounts
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
@@ -129,7 +131,13 @@ async def create_ledger_entry(balance: KeepsatsBalance, from_account: str = "") 
         credit_unit=Currency.MSATS,
         credit_amount=balance.net_msats,
     )
-    await transfer_ledger_entry.save()
+    try:
+        await transfer_ledger_entry.save(ignore_duplicates=True)
+    except DuplicateKeyError:
+        print("Duplicate entry, likely already exists.")
+
+    except Exception as e:
+        print(f"Error saving ledger entry: {e}")
     return transfer_ledger_entry
 
 
@@ -142,13 +150,22 @@ if __name__ == "__main__":
         db_conn = DBConn()
         await db_conn.setup_database()
         file_path = "src/jupyter/data/v4vapp_voltage.keepsats_balance_simple.json"
+        bad_accounts = await get_bad_hive_accounts()
         try:
             balances = await load_keepsats_balances(file_path)
             print(f"Loaded {len(balances)} balance records.")
             await TrackedBaseModel.update_quote()
             for balance in balances:
-                ledger_entry = await create_ledger_entry(balance)
-                print(f"Created ledger entry for account {balance.id}: {ledger_entry.short_id}")
+                bad_account = balance.id in bad_accounts
+                if balance.net_sats >= 2 and not bad_account:
+                    ledger_entry = await create_ledger_entry(balance)
+                    print(
+                        f"Created ledger entry for account {balance.id[:16]:<18}: {balance.net_sats:>14,.0f} {ledger_entry.short_id}"
+                    )
+                else:
+                    print(
+                        f"Skipping account {balance.id[:16]:<18} with low balance: {balance.net_sats:>14,.0f} sats"
+                    )
         except Exception as e:
             print(f"Error loading balances: {e}")
 
