@@ -47,7 +47,19 @@
                         </div>
                     </div>
                 </div>
-                <div class="card-body mt-3">
+                <div class="card-body mt-3 position-relative">
+                    <!-- Loading Overlay - covers entire data section -->
+                    <div id="loading-overlay" class="table-loading-overlay">
+                        <div class="loading-content">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div class="loading-text mt-3">
+                                <h5>Loading VSC Liability Users...</h5>
+                                <p class="text-muted">Fetching user balances and transaction data</p>
+                            </div>
+                        </div>
+                    </div>
                     <!-- Summary Stats -->
                     <div class="row mt-2 mb-5">
                         <div class="col-md-3">
@@ -83,19 +95,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="table-responsive position-relative">
-                        <!-- Loading Overlay - positioned over the table area -->
-                        <div id="loading-overlay" class="table-loading-overlay">
-                            <div class="loading-content">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <div class="loading-text mt-3">
-                                    <h5>Loading VSC Liability Users...</h5>
-                                    <p class="text-muted">Fetching user balances and transaction data</p>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -448,6 +448,7 @@
         backdrop-filter: blur(2px);
         transition: opacity 0.3s ease-out;
         border-radius: 0.375rem;
+        padding: 2rem;
     }
 
     .table-loading-overlay .loading-content {
@@ -456,6 +457,8 @@
         background-color: white;
         border-radius: 0.5rem;
         box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        max-width: 400px;
+        width: 100%;
     }
 
     .table-loading-overlay .loading-content .spinner-border {
