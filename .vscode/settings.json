@@ -38,6 +38,7 @@
         "routerstub",
         "setex",
         "tablefmt",
+        "tmpl",
         "typer",
         "Unpatch",
         "unvoted",

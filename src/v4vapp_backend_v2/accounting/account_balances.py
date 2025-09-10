@@ -60,6 +60,17 @@ async def all_account_balances(
 
     account_balances = AccountBalances.model_validate(clean_results)
 
+    # Find the most recent transaction date
+    for account in account_balances.root:
+        max_timestamp = datetime.min.replace(tzinfo=timezone.utc)
+        if account.balances:
+            for items in account.balances.values():
+                if items:
+                    last_item = items[-1]
+                    max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
+
+        account.last_transaction_date = max_timestamp
+
     return account_balances
 
 
