@@ -6,7 +6,7 @@ from typing import Any, Dict, Self
 from pydantic import BaseModel, Field, ValidationError, computed_field, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
-from pymongo.results import InsertOneResult
+from pymongo.results import InsertOneResult, UpdateResult
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
     NORMAL_CREDIT_ACCOUNTS,
@@ -460,7 +460,9 @@ class LedgerEntry(BaseModel):
         if not self.is_completed:
             raise LedgerEntryCreationException("LedgerEntry is not completed.")
 
-    async def save(self, ignore_duplicates: bool = False) -> InsertOneResult | None:
+    async def save(
+        self, ignore_duplicates: bool = False, upsert: bool = False
+    ) -> InsertOneResult | UpdateResult | None:
         """
         Saves the LedgerEntry to the database. This should only be called after the LedgerEntry is completed.
         and once. If it is called again, it will raise a duplicate exception.
@@ -482,9 +484,20 @@ class LedgerEntry(BaseModel):
             document = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
             document = convert_decimals(document)
 
-            ans = await InternalConfig.db["ledger"].insert_one(document=document)
+            if not upsert:
+                ans = await InternalConfig.db["ledger"].insert_one(document=document)
+            else:
+                ans = await InternalConfig.db["ledger"].update_one(
+                    filter=self.group_id_query,
+                    update={"$set": document},
+                    upsert=True,
+                )
+                logger.info(
+                    f"Ledger Entry upserted: {self.group_id}",
+                    extra={"notification": False, "db_ans": ans},
+                )
             logger.debug(f"Ledger Entry saved: {self.group_id}")
-            logger.debug(f"\n{self}", extra={"notification": False, **self.log_extra})
+            logger.debug(f"\n{self}", extra={"notification": False, "db_ans": ans})
 
             return ans
         except DuplicateKeyError as e:

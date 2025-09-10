@@ -132,7 +132,7 @@ async def create_ledger_entry(balance: KeepsatsBalance, from_account: str = "") 
         credit_amount=balance.net_msats,
     )
     try:
-        await transfer_ledger_entry.save(ignore_duplicates=True)
+        await transfer_ledger_entry.save(ignore_duplicates=True, upsert=True)
     except DuplicateKeyError:
         print("Duplicate entry, likely already exists.")
 
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     async def main():
         db_conn = DBConn()
         await db_conn.setup_database()
-        file_path = "src/jupyter/data/v4vapp_voltage.keepsats_balance_simple.json"
+        file_path = "src/jupyter/data/v4vapp_voltage.keepsats_with_in_progress.json"
         bad_accounts = await get_bad_hive_accounts()
         try:
             balances = await load_keepsats_balances(file_path)
