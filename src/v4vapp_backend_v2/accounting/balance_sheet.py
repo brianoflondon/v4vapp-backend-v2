@@ -1,7 +1,7 @@
 import math
 from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
@@ -15,7 +15,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 # @async_time_stats_decorator()
 async def generate_balance_sheet_mongodb(
     as_of_date: datetime | None = None, age: timedelta = timedelta(seconds=0)
-) -> Dict[str, Dict[str, Dict[str, float]]]:
+) -> Dict[str, Any]:
     """
     Generates a balance sheet from MongoDB data.
 
@@ -140,7 +140,7 @@ async def check_balance_sheet_mongodb(
     return is_balanced, bs_check[0]["total_msats"]
 
 
-def balance_sheet_printout(balance_sheet: Dict) -> str:
+def balance_sheet_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:
     """
     Formats the balance sheet into a readable string representation, displaying only USD values.
     Includes sections for Assets, Liabilities, and Equity, along with their respective totals.
@@ -148,7 +148,7 @@ def balance_sheet_printout(balance_sheet: Dict) -> str:
 
     Args:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
-        as_of_date (datetime): The date for which the balance sheet is being formatted.
+        vsc_details (bool): If False, hides individual sub-account lines for VSC Liability account.
 
     Returns:
         str: A formatted string representation of the balance sheet, showing only USD values.
@@ -177,12 +177,13 @@ def balance_sheet_printout(balance_sheet: Dict) -> str:
                 continue  # Skip accounts with all zero balances
             account_display = truncate_text(account_name, 74)
             output.append(f"{account_display:<74}")
-            for sub, balance in sub_accounts.items():
-                if sub == "Total":
-                    continue
-                sub_display = truncate_text(sub, 64)
-                formatted_balance = f"${balance['usd']:,.2f}"
-                output.append(f"    {sub_display:<64} {formatted_balance:>15}")
+            if not (account_name == "VSC Liability" and not vsc_details):
+                for sub, balance in sub_accounts.items():
+                    if sub == "Total":
+                        continue
+                    sub_display = truncate_text(sub, 64)
+                    formatted_balance = f"${balance['usd']:,.2f}"
+                    output.append(f"    {sub_display:<64} {formatted_balance:>15}")
             total_display = f"Total {truncate_text(account_name, 67)}"
             formatted_total = f"${sub_accounts['Total']['usd']:,.2f}"
             output.append(f"  {total_display:<67} {formatted_total:>15}")
@@ -206,13 +207,14 @@ def balance_sheet_printout(balance_sheet: Dict) -> str:
     return "\n".join(output)
 
 
-def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
+def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:
     """
     Formats a table with balances in SATS, HIVE, HBD, and USD.
     Returns a string table for reference.
 
     Args:
         balance_sheet (Dict): A dictionary containing the balance sheet data.
+        vsc_details (bool): If False, hides individual sub-account lines for VSC Liability account.
 
     Returns:
         str: A formatted string table displaying balances in SATS, HIVE, HBD, and USD.
@@ -241,27 +243,28 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict) -> str:
             # For Retained Earnings, use dynamic labels based on sign
             is_retained_earnings = category == "Equity" and account_name == "Retained Earnings"
 
-            for sub, balance in sub_accounts.items():
-                if sub == "Total":
-                    continue
+            if not (account_name == "VSC Liability" and not vsc_details):
+                for sub, balance in sub_accounts.items():
+                    if sub == "Total":
+                        continue
 
-                if is_retained_earnings:
-                    # Determine label based on sign (using sats as the base unit for checking)
-                    if balance.get("sats", 0) >= 0:
-                        dynamic_label = "Retained Earnings"
+                    if is_retained_earnings:
+                        # Determine label based on sign (using sats as the base unit for checking)
+                        if balance.get("sats", 0) >= 0:
+                            dynamic_label = "Retained Earnings"
+                        else:
+                            dynamic_label = "Retained Loss"
                     else:
-                        dynamic_label = "Retained Loss"
-                else:
-                    dynamic_label = account_name
+                        dynamic_label = account_name
 
-                output.append(
-                    f"{truncate_text(dynamic_label, 40):<40} "
-                    f"{truncate_text(sub, 17):<17} "
-                    f"{balance.get('sats', 0):>10,.0f} "
-                    f"{balance.get('hive', 0):>12,.3f} "
-                    f"{balance.get('hbd', 0):>12,.3f} "
-                    f"{balance.get('usd', 0):>12,.3f}"
-                )
+                    output.append(
+                        f"{truncate_text(dynamic_label, 40):<40} "
+                        f"{truncate_text(sub, 17):<17} "
+                        f"{balance.get('sats', 0):>10,.0f} "
+                        f"{balance.get('hive', 0):>12,.3f} "
+                        f"{balance.get('hbd', 0):>12,.3f} "
+                        f"{balance.get('usd', 0):>12,.3f}"
+                    )
             if "Total" not in sub_accounts:
                 total_usd = sum(
                     sub_acc.get("usd", 0)

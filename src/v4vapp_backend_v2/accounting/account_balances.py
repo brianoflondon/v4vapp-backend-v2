@@ -17,8 +17,9 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     format_time_delta,
@@ -128,6 +129,7 @@ async def account_balance_printout(
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
     ledger_account_details: LedgerAccountDetails | None = None,
+    quote: QuoteResponse | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
     Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
@@ -162,7 +164,8 @@ async def account_balance_printout(
             account=account, as_of_date=as_of_date, age=age
         )
     units = set(ledger_account_details.balances.keys())
-    quote = await TrackedBaseModel.update_quote()
+    if not quote:
+        quote = await TrackedBaseModel.update_quote()
 
     title_line = f"{account} balance as of {as_of_date:%Y-%m-%d %H:%M:%S} UTC"
     output = ["_" * max_width]

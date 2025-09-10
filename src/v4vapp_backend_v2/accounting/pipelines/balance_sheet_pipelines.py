@@ -148,6 +148,7 @@ def balance_sheet_pipeline(
                                 "sub": "$debit.sub",
                                 "type": "$debit.account_type",
                             },
+                            "count": {"$sum": 1},
                             "hbd": {"$sum": "$conv_signed.debit.hbd"},
                             "hive": {"$sum": "$conv_signed.debit.hive"},
                             "msats": {"$sum": "$conv_signed.debit.msats"},
@@ -164,6 +165,7 @@ def balance_sheet_pipeline(
                                 "sub": "$credit.sub",
                                 "type": "$credit.account_type",
                             },
+                            "count": {"$sum": 1},
                             "hbd": {"$sum": "$conv_signed.credit.hbd"},
                             "hive": {"$sum": "$conv_signed.credit.hive"},
                             "msats": {"$sum": "$conv_signed.credit.msats"},
@@ -179,6 +181,7 @@ def balance_sheet_pipeline(
         {
             "$group": {
                 "_id": "$all._id",
+                "count": {"$sum": "$all.count"},
                 "hbd": {"$sum": "$all.hbd"},
                 "hive": {"$sum": "$all.hive"},
                 "msats": {"$sum": "$all.msats"},
@@ -198,6 +201,7 @@ def balance_sheet_pipeline(
                                 "$push": {
                                     "k": "$_id.sub",
                                     "v": {
+                                        "count": "$count",
                                         "hbd": "$hbd",
                                         "hive": "$hive",
                                         "msats": "$msats",
@@ -206,6 +210,7 @@ def balance_sheet_pipeline(
                                     },
                                 }
                             },
+                            "total_count": {"$sum": "$count"},
                             "total_hbd": {"$sum": "$hbd"},
                             "total_hive": {"$sum": "$hive"},
                             "total_msats": {"$sum": "$msats"},
@@ -221,6 +226,7 @@ def balance_sheet_pipeline(
                                 "$mergeObjects": [
                                     {
                                         "Total": {
+                                            "count": "$total_count",
                                             "hbd": "$total_hbd",
                                             "hive": "$total_hive",
                                             "msats": "$total_msats",
@@ -244,6 +250,7 @@ def balance_sheet_pipeline(
                                 "$push": {
                                     "k": "$_id.sub",
                                     "v": {
+                                        "count": "$count",
                                         "hbd": "$hbd",
                                         "hive": "$hive",
                                         "msats": "$msats",
@@ -252,6 +259,7 @@ def balance_sheet_pipeline(
                                     },
                                 }
                             },
+                            "total_count": {"$sum": "$count"},
                             "total_hbd": {"$sum": "$hbd"},
                             "total_hive": {"$sum": "$hive"},
                             "total_msats": {"$sum": "$msats"},
@@ -267,6 +275,7 @@ def balance_sheet_pipeline(
                                 "$mergeObjects": [
                                     {
                                         "Total": {
+                                            "count": "$total_count",
                                             "hbd": "$total_hbd",
                                             "hive": "$total_hive",
                                             "msats": "$total_msats",

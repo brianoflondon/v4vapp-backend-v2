@@ -23,6 +23,7 @@ from v4vapp_backend_v2.accounting.profit_and_loss import (
     generate_profit_and_loss_report,
     profit_and_loss_printout,
 )
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -190,11 +191,27 @@ async def complete_report_page(
         all_accounts = await list_all_accounts()
         account_balances = []
 
+        def should_skip_vsc_liability_account(account, balance_sheet):
+            """Check if a VSC Liability account should be skipped based on transaction count."""
+            if account.name != "VSC Liability":
+                return False
+
+            try:
+                sub_account = balance_sheet["Liabilities"]["VSC Liability"][account.sub]
+                return sub_account.get("count", 0) < 2
+            except KeyError:
+                return False
+
+        quote = await TrackedBaseModel.update_quote()
         for account in all_accounts:
+            if should_skip_vsc_liability_account(account, balance_sheet):
+                continue
+
             printout, details = await account_balance_printout(
                 account=account,
                 line_items=True,
                 user_memos=True,
+                quote=quote,
             )
             account_balances.append({"account": account, "printout": printout, "details": details})
 
