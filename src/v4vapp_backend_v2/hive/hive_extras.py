@@ -91,6 +91,15 @@ class HiveTransferError(Exception):
         self.extra = extra if extra else {}
 
 
+class HiveNotHiveAccount(HiveTransferError):
+    """
+    Exception raised when a provided account name is not a valid Hive account.
+    so a transfer to it can't be made for notifications
+    """
+
+    pass
+
+
 class HiveNotEnoughHiveInAccount(HiveTransferError):
     """
     Exception raised when there are not enough Hive funds in the account.

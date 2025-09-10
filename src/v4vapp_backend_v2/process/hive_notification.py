@@ -47,11 +47,17 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
     if not LockStr(details.pay_to_cust_id).is_hive:
-        logger.error(
-            "Tracked operation customer ID is not a valid Hive account.",
+        logger.warning(
+            f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account.",
             extra={"notification": False, **details.tracked_op.log_extra},
         )
-        raise HiveTransferError("Tracked operation customer ID is not a valid Hive account.")
+        send_hive = False
+    else:
+        send_hive = True
+
+    # raise HiveNotHiveAccount(
+    #     f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account."
+    # )
 
     logger.info(
         f"Processing return/change for: {details.tracked_op.group_id}",
@@ -95,7 +101,10 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     trx: Dict[str, Any] = {}
     reply_type = ReplyType.UNKNOWN
     error_message = ""
-    if details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION:
+
+    if send_hive and (
+        details.tracked_op.op_type != "custom_json" or details.action == ReturnAction.CONVERSION
+    ):
         reply_type = ReplyType.TRANSFER
         trx = {}
         try:
@@ -129,7 +138,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             return_amount_msat = details.tracked_op.change_conv.msats
 
     # Custom JSONs are used for notifications and do not have a sats amount
-    elif details.tracked_op.op_type == "custom_json":
+    elif details.tracked_op.op_type == "custom_json" or not send_hive:
         reply_type = ReplyType.CUSTOM_JSON
         notification = KeepsatsTransfer(
             from_account=server_account_name,

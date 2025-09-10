@@ -19,6 +19,7 @@ from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
+from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
@@ -113,7 +114,11 @@ async def process_payment_success(
             action=ReturnAction.CUSTOM_JSON,
             pay_to_cust_id=cust_id,
         )
-        trx = await reply_with_hive(details=reply_details)
+        try:
+            _ = await reply_with_hive(details=reply_details)
+
+        except HiveNotHiveAccount as e:
+            logger.info(f"Not sending to a non-Hive Account: {e}")
 
     return ledger_entries_list
 
