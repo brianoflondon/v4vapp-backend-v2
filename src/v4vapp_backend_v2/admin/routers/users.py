@@ -4,22 +4,24 @@ Users Router
 Handles routes for displaying VSC Liability user accounts.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from timeit import default_timer as timer
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.account_balances import (
+    all_account_balances,
     check_hive_conversion_limits,
-    keepsats_balance,
     list_all_accounts,
 )
-from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -61,6 +63,7 @@ def get_limit_entries():
 
 
 @router.get("/data")
+@async_time_stats_decorator()
 async def users_data_api():
     """API endpoint to fetch user data asynchronously"""
     start = timer()
@@ -70,35 +73,45 @@ async def users_data_api():
 
     try:
         # Get all accounts
-        all_accounts = await list_all_accounts()
+        await list_all_accounts()
     except Exception:
         # If database is not available, show mock data for demo
-        all_accounts = [
-            LiabilityAccount(name="VSC Liability", sub="v4vapp-test"),
-            LiabilityAccount(name="VSC Liability", sub="v4vapp.qrc"),
-            LiabilityAccount(name="VSC Liability", sub="brianoflondon"),
-        ]
+        pass
 
-    # Filter for VSC Liability accounts only
-    vsc_liability_accounts = [
-        account for account in all_accounts if account.name == "VSC Liability" and account.sub
-    ]
-
-    # Sort by sub account name
-    vsc_liability_accounts.sort(key=lambda x: x.sub)
+    account_balances = await all_account_balances()
+    logger.info(
+        f"Fetched {len(account_balances.root)} account balances in {timer() - start:.2f} seconds"
+    )
+    # filter account_balances for all VSC Liability accounts
+    vsc_liability_balances = [ab for ab in account_balances.root if ab.name == "VSC Liability"]
+    vsc_liability_balances.sort(key=lambda x: x.sub)
+    logger.info(
+        f"Found {len(vsc_liability_balances)} VSC Liability accounts in {timer() - start:.2f} seconds"
+    )
 
     # Get balances for each account
     users_data: List[dict[str, Any]] = []
-    for account in vsc_liability_accounts:
-        try:
-            # Get the balance in msats and convert to sats
-            net_msats, account_details = await keepsats_balance(
-                cust_id=account.sub, as_of_date=datetime.now(tz=timezone.utc)
-            )
-            balance_sats = net_msats // 1000  # Convert msats to sats
-            check_limits = await check_hive_conversion_limits(cust_id=account.sub)
 
-            balance_usd = account_details.conv_total.usd
+    # Prepare concurrent tasks for limit checks
+    limit_check_tasks = [
+        check_hive_conversion_limits(cust_id=account.sub) for account in vsc_liability_balances
+    ]
+
+    # Run all limit checks concurrently
+    limit_check_results = await asyncio.gather(*limit_check_tasks, return_exceptions=True)
+
+    time_now = datetime.now(tz=timezone.utc)
+
+    for i, account in enumerate(vsc_liability_balances):
+        try:
+            balance_sats = account.sats  # Convert msats to sats
+            # Get the limit check result (handle exceptions)
+            limit_result = limit_check_results[i]
+            if isinstance(limit_result, Exception):
+                raise limit_result
+            check_limits = cast(LimitCheckResult, limit_result)
+
+            balance_usd = account.conv_total.usd
             balance_usd_fmt = f"{balance_usd:,.2f}"
 
             # Format the balance for display
@@ -117,9 +130,9 @@ async def users_data_api():
                     "balance_usd": balance_usd,
                     "balance_usd_fmt": balance_usd_fmt,
                     "has_transactions": (balance_sats is not None and balance_sats != 0)
-                    or len(account_details.balances) > 0,
-                    "last_transaction_date": account_details.last_transaction_date.isoformat()
-                    if account_details.last_transaction_date
+                    or len(account.balances) > 0,
+                    "last_transaction_date": account.last_transaction_date.isoformat()
+                    if account.last_transaction_date
                     else None,
                     "limit_percents": check_limits.percents,
                     "limit_ok": check_limits.limit_ok,
@@ -128,6 +141,9 @@ async def users_data_api():
                     if check_limits.next_limit_expiry
                     and isinstance(check_limits.next_limit_expiry, datetime)
                     else check_limits.next_limit_expiry,
+                    # "age": format_time_delta(
+                    #     time_now - account.last_transaction_date, just_days_or_hours=True
+                    # ),
                 }
             )
         except Exception as e:
@@ -175,7 +191,7 @@ async def users_data_api():
         "now": datetime.now(tz=timezone.utc).isoformat(),
     }
 
-    logger.info(f"Returning result with {len(users_data)} users")
+    logger.info(f"Returning result with {len(users_data)} users in {timer() - start:.2f} seconds")
     return result
 
 

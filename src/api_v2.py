@@ -9,6 +9,7 @@ from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
 from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsConvertExternal,
+    KeepsatsInvoice,
     KeepsatsTransferExternal,
     KeepsatsTransferResponse,
 )
@@ -288,6 +289,30 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
         hive_accname_to=InternalConfig().server_id,
         sats=convert.sats,
         memo=convert.memo,
+    )
+    trx = await send_transfer_custom_json(transfer_internal)
+    if trx is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Transfer failed",
+        )
+    trx_id = trx.get("trx_id", "unknown")
+    return KeepsatsTransferResponse(
+        success=True,
+        message="Transfer successful",
+        trx_id=trx_id,
+    )
+
+
+@lightning_v1_router.post("/keepsats/invoice")
+async def pay_invoice(
+    invoice: KeepsatsInvoice,
+) -> KeepsatsTransferResponse:
+    transfer_internal = KeepsatsTransfer(
+        hive_accname_from=invoice.hive_accname_from,
+        hive_accname_to=InternalConfig().server_id,
+        sats=invoice.sats,
+        memo=invoice.memo,
     )
     trx = await send_transfer_custom_json(transfer_internal)
     if trx is None:
