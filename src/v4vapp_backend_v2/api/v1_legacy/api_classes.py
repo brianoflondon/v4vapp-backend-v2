@@ -82,3 +82,31 @@ class KeepsatsConvertExternal(BaseModel):
         None,
         description="Memo to include with the conversion",
     )
+
+
+# MARK: KeepSats Invoice
+class KeepsatsInvoice(BaseModel):
+    """
+    Model for paying a Lightning invoice from keepsats of Hive account.
+
+    Attributes:
+        hive_accname_from (str): Hive name SENDING sats.
+        memo (str): Memo which includes the Lightning invoice to be paid.
+    """
+
+    hive_accname_from: str = Field(
+        ...,  # This field is required
+        description="Hive name SENDING sats",
+    )
+    memo: str = Field(
+        ...,  # This field is required
+        description="The Lightning invoice to be paid",
+    )
+    sats: int = Field(
+        0,
+        description="Amount of sats to transfer (set during processing)",
+    )
+    pay_result: Dict | None = Field(
+        None,
+        description="Result of the payment (set during processing)",
+    )
