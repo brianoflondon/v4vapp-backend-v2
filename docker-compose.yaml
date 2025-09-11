@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: node-monitor:latest
+    image: v4vapp-backend-v2-base:latest
     volumes:
       # - ./.certs:/app/.certs
       - ./config:/app/config
@@ -151,17 +151,17 @@ services:
 
 
 
-  voltage-node-monitor:
-    depends_on:
-      - v4vapp-backend-v2-base
-    image: v4vapp-backend-v2-base:latest
-    volumes:
-      - ./.certs:/app/.certs
-      - ./config:/app/config
-      - ./logs_docker/voltage:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
-    restart: unless-stopped
-    stop_grace_period: 20s
+  # voltage-node-monitor:
+  #   depends_on:
+  #     - v4vapp-backend-v2-base
+  #   image: v4vapp-backend-v2-base:latest
+  #   volumes:
+  #     - ./.certs:/app/.certs
+  #     - ./config:/app/config
+  #     - ./logs_docker/voltage:/app/logs
+  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
+  #   restart: unless-stopped
+  #   stop_grace_period: 20s
 
 
 
