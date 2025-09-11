@@ -1,12 +1,42 @@
 services:
-  # node-monitor:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   image: node-monitor:latest
-  #   volumes:
-  #     # - ./.certs:/app/.certs
-  #     - ./config:/app/config
+  v4vapp-backend-v2-base:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: node-monitor:latest
+    volumes:
+      # - ./.certs:/app/.certs
+      - ./config:/app/config
+
+  umbrel-node-monitor:
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/umbrel:/app/logs
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+
+  hive-monitor:
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/hive:/app/logs
+    command: [
+      "python", "src/hive_monitor_v2.py",
+      "--config", "devdocker.config.yaml",
+    ]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
 
   api-v2:
     build:
@@ -121,53 +151,25 @@ services:
 
 
 
-  # voltage-node-monitor:
-  #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
-  #   volumes:
-  #     - ./.certs:/app/.certs
-  #     - ./config:/app/config
-  #     - ./logs_docker/voltage:/app/logs
-  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
-  #   restart: unless-stopped
-  #   stop_grace_period: 20s
+  voltage-node-monitor:
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/voltage:/app/logs
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
+    restart: unless-stopped
+    stop_grace_period: 20s
 
 
-  # umbrel-node-monitor:
-  #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
-  #   volumes:
-  #     - ./.certs:/app/.certs
-  #     - ./config:/app/config
-  #     - ./logs_docker/umbrel:/app/logs
-  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "umbrel"]
-  #   restart: unless-stopped
-  #   stop_grace_period: 20s
 
-
-  # hive-monitor:
-  #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
-  #   volumes:
-  #     - ./.certs:/app/.certs
-  #     - ./config:/app/config
-  #     - ./logs_docker/hive:/app/logs
-  #   command: [
-  #     "python", "src/hive_monitor_v2.py",
-  #     "--config", "hive.config",
-  #   ]
-  #   restart: unless-stopped
-  #   stop_grace_period: 20s
-  #   networks:
-  #     - v4vapp-backend
 
   # binance-monitor:
   #   depends_on:
-  #     - node-monitor
-  #   image: node-monitor:latest
+  #     - v4vapp-backend-v2-base
+  #   image: v4vapp-backend-v2-base:latest
   #   volumes:
   #     - ./config:/app/config
   #     - ./logs_docker/binance:/app/logs
