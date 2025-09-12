@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from colorama import Fore, Style
 from nectar.amount import Amount
 
@@ -147,7 +149,9 @@ async def follow_on_transfer(
                 f"Detected keepsats operation in memo: {tracked_op.d_memo}",
                 extra={"notification": False, **tracked_op.log_extra},
             )
-            user_limits_text = await check_user_limits(tracked_op.conv.sats, tracked_op.cust_id)
+            user_limits_text = await check_user_limits(
+                extra_spend_msats=tracked_op.conv.msats, cust_id=tracked_op.cust_id
+            )
             if user_limits_text:
                 raise HiveTransferError(f"{user_limits_text}")
             await conversion_hive_to_keepsats(
@@ -432,7 +436,10 @@ async def decode_incoming_and_checks(
     else:  # both these tests are for conversions not paywithsats
         result = await check_amount_sent(pay_req=pay_req, tracked_op=tracked_op)  # type: ignore[assignment]
         if not result:
-            result = await check_user_limits(pay_req.value_msat, tracked_op.cust_id)
+            extra_spend_msats = Decimal(pay_req.value_msat)
+            result = await check_user_limits(
+                extra_spend_msats=extra_spend_msats, cust_id=tracked_op.cust_id
+            )
 
     if result:
         raise HiveConversionLimits(result)
@@ -491,7 +498,7 @@ async def check_amount_sent(
     return ""
 
 
-async def check_user_limits(extra_spend_msats: int, cust_id: str) -> str:
+async def check_user_limits(extra_spend_msats: Decimal, cust_id: str) -> str:
     """
     Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
 

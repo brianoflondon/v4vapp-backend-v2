@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List
 
 from colorama import Fore, Style
@@ -58,7 +59,7 @@ async def process_custom_json_func(
     if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         keepsats_transfer.msats = (
-            (keepsats_transfer.sats * 1000)
+            Decimal(keepsats_transfer.sats * 1000)
             if keepsats_transfer.sats and not keepsats_transfer.msats
             else keepsats_transfer.msats
         )
@@ -84,7 +85,7 @@ async def process_custom_json_func(
                     parent_op.add_reply(
                         reply_id=custom_json.group_id_p,
                         reply_type=ReplyType.CUSTOM_JSON,
-                        reply_msat=keepsats_transfer.msats if keepsats_transfer.msats else 0,
+                        reply_msat=int(keepsats_transfer.msats) if keepsats_transfer.msats else 0,
                         reply_message="Reply to transfer",
                     )
                     await parent_op.save()
@@ -164,7 +165,9 @@ async def custom_json_internal_transfer(
 
     net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)
     keepsats_transfer.msats = (
-        keepsats_transfer.sats * 1_000 if not keepsats_transfer.msats else keepsats_transfer.msats
+        Decimal(keepsats_transfer.sats * 1_000)
+        if not keepsats_transfer.msats
+        else keepsats_transfer.msats
     )
     server_id = InternalConfig().server_id
     fee_transfer = False
@@ -173,7 +176,7 @@ async def custom_json_internal_transfer(
         fee_transfer = True
 
     # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
-    if net_msats + 1_000 < keepsats_transfer.msats:
+    if keepsats_transfer.msats and net_msats + 1_000 < keepsats_transfer.msats:
         message = f"Insufficient Keepsats balance for {'fee' if fee_transfer else 'transfer'}: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
         if fee_transfer:
             logger.info(message)
@@ -202,7 +205,7 @@ async def custom_json_internal_transfer(
             )
             raise InsufficientBalanceError(message)
 
-    debit_credit_amount = keepsats_transfer.msats
+    debit_credit_amount = keepsats_transfer.msats or 0
 
     ledger_entries: List[LedgerEntry] = []
 
@@ -240,7 +243,8 @@ async def custom_json_internal_transfer(
     if keepsats_transfer.parent_id:
         parent_op = await load_tracked_object(tracked_obj=keepsats_transfer.parent_id)
         if (
-            getattr(parent_op, "cust_id", None)
+            hasattr(parent_op, "cust_id")
+            and getattr(parent_op, "cust_id", None)
             and parent_op
             and parent_op.op_type
             in [
@@ -255,7 +259,7 @@ async def custom_json_internal_transfer(
                 original_memo=keepsats_transfer.memo,
                 reason_str=description,
                 action=ReturnAction.CHANGE,
-                pay_to_cust_id=parent_op.cust_id,
+                pay_to_cust_id=getattr(parent_op, "cust_id"),
                 amount=parent_op.change_amount,
                 nobroadcast=nobroadcast,
             )
@@ -275,7 +279,7 @@ async def custom_json_internal_transfer(
         fee_direction = custom_json.fee_direction
         quote = TrackedBaseModel.last_quote
         fee_conv = CryptoConversion(
-            value=keepsats_transfer.msats, conv_from=Currency.MSATS, quote=quote
+            value=keepsats_transfer.msats or 0, conv_from=Currency.MSATS, quote=quote
         ).conversion
         cust_id = custom_json.from_account
         ledger_type = LedgerType.FEE_INCOME
@@ -286,13 +290,13 @@ async def custom_json_internal_transfer(
             ledger_type=ledger_type,
             group_id=f"{custom_json.group_id}-{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Fee for Keepsats {keepsats_transfer.msats / 1000:,.0f} sats for {cust_id}",
+            description=f"Fee for Keepsats {(keepsats_transfer.msats or 0) / 1000:,.0f} sats for {cust_id}",
             debit=LiabilityAccount(
                 name="VSC Liability",
                 sub=server_id,
             ),
             debit_unit=Currency.MSATS,
-            debit_amount=keepsats_transfer.msats,
+            debit_amount=keepsats_transfer.msats or 0,
             debit_conv=fee_conv,
             credit=RevenueAccount(
                 name="Fee Income Keepsats",
@@ -300,7 +304,7 @@ async def custom_json_internal_transfer(
             ),
             user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
             credit_unit=Currency.MSATS,
-            credit_amount=keepsats_transfer.msats,
+            credit_amount=keepsats_transfer.msats or 0,
             credit_conv=fee_conv,
         )
         await fee_ledger_entry.save()

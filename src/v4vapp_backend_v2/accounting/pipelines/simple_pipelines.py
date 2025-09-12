@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
@@ -177,7 +178,7 @@ def filter_by_account_as_of_date_query(
 # Modify the limit_check_pipeline function to include cust_id in the output
 def limit_check_pipeline(
     cust_id: str,
-    extra_spend_sats: int = 0,
+    extra_spend_sats: Decimal = Decimal(0),
     lightning_rate_limits: List[V4VConfigRateLimits] | None = None,
     details: bool = False,
 ) -> List[Mapping[str, Any]]:
@@ -236,6 +237,8 @@ def limit_check_pipeline(
             # No $match for the last (longest) period
             facet_dict[facet_name] = [{"$group": group_stage}]
 
+    extra_spend_sats_str = str(extra_spend_sats)
+
     # Generate the pipeline dynamically
     pipeline: List[Mapping[str, Any]] = [
         {"$match": top_level_match},
@@ -253,7 +256,9 @@ def limit_check_pipeline(
                         "hbd": {"$ifNull": [f"${f'{limit.hours}'}.totalCreditConvSumHBD", 0]},
                         "limit_hours": f"{limit.hours}",
                         "limit_sats": f"{limit.sats}",
-                        "limit_ok": {"$lt": [{"$add": ["$sats", extra_spend_sats]}, limit.sats]},
+                        "limit_ok": {
+                            "$lt": [{"$add": ["$sats", extra_spend_sats_str]}, limit.sats]
+                        },
                         **(
                             {"details": {"$ifNull": [f"${f'{limit.hours}'}.details", []]}}
                             if details

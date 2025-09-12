@@ -174,7 +174,7 @@ class ConversionResult(BaseModel):
 async def calc_hive_to_keepsats(
     tracked_op: TransferBase,
     quote: QuoteResponse | None = None,
-    msats: int = 0,
+    msats: Decimal = Decimal(0),
 ) -> ConversionResult:
     """
     Converts a Hive or HBD transfer operation to its equivalent value in millisatoshis (msats) using a provided or inferred quote.
@@ -213,7 +213,7 @@ async def calc_hive_to_keepsats(
 
 
 def hive_to_keepsats_calc(
-    msats: int,
+    msats: Decimal,
     amount_minus_minimum: Amount,
     quote: QuoteResponse,
     from_currency: Currency,

@@ -41,7 +41,7 @@ class CryptoConv(BaseModel):
     usd: Decimal = Field(Decimal(0), description="Converted value in USD")
     sats: Decimal = Field(Decimal(0), description="Converted value in Sats")
     msats: Decimal = Field(Decimal(0), description="Converted value in milliSats")
-    msats_fee: int = Field(0, description="Service fee in milliSats")
+    msats_fee: Decimal = Field(Decimal(0), description="Service fee in milliSats")
     btc: Decimal = Field(Decimal(0), description="Converted value in Bitcoin")
     sats_hive: Decimal = Field(Decimal(0), description="Sats per HIVE")
     sats_hbd: Decimal = Field(Decimal(0), description="Sats per HBD")
@@ -65,6 +65,8 @@ class CryptoConv(BaseModel):
         "sats_hbd",
         "sats",
         "msats",
+        "msats_fee",
+        "btc",
         "value",
         mode="before",
     )
@@ -213,13 +215,13 @@ class CryptoConv(BaseModel):
             bool: True if all conversion values are zero, False otherwise.
         """
         return (
-            self.hive == 0.0
-            and self.hbd == 0.0
-            and self.usd == 0.0
-            and self.sats == 0
-            and self.msats == 0
-            and self.btc == 0.0
-            and self.msats_fee == 0
+            self.hive == Decimal(0)
+            and self.hbd == Decimal(0)
+            and self.usd == Decimal(0)
+            and self.sats == Decimal(0)
+            and self.msats == Decimal(0)
+            and self.btc == Decimal(0)
+            and self.msats_fee == Decimal(0)
         )
 
     def is_set(self) -> bool:
@@ -380,7 +382,7 @@ class CryptoConversion(BaseModel):
     sats: Decimal = Decimal(0)
     msats: Decimal = Decimal(0)
     btc: Decimal = Decimal(0)
-    msats_fee: int = 0
+    msats_fee: Decimal = Decimal(0)
 
     @field_validator("value", "hive", "hbd", "usd", "btc", "sats", "msats", mode="before")
     @classmethod
@@ -396,7 +398,7 @@ class CryptoConversion(BaseModel):
     def __init__(
         self,
         amount: Amount | AmountPyd | None = None,
-        value: float | int | Decimal = 0.0,
+        value: float | int | Decimal = Decimal(),
         conv_from: Currency | None = None,
         quote: QuoteResponse | None = None,
         **kwargs,

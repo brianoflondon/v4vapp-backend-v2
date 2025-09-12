@@ -1,9 +1,12 @@
+import decimal
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Generator
 
 from bson.decimal128 import Decimal128
+
+from v4vapp_backend_v2.config.setup import logger
 
 
 # MARK: General Text
@@ -110,7 +113,25 @@ def convert_decimals(obj):
         if obj == obj.to_integral_value():
             return int(obj)  # Convert to Python int for MongoDB int64
         else:
-            return Decimal128(str(obj))  # Convert to Decimal128 for MongoDB
+            try:
+                return Decimal128(str(obj))  # Convert to Decimal128 for MongoDB
+            except decimal.Inexact:
+                # If Decimal128 conversion fails due to precision issues,
+                # round to 6 decimal places and try again
+                rounded_obj = round(obj, 6)
+                try:
+                    return Decimal128(str(rounded_obj))
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to convert rounded Decimal {rounded_obj} to Decimal128: {e}, converting to float"
+                    )
+                    return float(rounded_obj)
+            except Exception as e:
+                # If Decimal128 conversion fails, convert to float as fallback
+                logger.warning(
+                    f"Failed to convert Decimal {obj} to Decimal128: {e}, converting to float"
+                )
+                return float(obj)
     else:
         return obj
 

@@ -115,7 +115,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                                 extra={"notification": False},
                             )
                     except Exception as e:
-                        logger.error(
+                        logger.exception(
                             f"Error saving ledger entry: {e}",
                             extra={**ledger_entry.log_extra, "notification": False},
                         )

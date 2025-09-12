@@ -6,6 +6,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
     HiveTransferError,
@@ -135,7 +136,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
                 amount=return_amount,
                 quote=TransferBase.last_quote,
             ).conversion
-            return_amount_msat = details.tracked_op.change_conv.msats
+            return_amount_msat = int(details.tracked_op.change_conv.msats)
 
     # Custom JSONs are used for notifications and do not have a sats amount
     elif details.tracked_op.op_type == "custom_json" or not send_hive:
@@ -277,8 +278,10 @@ async def send_transfer_custom_json(
         else:
             send_from = InternalConfig().server_id
         # TODO: #169 add pending for custom_json
+        json_data = transfer.model_dump(exclude_none=True, exclude_unset=True)
+        json_data_converted = convert_decimals(json_data)
         trx = await send_custom_json(
-            json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+            json_data=json_data_converted,
             send_account=send_from,
             active=True,
             id="v4vapp_dev_transfer",

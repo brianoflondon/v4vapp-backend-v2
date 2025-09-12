@@ -684,7 +684,7 @@ async def ledger_pipeline_result(
 
 
 async def check_hive_conversion_limits(
-    cust_id: str, extra_spend_msats: int = 0, line_items: bool = False
+    cust_id: str, extra_spend_msats: Decimal = Decimal(0), line_items: bool = False
 ) -> LimitCheckResult:
     """
     Checks if a Hive account's recent Lightning conversions are within configured rate limits.
@@ -737,7 +737,7 @@ async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
 
     first_limit = min(lightning_rate_limits, key=lambda x: x.hours)
 
-    pipeline = limit_check_pipeline(cust_id=cust_id, details=True, extra_spend_sats=0)
+    pipeline = limit_check_pipeline(cust_id=cust_id, details=True)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
 
@@ -771,7 +771,7 @@ async def keepsats_balance(
     cust_id: str = "",
     as_of_date: datetime | None = None,
     line_items: bool = False,
-) -> Tuple[int, LedgerAccountDetails]:
+) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -806,8 +806,8 @@ async def keepsats_balance(
 
 
 async def keepsats_balance_printout(
-    cust_id: str, previous_msats: int | None = None, line_items: bool = False
-) -> Tuple[int, LedgerAccountDetails]:
+    cust_id: str, previous_msats: int | Decimal | None = None, line_items: bool = False
+) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
 

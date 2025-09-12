@@ -90,9 +90,9 @@ async def generate_balance_sheet_mongodb(
                 for account in balance_sheet[section]:
                     if account != "Total" and "Total" in balance_sheet[section][account]:
                         for cur in currencies:
-                            section_total[cur] += Decimal(balance_sheet[section][account]["Total"].get(
-                                cur, Decimal(0)
-                            ))
+                            section_total[cur] += Decimal(
+                                balance_sheet[section][account]["Total"].get(cur, Decimal(0))
+                            )
                 balance_sheet[section]["Total"] = section_total
             else:
                 balance_sheet[section] = {
@@ -152,9 +152,15 @@ async def check_balance_sheet_mongodb(
         return True, 0.0
 
     tolerance_msats = 10_000  # tolerance of 10 sats.
+
+    # Convert Decimal128 values to Decimal for arithmetic operations
+    assets_msats = _convert_decimal128_to_decimal(bs_check[0]["assets_msats"])
+    liabilities_msats = _convert_decimal128_to_decimal(bs_check[0]["liabilities_msats"])
+    equity_msats = _convert_decimal128_to_decimal(bs_check[0]["equity_msats"])
+
     is_balanced = math.isclose(
-        bs_check[0]["assets_msats"],
-        bs_check[0]["liabilities_msats"] + bs_check[0]["equity_msats"],
+        assets_msats,
+        liabilities_msats + equity_msats,
         rel_tol=0.01,
         abs_tol=tolerance_msats,
     )
