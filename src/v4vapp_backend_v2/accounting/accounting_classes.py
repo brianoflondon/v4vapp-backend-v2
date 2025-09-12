@@ -185,7 +185,6 @@ class LedgerAccountDetails(LedgerAccount):
         )
         for line in self.combined_balance:
             line.conv_running_total += ConvertedSummary.from_crypto_conv(line.conv_signed)
-            print(line.conv_running_total, line.unit, line.timestamp)
 
     def __str__(self) -> str:
         """
