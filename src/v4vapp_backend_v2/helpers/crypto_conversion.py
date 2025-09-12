@@ -5,6 +5,7 @@ from decimal import Decimal
 from math import isclose
 from typing import Any, ClassVar
 
+from bson.decimal128 import Decimal128
 from nectar.amount import Amount
 from pydantic import BaseModel, Field, computed_field, field_validator
 
@@ -38,8 +39,8 @@ class CryptoConv(BaseModel):
     hive: Decimal = Field(Decimal(0), description="Converted value in HIVE")
     hbd: Decimal = Field(Decimal(0), description="Converted value in HBD")
     usd: Decimal = Field(Decimal(0), description="Converted value in USD")
-    sats: int = Field(0, description="Converted value in Sats")
-    msats: int = Field(0, description="Converted value in milliSats")
+    sats: Decimal = Field(Decimal(0), description="Converted value in Sats")
+    msats: Decimal = Field(Decimal(0), description="Converted value in milliSats")
     msats_fee: int = Field(0, description="Service fee in milliSats")
     btc: Decimal = Field(Decimal(0), description="Converted value in Bitcoin")
     sats_hive: Decimal = Field(Decimal(0), description="Sats per HIVE")
@@ -55,10 +56,23 @@ class CryptoConv(BaseModel):
         None, description="The date when the conversion was fetched"
     )
 
-    @field_validator("hive", "hbd", "usd", "btc", "sats_hive", "sats_hbd", "value", mode="before")
+    @field_validator(
+        "hive",
+        "hbd",
+        "usd",
+        "btc",
+        "sats_hive",
+        "sats_hbd",
+        "sats",
+        "msats",
+        "value",
+        mode="before",
+    )
     @classmethod
     def convert_to_decimal(cls, v):
         if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        if isinstance(v, Decimal128):
             return Decimal(str(v))
         return v
 
@@ -116,18 +130,18 @@ class CryptoConv(BaseModel):
                 data["fetch_date"] = quote.fetch_date or datetime.now(tz=timezone.utc)
                 data["sats_hive"] = quote.sats_hive_p
                 data["sats_hbd"] = quote.sats_hbd_p
-                data["sats"] = int(Decimal(data["hive"]) * quote.sats_hive_p)
-                data["msats"] = int(data["sats"] * 1000)
+                data["sats"] = Decimal(data["hive"]) * quote.sats_hive_p
+                data["msats"] = data["sats"] * 1000
                 data["btc"] = data["msats"] / 100_000_000_000
-                data["usd"] = round(data["sats"] / float(quote.sats_usd_p), 6)
+                data["usd"] = round(float(data["sats"] / quote.sats_usd_p), 6)
 
         super().__init__(**data)
         # If msats is not set, calculate it from the other values
         if "msats" not in data:
-            self.msats = int(self.sats * 1000)
+            self.msats = self.sats * 1000
         # If sats is not set, calculate it from the msats
         if "sats" not in data:
-            self.sats = int(self.msats / 1000)
+            self.sats = self.msats / 1000
 
     def __neg__(self):
         # List of fields NOT to invert
@@ -229,7 +243,7 @@ class CryptoConv(BaseModel):
             V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
-        limit_test_result = limit_test(self.msats)
+        limit_test_result = limit_test(float(self.msats))
         return limit_test_result
 
     @computed_field
@@ -363,15 +377,17 @@ class CryptoConversion(BaseModel):
     hive: Decimal = Decimal(0)
     hbd: Decimal = Decimal(0)
     usd: Decimal = Decimal(0)
-    sats: int = 0
-    msats: int = 0
+    sats: Decimal = Decimal(0)
+    msats: Decimal = Decimal(0)
     btc: Decimal = Decimal(0)
     msats_fee: int = 0
 
-    @field_validator("value", "hive", "hbd", "usd", "btc", mode="before")
+    @field_validator("value", "hive", "hbd", "usd", "btc", "sats", "msats", mode="before")
     @classmethod
     def convert_to_decimal(cls, v) -> Decimal | Any:
         if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        if isinstance(v, Decimal128):
             return Decimal(str(v))
         if isinstance(v, Decimal):
             return v
@@ -434,35 +450,33 @@ class CryptoConversion(BaseModel):
 
         try:
             if self.conv_from == Currency.MSATS:
-                self.msats = int(self.value)
+                self.msats = self.value
             elif self.conv_from == Currency.SATS:
-                self.msats = int(self.value * 1000)
+                self.msats = self.value * 1000
             elif self.conv_from == Currency.HIVE:
-                self.msats = int(Decimal(self.value) * self.quote.sats_hive_p * 1000)
+                self.msats = Decimal(self.value) * self.quote.sats_hive_p * 1000
             elif self.conv_from == Currency.HBD:
-                self.msats = int(Decimal(self.value) * self.quote.sats_hbd_p * 1000)
+                self.msats = Decimal(self.value) * self.quote.sats_hbd_p * 1000
             elif self.conv_from == Currency.USD:
-                self.msats = int(Decimal(self.value) * self.quote.sats_usd_p * 1000)
+                self.msats = Decimal(self.value) * self.quote.sats_usd_p * 1000
             else:
                 raise ValueError("Unsupported conversion currency")
 
             # Step 2: Derive sats from msats
-            self.sats = int(round(self.msats / 1000, 0))
+            self.sats = self.msats / 1000
 
             # Step 3: Derive all other values from msats
-            self.btc = Decimal(self.msats) / Decimal(
-                100_000_000_000
-            )  # msats to BTC (1 BTC = 10^11 msats)
+            self.btc = self.msats / Decimal(100_000_000_000)  # msats to BTC (1 BTC = 10^11 msats)
             self.usd = Decimal(str(round(self.msats / (self.quote.sats_usd_p * Decimal(1000)), 6)))
             self.hbd = Decimal(str(round(self.msats / (self.quote.sats_hbd_p * Decimal(1000)), 6)))
             self.hive = Decimal(
                 str(round(self.msats / (self.quote.sats_hive_p * Decimal(1000)), 5))
             )
-            self.msats_fee = msats_fee(self.msats)
+            self.msats_fee = msats_fee(int(self.msats))
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
-            self.msats = 0
-            self.sats = 0
+            self.msats = Decimal(0)
+            self.sats = Decimal(0)
             self.btc = Decimal(0)
             self.usd = Decimal(0)
             self.hbd = Decimal(0)
@@ -476,7 +490,7 @@ class CryptoConversion(BaseModel):
             hive=self.hive,
             hbd=self.hbd,
             usd=self.usd,
-            sats=int(self.sats),  # Cast to int to match CryptoConv type
+            sats=self.sats,
             msats=self.msats,
             msats_fee=self.msats_fee,
             btc=self.btc,

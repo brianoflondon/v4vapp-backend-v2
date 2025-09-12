@@ -1,9 +1,18 @@
 import textwrap
 from datetime import datetime, timezone
+from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, Self
 
-from pydantic import BaseModel, Field, ValidationError, computed_field, model_validator
+from bson.decimal128 import Decimal128
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult, UpdateResult
@@ -24,6 +33,21 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     snake_case,
 )
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
+
+
+def convert_decimal128_to_decimal(obj):
+    """
+    Recursively convert Decimal128 objects to Decimal objects for Pydantic validation.
+    This handles the conversion when loading data from MongoDB.
+    """
+    if isinstance(obj, dict):
+        return {k: convert_decimal128_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimal128_to_decimal(item) for item in obj]
+    elif isinstance(obj, Decimal128):
+        return Decimal(str(obj))
+    else:
+        return obj
 
 
 class LedgerEntryException(Exception):
@@ -172,6 +196,14 @@ class LedgerEntry(BaseModel):
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
     )
+
+    @field_validator("debit_conv", "credit_conv", mode="before")
+    @classmethod
+    def convert_mongodb_decimals(cls, v):
+        """Convert Decimal128 objects from MongoDB to Decimal objects for Pydantic validation."""
+        if isinstance(v, dict):
+            return convert_decimal128_to_decimal(v)
+        return v
 
     def __init__(self, **data):
         super().__init__(**data)

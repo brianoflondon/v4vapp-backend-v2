@@ -210,7 +210,8 @@
                     <small class="text-muted">- {{ account.sub }}</small>
                 </h5>
             </div>
-            <div class="balance-value">{{ "{:,}".format(details.sats or 0) }} SATS</div>
+            <div class="balance-value">{{ "{:,}".format(details.sats|float|round|int if details.sats else 0) }} SATS
+            </div>
         </div>
 
         <div class="account-summary-left">
@@ -322,7 +323,7 @@
                                 </td>
                                 <td class="text-end">
                                     {% if currency == 'MSATS' %}
-                                    {% set amount_sats = (line.amount_signed / 1000)|int %}
+                                    {% set amount_sats = (line.amount_signed|float / 1000)|int %}
                                     <span class="{{ 'text-success' if amount_sats > 0 else 'text-danger' }}">
                                         {{ amount_sats }} sats
                                     </span>
@@ -334,7 +335,7 @@
                                 </td>
                                 <td class="text-end">
                                     {% if currency == 'MSATS' %}
-                                    {{ ((line.amount_running_total / 1000)|int) }} sats
+                                    {{ ((line.amount_running_total|float / 1000)|int) }} sats
                                     {% else %}
                                     {{ line.amount_running_total }}
                                     {% endif %}
@@ -423,10 +424,10 @@
         content += `HBD Balance: {{ details.balances_net['HBD'] }}\n`;
         {% endif %}
         {% if details.balances_net['MSATS'] is defined and details.balances_net['MSATS'] %}
-        content += `SATS Balance: {{ ((details.balances_net['MSATS'] / 1000)|int) }}\n`;
+        content += `SATS Balance: {{ ((details.balances_net['MSATS']|float / 1000)|int) }}\n`;
         {% endif %}
         {% if details.balances_net['USD'] is defined and details.balances_net['USD'] %}
-        content += `USD Balance: ${{ "%.2f"| format(details.balances_net['USD']) }}\n`;
+        content += `USD Balance: ${{ "%.2f"| format(details.balances_net['USD'] | float) }}\n`;
         {% endif %}
 
         content += `\n--- Transaction Details ---\n`;
@@ -439,9 +440,9 @@
         {% for line in balance_lines %}
         content += `{{ line.timestamp.strftime('%Y-%m-%d %H:%M') }}    {{ line.description }}    `;
         {% if currency == 'MSATS' %}
-        content += `{{ "{:+,}".format((line.amount_signed / 1000)|int) }} sats    {{ "{:,}".format((line.amount_running_total / 1000)|int) }} sats\n`;
+        content += `{{ "{:+,}".format((line.amount_signed / 1000)|float|int) }} sats    {{ "{:,}".format((line.amount_running_total / 1000)|float|int) }} sats\n`;
         {% else %}
-        content += `{{ "{:+.3f}".format(line.amount_signed) }}    {{ "%.3f"|format(line.amount_running_total) }}\n`;
+        content += `{{ "{:+.3f}".format(line.amount_signed|float) }}    {{ "%.3f"|format(line.amount_running_total|float) }}\n`;
         {% endif %}
         {% endfor %}
         {% endif %}
@@ -462,10 +463,10 @@
         // Create a simplified text version
         let content = `{{ account.name }} ({{ account.account_type }}) - Sub: {{ account.sub }}\n`;
         {% if details.balances_net['HIVE'] is defined and details.balances_net['HIVE'] %}
-        content += `HIVE: {{ "%.3f"|format(details.balances_net['HIVE']) }}\n`;
+        content += `HIVE: {{ "%.3f"|format(details.balances_net['HIVE']|float) }}\n`;
         {% endif %}
         {% if details.balances_net['MSATS'] is defined and details.balances_net['MSATS'] %}
-        content += `SATS: {{ "{:,}".format((details.balances_net['MSATS'] / 1000)|int) }}\n`;
+        content += `SATS: {{ "{:,}".format((details.balances_net['MSATS'] / 1000)|float|int) }}\n`;
         {% endif %}
 
         navigator.clipboard.writeText(content).then(function () {

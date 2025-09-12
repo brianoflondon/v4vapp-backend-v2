@@ -39,6 +39,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
+from v4vapp_backend_v2.process.lock_str_class import LockStr
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -68,6 +69,7 @@ async def test_just_clear():
     Test to clear the database and reset the environment.
     This test clears the database and resets the environment to ensure a clean state for subsequent tests.
     """
+    await LockStr.clear_all_locks()
     await clear_and_reset()
     print("Database cleared and reset.")
 

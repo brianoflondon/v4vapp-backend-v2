@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -66,7 +67,7 @@ class KeepsatsTransfer(BaseModel):
         ge=0,
         description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
     )
-    msats: int | None = Field(
+    msats: Decimal | None = Field(
         None,
         ge=0,
         description=(

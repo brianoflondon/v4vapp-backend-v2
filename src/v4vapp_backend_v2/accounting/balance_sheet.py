@@ -1,7 +1,10 @@
 import math
 from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Dict, Tuple
+
+from bson import Decimal128
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
@@ -10,6 +13,18 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     profit_loss_pipeline,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
+
+
+def _convert_decimal128_to_decimal(value: Any) -> Any:
+    """Convert Decimal128 values to Decimal for arithmetic operations."""
+    if isinstance(value, Decimal128):
+        return Decimal(str(value))
+    elif isinstance(value, dict):
+        return {k: _convert_decimal128_to_decimal(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_convert_decimal128_to_decimal(item) for item in value]
+    else:
+        return value
 
 
 # @async_time_stats_decorator()
@@ -48,6 +63,10 @@ async def generate_balance_sheet_mongodb(
     balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
 
+    # Convert Decimal128 values to Decimal for arithmetic operations
+    balance_sheet = _convert_decimal128_to_decimal(balance_sheet)
+    profit_loss = _convert_decimal128_to_decimal(profit_loss)
+
     if "Equity" not in balance_sheet:
         balance_sheet["Equity"] = {}
 
@@ -63,20 +82,22 @@ async def generate_balance_sheet_mongodb(
             "msats": values["msats"],
         }
 
-    # Compute section totals
-    currencies = ["hbd", "hive", "msats", "sats", "usd"]
-    for section in ["Assets", "Liabilities", "Equity"]:
-        if section in balance_sheet:
-            section_total = {cur: 0.0 for cur in currencies}
-            for account in balance_sheet[section]:
-                if account != "Total" and "Total" in balance_sheet[section][account]:
-                    for cur in currencies:
-                        section_total[cur] += balance_sheet[section][account]["Total"].get(
-                            cur, 0.0
-                        )
-            balance_sheet[section]["Total"] = section_total
-
-    # Calculate grand total (Assets vs Liabilities + Equity)
+        # Compute section totals
+        currencies = ["hbd", "hive", "msats", "sats", "usd"]
+        for section in ["Assets", "Liabilities", "Equity"]:
+            if section in balance_sheet:
+                section_total = {cur: Decimal(0) for cur in currencies}
+                for account in balance_sheet[section]:
+                    if account != "Total" and "Total" in balance_sheet[section][account]:
+                        for cur in currencies:
+                            section_total[cur] += Decimal(balance_sheet[section][account]["Total"].get(
+                                cur, Decimal(0)
+                            ))
+                balance_sheet[section]["Total"] = section_total
+            else:
+                balance_sheet[section] = {
+                    "Total": {cur: Decimal(0) for cur in currencies}
+                }  # Calculate grand total (Assets vs Liabilities + Equity)
     assets_total = balance_sheet["Assets"]["Total"]
     liabilities_total = balance_sheet["Liabilities"]["Total"]
     equity_total = balance_sheet["Equity"]["Total"]

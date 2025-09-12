@@ -70,6 +70,7 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
+@crypto_v2_router.post("")
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -176,7 +177,7 @@ async def keepsats(
         "net_hbd": account_balance.hbd,
         "net_sats": account_balance.sats,
         "in_progress_sats": 0,
-        "all_transactions": [],
+        "all_transactions": account_balance if line_items else [],
     }
 
 

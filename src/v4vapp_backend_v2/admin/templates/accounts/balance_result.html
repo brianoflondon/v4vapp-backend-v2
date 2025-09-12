@@ -240,7 +240,8 @@
                     {{ account.sub }}
                 </h5>
             </div>
-            <div class="balance-value">{{ "{:,}".format(details.sats or 0) }} SATS</div>
+            <div class="balance-value">{{ "{:,}".format(details.sats|float|round|int if details.sats else 0) }} SATS
+            </div>
         </div>
 
         <div class="account-summary-left">

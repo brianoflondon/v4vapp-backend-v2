@@ -198,7 +198,7 @@ async def account_balance_printout(
     COL_LEDGER_TYPE = 11
 
     total_usd: Decimal = Decimal(0)
-    total_msats: int = 0
+    total_msats: Decimal = Decimal(0)
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
@@ -225,8 +225,12 @@ async def account_balance_printout(
                     description = truncate_text(row.description, 50)
                     ledger_type = row.ledger_type
                     # Raw numeric values
-                    debit_val = row.amount if row.side == "debit" and row.unit == unit else 0.0
-                    credit_val = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                    debit_val = (
+                        row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
+                    )
+                    credit_val = (
+                        row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
+                    )
                     balance_val = row.amount_running_total
                     if unit.upper() == "MSATS":
                         debit_val /= conversion_factor
@@ -239,8 +243,8 @@ async def account_balance_printout(
                         credit_fmt = f"{credit_val:,.0f}"
                         balance_fmt = f"{balance_val:,.0f}"
                     else:
-                        debit_fmt = f"{debit_val:,.3f}"
-                        credit_fmt = f"{credit_val:,.3f}"
+                        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+                        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
                         balance_fmt = f"{balance_val:,.3f}"
 
                     line = (
@@ -409,10 +413,14 @@ async def account_balance_printout_grouped_by_customer(
 
                             # Raw numeric values
                             debit_val = (
-                                row.amount if row.side == "debit" and row.unit == unit else 0.0
+                                row.amount
+                                if row.side == "debit" and row.unit == unit
+                                else Decimal(0)
                             )
                             credit_val = (
-                                row.amount if row.side == "credit" and row.unit == unit else 0.0
+                                row.amount
+                                if row.side == "credit" and row.unit == unit
+                                else Decimal(0)
                             )
 
                             # Update running total for this customer
@@ -434,8 +442,8 @@ async def account_balance_printout_grouped_by_customer(
                                 credit_fmt = f"{credit_val:,.0f}"
                                 balance_fmt = f"{balance_val:,.0f}"
                             else:
-                                debit_fmt = f"{debit_val:,.3f}"
-                                credit_fmt = f"{credit_val:,.3f}"
+                                debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+                                credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
                                 balance_fmt = f"{balance_val:,.3f}"
 
                             line = (
@@ -792,8 +800,8 @@ async def keepsats_balance(
     )
 
     net_msats = account_balance.msats
-    if net_msats < 0 and account_balance.sats == 0:
-        net_msats = 0
+    if net_msats < Decimal(0) and account_balance.sats == Decimal(0):
+        net_msats = Decimal(0)
     return net_msats, account_balance
 
 
