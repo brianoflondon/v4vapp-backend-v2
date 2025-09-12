@@ -25,6 +25,7 @@ from v4vapp_backend_v2.accounting.profit_and_loss import (
 )
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.admin.navigation import NavigationManager
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
@@ -73,6 +74,7 @@ async def balance_sheet_page(request: Request):
     try:
         # Generate balance sheet
         balance_sheet = await generate_balance_sheet_mongodb()
+        balance_sheet = convert_decimals_to_float_or_int(balance_sheet)
         balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)
 
         # Convert datetime to string for JSON serialization
@@ -129,6 +131,7 @@ async def profit_loss_page(request: Request):
     try:
         # Generate profit and loss report
         pl_report = await generate_profit_and_loss_report()
+        pl_report = convert_decimals_to_float_or_int(pl_report)
         profit_loss_str = await profit_and_loss_printout(pl_report=pl_report)
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
@@ -181,10 +184,12 @@ async def complete_report_page(
     try:
         # Generate balance sheet
         balance_sheet = await generate_balance_sheet_mongodb()
+        balance_sheet = convert_decimals_to_float_or_int(balance_sheet)
         balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)
 
         # Generate profit and loss
         pl_report = await generate_profit_and_loss_report()
+        pl_report = convert_decimals_to_float_or_int(pl_report)
         profit_loss_str = await profit_and_loss_printout(pl_report=pl_report)
 
         # Get all accounts and their balances

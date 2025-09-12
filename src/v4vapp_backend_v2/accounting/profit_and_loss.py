@@ -53,7 +53,7 @@ async def generate_profit_and_loss_report(
 
 
 async def profit_and_loss_printout(
-    pl_report: dict | None = None,
+    pl_report: dict[str, Any] | None = None,
     as_of_date: datetime | None = None,
     age: timedelta = timedelta(days=0),
 ) -> str:

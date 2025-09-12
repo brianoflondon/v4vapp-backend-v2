@@ -2,7 +2,7 @@ import decimal
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Generator
+from typing import Any, Generator
 
 from bson.decimal128 import Decimal128
 
@@ -59,31 +59,6 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: Database
 
 
-# def convert_decimals(obj):
-#     """
-#     Recursively converts all Decimal instances within a nested structure (dicts, lists) to floats.
-
-#     Args:
-#         obj: The input object, which can be a dict, list, Decimal, or any other type.
-
-#     Returns:
-#         The input object with all Decimal instances converted to floats. The structure of dicts and lists is preserved.
-
-#     Example:
-#         >>> from decimal import Decimal
-#         >>> convert_decimals({'a': Decimal('1.1'), 'b': [Decimal('2.2'), 3]})
-#         {'a': 1.1, 'b': [2.2, 3]}
-#     """
-#     if isinstance(obj, dict):
-#         return {k: convert_decimals(v) for k, v in obj.items()}
-#     elif isinstance(obj, list):
-#         return [convert_decimals(item) for item in obj]
-#     elif isinstance(obj, Decimal):
-#         return float(obj)  # Or str(obj) if you want string precision
-#     else:
-#         return obj
-
-
 def convert_decimals(obj):
     """
     Recursively converts Decimal instances within a nested structure (dicts, lists) to appropriate MongoDB types:
@@ -132,6 +107,41 @@ def convert_decimals(obj):
                     f"Failed to convert Decimal {obj} to Decimal128: {e}, converting to float"
                 )
                 return float(obj)
+    else:
+        return obj
+
+
+def convert_decimals_to_float_or_int(obj) -> dict | list | float | int | Any:
+    """
+    Recursively converts Decimal and Decimal128 instances within a nested structure (dicts, lists) to appropriate Python types:
+    - Whole-number Decimals to Python int.
+    - Fractional Decimals to Python float.
+    - Preserves other types and nested structures.
+
+    Args:
+        obj: The input object, which can be a dict, list, Decimal, Decimal128, or any other type.
+    Returns:
+        The input object with all Decimal and Decimal128 instances converted to int or float as appropriate.
+        The structure of dicts and lists is preserved.
+
+    Example:
+        >>> from decimal import Decimal
+        >>> from bson.decimal128 import Decimal128
+        >>> convert_decimals_to_float_or_int({'a': Decimal('12345678901234567890'), 'b': Decimal('1.23'), 'c': [Decimal('2.0'), 3]})
+        {'a': 12345678901234567890, 'b': 1.23, 'c': [2.0, 3]}
+    """
+    if isinstance(obj, dict):
+        return {k: convert_decimals_to_float_or_int(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals_to_float_or_int(item) for item in obj]
+    elif isinstance(obj, Decimal):
+        # Check if the Decimal is a whole number (no fractional part)
+        if obj == obj.to_integral_value():
+            return int(obj)  # Convert to Python int for MongoDB int64
+        else:
+            return float(obj)  # Convert to Python float for MongoDB Decimal128
+    elif isinstance(obj, Decimal128):
+        return float(obj)  # Convert Decimal128 to float
     else:
         return obj
 

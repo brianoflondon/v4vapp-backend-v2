@@ -110,8 +110,13 @@ async def generate_balance_sheet_mongodb(
         "msats": liabilities_total["msats"] + equity_total["msats"],
     }
 
-    tolerance_msats_check = assets_total["msats"] - (
-        liabilities_total["msats"] + equity_total["msats"]
+    # Convert Decimal128 values to Decimal for arithmetic operations before math.isclose
+    assets_msats_decimal = _convert_decimal128_to_decimal(assets_total["msats"])
+    liabilities_msats_decimal = _convert_decimal128_to_decimal(liabilities_total["msats"])
+    equity_msats_decimal = _convert_decimal128_to_decimal(equity_total["msats"])
+
+    tolerance_msats_check = assets_msats_decimal - (
+        liabilities_msats_decimal + equity_msats_decimal
     )
     # Use math.isclose to avoid brittle exact equality on computed sums
     if not math.isclose(tolerance_msats_check, tolerance_msats, rel_tol=0.0, abs_tol=1_000):
@@ -129,7 +134,7 @@ async def generate_balance_sheet_mongodb(
 
 async def check_balance_sheet_mongodb(
     as_of_date: datetime | None = None, age: timedelta | None = None
-) -> Tuple[bool, float]:
+) -> Tuple[bool, Decimal]:
     """
     Checks if the balance sheet is balanced using MongoDB data.
 
@@ -149,9 +154,9 @@ async def check_balance_sheet_mongodb(
 
     # Database is empty or no data found
     if not bs_check:
-        return True, 0.0
+        return True, Decimal(0)
 
-    tolerance_msats = 10_000  # tolerance of 10 sats.
+    tolerance_msats = Decimal(10_000)  # tolerance of 10 sats.
 
     # Convert Decimal128 values to Decimal for arithmetic operations
     assets_msats = _convert_decimal128_to_decimal(bs_check[0]["assets_msats"])
@@ -164,7 +169,8 @@ async def check_balance_sheet_mongodb(
         rel_tol=0.01,
         abs_tol=tolerance_msats,
     )
-    return is_balanced, bs_check[0]["total_msats"]
+    msats_tolerance = _convert_decimal128_to_decimal(bs_check[0]["total_msats"])
+    return is_balanced, msats_tolerance
 
 
 def balance_sheet_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:
