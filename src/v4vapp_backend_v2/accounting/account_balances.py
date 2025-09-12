@@ -18,6 +18,7 @@ from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db_tools import _convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -707,6 +708,7 @@ async def check_hive_conversion_limits(
     )
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
+    results = _convert_decimal128_to_decimal(results)
     limit_check = LimitCheckResult.model_validate(results[0]) if results else LimitCheckResult()
     if not limit_check.limit_ok:
         expiry_info = await get_next_limit_expiry(cust_id)
