@@ -5,6 +5,7 @@ FastAPI application for V4VApp backend administration.
 """
 
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -199,9 +200,9 @@ class AdminApp:
                     hbd_actual = hive_balances[server_id].get("HBD", 0.0)
 
                     # Check with tolerance
-                    tolerance = 0.001
-                    hive_match = abs(hive_deposits - hive_actual) <= tolerance
-                    hbd_match = abs(hbd_deposits - hbd_actual) <= tolerance
+                    tolerance = Decimal(0.001)
+                    hive_match = abs(Decimal(hive_deposits) - Decimal(hive_actual)) <= tolerance
+                    hbd_match = abs(Decimal(hbd_deposits) - Decimal(hbd_actual)) <= tolerance
 
                     if hive_match and hbd_match:
                         server_balance_check = {"status": "match", "icon": "✅"}
