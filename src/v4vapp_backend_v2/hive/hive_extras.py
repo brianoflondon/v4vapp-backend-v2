@@ -24,6 +24,7 @@ from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_bad_hive_accounts,
     check_not_development_accounts,
 )
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
@@ -520,6 +521,7 @@ async def send_custom_json(
     id: str = "v4vapp_transfer",
     nobroadcast: bool = False,
     active: bool = True,
+    resend_attempt: int = 0,
 ) -> Dict[str, str]:
     """
     Asynchronously sends a custom JSON operation to the Hive blockchain.
@@ -552,16 +554,19 @@ async def send_custom_json(
     # Need Required_auths not posting auths for a transfer
     # test json data is a dict which will become a nice json object:
 
-    pending = PendingCustomJson(
-        cj_id=id,
-        send_account=send_account,
-        json_data=json_data,
-        active=active,
-    )
-    await pending.save()
-    if not isinstance(json_data, dict):
+    json_data_converted: Dict[str, Any] = convert_decimals_to_float_or_int(json_data)
+    pending = None
+    if not resend_attempt:
+        pending = PendingCustomJson(
+            cj_id=id,
+            send_account=send_account,
+            json_data=json_data_converted,
+            active=active,
+        )
+        await pending.save()
+    if not isinstance(json_data_converted, dict):
         raise ValueError("json_data must be a dictionary")
-    if not json_data:
+    if not json_data_converted:
         raise ValueError("json_data must not be empty")
     if not hive_client and not keys:
         raise ValueError("No hive_client or keys provided")
@@ -576,9 +581,10 @@ async def send_custom_json(
             kwargs = {"required_posting_auths": [send_account]}
 
         trx = hive_client.custom_json(
-            id=id, json_data=json_data, **kwargs, nobroadcast=nobroadcast
+            id=id, json_data=json_data_converted, **kwargs, nobroadcast=nobroadcast
         )
-        await pending.delete()
+        if not resend_attempt and pending is not None:
+            await pending.delete()
         return trx
     except UnhandledRPCError as ex:
         logger.warning(
@@ -588,7 +594,7 @@ async def send_custom_json(
         raise CustomJsonSendError(
             f"Error sending custom_json: {ex}",
             extra={
-                "json_data": json_data,
+                "json_data": json_data_converted,
                 "send_account": send_account,
                 "nobroadcast": nobroadcast,
             },

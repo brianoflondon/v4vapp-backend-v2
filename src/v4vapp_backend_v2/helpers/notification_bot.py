@@ -195,13 +195,13 @@ class NotificationBot:
             except TimedOut as e:
                 attempt += 1
                 if attempt >= retries:
-                    logger.exception(
+                    logger.error(
                         f"Error sending [ {text} ] after {retries} retries: {e}",
                         extra={"notification": False, "error": e},
                     )
                     return
                 logger.warning(
-                    f"Timed out while sending message. Retrying {attempt}/{retries}...",
+                    f"Timed out while sending message {text}. Retrying {attempt}/{retries}...",
                     extra={"notification": False},
                 )
                 await asyncio.sleep(2**attempt + random.random())

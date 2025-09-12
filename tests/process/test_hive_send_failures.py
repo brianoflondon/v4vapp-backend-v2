@@ -17,6 +17,8 @@ from tests.utils import (
 from v4vapp_backend_v2.accounting.account_balances import keepsats_balance_printout
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.database.db_tools import _convert_decimal128_to_decimal
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
 from v4vapp_backend_v2.hive.hive_extras import (
     get_verified_hive_client_for_accounts,
     send_custom_json,
@@ -198,6 +200,7 @@ async def test_custom_json_paywithsats_keepsats_failure_not_enough_keepsats():
     if not last_hive_op:
         raise TimeoutError("Did not receive expected Hive operation in time.")
 
+    last_hive_op = _convert_decimal128_to_decimal(last_hive_op)
     custom_json = CustomJson.model_validate(last_hive_op)
     assert "Insufficient Keepsats balance" in custom_json.json_data.memo, (
         f"Expected failure reason not found in description: {custom_json.json_data.memo}"
@@ -246,9 +249,12 @@ async def test_send_wrong_authorization_custom_json():
         to_account="devser.v4vapp",
         memo=f"{invoice.payment_request} {datetime.now().isoformat()}",
     )
+    json_data_converted = convert_decimals_to_float_or_int(
+        transfer.model_dump(exclude_none=True, exclude_unset=True)
+    )
     trx = hive_client.custom_json(
         id="v4vapp_dev_transfer",
-        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        json_data=json_data_converted,
         required_auths=["v4vapp.qrc"],
     )
 

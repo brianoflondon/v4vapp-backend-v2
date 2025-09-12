@@ -2,7 +2,7 @@ import decimal
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Generator
+from typing import Any, Dict, Generator
 
 from bson.decimal128 import Decimal128
 
@@ -59,7 +59,9 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: Database
 
 
-def convert_decimals(obj):
+def convert_decimals(
+    obj: dict | list | Decimal | Any,
+) -> dict | list | Decimal128 | int | float | Any:
     """
     Recursively converts Decimal instances within a nested structure (dicts, lists) to appropriate MongoDB types:
     - Whole-number Decimals to Python int (for MongoDB int64).
@@ -111,7 +113,7 @@ def convert_decimals(obj):
         return obj
 
 
-def convert_decimals_to_float_or_int(obj) -> dict | list | float | int | Any:
+def convert_decimals_to_float_or_int(obj: Any) -> dict | list | float | int | Any | Dict[str, Any]:
     """
     Recursively converts Decimal and Decimal128 instances within a nested structure (dicts, lists) to appropriate Python types:
     - Whole-number Decimals to Python int.
@@ -141,7 +143,7 @@ def convert_decimals_to_float_or_int(obj) -> dict | list | float | int | Any:
         else:
             return float(obj)  # Convert to Python float for MongoDB Decimal128
     elif isinstance(obj, Decimal128):
-        return float(obj)  # Convert Decimal128 to float
+        return float(str(obj))  # Convert Decimal128 to float
     else:
         return obj
 
@@ -260,20 +262,20 @@ def detect_paywithsats(memo: str) -> bool:
     return False
 
 
-def paywithsats_amount(memo: str) -> int:
+def paywithsats_amount(memo: str) -> Decimal:
     """
     Extracts the amount specified in a memo string formatted as "paywithsats:amount".
     Args:
         memo (str): The memo string containing the amount, expected in the format "paywithsats:amount".
     Returns:
-        int: The extracted amount as an integer if found; otherwise, 0.
+        Decimal: The extracted amount as a Decimal if found; otherwise, 0.
     """
 
     # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
     match = re.search(r"paywithsats:(\d+)", memo)
     if match:
-        return int(match.group(1))
-    return 0
+        return Decimal(match.group(1))
+    return Decimal(0)
 
 
 def detect_hbd(memo: str) -> bool:

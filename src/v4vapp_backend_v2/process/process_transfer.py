@@ -482,17 +482,19 @@ async def check_amount_sent(
     surplus_msats = tracked_op.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
         if tracked_op.unit == Currency.HIVE:
-            surplus_hive = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hive), 3))
+            surplus_hive = abs(
+                round(surplus_msats / Decimal(1_000) / tracked_op.conv.sats_hive, 3)
+            )
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hive:,.3f} HIVE"
             )
         elif tracked_op.unit == Currency.HBD:
-            surplus_hbd = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hbd), 3))
+            surplus_hbd = abs(round(surplus_msats / Decimal(1_000) / tracked_op.conv.sats_hbd, 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hbd:,.3f} HBD"
             )
         else:
-            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
+            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / Decimal(1_000):,.0f} sats"
 
         return failure_reason
     return ""

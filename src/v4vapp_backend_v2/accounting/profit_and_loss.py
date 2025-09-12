@@ -6,18 +6,8 @@ from bson import Decimal128
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import profit_loss_pipeline
+from v4vapp_backend_v2.database.db_tools import _convert_decimal128_to_decimal
 
-
-def _convert_decimal128_to_decimal(value: Any) -> Any:
-    """Convert Decimal128 values to Decimal for arithmetic operations."""
-    if isinstance(value, Decimal128):
-        return Decimal(str(value))
-    elif isinstance(value, dict):
-        return {k: _convert_decimal128_to_decimal(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [_convert_decimal128_to_decimal(item) for item in value]
-    else:
-        return value
 
 
 async def generate_profit_and_loss_report(
@@ -129,4 +119,5 @@ async def profit_and_loss_printout(
     )
     output.append("=" * max_width)
 
+    return "\n".join(output)
     return "\n".join(output)

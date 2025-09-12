@@ -4,10 +4,10 @@ from colorama import Fore, Style
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.hive.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (  # Assuming this function exists for sending custom JSONs
     account_hive_balances,
     get_verified_hive_client,
-    send_custom_json,  # Assuming this function exists for sending custom JSONs
+    send_custom_json,
     send_pending,
 )
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
@@ -79,12 +79,14 @@ async def resend_pending_transactions() -> None:
     hive_client, _ = await get_verified_hive_client(nobroadcast=nobroadcast)
     for pending in sending:
         try:
+            pending.resend_attempt += 1
             trx = await send_pending(pending=pending, hive_client=hive_client)
             logger.info(
                 f"{Fore.GREEN}Resent pending transaction {pending}, trx: {trx.get('trx_id')}{Style.RESET_ALL}"
             )
             await pending.delete()
         except Exception as e:
+            await pending.save()
             logger.warning(f"Failed to resend pending transaction {pending}: {e}")
 
 
@@ -127,14 +129,17 @@ async def resend_pending_custom_jsons():
             continue
         try:
             # Note: Adjust parameters based on actual send_custom_json signature
+            pending.resend_attempt += 1
             trx = await send_custom_json(
                 json_data=pending.json_data,
                 send_account=pending.send_account,
                 id=pending.cj_id,
                 hive_client=hive_client,
                 nobroadcast=pending.nobroadcast,
+                resend_attempt=pending.resend_attempt,
             )
             logger.info(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
             await pending.delete()
         except Exception as e:
+            await pending.save()
             logger.warning(f"Failed to resend pending custom JSON {pending}: {e}")
