@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from math import isclose
 from typing import Any, ClassVar
 
@@ -55,6 +55,21 @@ class CryptoConv(BaseModel):
     fetch_date: datetime | None = Field(
         None, description="The date when the conversion was fetched"
     )
+
+    @property
+    def sats_rounded(self) -> Decimal:
+        """
+        Correctly round sats to the nearest integer using standard rounding.
+
+        Uses ROUND_HALF_UP (standard rounding) instead of Python's default
+        ROUND_HALF_EVEN (banker's rounding). This ensures that .5 always rounds up.
+
+        Examples:
+        - 4999.4 -> 4999
+        - 4999.5 -> 5000 (rounds UP)
+        - 4999.6 -> 5000
+        """
+        return self.sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     @field_validator(
         "hive",
@@ -474,7 +489,7 @@ class CryptoConversion(BaseModel):
             self.hive = Decimal(
                 str(round(self.msats / (self.quote.sats_hive_p * Decimal(1000)), 5))
             )
-            self.msats_fee = msats_fee(int(self.msats))
+            self.msats_fee = Decimal(msats_fee(int(self.msats)))
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
             self.msats = Decimal(0)
@@ -483,7 +498,7 @@ class CryptoConversion(BaseModel):
             self.usd = Decimal(0)
             self.hbd = Decimal(0)
             self.hive = Decimal(0)
-            self.msats_fee = 0
+            self.msats_fee = Decimal(0)
 
     @property
     def conversion(self) -> CryptoConv:
@@ -515,8 +530,8 @@ class CryptoConversion(BaseModel):
             Currency.SATS: float(self.sats),
             Currency.BTC: float(self.btc),
             Currency.MSATS: float(self.msats),
-            "sats_hive": float(self.quote.sats_hive_p),  # type: ignore computed field
-            "sats_hbd": float(self.quote.sats_hbd_p),  # type: ignore computed field
+            "sats_hive": float(self.quote.sats_hive_p),  # type: ignore
+            "sats_hbd": float(self.quote.sats_hbd_p),  # type: ignore
             "conv_from": self.conv_from,
             "value": float(self.value),
         }

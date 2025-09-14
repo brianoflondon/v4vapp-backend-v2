@@ -761,7 +761,7 @@ class LedgerEntry(BaseModel):
                 f"{self.debit_conv.hive:>11,.3f} HIVE "
                 f"{self.debit_conv.hbd:>11,.3f} HBD "
                 f"{self.debit_conv.usd:>11,.3f} USD "
-                f"{self.debit_conv.msats / 1000:>18,.3f} SATS "
+                f"{self.debit_conv.sats_rounded:>18,.3f} SATS "
             )
         else:
             conversion_line = "Converted              N/A"

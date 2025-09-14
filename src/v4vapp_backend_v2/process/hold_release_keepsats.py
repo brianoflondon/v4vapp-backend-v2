@@ -33,7 +33,7 @@ async def hold_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}{fee_str}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Hold Keepsats {amount_msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Hold Keepsats {round(amount_msats / 1000):,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,  # This is the CUSTOMER

@@ -112,7 +112,7 @@ async def conversion_keepsats_to_hive(
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=(
-            f"Convert {conv_result.to_convert_conv.msats / 1000:,.0f} "
+            f"Convert {conv_result.to_convert_conv.sats_rounded:,.0f} "
             f"into {conv_result.to_convert_amount} for {cust_id}"
         ),
         debit=AssetAccount(
@@ -139,7 +139,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra Conversion: {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id} Keepsats",
+        description=f"Contra Conversion: {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id} Keepsats",
         debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
         debit_unit=to_currency,
         debit_amount=conv_result.to_convert_conv.value_in(to_currency),
@@ -166,7 +166,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,
@@ -197,7 +197,7 @@ async def conversion_keepsats_to_hive(
             ledger_type=ledger_type,
             group_id=f"{tracked_op.group_id}-{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.to_convert_conv.msats / 1000:,.0f} msats for {cust_id}",
+            description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.to_convert_conv.sats_rounded:,.0f} msats for {cust_id}",
             debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
             debit_unit=Currency.MSATS,
             debit_amount=conv_result.to_convert_conv.msats,
@@ -219,7 +219,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Move Keepsats {conv_result.net_to_receive_amount} to {conv_result.net_to_receive_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Move Keepsats {conv_result.net_to_receive_amount} to {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,
@@ -269,9 +269,9 @@ async def conversion_keepsats_to_hive(
     end_memo = f" | {tracked_op.change_memo}" if tracked_op.change_memo else lightning_memo
     if not is_clean_memo(lightning_memo):
         tracked_op.change_memo = (
-            f"Converted {conv_result.to_convert_conv.msats / 1000:,.0f} sats to "
+            f"Converted {conv_result.to_convert_conv.sats_rounded:,.0f} sats to "
             f"{conv_result.net_to_receive_amount} "
-            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id}"
+            f"with fee: {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}"
             f"{end_memo}"
         )
 
