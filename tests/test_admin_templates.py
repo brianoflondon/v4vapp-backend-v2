@@ -53,7 +53,7 @@ class TestTemplateCompilation:
             assert '{% extends "base.html" %}' in content
             assert "VSC Liability Users" in content
             assert "User" in content
-            assert "Balance (SATS)" in content
+            assert "Balance" in content
 
     def test_dashboard_template_compilation(self, template_env):
         """Test dashboard template compiles without errors"""

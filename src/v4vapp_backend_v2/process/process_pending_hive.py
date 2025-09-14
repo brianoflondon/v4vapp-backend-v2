@@ -5,6 +5,7 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (  # Assuming this function exists for sending custom JSONs
+    CustomJsonSendError,
     account_hive_balances,
     get_verified_hive_client,
     send_custom_json,
@@ -140,6 +141,14 @@ async def resend_pending_custom_jsons():
             )
             logger.info(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
             await pending.delete()
+        except CustomJsonSendError as e:
+            logger.error(f"CustomJsonSendError when resending custom JSON {pending}: {e}")
+            await pending.delete()  # Consider whether to delete or keep for future attempts
+
         except Exception as e:
-            await pending.save()
+            if pending.resend_attempt >= 3:
+                logger.error(
+                    f"Failed to resend pending custom JSON {pending} after {pending.resend_attempt} attempts: {e}"
+                )
+                await pending.delete()  # Consider whether to delete or keep for future attempts
             logger.warning(f"Failed to resend pending custom JSON {pending}: {e}")

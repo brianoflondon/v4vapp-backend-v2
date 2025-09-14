@@ -42,9 +42,9 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
 def format_sats_for_label(sats: int) -> str:
     """Format sats for display in labels (e.g., 400000 -> '400k', 1200000 -> '1.2M')"""
     if sats >= 1_000_000:
-        return f"{sats / 1_000_000:.1f}M"
+        return f"{round(sats / 1_000_000, 1):.1f}M"
     elif sats >= 1_000:
-        return f"{sats // 1_000}k"
+        return f"{round(sats // 1_000, 0):.0f}k"
     else:
         return str(sats)
 

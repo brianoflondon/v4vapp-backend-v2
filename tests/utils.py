@@ -152,6 +152,9 @@ async def send_test_custom_json(transfer: KeepsatsTransfer) -> Dict[str, Any]:
 
 
 async def clear_and_reset():
+    db_conn = DBConn()
+    await db_conn.setup_database()
+    await db_conn.db()["pending"].delete_many({})
     ledger_count = await get_ledger_count()
     trx = await send_server_balance_to_test()
     if trx:

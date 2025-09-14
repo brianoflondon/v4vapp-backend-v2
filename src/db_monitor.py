@@ -1,9 +1,9 @@
 import asyncio
-from pprint import pprint
 import signal
 import sys
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
+from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
@@ -150,6 +150,10 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         bool: True if the "locked" field is found in either the "updatedFields" or
         "removedFields" of the change event, otherwise False.
     """
+    debugging = False
+    if not debugging:
+        return False
+
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
