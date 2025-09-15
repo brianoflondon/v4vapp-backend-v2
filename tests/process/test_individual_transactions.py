@@ -422,6 +422,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
 
 
+@pytest.mark.skip(reason="This test creates a pending transaction which blocks further tests")
 async def test_pending_hive_payment():
     await test_deposit_hive_to_keepsats(5_000, timeout=120, message="test_pending_hive_payment")
 
