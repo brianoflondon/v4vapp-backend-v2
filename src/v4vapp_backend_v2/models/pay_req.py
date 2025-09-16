@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Dict, List
 
 from google.protobuf.json_format import MessageToDict
@@ -114,7 +115,7 @@ class PayReq(BaseModel):
     features: Dict[str, Feature] | None = None
     blinded_paths: List[BlindedPaymentPath] | None = None
 
-    # Added fields in additionto normal LND fields
+    # Added fields in addition to normal LND fields
     conv: CryptoConv = Field(
         default_factory=CryptoConv,
         description="Conversion data for the payment request",
@@ -281,7 +282,7 @@ class PayReq(BaseModel):
         }
 
     @property
-    def fee_estimate(self) -> int:
+    def fee_estimate(self) -> Decimal:
         """
         Returns the estimated fee for the payment request.
 
@@ -290,9 +291,9 @@ class PayReq(BaseModel):
         """
         # This is a placeholder implementation. Actual fee estimation logic should be implemented.
         lnd_config = InternalConfig().config.lnd_config
-        return int(
-            lnd_config.lightning_fee_base_msats
-            + (self.value_msat * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
+        return Decimal(
+            Decimal(lnd_config.lightning_fee_base_msats)
+            + (self.value_msat * Decimal(lnd_config.lightning_fee_estimate_ppm) / 1_000_000)
         )
 
 
