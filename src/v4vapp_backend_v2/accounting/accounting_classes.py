@@ -5,6 +5,7 @@ from typing import Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 from pydantic.dataclasses import dataclass
+from tabulate import tabulate
 
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
@@ -94,6 +95,7 @@ class AccountBalanceLine(BaseModel):
     short_id: str = ""
     ledger_type: str = ""
     timestamp: datetime = datetime.now(tz=timezone.utc)
+    timestamp_unix: float = 0.0
     description: str = ""
     user_memo: str = ""
     cust_id: str = ""
@@ -181,10 +183,63 @@ class LedgerAccountDetails(LedgerAccount):
                 self.balances_net[currency] = Decimal(0)
 
         self.combined_balance = sorted(
-            [line for lines in self.balances.values() for line in lines], key=lambda x: x.timestamp
+            [
+                line
+                for lines in self.balances.values()
+                for line in lines
+                if line.ledger_type not in ["hold_k", "release_k"]
+            ],
+            key=lambda x: x.timestamp,
         )
-        for line in self.combined_balance:
-            line.conv_running_total += ConvertedSummary.from_crypto_conv(line.conv_signed)
+        if self.combined_balance:
+            # Initialize the first line's running total
+            self.combined_balance[0].conv_running_total = ConvertedSummary.from_crypto_conv(
+                self.combined_balance[0].conv_signed
+            )
+            self.combined_balance[0].timestamp_unix = (
+                self.combined_balance[0].timestamp.timestamp() * 1000
+            )
+
+            # Calculate running totals for subsequent lines
+            for i in range(1, len(self.combined_balance)):
+                self.combined_balance[i].timestamp_unix = (
+                    self.combined_balance[i].timestamp.timestamp() * 1000
+                )
+                line = self.combined_balance[i]
+                prev_line = self.combined_balance[i - 1]
+                line.conv_running_total = (
+                    prev_line.conv_running_total
+                    + ConvertedSummary.from_crypto_conv(line.conv_signed)
+                )
+
+        # if self.combined_balance:
+        #     # Create a table for debugging combined balance information
+        #     debug_table_data = []
+        #     for line in self.combined_balance:
+        #         debug_table_data.append(
+        #             [
+        #                 line.unit,
+        #                 line.ledger_type,
+        #                 f"{line.conv_signed.sats_rounded:,.0f}",
+        #                 f"{line.conv_signed.sats_rounded:,.0f}",
+        #                 f"{line.conv_running_total.sats_rounded:,.0f}",
+        #             ]
+        #         )
+
+        #     debug_table = tabulate(
+        #         debug_table_data,
+        #         headers=[
+        #             "Unit",
+        #             "ledger_type",
+        #             "Amount Signed (sats)",
+        #             "Conv Signed (sats)",
+        #             "Running Total (sats)",
+        #         ],
+        #         tablefmt="fancy_grid",
+        #     )
+        #     print("Combined Balance Debug Information:")
+        #     print(debug_table)
+        #     print(self.balances_printout())
 
     def __str__(self) -> str:
         """
@@ -197,19 +252,11 @@ class LedgerAccountDetails(LedgerAccount):
         """
         Returns a formatted string representation of the account details for Keepsats.
         """
-        # Fixed column widths
-        col1_width = 50
-        col2_width = 12
+        # Prepare table data
+        table_data = []
 
-        # Create separator
-        separator = f"+{'-' * (col1_width + 2)}+{'-' * (col2_width + 2)}+"
-
-        lines = [separator]
-
-        # Add account name row with value (truncate if too long)
+        # Add account name row
         account_name_str = LedgerAccount.__str__(self)
-        if len(account_name_str) > col1_width:
-            account_name_str = account_name_str[: col1_width - 3] + "..."
 
         # Get the main value to display on account line
         main_value = ""
@@ -221,20 +268,19 @@ class LedgerAccountDetails(LedgerAccount):
             sats_value = int(conv_summary.sats) if conv_summary.sats else 0
             main_value = f"{sats_value:,}"
 
-        lines.append(f"| {account_name_str:<{col1_width}} | {main_value:>{col2_width}} |")
+        table_data.append([account_name_str, main_value])
 
         # Add currency data for additional currencies
         for currency, conv_summary in self.balances_totals.items():
             if currency == Currency.HIVE:
                 value = f"{conv_summary.hive:.3f}" if conv_summary.hive else "0.000"
-                lines.append(f"| {'HIVE':<{col1_width}} | {value:>{col2_width}} |")
+                table_data.append(["HIVE", value])
             elif currency == Currency.MSATS:
                 sats_value = int(conv_summary.sats) if conv_summary.sats else 0
                 value = f"{sats_value:,}"
-                lines.append(f"| {'SATS':<{col1_width}} | {value:>{col2_width}} |")
-            lines.append(separator)
+                table_data.append(["SATS", value])
 
-        return "\n".join(lines)
+        return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
 
 class AccountBalances(RootModel):
@@ -245,6 +291,7 @@ class StrippedAccountBalanceLine(BaseModel):
     short_id: str = ""
     ledger_type: str = ""
     timestamp: datetime = datetime.now(tz=timezone.utc)
+    timestamp_unix: float = 0.0
     description: str = ""
     user_memo: str = ""
     cust_id: str = ""
@@ -337,19 +384,11 @@ class StrippedLedgerAccountDetails(LedgerAccount):
         """
         Returns a formatted string representation of the account details for Keepsats.
         """
-        # Fixed column widths
-        col1_width = 50
-        col2_width = 12
+        # Prepare table data
+        table_data = []
 
-        # Create separator
-        separator = f"+{'-' * (col1_width + 2)}+{'-' * (col2_width + 2)}+"
-
-        lines = [separator]
-
-        # Add account name row with value (truncate if too long)
+        # Add account name row
         account_name_str = LedgerAccount.__str__(self)
-        if len(account_name_str) > col1_width:
-            account_name_str = account_name_str[: col1_width - 3] + "..."
 
         # Get the main value to display on account line
         main_value = ""
@@ -361,20 +400,19 @@ class StrippedLedgerAccountDetails(LedgerAccount):
             sats_value = int(conv_summary.sats) if conv_summary.sats else 0
             main_value = f"{sats_value:,}"
 
-        lines.append(f"| {account_name_str:<{col1_width}} | {main_value:>{col2_width}} |")
+        table_data.append([account_name_str, main_value])
 
         # Add currency data for additional currencies
         for currency, conv_summary in self.balances_totals.items():
             if currency == Currency.HIVE:
                 value = f"{conv_summary.hive:.3f}" if conv_summary.hive else "0.000"
-                lines.append(f"| {'HIVE':<{col1_width}} | {value:>{col2_width}} |")
+                table_data.append(["HIVE", value])
             elif currency == Currency.MSATS:
                 sats_value = int(conv_summary.sats) if conv_summary.sats else 0
                 value = f"{sats_value:,}"
-                lines.append(f"| {'SATS':<{col1_width}} | {value:>{col2_width}} |")
-            lines.append(separator)
+                table_data.append(["SATS", value])
 
-        return "\n".join(lines)
+        return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
 
 # This is the last line# This is the last line
