@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Union
 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -13,6 +13,11 @@ class ConvertedSummary:
     sats: Decimal = Decimal(0)
     msats: Decimal = Decimal(0)
 
+    @property
+    def sats_rounded(self) -> Decimal:
+        """Return sats rounded to the nearest integer."""
+        return self.sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
     @classmethod
     def from_crypto_conv(cls, crypto_conv: CryptoConv) -> "ConvertedSummary":
         """Create a ConvertedSummary from a CryptoConv object."""
@@ -20,8 +25,8 @@ class ConvertedSummary:
             hive=crypto_conv.hive,
             hbd=crypto_conv.hbd,
             usd=crypto_conv.usd,
-            sats=Decimal(crypto_conv.sats),
-            msats=Decimal(crypto_conv.msats),
+            sats=crypto_conv.sats,
+            msats=crypto_conv.msats,
         )
 
     def __add__(self, other: "ConvertedSummary") -> "ConvertedSummary":
