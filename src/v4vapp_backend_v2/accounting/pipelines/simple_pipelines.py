@@ -257,7 +257,7 @@ def limit_check_pipeline(
                         "limit_hours": f"{limit.hours}",
                         "limit_sats": f"{limit.sats}",
                         "limit_ok": {
-                            "$lt": [{"$add": ["$sats", extra_spend_sats_str]}, limit.sats]
+                            "$lt": [{"$add": ["$sats", extra_spend_sats_str]}, str(limit.sats)]
                         },
                         **(
                             {"details": {"$ifNull": [f"${f'{limit.hours}'}.details", []]}}
