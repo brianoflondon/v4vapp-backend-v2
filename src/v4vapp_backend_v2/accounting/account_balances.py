@@ -265,11 +265,7 @@ async def account_balance_printout(
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
         # Perform a conversion with the current quote for this Currency unit
-        final_balance = ledger_account_details.balances_net.get(unit, 0)
-        if unit in [Currency.HIVE, Currency.HBD]:
-            final_balance = round(final_balance, 3)
-        else:
-            final_balance = int(final_balance)
+        final_balance = Decimal(ledger_account_details.balances_net.get(unit, 0))
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
         output.append(
@@ -370,7 +366,7 @@ async def account_balance_printout_grouped_by_customer(
     COL_LEDGER_TYPE = 11
 
     total_usd: Decimal = Decimal(0)
-    total_msats: int = 0
+    total_msats: Decimal = Decimal(0)
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
@@ -400,7 +396,7 @@ async def account_balance_printout_grouped_by_customer(
                         output.append(f"\n--- Customer: {cust_id} ---")
 
                         # Recalculate running totals for this customer group
-                        running_total = 0.0
+                        running_total = Decimal(0)
                         for row in sorted(
                             cust_rows,
                             key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
@@ -414,12 +410,12 @@ async def account_balance_printout_grouped_by_customer(
 
                             # Raw numeric values
                             debit_val = (
-                                row.amount
+                                Decimal(row.amount)
                                 if row.side == "debit" and row.unit == unit
                                 else Decimal(0)
                             )
                             credit_val = (
-                                row.amount
+                                Decimal(row.amount)
                                 if row.side == "credit" and row.unit == unit
                                 else Decimal(0)
                             )
@@ -465,7 +461,7 @@ async def account_balance_printout_grouped_by_customer(
                 else:
                     # Single cust_id, recalculate running totals for consistency
                     output.append(f"\n--- Customer: {list(cust_ids)[0]} ---")
-                    running_total = 0.0
+                    running_total = Decimal(0)
                     for row in sorted(
                         date_rows,
                         key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
@@ -522,10 +518,7 @@ async def account_balance_printout_grouped_by_customer(
 
         # Perform a conversion with the current quote for this Currency unit
         final_balance = ledger_account_details.balances_net.get(unit, 0)
-        if unit in [Currency.HIVE, Currency.HBD]:
-            final_balance = round(final_balance, 3)
-        else:
-            final_balance = int(final_balance)
+
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
         output.append(
@@ -825,13 +818,16 @@ async def keepsats_balance_printout(
         - Net balance, previous balance (if provided), and the delta between balances.
     """
     net_msats, account_balance = await keepsats_balance(cust_id=cust_id, line_items=line_items)
-
+    sats = (net_msats / 1000).quantize(Decimal("1."))
+    previous_sats = (
+        (Decimal(previous_msats) / 1000).quantize(Decimal("1.")) if previous_msats else None
+    )
     logger.info("_" * 50)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")
-    logger.info(f"  Net balance:      {net_msats // 1000:,.0f} sats")
-    if previous_msats is not None:
-        logger.info(f"  Previous balance: {previous_msats // 1000:,.0f} sats")
-        logger.info(f"  Delta:           {net_msats - previous_msats:,.0f} sats")
+    logger.info(f"  Net balance:      {sats:,.0f} sats")
+    if previous_sats is not None:
+        logger.info(f"  Previous balance: {previous_sats:,.0f} sats")
+        logger.info(f"  Delta:           {sats - previous_sats:,.0f} sats")
     logger.info("_" * 50)
 
     return net_msats, account_balance
