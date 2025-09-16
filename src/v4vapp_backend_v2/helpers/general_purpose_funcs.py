@@ -59,9 +59,9 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: Database
 
 
-def convert_decimals(
-    obj: dict | list | Decimal | Any,
-) -> dict | list | Decimal128 | int | float | Any:
+def convert_decimals_for_mongodb(
+    obj: Dict[str, Any] | Dict | list | Decimal | Any,
+) -> Dict | Dict[str, Any] | Dict | list | Decimal128 | int | float | Any:
     """
     Recursively converts Decimal instances within a nested structure (dicts, lists) to appropriate MongoDB types:
     - Whole-number Decimals to Python int (for MongoDB int64).
@@ -82,9 +82,9 @@ def convert_decimals(
         {'a': 12345678901234567890, 'b': Decimal128('1.23'), 'c': [2, 3]}
     """
     if isinstance(obj, dict):
-        return {k: convert_decimals(v) for k, v in obj.items()}
+        return {k: convert_decimals_for_mongodb(v) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [convert_decimals(item) for item in obj]
+        return [convert_decimals_for_mongodb(item) for item in obj]
     elif isinstance(obj, Decimal):
         # Check if the Decimal is a whole number (no fractional part)
         if obj == obj.to_integral_value():
@@ -94,21 +94,48 @@ def convert_decimals(
                 return Decimal128(str(obj))  # Convert to Decimal128 for MongoDB
             except decimal.Inexact:
                 # If Decimal128 conversion fails due to precision issues,
-                # round to 6 decimal places and try again
-                rounded_obj = round(obj, 6)
+                # round to 10 decimal places and try again (more precision than 6)
+                rounded_obj = round(obj, 10)
                 try:
                     return Decimal128(str(rounded_obj))
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to convert rounded Decimal {rounded_obj} to Decimal128: {e}, converting to float"
-                    )
-                    return float(rounded_obj)
-            except Exception as e:
-                # If Decimal128 conversion fails, convert to float as fallback
-                logger.warning(
-                    f"Failed to convert Decimal {obj} to Decimal128: {e}, converting to float"
-                )
-                return float(obj)
+                except Exception:
+                    # If still fails, try with even more aggressive rounding
+                    rounded_obj = round(obj, 6)
+                    try:
+                        return Decimal128(str(rounded_obj))
+                    except Exception:
+                        # As a last resort, round to 4 decimal places for financial data
+                        rounded_obj = round(obj, 4)
+                        try:
+                            return Decimal128(str(rounded_obj))
+                        except Exception:
+                            # Only convert to float as absolute last resort
+                            logger.warning(
+                                f"Failed to convert Decimal {obj} to Decimal128 after multiple rounding attempts, converting to float"
+                            )
+                            return float(rounded_obj)
+            except Exception:
+                # If Decimal128 conversion fails for other reasons, try rounding first
+                try:
+                    # Try rounding to 10 decimal places
+                    rounded_obj = round(obj, 10)
+                    return Decimal128(str(rounded_obj))
+                except Exception:
+                    try:
+                        # Try rounding to 6 decimal places
+                        rounded_obj = round(obj, 6)
+                        return Decimal128(str(rounded_obj))
+                    except Exception:
+                        try:
+                            # Try rounding to 4 decimal places
+                            rounded_obj = round(obj, 4)
+                            return Decimal128(str(rounded_obj))
+                        except Exception:
+                            # Only convert to float as absolute last resort
+                            logger.warning(
+                                f"Failed to convert Decimal {obj} to Decimal128 after multiple attempts, converting to float"
+                            )
+                            return float(obj)
     else:
         return obj
 

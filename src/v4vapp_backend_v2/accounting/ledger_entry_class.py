@@ -4,7 +4,6 @@ from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, Self
 
-from bson.decimal128 import Decimal128
 from pydantic import (
     BaseModel,
     Field,
@@ -25,29 +24,15 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    convert_decimals,
+    convert_decimals_for_mongodb,
     lightning_memo,
     snake_case,
 )
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
-
-
-def convert_decimal128_to_decimal(obj):
-    """
-    Recursively convert Decimal128 objects to Decimal objects for Pydantic validation.
-    This handles the conversion when loading data from MongoDB.
-    """
-    if isinstance(obj, dict):
-        return {k: convert_decimal128_to_decimal(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_decimal128_to_decimal(item) for item in obj]
-    elif isinstance(obj, Decimal128):
-        return Decimal(str(obj))
-    else:
-        return obj
 
 
 class LedgerEntryException(Exception):
@@ -166,14 +151,14 @@ class LedgerEntry(BaseModel):
     cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )
-    debit_amount: float = Field(0.0, description="Amount of the debit transaction")
+    debit_amount: Decimal = Field(Decimal(0), description="Amount of the debit transaction")
     debit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the debit transaction"
     )
     debit_conv: CryptoConv = Field(
         default_factory=CryptoConv, description="Conversion details for the debit transaction"
     )
-    credit_amount: float = Field(0.0, description="Amount of the credit transaction")
+    credit_amount: Decimal = Field(Decimal(0), description="Amount of the credit transaction")
     credit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the credit transaction"
     )
@@ -197,13 +182,11 @@ class LedgerEntry(BaseModel):
         description="Type of the operation, defaults to 'ledger_entry'",
     )
 
-    @field_validator("debit_conv", "credit_conv", mode="before")
+    @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
     @classmethod
     def convert_mongodb_decimals(cls, v):
         """Convert Decimal128 objects from MongoDB to Decimal objects for Pydantic validation."""
-        if isinstance(v, dict):
-            return convert_decimal128_to_decimal(v)
-        return v
+        return convert_decimal128_to_decimal(v)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -242,7 +225,7 @@ class LedgerEntry(BaseModel):
         return self
 
     @computed_field
-    def debit_amount_signed(self) -> int | float:
+    def debit_amount_signed(self) -> Decimal:
         """
         Returns the debit amount as a signed value.
         This is used to ensure that the debit amount is always positive in accounting terms.
@@ -250,7 +233,7 @@ class LedgerEntry(BaseModel):
         return self.debit_amount * self.debit_sign
 
     @computed_field
-    def credit_amount_signed(self) -> int | float:
+    def credit_amount_signed(self) -> Decimal:
         """
         Returns the credit amount as a signed value.
         This is used to ensure that the credit amount is always positive in accounting terms.
@@ -513,8 +496,10 @@ class LedgerEntry(BaseModel):
         self.db_checks()
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
-            document = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
-            document = convert_decimals(document)
+            document: Dict[str, Any] = self.model_dump(
+                by_alias=True, exclude_none=True, exclude_unset=True
+            )
+            document = convert_decimals_for_mongodb(document)
 
             if not upsert:
                 ans = await InternalConfig.db["ledger"].insert_one(document=document)

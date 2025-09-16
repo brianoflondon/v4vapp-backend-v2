@@ -9,14 +9,19 @@ from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
 from binance.spot import Spot  # type: ignore
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
-from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, format_time_delta
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    convert_decimals_for_mongodb,
+    format_time_delta,
+)
 from v4vapp_backend_v2.hive.hive_extras import call_hive_internal_market
 
 ALL_PRICES_COINGECKO = (
@@ -170,7 +175,6 @@ class QuoteResponse(BaseModel):
     fetch_date: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc)
     error: str = ""
     error_details: Dict[str, Any] = {}
-
 
     @field_validator("hive_usd", "hbd_usd", "btc_usd", "hive_hbd", mode="before")
     @classmethod
@@ -684,7 +688,7 @@ class AllQuotes(BaseModel):
             context = f"{DB_RATES_COLLECTION}:{self.fetch_date.isoformat()}"
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
             document = record.model_dump()
-            document = convert_decimals(document)
+            document = convert_decimals_for_mongodb(document)
 
             # Do not await: runs in background
             task = asyncio.create_task(

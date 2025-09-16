@@ -13,7 +13,10 @@ from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, 
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    convert_decimals_for_mongodb,
+    snake_case,
+)
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 ICON = "🔄"
@@ -327,7 +330,7 @@ class TrackedBaseModel(BaseModel):
             update.pop("replies", None)  # Remove empty replies list if it exists
 
         # Convert Decimal objects to floats for MongoDB compatibility
-        update = convert_decimals(update)
+        update = convert_decimals_for_mongodb(update)
 
         update = {
             "$set": update,

@@ -10,7 +10,7 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
-from v4vapp_backend_v2.database.db_tools import _convert_decimal128_to_decimal
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
@@ -51,8 +51,8 @@ async def generate_balance_sheet_mongodb(
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
 
     # Convert Decimal128 values to Decimal for arithmetic operations
-    balance_sheet = _convert_decimal128_to_decimal(balance_sheet)
-    profit_loss = _convert_decimal128_to_decimal(profit_loss)
+    balance_sheet = convert_decimal128_to_decimal(balance_sheet)
+    profit_loss = convert_decimal128_to_decimal(profit_loss)
 
     if "Equity" not in balance_sheet:
         balance_sheet["Equity"] = {}
@@ -98,9 +98,9 @@ async def generate_balance_sheet_mongodb(
     }
 
     # Convert Decimal128 values to Decimal for arithmetic operations before math.isclose
-    assets_msats_decimal = _convert_decimal128_to_decimal(assets_total["msats"])
-    liabilities_msats_decimal = _convert_decimal128_to_decimal(liabilities_total["msats"])
-    equity_msats_decimal = _convert_decimal128_to_decimal(equity_total["msats"])
+    assets_msats_decimal = convert_decimal128_to_decimal(assets_total["msats"])
+    liabilities_msats_decimal = convert_decimal128_to_decimal(liabilities_total["msats"])
+    equity_msats_decimal = convert_decimal128_to_decimal(equity_total["msats"])
 
     tolerance_msats_check = assets_msats_decimal - (
         liabilities_msats_decimal + equity_msats_decimal
@@ -146,9 +146,9 @@ async def check_balance_sheet_mongodb(
     tolerance_msats = Decimal(10_000)  # tolerance of 10 sats.
 
     # Convert Decimal128 values to Decimal for arithmetic operations
-    assets_msats = _convert_decimal128_to_decimal(bs_check[0]["assets_msats"])
-    liabilities_msats = _convert_decimal128_to_decimal(bs_check[0]["liabilities_msats"])
-    equity_msats = _convert_decimal128_to_decimal(bs_check[0]["equity_msats"])
+    assets_msats = convert_decimal128_to_decimal(bs_check[0]["assets_msats"])
+    liabilities_msats = convert_decimal128_to_decimal(bs_check[0]["liabilities_msats"])
+    equity_msats = convert_decimal128_to_decimal(bs_check[0]["equity_msats"])
 
     is_balanced = math.isclose(
         assets_msats,
@@ -156,7 +156,7 @@ async def check_balance_sheet_mongodb(
         rel_tol=0.01,
         abs_tol=tolerance_msats,
     )
-    msats_tolerance = _convert_decimal128_to_decimal(bs_check[0]["total_msats"])
+    msats_tolerance = convert_decimal128_to_decimal(bs_check[0]["total_msats"])
     return is_balanced, msats_tolerance
 
 

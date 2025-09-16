@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any, Dict, List, Type, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
@@ -170,6 +170,13 @@ class KeepsatsTransfer(BaseModel):
             str: The user memo.
         """
         return process_user_memo(self.memo)
+
+    @field_validator("sats", "msats", mode="before")
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
 
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]

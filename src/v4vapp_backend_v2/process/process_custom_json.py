@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import List
 
 from colorama import Fore, Style
@@ -206,7 +206,9 @@ async def custom_json_internal_transfer(
             raise InsufficientBalanceError(message)
 
     debit_credit_amount_msats = keepsats_transfer.msats or Decimal(0)
-    debit_credit_amount_sats = debit_credit_amount_sats // Decimal(1000)
+    debit_credit_amount_sats = (debit_credit_amount_msats / Decimal(1000)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
 
     ledger_entries: List[LedgerEntry] = []
 
