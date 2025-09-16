@@ -73,8 +73,8 @@ class LedgerEntry(BaseModel):
         credit (LedgerAccountAny): Account to be credited.
 
         __init__(self, **data): Initializes a LedgerEntry instance.
-        debit_amount_signed(self) -> int | float: Returns the debit amount as a signed value.
-        credit_amount_signed(self) -> int | float: Returns the credit amount as a signed value.
+        debit_amount_signed(self) -> Decimal: Returns the debit amount as a signed value.
+        credit_amount_signed(self) -> Decimal: Returns the credit amount as a signed value.
         debit_sign(self) -> int: Returns the sign of the debit amount.
         credit_sign(self) -> int: Returns the sign of the credit amount.
         conv_signed(self) -> Dict[str, CryptoConv]: Returns conversion details as signed values.
