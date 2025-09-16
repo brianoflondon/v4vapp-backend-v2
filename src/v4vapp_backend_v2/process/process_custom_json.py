@@ -205,7 +205,8 @@ async def custom_json_internal_transfer(
             )
             raise InsufficientBalanceError(message)
 
-    debit_credit_amount = keepsats_transfer.msats or 0
+    debit_credit_amount_msats = keepsats_transfer.msats or Decimal(0)
+    debit_credit_amount_sats = debit_credit_amount_sats // Decimal(1000)
 
     ledger_entries: List[LedgerEntry] = []
 
@@ -214,7 +215,9 @@ async def custom_json_internal_transfer(
         or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
     )
     user_memo = process_clean_memo(user_memo)
-    description = f"Transfer {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+
+    fee_text = f"Fee {debit_credit_amount_sats:,.0f} sats " if fee_transfer else "Transfer "
+    description = f"{fee_text}{keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
     ledger_type = (
         LedgerType.CUSTOM_JSON_TRANSFER if not fee_transfer else LedgerType.CUSTOM_JSON_FEE
     )
@@ -229,12 +232,12 @@ async def custom_json_internal_transfer(
         op_type=custom_json.op_type,
         debit=LiabilityAccount(name="VSC Liability", sub=keepsats_transfer.from_account),
         debit_conv=custom_json.conv,
-        debit_amount=debit_credit_amount,
+        debit_amount=debit_credit_amount_msats,
         debit_unit=Currency.MSATS,
         credit=LiabilityAccount(name="VSC Liability", sub=keepsats_transfer.to_account),
         credit_conv=custom_json.conv,
         credit_unit=Currency.MSATS,
-        credit_amount=debit_credit_amount,
+        credit_amount=debit_credit_amount_msats,
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
@@ -302,7 +305,6 @@ async def custom_json_internal_transfer(
                 name="Fee Income Keepsats",
                 sub=fee_direction,
             ),
-            user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
             credit_unit=Currency.MSATS,
             credit_amount=keepsats_transfer.msats or 0,
             credit_conv=fee_conv,

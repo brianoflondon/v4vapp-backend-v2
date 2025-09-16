@@ -212,7 +212,7 @@ async def follow_on_transfer(
 
             if tracked_op.paywithsats:
                 await hold_keepsats(
-                    amount_msats=pay_req.value_msat + pay_req.fee_estimate,
+                    amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,
                     cust_id=cust_id,
                     tracked_op=tracked_op,
                 )

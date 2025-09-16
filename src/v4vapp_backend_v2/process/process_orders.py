@@ -15,7 +15,10 @@ async def process_create_fill_order_op(
     ledger_entries = []
     tracked_customers = [InternalConfig().server_id]  # Replace with dynamic query if needed
 
-    if isinstance(limit_fill_order, LimitOrderCreate):
+    if (
+        isinstance(limit_fill_order, LimitOrderCreate)
+        and limit_fill_order.owner not in tracked_customers
+    ):
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
             quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
