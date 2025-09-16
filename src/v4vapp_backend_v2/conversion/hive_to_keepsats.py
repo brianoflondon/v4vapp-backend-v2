@@ -170,7 +170,7 @@ async def conversion_hive_to_keepsats(
             name="VSC Liability",
             sub=cust_id,
         ),
-        user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
+        user_memo=f"Internal conversion by {cust_id}",
         debit_unit=from_currency,
         debit_amount=conv_result.to_convert_conv.value_in(from_currency),
         debit_conv=conv_result.to_convert_conv,
