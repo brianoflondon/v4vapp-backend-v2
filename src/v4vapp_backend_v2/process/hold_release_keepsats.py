@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
@@ -9,12 +10,12 @@ from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
 async def hold_keepsats(
-    amount_msats: int, cust_id: str, tracked_op: TrackedAny, fee: bool = False
+    amount_msats: Decimal, cust_id: str, tracked_op: TrackedAny, fee: bool = False
 ) -> LedgerEntry:
     """
     Creates and saves a ledger entry representing the withdrawal of Keepsats from a customer's liability account to the treasury.
     Args:
-        amount_msats (int): The amount to withdraw, in millisatoshis.
+        amount_msats (Decimal): The amount to withdraw, in millisatoshis.
         cust_id (str): The customer identifier.
         tracked_op (TrackedAny): The tracked operation associated with this withdrawal.
     Returns:
@@ -23,6 +24,7 @@ async def hold_keepsats(
         Any exceptions raised by CryptoConversion.get_quote() or LedgerEntry.save().
     """
     fee_str = "-fee" if fee else ""
+    amount_sats = amount_msats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     debit_conversion = CryptoConversion(conv_from=Currency.MSATS, value=amount_msats)
     await debit_conversion.get_quote()
     ledger_type = LedgerType.HOLD_KEEPSATS
@@ -33,7 +35,7 @@ async def hold_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}{fee_str}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Hold Keepsats {round(amount_msats / 1000):,.0f} sats for {cust_id}",
+        description=f"Hold Keepsats {amount_sats:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,  # This is the CUSTOMER
