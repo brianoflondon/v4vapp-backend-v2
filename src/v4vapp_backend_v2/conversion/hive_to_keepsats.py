@@ -37,6 +37,7 @@ Notes:
 """
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List
 
 from nectar.amount import Amount
@@ -59,7 +60,7 @@ async def conversion_hive_to_keepsats(
     server_id: str,
     cust_id: str,
     tracked_op: TransferBase,
-    msats: int = 0,
+    msats: Decimal = Decimal(0),
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
 ) -> None:
