@@ -212,17 +212,21 @@ async def custom_json_internal_transfer(
 
     ledger_entries: List[LedgerEntry] = []
 
-    user_memo = (
-        keepsats_transfer.user_memo
-        or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
-    )
-    user_memo = process_clean_memo(user_memo)
-
     fee_text = f"Fee {debit_credit_amount_sats:,.0f} sats " if fee_transfer else "Transfer "
     description = f"{fee_text}{keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
-    ledger_type = (
-        LedgerType.CUSTOM_JSON_TRANSFER if not fee_transfer else LedgerType.CUSTOM_JSON_FEE
-    )
+
+    # Do not use a long user_memo if this is a fee transfer, the Description will suffice
+    if fee_transfer:
+        ledger_type = LedgerType.CUSTOM_JSON_FEE
+        user_memo = ""
+    else:
+        ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+        user_memo = (
+            keepsats_transfer.user_memo
+            or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+        )
+        user_memo = process_clean_memo(user_memo)
+
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,

@@ -6,6 +6,7 @@ from nectar.amount import Amount
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (  # Assuming this function exists for sending custom JSONs
     CustomJsonSendError,
+    HiveMissingKeyError,
     account_hive_balances,
     get_verified_hive_client,
     send_custom_json,
@@ -86,6 +87,9 @@ async def resend_pending_transactions() -> None:
                 f"{Fore.GREEN}Resent pending transaction {pending}, trx: {trx.get('trx_id')}{Style.RESET_ALL}"
             )
             await pending.delete()
+        except HiveMissingKeyError as e:
+            logger.warning(f"MissingKeyError when resending pending transaction {pending}: {e}")
+            await pending.delete()  # Consider whether to delete or keep for future attempts
         except Exception as e:
             await pending.save()
             logger.warning(f"Failed to resend pending transaction {pending}: {e}")
