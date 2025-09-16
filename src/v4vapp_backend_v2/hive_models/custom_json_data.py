@@ -84,11 +84,11 @@ class KeepsatsTransfer(BaseModel):
     parent_id: str | None = Field(
         None, description="The short ID of the parent transaction, if applicable"
     )
-    hive: float | None = Field(
+    hive: Decimal | None = Field(
         default=None,
         description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
     )
-    hbd: float | None = Field(
+    hbd: Decimal | None = Field(
         default=None,
         description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
     )

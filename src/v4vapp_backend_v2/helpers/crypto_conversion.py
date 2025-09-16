@@ -489,7 +489,7 @@ class CryptoConversion(BaseModel):
             self.hive = Decimal(
                 str(round(self.msats / (self.quote.sats_hive_p * Decimal(1000)), 5))
             )
-            self.msats_fee = Decimal(msats_fee(int(self.msats)))
+            self.msats_fee = msats_fee(self.msats)
         except ZeroDivisionError:
             # Handle division by zero if the quote is not available
             self.msats = Decimal(0)

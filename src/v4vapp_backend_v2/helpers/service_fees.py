@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 
-MARGIN_SPREAD = 0.002
+MARGIN_SPREAD = Decimal(0.002)
 
 
 class V4VMinimumInvoice(ValueError):
@@ -19,7 +21,7 @@ class V4VMaximumInvoice(ValueError):
     pass
 
 
-def msats_fee(msats: float) -> int:
+def msats_fee(msats: Decimal) -> Decimal:
     """
     Calculate the service fee based on the base amount in milisats.
     Returns zero below the minimum invoice amount but calcs a fee for values above maximum.
@@ -31,13 +33,13 @@ def msats_fee(msats: float) -> int:
         int: The calculated service fee in milisats.
     """
     config_data = V4VConfig().data
-    fee: float = ((config_data.conv_fee_percent + MARGIN_SPREAD) * msats) + (
+    fee = ((config_data.conv_fee_percent + MARGIN_SPREAD) * msats) + (
         config_data.conv_fee_sats * 1_000
     )
-    return int(fee)
+    return fee.quantize(Decimal("1"))  # Round to nearest integer
 
 
-def limit_test(msats: float = 0.0) -> bool:
+def limit_test(msats: Decimal = Decimal(0.0)) -> bool:
     """
     Checks if the given amount in millisatoshis (msats) is within the allowed invoice payment limits.
 

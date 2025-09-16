@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pprint import pprint
 from typing import List
 
@@ -21,7 +22,7 @@ class V4VConfigRateLimits(BaseModel):
     """Class for holding the hourly rate limits for using the Lightning exchange"""
 
     hours: int = Field(0, description="Number of hours for the rate limit.")
-    sats: int = Field(0, description="Limit in satoshis for the rate limit.")
+    sats: Decimal = Field(Decimal(0), description="Limit in satoshis for the rate limit.")
 
     @model_validator(mode="before")
     @classmethod
@@ -46,19 +47,23 @@ class V4VConfigRateLimits(BaseModel):
 class V4VConfigData(BaseModel):
     """Class for fetching and storing some config settings on Hive"""
 
-    hive_return_fee: float = Field(0.002, description="Fee for returning Hive transactions.")
-    conv_fee_percent: float = Field(
-        0.015, description="Conversion fee percentage for transactions."
+    hive_return_fee: Decimal = Field(
+        Decimal(0.002), description="Fee for returning Hive transactions."
     )
-    conv_fee_sats: int = Field(50, description="Conversion fee in satoshis for transactions.")
-    minimum_invoice_payment_sats: int = Field(
-        250, description="Minimum invoice payment in satoshis."
+    conv_fee_percent: Decimal = Field(
+        Decimal(0.015), description="Conversion fee percentage for transactions."
     )
-    maximum_invoice_payment_sats: int = Field(
-        100_000, description="Maximum invoice payment in satoshis."
+    conv_fee_sats: Decimal = Field(
+        Decimal(50), description="Conversion fee in satoshis for transactions."
     )
-    max_acceptable_lnd_fee_msats: int = Field(
-        500_000, description="Maximum acceptable Lightning Network fee in millisatoshis."
+    minimum_invoice_payment_sats: Decimal = Field(
+        Decimal(250), description="Minimum invoice payment in satoshis."
+    )
+    maximum_invoice_payment_sats: Decimal = Field(
+        Decimal(100_000), description="Maximum invoice payment in satoshis."
+    )
+    max_acceptable_lnd_fee_msats: Decimal = Field(
+        Decimal(500_000), description="Maximum acceptable Lightning Network fee in millisatoshis."
     )
     closed_get_lnd: bool = Field(
         False, description="Flag to indicate if the LND gateway is closed."
@@ -68,14 +73,14 @@ class V4VConfigData(BaseModel):
     )
     v4v_frontend_iri: str = Field("", description="IRI for the V4V frontend.")
     v4v_api_iri: str = Field("", description="IRI for the V4V API.")
-    v4v_fees_streaming_sats_to_hive_percent: float = Field(
-        0.03, description="Fee percentage for streaming sats to Hive."
+    v4v_fees_streaming_sats_to_hive_percent: Decimal = Field(
+        Decimal(0.03), description="Fee percentage for streaming sats to Hive."
     )
     lightning_rate_limits: List[V4VConfigRateLimits] = Field(
         default_factory=lambda: [
-            V4VConfigRateLimits(hours=4, sats=200_000 * 2),
-            V4VConfigRateLimits(hours=72, sats=200_000 * 4),
-            V4VConfigRateLimits(hours=168, sats=200_000 * 6),
+            V4VConfigRateLimits(hours=4, sats=Decimal(200_000 * 2)),
+            V4VConfigRateLimits(hours=72, sats=Decimal(200_000 * 4)),
+            V4VConfigRateLimits(hours=168, sats=Decimal(200_000 * 6)),
         ],
         description="Rate limits for Lightning transactions.",
     )
@@ -278,7 +283,10 @@ class V4VConfig:
         # Fix: Only pop the key if it exists
         if CONFIG_ROOT_KEY in existing_metadata:
             existing_metadata.pop(CONFIG_ROOT_KEY)
-        new_meta = {**(existing_metadata or {}), CONFIG_ROOT_KEY: self.data.model_dump()}
+        new_meta = {
+            **(existing_metadata or {}),
+            CONFIG_ROOT_KEY: self.data.model_dump(mode="json"),
+        }
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
         try:
