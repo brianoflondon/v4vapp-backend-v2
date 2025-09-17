@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List
 
+from nectar.amount import Amount
 from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
 from pydantic.dataclasses import dataclass
 from tabulate import tabulate
@@ -134,7 +135,8 @@ class LedgerAccountDetails(LedgerAccount):
     """
 
     balances: Dict[Currency, List[AccountBalanceLine]] = Field(
-        default_factory=dict, description="Complete details for all transactions in each currency"
+        default_factory=dict,
+        description="Complete details for all transactions in each currency, each list is for a separate currency",
     )
     balances_totals: Dict[Currency, ConvertedSummary] = Field(
         default_factory=dict,
@@ -148,14 +150,27 @@ class LedgerAccountDetails(LedgerAccount):
         description="Combined list of all balance lines across all currencies sorted by timestamp ascending",
     )
     last_transaction_date: datetime | None = None
-    hive: Decimal = Decimal(0)
-    hbd: Decimal = Decimal(0)
-    usd: Decimal = Decimal(0)
-    msats: Decimal = Decimal(0)
-    sats: Decimal = Decimal(0)
-    conv_total: ConvertedSummary = ConvertedSummary()
+    hive: Decimal = Field(Decimal(0), description="Latest running total for HIVE currency")
+    hbd: Decimal = Field(Decimal(0), description="Latest running total for HBD currency")
+    usd: Decimal = Field(Decimal(0), description="Latest running total for USD currency")
+    msats: Decimal = Field(Decimal(0), description="Latest running total for MSATS currency")
+    sats: Decimal = Field(Decimal(0), description="Latest running total for SATS currency")
+    conv_total: ConvertedSummary = Field(
+        ConvertedSummary(),
+        description="Aggregated conversion total across all currencies",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def hive_amount(self) -> Amount:
+        """Returns the HIVE balance as an Amount object."""
+        return Amount(f"{self.hive:.3f} HIVE")
+
+    @property
+    def hbd_amount(self) -> Amount:
+        """Returns the HBD balance as an Amount object."""
+        return Amount(f"{self.hbd:.3f} HBD")
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -211,35 +226,6 @@ class LedgerAccountDetails(LedgerAccount):
                     prev_line.conv_running_total
                     + ConvertedSummary.from_crypto_conv(line.conv_signed)
                 )
-
-        # if self.combined_balance:
-        #     # Create a table for debugging combined balance information
-        #     debug_table_data = []
-        #     for line in self.combined_balance:
-        #         debug_table_data.append(
-        #             [
-        #                 line.unit,
-        #                 line.ledger_type,
-        #                 f"{line.conv_signed.sats_rounded:,.0f}",
-        #                 f"{line.conv_signed.sats_rounded:,.0f}",
-        #                 f"{line.conv_running_total.sats_rounded:,.0f}",
-        #             ]
-        #         )
-
-        #     debug_table = tabulate(
-        #         debug_table_data,
-        #         headers=[
-        #             "Unit",
-        #             "ledger_type",
-        #             "Amount Signed (sats)",
-        #             "Conv Signed (sats)",
-        #             "Running Total (sats)",
-        #         ],
-        #         tablefmt="fancy_grid",
-        #     )
-        #     print("Combined Balance Debug Information:")
-        #     print(debug_table)
-        #     print(self.balances_printout())
 
     def __str__(self) -> str:
         """
@@ -415,4 +401,5 @@ class StrippedLedgerAccountDetails(LedgerAccount):
         return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
 
+# This is the last line# This is the last line
 # This is the last line# This is the last line

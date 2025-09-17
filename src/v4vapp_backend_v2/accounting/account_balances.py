@@ -29,6 +29,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 )
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 UNIT_TOLERANCE = {
     "HIVE": 0.001,
@@ -571,7 +572,7 @@ async def list_all_accounts() -> List[LedgerAccount]:
 
 
 async def ledger_pipeline_result(
-    cust_id: str,
+    cust_id: CustIDType,
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
     as_of_date: datetime | None = None,
@@ -625,60 +626,8 @@ async def ledger_pipeline_result(
     return ans
 
 
-# async def get_account_lightning_conv(
-#     cust_id: str = "",
-#     as_of_date: datetime | None = None,
-#     age: timedelta = timedelta(hours=4),
-#     line_items: bool = True,
-# ) -> LedgerConvSummary:
-#     """
-#     Retrieves the lightning conversion for a specific customer as of a given date.
-#     This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
-#     i.e. conversions from HIVE/HBD to SATS.
-#     THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
-
-#     Args:
-#         account (LedgerAccount): The account for which to retrieve the lightning spend.
-#         as_of_date (datetime, optional): The date up to which to calculate the spend. Defaults to the current UTC time.
-
-#     Returns:
-#         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
-#     """
-#     if as_of_date is None:
-#         as_of_date = datetime.now(tz=timezone.utc)
-#     hive_config = InternalConfig().config.hive
-#     server_id = InternalConfig().server_id
-#     # This account is the transit point through which all keepsats and conversions happen.
-#     account = AssetAccount(
-#         name="Customer Deposits Hive",
-#         sub=server_id,
-#     )
-
-#     pipeline = filter_sum_credit_debit_pipeline(
-#         account=account,
-#         cust_id=cust_id,
-#         age=age,
-#         as_of_date=as_of_date,
-#         ledger_types=[
-#             LedgerType.CONV_HIVE_TO_KEEPSATS,
-#             LedgerType.CONV_KEEPSATS_TO_HIVE,
-#             LedgerType.CONV_HIVE_TO_LIGHTNING,
-#             LedgerType.CONV_LIGHTNING_TO_HIVE,
-#         ],
-#         line_items=line_items,
-#     )
-#     ans = await ledger_pipeline_result(
-#         cust_id=cust_id,
-#         age=age,
-#         account=account,
-#         pipeline=pipeline,
-#         as_of_date=as_of_date,
-#     )
-#     return ans
-
-
 async def check_hive_conversion_limits(
-    cust_id: str, extra_spend_msats: Decimal = Decimal(0), line_items: bool = False
+    cust_id: CustIDType, extra_spend_msats: Decimal = Decimal(0), line_items: bool = False
 ) -> LimitCheckResult:
     """
     Checks if a Hive account's recent Lightning conversions are within configured rate limits.
@@ -713,7 +662,7 @@ async def check_hive_conversion_limits(
     return limit_check
 
 
-async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
+async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, int] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
     This looks at the first (shortest) rate limit period and finds the oldest transaction
@@ -763,7 +712,7 @@ async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
 
 # @async_time_stats_decorator()
 async def keepsats_balance(
-    cust_id: str = "",
+    cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
     line_items: bool = False,
 ) -> Tuple[Decimal, LedgerAccountDetails]:
@@ -801,7 +750,7 @@ async def keepsats_balance(
 
 
 async def keepsats_balance_printout(
-    cust_id: str, previous_msats: int | Decimal | None = None, line_items: bool = False
+    cust_id: CustIDType, previous_msats: int | Decimal | None = None, line_items: bool = False
 ) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
