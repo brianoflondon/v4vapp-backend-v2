@@ -2,6 +2,7 @@ from typing import Any, Dict
 
 from nectar.amount import Amount
 
+from v4vapp_backend_v2.accounting.account_balances import keepsats_balance
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -18,9 +19,46 @@ from v4vapp_backend_v2.hive.hive_extras import (
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
-from v4vapp_backend_v2.process.lock_str_class import LockStr
+from v4vapp_backend_v2.process.lock_str_class import CustIDType, LockStr
 
 MEMO_FOOTER = " | Thank you for using v4v.app"
+
+
+async def check_for_outstanding_hive_balance(cust_id: CustIDType, amount: Amount) -> Amount:
+    """
+    Asynchronously checks for outstanding HIVE or HBD balance for a given customer.
+
+    This function retrieves the customer's account balance and calculates the net amount
+    by subtracting the relevant balance (HIVE or HBD) from the provided amount. If the net
+    amount is negative, it returns a minimum amount of 0.001 for the respective symbol.
+    Otherwise, it returns the net amount formatted to 3 decimal places. If the symbol
+    is neither HIVE nor HBD, it returns the original amount unchanged.
+
+    Parameters:
+        cust_id (CustIDType): The customer ID to check the balance for.
+        amount (Amount): The amount we are sending to be reduced if the account is in deficit.
+
+    Returns:
+        Amount: The outstanding amount after adjustment, or the original amount if symbol is invalid.
+    """
+    _, account_balance = await keepsats_balance(cust_id)
+    # looking for a positive hive or hbd balance.
+
+    to_send = amount
+    if amount.symbol == "HIVE":
+        net = account_balance.hive_amount - amount
+        if net < Amount("0.000 HIVE"):
+            to_send = amount + net
+
+    elif amount.symbol == "HBD":
+        net = account_balance.hbd_amount - amount
+        if net < Amount("0.000 HBD"):
+            to_send = amount + net
+
+    if to_send < Amount(f"0.001 {amount.symbol}"):
+        to_send = Amount(f"0.001 {amount.symbol}")
+
+    return to_send
 
 
 async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False) -> Dict[str, str]:
@@ -108,12 +146,15 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     ):
         reply_type = ReplyType.TRANSFER
         trx = {}
+        adjusted_amount = await check_for_outstanding_hive_balance(
+            cust_id=details.pay_to_cust_id, amount=amount
+        )
         try:
             trx = await send_transfer(
                 hive_client=hive_client,
                 from_account=server_account_name,
                 to_account=details.pay_to_cust_id,  # Repay to the original sender
-                amount=amount,
+                amount=adjusted_amount,
                 memo=memo,
             )
         except HiveTransferError as e:
