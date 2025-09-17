@@ -234,6 +234,7 @@ async def process_transfer_op(
         ledger_entry.credit = LiabilityAccount("VSC Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
+        ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)

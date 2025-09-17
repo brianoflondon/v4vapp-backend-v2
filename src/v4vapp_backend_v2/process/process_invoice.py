@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
@@ -7,7 +8,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import process_clean_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import received_lightning_message
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice, InvoiceState
@@ -142,7 +143,7 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
             details = HiveReturnDetails(
                 tracked_op=invoice,
                 original_memo=invoice.memo,
-                reason_str=process_clean_memo(invoice.memo),
+                reason_str=received_lightning_message(invoice.memo, Decimal(invoice.value)),
                 action=ReturnAction.CHANGE,
                 pay_to_cust_id=invoice.cust_id,
                 nobroadcast=nobroadcast,

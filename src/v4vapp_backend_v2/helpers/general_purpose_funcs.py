@@ -249,7 +249,7 @@ def get_in_flight_time(creation_date: datetime) -> str:
 def detect_keepsats(memo: str) -> bool:
     """
     Detects if the given memo contains keywords related to keeping sats.
-    Notice does not find any occurance of "sats" as a bare word only.
+    Notice does not find any occurrence of "sats" as a bare word only.
 
     Args:
         memo (str): The memo to be checked.
@@ -343,6 +343,22 @@ def is_clean_memo(memo: str) -> bool:
     if "#clean" in memo.lower():
         return True
     return False
+
+
+def received_lightning_message(memo: str, sats: Decimal) -> str:
+    """
+    Detects if the given memo contains keywords related to receiving a Lightning payment.
+    Args:
+        memo (str): The memo to be checked.
+    Returns:
+        bool: True if the memo contains keywords related to receiving a Lightning payment, False otherwise.
+    """
+    if is_clean_memo(memo):
+        memo = process_clean_memo(memo)
+        return memo
+    memo = process_clean_memo(memo)
+    memo = f"You received {sats:,.0f} sats from Lightning | {memo}"
+    return memo
 
 
 def process_clean_memo(
@@ -644,6 +660,7 @@ def sanitize_filename(filename: str) -> str:
 def lightning_memo(memo: str) -> str:
     """
     Removes and shortens a lightning invoice from a memo for output.
+    If no invoice is found, it just adds a chat bubble to the start.
 
     Returns:
         str: The shortened memo string.

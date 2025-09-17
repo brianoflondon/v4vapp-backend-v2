@@ -111,7 +111,7 @@ class TransferBase(OpBase):
             self.d_memo = self.memo
 
     @property
-    def amount_decimal(self) -> float:
+    def amount_decimal(self) -> Decimal:
         """Convert string amount to decimal with proper precision"""
         return self.amount.amount_decimal
 
