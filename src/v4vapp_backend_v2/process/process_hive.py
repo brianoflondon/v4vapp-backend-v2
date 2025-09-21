@@ -20,7 +20,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
-from v4vapp_backend_v2.process.process_errors import HiveLightningError
+from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError, HiveLightningError
 from v4vapp_backend_v2.process.process_orders import process_create_fill_order_op
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
@@ -86,6 +86,9 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
             )
             return ledger_entries
         return []
+
+    except CustomJsonRetryError as e:
+        raise e
 
     except LedgerEntryException as e:
         logger.error(f"Error processing transfer operation: {e}")

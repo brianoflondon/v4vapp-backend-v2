@@ -25,6 +25,7 @@ from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import (
     CustomJsonAuthorizationError,
+    CustomJsonRetryError,
     CustomJsonToLightningError,
     InsufficientBalanceError,
 )
@@ -135,7 +136,9 @@ async def process_custom_json_func(
 
 
 async def custom_json_internal_transfer(
-    custom_json: CustomJson, keepsats_transfer: KeepsatsTransfer, nobroadcast: bool = False
+    custom_json: CustomJson,
+    keepsats_transfer: KeepsatsTransfer,
+    nobroadcast: bool = False,
 ) -> List[LedgerEntry]:
     """
     Must perform balance check before processing the transfer.
@@ -158,32 +161,45 @@ async def custom_json_internal_transfer(
     """
     # This is a transfer between two accounts
     logger.info(
-        f"{custom_json.short_id} Processing CustomJson transfer: {keepsats_transfer.from_account} -> {keepsats_transfer.to_account} {keepsats_transfer.sats:,} sats"
+        f"{custom_json.short_id} Processing CustomJson transfer: {keepsats_transfer.log_str}"
     )
     if not keepsats_transfer or not keepsats_transfer.sats:
         raise CustomJsonToLightningError("Keepsats transfer amount is zero.")
 
-    net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)
     keepsats_transfer.msats = (
         Decimal(keepsats_transfer.sats * 1_000)
         if not keepsats_transfer.msats
         else keepsats_transfer.msats
     )
     server_id = InternalConfig().server_id
+    message = ""
     fee_transfer = False
     fee_sats = custom_json.fee_memo
     if fee_sats > 0 and keepsats_transfer.sats <= fee_sats and custom_json.to_account == server_id:
         fee_transfer = True
 
+    net_msats, account_balance = await keepsats_balance(cust_id=keepsats_transfer.from_account)
     # Add a buffer of 1 sat 1_000 msats to avoid rounding issues
-    if keepsats_transfer.msats and net_msats + 1_000 < keepsats_transfer.msats:
-        message = f"Insufficient Keepsats balance for {'fee' if fee_transfer else 'transfer'}: {keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, but transfer requires {keepsats_transfer.sats:,} sats."
+    if (
+        keepsats_transfer.from_account != server_id
+        and keepsats_transfer.msats
+        and net_msats + 1_000 < keepsats_transfer.msats
+    ):
+        message = (
+            f"Insufficient Keepsats balance for {'fee' if fee_transfer else 'transfer'}: "
+            f"{keepsats_transfer.from_account} has {net_msats // 1000:,.0f} sats, "
+            f"but transfer requires {keepsats_transfer.sats:,} sats. {custom_json.short_id}"
+        )
+        if not fee_transfer:
+            raise CustomJsonRetryError(message)
+
+    if message:
         if fee_transfer:
             logger.info(message)
         # The order in which refunds arrive from payment, and fees are taken is not always predictable
         # ALWAYS account for fees when processing refunds
         if not fee_transfer:
-            logger.warning(message)
+            logger.warning(message, extra={"notification": False, **custom_json.log_extra})
             # Sending this to follow_on_transfer which will deal with the balance failure and send notification
             return_details = HiveReturnDetails(
                 tracked_op=custom_json,
