@@ -63,6 +63,8 @@ async def conversion_hive_to_keepsats(
     msats: Decimal = Decimal(0),
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
+    value_sat_rounded: Decimal = Decimal(0),
+    fee_sat_rounded: Decimal = Decimal(0),
 ) -> None:
     """
     Converts a HIVE or HBD deposit to Keepsats (Lightning msats) and records the corresponding ledger entries.
@@ -189,7 +191,15 @@ async def conversion_hive_to_keepsats(
     end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
 
     if "⚡️" in tracked_op.lightning_memo:
-        lightning_paid = f"Your Lightning Invoice of {conv_result.net_to_receive_conv.sats_rounded:,.0f} has been paid. | "
+        if value_sat_rounded > 0:
+            fee_text = ""
+            if fee_sat_rounded > 0:
+                fee_text = f" (fee: {fee_sat_rounded:,.0f} sats)"
+            lightning_paid = (
+                f"Your payment of {value_sat_rounded:,.0f} sats has been paid.{fee_text} | "
+            )
+        else:
+            lightning_paid = f"Your Lightning Invoice of {conv_result.net_to_receive_conv.sats_rounded:,.0f} has been paid. | "
     else:
         lightning_paid = ""
 
