@@ -293,7 +293,7 @@ def hive_to_keepsats_calc(
 
 async def calc_keepsats_to_hive(
     timestamp: datetime = datetime.now(tz=timezone.utc),
-    msats: int | None = None,
+    msats: Decimal | None = None,
     to_currency: Currency = Currency.HIVE,
     amount: Amount | None = None,
     quote: QuoteResponse | None = None,
@@ -436,7 +436,7 @@ async def calc_keepsats_to_hive(
     ).conversion
 
     # Deduct notification fee if above minimum threshold
-    notification_fee = 0
+    notification_fee = Decimal(0)
     if msats > notification_threshold_msats:
         notification_amount = Amount(f"0.001 {to_currency.value.upper()}")
         notification_amount_conv = CryptoConversion(
@@ -447,7 +447,7 @@ async def calc_keepsats_to_hive(
 
     # Calculate the total amount to convert (including fees)
     to_convert_conv = CryptoConversion(
-        value=msats, conv_from=from_currency, quote=quote
+        value=original_msats, conv_from=from_currency, quote=quote
     ).conversion
     to_convert = to_convert_conv.value_in(from_currency)
 
