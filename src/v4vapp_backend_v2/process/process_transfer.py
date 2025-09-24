@@ -158,7 +158,7 @@ async def follow_on_transfer(
                 server_id=server_id,
                 cust_id=cust_id,
                 tracked_op=tracked_op,
-                msats=0,
+                msats=Decimal(0),
                 nobroadcast=nobroadcast,
             )
             return
@@ -202,7 +202,7 @@ async def follow_on_transfer(
                 cust_id=cust_id,
                 tracked_op=tracked_op,
                 nobroadcast=nobroadcast,
-                msats=0,  # Use all the funds sent
+                msats=Decimal(0),  # Use all the funds sent
             )
             return
         else:
