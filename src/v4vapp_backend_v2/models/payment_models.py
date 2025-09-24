@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List, Optional, override
 
@@ -361,6 +362,22 @@ class Payment(TrackedBaseModel):
         if self.fee_msat and self.value_msat:
             return int((self.fee_msat / self.value_msat) * 1_000_000)
         return 0
+
+    @property
+    def value_sat_rounded(self) -> Decimal:
+        """
+        Returns the value of the payment in millisatoshis, rounded to the nearest integer.
+        """
+        sats = Decimal(self.value_msat) / Decimal(1000)
+        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    @property
+    def fee_sat_rounded(self) -> Decimal:
+        """
+        Returns the fee of the payment in sats, rounded to the nearest integer.
+        """
+        sats = Decimal(self.fee_msat) / Decimal(1000)
+        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     @property
     def log_str(self) -> str:
