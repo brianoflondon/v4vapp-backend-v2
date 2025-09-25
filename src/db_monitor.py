@@ -334,15 +334,19 @@ async def subscribe_stream(
                     await closer
 
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
-        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        logger.info(f"Keyboard interrupt or Cancelled: {collection_name} {e}")
         InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
+        if await LockStr.any_locks_open():
+            logger.info(f"{ICON} Open locks found. Please release them before shutdown.")
+            while await LockStr.any_locks_open():
+                logger.info(f"{ICON} Waiting for locks to be released...")
+                await asyncio.sleep(5)
         logger.info(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
-            extra={"notification": True},
+            extra={"notification": False},
         )
-        # Don’t re-raise; let caller’s cancellation proceed cleanly
-        return
+        raise e
 
     except OperationFailure as e:
         error_code = f"db_monitor_{collection_name}"
@@ -462,18 +466,27 @@ async def main_async_start(use_resume: bool = True):
         await shutdown_event.wait()
         for t in tasks:
             t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # NEW: Check for exceptions in task results and re-raise the first one
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
-        logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        logger.info(f"{ICON} 👋 Goodbye! from Database Monitor App", extra={"notification": True})
+        logger.info(f"{ICON} 👋 Received signal to stop. Checking for locks...")
+
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Database Monitor App {e}", extra={"error": e})
         raise e
     finally:
         logger.info(f"{ICON} Cleaning up resources...")
+        logger.info(
+            f"{ICON} 👋 Goodbye from Database Monitor App. Version: {__version__}",
+            extra={"notification": True},
+        )
         # Cancel all tasks except the current one
         if hasattr(InternalConfig, "notification_loop"):
             while InternalConfig.notification_lock:
@@ -484,7 +497,6 @@ async def main_async_start(use_resume: bool = True):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
 
