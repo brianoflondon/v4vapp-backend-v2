@@ -22,7 +22,7 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     LedgerAccountAny,
 )
-from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
@@ -239,6 +239,11 @@ class LedgerEntry(BaseModel):
         This is used to ensure that the credit amount is always positive in accounting terms.
         """
         return self.credit_amount * self.credit_sign
+
+    @property
+    def icon(self) -> str:
+        icon = LedgerTypeIcon.get(self.ledger_type, "❓")
+        return icon
 
     @property
     def debit_sign(self) -> int:
@@ -750,9 +755,7 @@ class LedgerEntry(BaseModel):
         else:
             conversion_line = "Converted              N/A"
 
-        entry = (
-            f"J/E NUMBER  : {self.group_id or '#####'}\nLEDGER TYPE : {self.ledger_type_str:<40}\n"
-        )
+        entry = f"J/E NUMBER  : {self.group_id or '#####'}\nLEDGER TYPE : {self.icon}{self.ledger_type_str:<40}\n"
         # Build combined CUSTOMER_ID + right-aligned date line
         line_width = 100  # matches separator width below
 

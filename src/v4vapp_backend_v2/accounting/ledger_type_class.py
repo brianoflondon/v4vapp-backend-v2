@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Dict
 
 
 class LedgerType(StrEnum):
@@ -90,3 +91,30 @@ class LedgerType(StrEnum):
         ans = " ".join(word.capitalize() for word in self.name.split("_"))
         ans = f"{ans} ({self.name} {self.value})"
         return ans
+
+    @property
+    def capitalized(self) -> str:
+        """Returns the capitalized string representation of the ledger type.
+
+        This property is used to provide a human-readable format of the ledger type,
+        which can be useful for logging or displaying in user interfaces.
+
+        Returns:
+            str: The capitalized string representation of the ledger type.
+        """
+        ans = " ".join(word.capitalize() for word in self.name.split("_"))
+        return ans
+
+
+LedgerTypeIcon: Dict[LedgerType, str] = {
+    LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
+    LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
+    LedgerType.CUSTOMER_HIVE_OUT: "📤",  # Customer withdrawal from Hive account
+    LedgerType.CUSTOMER_HIVE_IN: "📥",  # Customer deposit into Hive account
+    LedgerType.CUSTOM_JSON_TRANSFER: "🔄",  # Custom JSON transfer or notification
+    LedgerType.FEE_INCOME: "💵",  # Fee income from Hive transactions
+    LedgerType.CONSUME_CUSTOMER_KEEPSATS: "🍽️",  # Consume customer SATS for conversion
+    LedgerType.HOLD_KEEPSATS: "⏳",  # Holding Keepsats in the account
+    LedgerType.CUSTOM_JSON_FEE: "💵",  # Custom JSON fee notification
+    LedgerType.RELEASE_KEEPSATS: "🚀",  # Release Keepsats from the account
+}
