@@ -496,11 +496,10 @@ class LedgerEntry(BaseModel):
         self.db_checks()
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
-            document: Dict[str, Any] = self.model_dump(
-                by_alias=True, exclude_none=True, exclude_unset=True
-            )
+            document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
             document = convert_decimals_for_mongodb(document)
 
+            ans: InsertOneResult | UpdateResult | None = None
             if not upsert:
                 ans = await InternalConfig.db["ledger"].insert_one(document=document)
             else:
