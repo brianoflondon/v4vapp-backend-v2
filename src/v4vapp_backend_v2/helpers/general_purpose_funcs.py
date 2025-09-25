@@ -663,7 +663,7 @@ def lightning_memo(memo: str) -> str:
     If no invoice is found, it just adds a chat bubble to the start.
 
     Returns:
-        str: The shortened memo string.
+        str: The shortened memo string or just the original memo with a chat bubble.
     """
     # Regex pattern to capture 'lnbc' followed by numbers and one letter
     pattern = r"(lnbc\d+[a-zA-Z])"
