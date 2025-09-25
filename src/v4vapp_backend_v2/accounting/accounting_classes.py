@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Dict, List
 
 from nectar.amount import Amount
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 from pydantic.dataclasses import dataclass
 from tabulate import tabulate
 
@@ -159,6 +159,10 @@ class LedgerAccountDetails(LedgerAccount):
         ConvertedSummary(),
         description="Aggregated conversion total across all currencies",
     )
+    in_progress_msats: Decimal = Field(
+        Decimal(0),
+        description="Net amount of keepsats currently held (HOLD_KEEPSATS - RELEASE_KEEPSATS)",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -187,7 +191,9 @@ class LedgerAccountDetails(LedgerAccount):
         if Currency.MSATS in self.balances:
             self.msats = self.balances[Currency.MSATS][-1].amount_running_total
             self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
-            self.sats = round(self.msats / 1000, 0)
+            self.sats = Decimal(self.msats / Decimal(1000)).quantize(
+                Decimal("1"), rounding="ROUND_HALF_UP"
+            )
 
         for currency, balance_lines in self.balances.items():
             if balance_lines:
@@ -268,137 +274,54 @@ class LedgerAccountDetails(LedgerAccount):
 
         return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
+    def remove_balances(self) -> "LedgerAccountDetails":
+        """
+        Remove all balances from this LedgerAccountDetails instance by setting the balances attribute to an empty dictionary.
+
+        This method creates a deep copy of the current instance, clears its balances, and returns the modified copy.
+        The original instance remains unchanged.
+
+        Returns:
+            LedgerAccountDetails: A new LedgerAccountDetails instance with balances removed (set to an empty dict).
+        """
+        copy_balance = self.model_copy()
+        copy_balance.balances = {}
+        return copy_balance
+
+    def to_api_response(self, hive_accname: str, line_items: bool = False) -> dict:
+        """
+        Returns a dictionary representation of the account balance details, with numeric values
+        rounded to 3 decimal places (half up) where applicable, formatted for API responses.
+        All numeric values are returned as floats.
+
+        Args:
+            hive_accname (str): The Hive account name.
+            line_items (bool): If True, includes the full account balance object in 'all_transactions';
+                               otherwise, an empty list.
+
+        Returns:
+            dict: A dictionary with the specified keys and rounded float values.
+        """
+        in_progress_sats = round(
+            Decimal(self.in_progress_msats / 1000).quantize(
+                Decimal("1"), rounding="ROUND_HALF_UP"
+            ),
+            0,
+        )
+        return {
+            "hive_accname": hive_accname,
+            "net_msats": round(float(self.msats), 0),
+            "net_hive": round(float(self.hive), 3),
+            "net_usd": round(float(self.usd), 3),
+            "net_hbd": round(float(self.hbd), 3),
+            "net_sats": float(round(self.sats, 0)),
+            "in_progress_sats": float(in_progress_sats),
+            "all_transactions": self if line_items else [],
+        }
+
 
 class AccountBalances(RootModel):
     root: List[LedgerAccountDetails]
-
-
-class StrippedAccountBalanceLine(BaseModel):
-    short_id: str = ""
-    ledger_type: str = ""
-    timestamp: datetime = datetime.now(tz=timezone.utc)
-    timestamp_unix: float = 0.0
-    description: str = ""
-    user_memo: str = ""
-    cust_id: str = ""
-    op_type: str = ""
-    account_type: str = ""
-    name: str = ""
-    sub: str = ""
-    contra: bool = False
-    amount: Decimal = Decimal(0)
-    amount_signed: Decimal = Decimal(0)
-    unit: str = ""
-    conv: CryptoConv = CryptoConv()
-    conv_signed: CryptoConv = CryptoConv()
-    side: str = Field("", description="The side of the transaction, e.g., 'debit' or 'credit'")
-    amount_running_total: Decimal = Decimal(0)
-    conv_running_total: ConvertedSummary = ConvertedSummary()
-
-
-class StrippedLedgerAccountDetails(LedgerAccount):
-    """
-    Stripped-down version of LedgerAccountDetails without group_id in balance lines.
-    """
-
-    balances: Dict[Currency, List[StrippedAccountBalanceLine]] = Field(
-        default_factory=dict, description="Complete details for all transactions in each currency"
-    )
-    balances_totals: Dict[Currency, ConvertedSummary] = Field(
-        default_factory=dict,
-        description="Totals for each currency, including conversion summaries",
-    )
-    balances_net: Dict[Currency, Decimal] = Field(
-        default_factory=dict, description="Net balances for each currency"
-    )
-    last_transaction_date: datetime | None = None
-    hive: Decimal = Decimal(0)
-    hbd: Decimal = Decimal(0)
-    usd: Decimal = Decimal(0)
-    msats: Decimal = Decimal(0)
-    sats: Decimal = Decimal(0)
-    conv_total: ConvertedSummary = ConvertedSummary()
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    @model_validator(mode="before")
-    @classmethod
-    def strip_group_id(cls, data):
-        if isinstance(data, dict) and "balances" in data:
-            balances = data["balances"]
-            if isinstance(balances, dict):
-                for currency, lines in balances.items():
-                    if isinstance(lines, list):
-                        for line in lines:
-                            if isinstance(line, dict) and "group_id" in line:
-                                del line["group_id"]
-        return data
-
-    def __init__(self, **data):
-        super().__init__(**data)
-
-        if Currency.HIVE in self.balances:
-            self.hive = round(self.balances[Currency.HIVE][-1].amount_running_total, 3)
-            self.conv_total += self.balances[Currency.HIVE][-1].conv_running_total
-        if Currency.HBD in self.balances:
-            self.hbd = round(self.balances[Currency.HBD][-1].amount_running_total, 3)
-            self.conv_total += self.balances[Currency.HBD][-1].conv_running_total
-        if Currency.USD in self.balances:
-            self.usd = round(self.balances[Currency.USD][-1].amount_running_total, 3)
-            self.conv_total += self.balances[Currency.USD][-1].conv_running_total
-        if Currency.MSATS in self.balances:
-            self.msats = self.balances[Currency.MSATS][-1].amount_running_total
-            self.conv_total += self.balances[Currency.MSATS][-1].conv_running_total
-            self.sats = round(self.msats / 1000, 0)
-
-        for currency, balance_lines in self.balances.items():
-            if balance_lines:
-                self.balances_totals[currency] = balance_lines[-1].conv_running_total
-                self.balances_net[currency] = balance_lines[-1].amount_running_total
-            else:
-                self.balances_totals[currency] = ConvertedSummary()
-                self.balances_net[currency] = Decimal(0)
-
-    def __str__(self) -> str:
-        """
-        Returns a string representation of the account name.
-        This is used for logging and display purposes.
-        """
-        return self.balances_printout()
-
-    def balances_printout(self) -> str:
-        """
-        Returns a formatted string representation of the account details for Keepsats.
-        """
-        # Prepare table data
-        table_data = []
-
-        # Add account name row
-        account_name_str = LedgerAccount.__str__(self)
-
-        # Get the main value to display on account line
-        main_value = ""
-        if Currency.HIVE in self.balances_totals:
-            conv_summary = self.balances_totals[Currency.HIVE]
-            main_value = f"{conv_summary.hive:.3f}" if conv_summary.hive else "0.000"
-        elif Currency.MSATS in self.balances_totals:
-            conv_summary = self.balances_totals[Currency.MSATS]
-            sats_value = int(conv_summary.sats) if conv_summary.sats else 0
-            main_value = f"{sats_value:,}"
-
-        table_data.append([account_name_str, main_value])
-
-        # Add currency data for additional currencies
-        for currency, conv_summary in self.balances_totals.items():
-            if currency == Currency.HIVE:
-                value = f"{conv_summary.hive:.3f}" if conv_summary.hive else "0.000"
-                table_data.append(["HIVE", value])
-            elif currency == Currency.MSATS:
-                sats_value = int(conv_summary.sats) if conv_summary.sats else 0
-                value = f"{sats_value:,}"
-                table_data.append(["SATS", value])
-
-        return tabulate(table_data, headers=["Account/Currency", "Balance"], tablefmt="fancy_grid")
 
 
 # This is the last line# This is the last line
