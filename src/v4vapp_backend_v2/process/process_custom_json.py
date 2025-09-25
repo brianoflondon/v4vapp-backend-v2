@@ -235,13 +235,23 @@ async def custom_json_internal_transfer(
     if fee_transfer:
         ledger_type = LedgerType.CUSTOM_JSON_FEE
         user_memo = ""
+    elif (
+        keepsats_transfer.parent_id
+    ):  # if this has a parent, it is from an external inbound transfer
+        ledger_type = LedgerType.RECEIVE_LIGHTNING
+        user_memo = (
+            lightning_memo(keepsats_transfer.user_memo)
+            + f" | received {keepsats_transfer.sats:,} sats from Lightning"
+            or f"Received {keepsats_transfer.sats:,} sats from Lightning"
+        )
     else:
         ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+
         user_memo = (
-            lightning_memo(keepsats_transfer.user_memo) + " | received from Lightning"
-            or f"{keepsats_transfer.to_account} received {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account}"
+            keepsats_transfer.user_memo
+            + f" | {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
+            or f"{keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
         )
-        user_memo = process_clean_memo(user_memo)
 
     transfer_ledger_entry = LedgerEntry(
         cust_id=custom_json.cust_id,

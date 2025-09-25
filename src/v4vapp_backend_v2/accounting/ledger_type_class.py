@@ -43,6 +43,7 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
+    RECEIVE_LIGHTNING = "recv_l"  # Receive Custom JSON from external source
 
     WITHDRAW_LIGHTNING = "withdraw_l"
     DEPOSIT_LIGHTNING = "deposit_l"
@@ -117,4 +118,6 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.HOLD_KEEPSATS: "⏳",  # Holding Keepsats in the account
     LedgerType.CUSTOM_JSON_FEE: "💵",  # Custom JSON fee notification
     LedgerType.RELEASE_KEEPSATS: "🚀",  # Release Keepsats from the account
+    LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
+    LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
 }
