@@ -313,6 +313,16 @@ class LockStr(AccName):
         except Exception as e:
             logger.error(f"{ICON} Error clearing all locks: {e}")
 
+    @staticmethod
+    async def any_locks_open() -> bool:
+        redis_instance = InternalConfig.redis_async
+        try:
+            keys = await redis_instance.keys("lock_str:*")
+            return len(keys) > 0
+        except Exception as e:
+            logger.error(f"Error checking for open locks: {e}")
+            return False
+
     @asynccontextmanager
     async def locked(
         self,
