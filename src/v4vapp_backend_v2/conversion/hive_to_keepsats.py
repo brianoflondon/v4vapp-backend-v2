@@ -168,7 +168,7 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Conversion {conv_result.to_convert_amount} to {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
+        description=f"Withdraw {conv_result.to_convert_amount} from {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,
