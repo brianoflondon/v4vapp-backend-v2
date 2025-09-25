@@ -5,6 +5,7 @@ from typing import Any, List, Mapping, Tuple
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
+    net_held_msats_balance_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
@@ -70,7 +71,7 @@ async def all_account_balances(
                 if items:
                     last_item = items[-1]
                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
-
+        account.in_progress_msats = await in_progress(account.sub)
         account.last_transaction_date = max_timestamp
 
     return account_balances
@@ -131,6 +132,8 @@ async def one_account_balance(
                     max_timestamp = line.timestamp
         ledger_details.last_transaction_date = max_timestamp
 
+    ledger_details.in_progress_msats = await in_progress(account.sub)
+
     return ledger_details
 
 
@@ -145,22 +148,20 @@ async def account_balance_printout(
     quote: QuoteResponse | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
-    Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
-    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
-    Properly accounts for assets and liabilities, and includes converted values to other units
-    (SATS, HIVE, HBD, USD, msats).
+    Calculate and display the balance for a specified account (and optional sub-account).
+    Optionally lists all debit and credit transactions up to the specified date, or shows only the closing balance.
 
-    Args:
-        account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
-        a str is passed, we assume this is a `VSC Liability` account for customer `account`.
-        df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
-        full_history (bool, optional): If True, shows the full transaction history with running balances.
-                                       If False, shows only the closing balance. Defaults to False.
-        as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
+        account (LedgerAccount | str): A LedgerAccount object specifying the account name, type, and optional sub-account.
+                                       If a str is passed, it is treated as a 'VSC Liability' account for the customer specified by the string.
+        line_items (bool, optional): If True, includes detailed line items for transactions. Defaults to True.
+        user_memos (bool, optional): If True, includes user memos for transactions. Defaults to True.
+        as_of_date (datetime | None, optional): The date up to which to calculate the balance. Defaults to None (current UTC date).
+        age (timedelta | None, optional): An optional age filter for transactions. Defaults to None.
+        ledger_account_details (LedgerAccountDetails | None, optional): Pre-computed ledger account details. If None, it will be fetched. Defaults to None.
+        quote (QuoteResponse | None, optional): Pre-fetched quote for currency conversions. If None, it will be updated. Defaults to None.
 
-    Returns:
-        str: A formatted string containing either the full transaction history or the closing balance
-             for the specified account and sub-account up to the specified date.
+        Tuple[str, LedgerAccountDetails]: A tuple containing a formatted string with the balance printout and the LedgerAccountDetails object.
+
     """
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
@@ -241,9 +242,9 @@ async def account_balance_printout(
 
                     # Number formats
                     if unit.upper() == "MSATS":
-                        debit_fmt = f"{debit_val:,.0f}"
-                        credit_fmt = f"{credit_val:,.0f}"
-                        balance_fmt = f"{balance_val:,.0f}"
+                        debit_fmt = f"{debit_val:,.1f}"
+                        credit_fmt = f"{credit_val:,.1f}"
+                        balance_fmt = f"{balance_val:,.1f}"
                     else:
                         debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
                         credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
@@ -436,9 +437,9 @@ async def account_balance_printout_grouped_by_customer(
 
                             # Number formats
                             if unit.upper() == "MSATS":
-                                debit_fmt = f"{debit_val:,.0f}"
-                                credit_fmt = f"{credit_val:,.0f}"
-                                balance_fmt = f"{balance_val:,.0f}"
+                                debit_fmt = f"{debit_val:,.1f}"
+                                credit_fmt = f"{credit_val:,.1f}"
+                                balance_fmt = f"{balance_val:,.1f}"
                             else:
                                 debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
                                 credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
@@ -780,3 +781,31 @@ async def keepsats_balance_printout(
     logger.info("_" * 50)
 
     return net_msats, account_balance
+
+
+async def in_progress(cust_id: CustIDType) -> Decimal:
+    """
+    Calculate the in-progress balance for a given customer ID.
+
+    This asynchronous function aggregates ledger entries using a predefined pipeline
+    to compute the net held balance in millisatoshis, converts it to satoshis,
+    quantizes to whole satoshis, and returns the result as a Decimal.
+
+    Args:
+        cust_id (CustIDType): The customer ID for which to calculate the balance.
+
+    Returns:
+        Decimal: The in-progress balance in satoshis, quantized to whole units.
+                 Returns 0 if no results are found.
+    """
+    in_progress_pipeline = net_held_msats_balance_pipeline(cust_id=cust_id)
+    cursor = await LedgerEntry.collection().aggregate(in_progress_pipeline)
+    results = await cursor.to_list(length=None)
+    if results and len(results) > 0:
+        in_progress_sats = Decimal(results[0].get("net_held", 0) / Decimal(1000)).quantize(
+            Decimal("1.")
+        )
+    else:
+        in_progress_sats = Decimal(0)
+
+    return in_progress_sats

@@ -54,7 +54,6 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     return pipeline
 
 
-
 def all_account_balances_pipeline(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
@@ -504,4 +503,46 @@ def all_account_balances_pipeline(
         {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
     ]
 
+    return pipeline
+
+
+def net_held_msats_balance_pipeline(cust_id: str) -> Sequence[Mapping[str, Any]]:
+    """
+    Generates a MongoDB aggregation pipeline to calculate the net held balance for a given cust_id.
+
+    The net held balance is computed as the sum of debit_amount for 'hold_k' ledger types
+    minus the sum of debit_amount for 'release_k' ledger types. This represents the
+    customer's net held amount (e.g., positive means more held, negative means over-released).
+
+    Args:
+        cust_id (str): The customer ID to calculate the net held balance for.
+
+    Returns:
+        List[Mapping[str, Any]]: The aggregation pipeline as a list of stages.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {"$match": {"cust_id": cust_id, "ledger_type": {"$in": ["hold_k", "release_k"]}}},
+        {"$group": {"_id": "$ledger_type", "total": {"$sum": "$debit_amount"}}},
+        {
+            "$group": {
+                "_id": None,
+                "hold_total": {
+                    "$sum": {
+                        "$cond": {"if": {"$eq": ["$_id", "hold_k"]}, "then": "$total", "else": 0}
+                    }
+                },
+                "release_total": {
+                    "$sum": {
+                        "$cond": {
+                            "if": {"$eq": ["$_id", "release_k"]},
+                            "then": "$total",
+                            "else": 0,
+                        }
+                    }
+                },
+            }
+        },
+        {"$project": {"net_held": {"$subtract": ["$hold_total", "$release_total"]}}},
+        {"$project": {"_id": 0, "cust_id": cust_id, "net_held": "$net_held"}},
+    ]
     return pipeline
