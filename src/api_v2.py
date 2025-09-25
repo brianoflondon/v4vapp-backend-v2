@@ -169,16 +169,11 @@ async def keepsats(
     net_msats, account_balance = await keepsats_balance(
         cust_id=hive_accname, line_items=line_items
     )
-    return {
-        "hive_accname": hive_accname,
-        "net_msats": account_balance.msats,
-        "net_hive": account_balance.hive,
-        "net_usd": account_balance.usd,
-        "net_hbd": account_balance.hbd,
-        "net_sats": account_balance.sats,
-        "in_progress_sats": 0,
-        "all_transactions": account_balance if line_items else [],
-    }
+
+    if line_items:
+        account_balance = account_balance.remove_balances()
+
+    return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items)
 
 
 @lightning_v1_router.post("/keepsats/transfer")
