@@ -253,14 +253,14 @@ async def conversion_keepsats_to_hive(
             description=f"Reclassify positive SATS from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
             debit_unit=Currency.MSATS,
-            debit_amount=conv_result.net_to_receive_conv.msats,
-            debit_conv=conv_result.net_to_receive_conv,
+            debit_amount=conv_result.to_convert_conv.msats,
+            debit_conv=conv_result.to_convert_conv,
             credit=AssetAccount(
                 name="Converted Keepsats Offset", sub="from_keepsats", contra=True
             ),
             credit_unit=Currency.MSATS,
-            credit_amount=conv_result.net_to_receive_conv.msats,
-            credit_conv=conv_result.net_to_receive_conv,
+            credit_amount=conv_result.to_convert_conv.msats,
+            credit_conv=conv_result.to_convert_conv,
         )
         ledger_entries.append(reclassify_sats_entry)
         await reclassify_sats_entry.save()
