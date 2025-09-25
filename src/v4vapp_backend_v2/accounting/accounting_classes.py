@@ -11,6 +11,7 @@ from tabulate import tabulate
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
@@ -95,6 +96,8 @@ class AccountBalanceLine(BaseModel):
     group_id: str = ""
     short_id: str = ""
     ledger_type: str = ""
+    ledger_type_str: str = ""
+    icon: str = ""
     timestamp: datetime = datetime.now(tz=timezone.utc)
     timestamp_unix: float = 0.0
     description: str = ""
@@ -108,11 +111,21 @@ class AccountBalanceLine(BaseModel):
     amount: Decimal = Decimal(0)
     amount_signed: Decimal = Decimal(0)
     unit: str = ""
-    conv: CryptoConv = CryptoConv()
+    conv: CryptoConv | None = None
     conv_signed: CryptoConv = CryptoConv()
     side: str = Field("", description="The side of the transaction, e.g., 'debit' or 'credit'")
     amount_running_total: Decimal = Decimal(0)
     conv_running_total: ConvertedSummary = ConvertedSummary()
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.icon:
+            try:
+                lt = LedgerType(self.ledger_type)
+                self.ledger_type_str = lt.capitalized
+                self.icon = LedgerTypeIcon.get(lt, "❓")
+            except ValueError:
+                self.icon = "❓"
 
 
 class LedgerAccountDetails(LedgerAccount):
@@ -203,15 +216,16 @@ class LedgerAccountDetails(LedgerAccount):
                 self.balances_totals[currency] = ConvertedSummary()
                 self.balances_net[currency] = Decimal(0)
 
-        self.combined_balance = sorted(
-            [
-                line
-                for lines in self.balances.values()
-                for line in lines
-                if line.ledger_type not in ["hold_k", "release_k"]
-            ],
-            key=lambda x: x.timestamp,
-        )
+        # Create copies of the balance lines, filter out unwanted ledger types, and delete the .conv item from each line
+        combined_lines = []
+        for lines in self.balances.values():
+            for line in lines:
+                if line.ledger_type not in ["hold_k", "release_k"]:
+                    line_copy = line.model_copy()
+                    line_copy.conv = None
+                    combined_lines.append(line_copy)
+        self.combined_balance = sorted(combined_lines, key=lambda x: x.timestamp)
+
         if self.combined_balance:
             # Initialize the first line's running total
             self.combined_balance[0].conv_running_total = ConvertedSummary.from_crypto_conv(
