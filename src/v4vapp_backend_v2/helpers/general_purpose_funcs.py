@@ -676,7 +676,7 @@ def lightning_memo(memo: str) -> str:
     return memo
 
 
-def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
+def truncate_text(text: str | BaseException, max_length: int = 20, centered: bool = False) -> str:
     """
     Truncates a given text to a specified maximum length, optionally centering it.
 
@@ -692,6 +692,9 @@ def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
     Returns:
         str: The truncated (and optionally centered) text.
     """
+    if isinstance(text, BaseException):
+        text = str(text)
+
     if centered:
         text = text[: max_length - 3] + "..." if len(text) > max_length else text
         return text.center(max_length)
