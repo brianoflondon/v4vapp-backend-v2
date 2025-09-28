@@ -1,4 +1,5 @@
 import argparse
+import socket
 from typing import Any, Dict
 
 import uvicorn
@@ -346,6 +347,20 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
 
         response = await call_next(request)
         return response
+
+    # Add root endpoint here
+    @app.get("/")
+    @app.get("/health")
+    async def root():
+        return {
+            "message": "Welcome to V4VApp API v2",
+            "version": __version__,
+            "status": "running",
+            "server_id": InternalConfig().server_id,
+            "dns_name": socket.getfqdn(),
+            "host_name": socket.gethostname(),
+            "documentation": "/docs",
+        }
 
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])
