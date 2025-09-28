@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+import re
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     sanitize_filename,
     sanitize_markdown_v1,
     sanitize_markdown_v2,
+    truncate_text,
 )
 
 BOT_CONFIG_EXTENSION = "_n_bot_config.json"
@@ -158,6 +160,12 @@ class NotificationBot:
             return False
         return True
 
+    @staticmethod
+    def strip_ansi(text: str) -> str:
+        """Strip ANSI escape sequences from text."""
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        return ansi_escape.sub("", text)
+
     async def send_message(self, text: str, retries: int = 3, **kwargs: Any) -> None:
         """Send text messages, with pattern-based filtering and rate limiting."""
         if not self.bot or not self.config.chat_id:
@@ -165,8 +173,9 @@ class NotificationBot:
                 "No chat ID set. Please start the bot first by sending /start"
             )
 
-        text = self.truncate_text(text)
         text_original = text
+        text = self.strip_ansi(text)
+        text = truncate_text(text, 300)
 
         # Check if the message should be sent based on pattern frequency
         if not self._check_message_pattern(text):
@@ -317,12 +326,6 @@ class NotificationBot:
                 await self.send_menu()
             elif update.message.text == "/status":
                 await self.send_message("Bot is running")
-
-    def truncate_text(self, text: str, length: int = 1000) -> str:
-        if len(text) > length:
-            truncated_text = text[:length] + "..."
-            return truncated_text
-        return text
 
     async def send_menu(self):
         menu_text = """

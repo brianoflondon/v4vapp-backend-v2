@@ -17,6 +17,9 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingTransaction,
 )
 
+# icon with a clock
+ICON = "🕒"
+
 
 async def resend_transactions() -> None:
     """
@@ -41,9 +44,9 @@ async def resend_pending_transactions() -> None:
     """
     all_pending = await PendingTransaction.list_all()
     if len(all_pending) == 0:
-        logger.info("No pending Hive transactions to resend.")
+        logger.info(f"{ICON} No pending Hive transactions to resend.")
         return
-    logger.info(f"Resending pending Hive transaction {len(all_pending)}")
+    logger.info(f"{ICON} Resending pending Hive transaction {len(all_pending)}")
 
     server_id = InternalConfig().server_id
     server_balance = account_hive_balances(hive_accname=server_id)
@@ -112,9 +115,9 @@ async def resend_pending_custom_jsons():
     """
     all_pending_cj = await PendingCustomJson.list_all()
     if len(all_pending_cj) == 0:
-        logger.info("No pending custom JSONs to resend.")
+        logger.info(f"{ICON} No pending custom JSONs to resend.")
         return
-    logger.info(f"Resending {len(all_pending_cj)} pending custom JSONs.")
+    logger.info(f"{ICON} Resending {len(all_pending_cj)} pending custom JSONs.")
 
     sending_cj: List[PendingCustomJson] = []
 
