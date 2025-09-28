@@ -646,6 +646,8 @@ class InternalConfig:
     redis_decoded: ClassVar[Redis] = Redis(decode_responses=True)
     redis_async: ClassVar[AsyncRedis] = AsyncRedis()
 
+    local_machine_name: str = "unknown"
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(InternalConfig, cls).__new__(cls)
@@ -669,7 +671,8 @@ class InternalConfig:
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
             self.setup_redis()
-        atexit.register(self.shutdown)
+            self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
+            atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()

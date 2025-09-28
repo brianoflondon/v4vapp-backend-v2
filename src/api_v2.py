@@ -1,5 +1,4 @@
 import argparse
-import os
 import socket
 from typing import Any, Dict
 
@@ -359,7 +358,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
             "status": "running",
             "server_id": InternalConfig().server_id,
             "dns_name": socket.getfqdn(),
-            "local_machine_name": os.getenv("LOCAL_MACHINE_NAME", "unknown"),
+            "local_machine_name": InternalConfig().local_machine_name,
             "documentation": "/docs",
         }
 

@@ -4,7 +4,6 @@ Main Admin Application
 FastAPI application for V4VApp backend administration.
 """
 
-import os
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -43,7 +42,6 @@ class AdminApp:
 
     def __init__(self, config_filename: str = "devhive.config.yaml"):
         InternalConfig(config_filename=config_filename, log_filename="admin_v2.jsonl")
-        self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
         self.app = FastAPI(
             lifespan=lifespan,
             title="V4VApp Admin Interface",
@@ -53,7 +51,7 @@ class AdminApp:
             redoc_url="/admin/redoc",
         )
         logger.info(
-            f"Initializing Admin Interface on {self.local_machine_name} {self.app.version}",
+            f"Initializing Admin Interface on {InternalConfig().local_machine_name} {self.app.version}",
             extra={"notification": True},
         )
 
@@ -236,7 +234,7 @@ class AdminApp:
                         "config_file": self.config.config_filename,
                         "server_account": server_id,
                         "server_balance_check": server_balance_check,
-                        "local_machine_name": os.getenv("LOCAL_MACHINE_NAME", "unknown"),  # Added
+                        "local_machine_name": InternalConfig().local_machine_name,
                     },
                 },
             )
@@ -254,7 +252,7 @@ class AdminApp:
                 "admin_version": "1.0.0",
                 "project_version": project_version,
                 "config": self.config.config_filename,
-                "local_machine_name": os.getenv("LOCAL_MACHINE_NAME", "unknown"),
+                "local_machine_name": InternalConfig().local_machine_name,
                 "server_id": InternalConfig().server_id,
             }
 
