@@ -43,6 +43,7 @@ class AdminApp:
 
     def __init__(self, config_filename: str = "devhive.config.yaml"):
         InternalConfig(config_filename=config_filename, log_filename="admin_v2.jsonl")
+        self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
         self.app = FastAPI(
             lifespan=lifespan,
             title="V4VApp Admin Interface",
@@ -50,6 +51,10 @@ class AdminApp:
             version="1.0.0",
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
+        )
+        logger.info(
+            f"Initializing Admin Interface on {self.local_machine_name} {self.app.version}",
+            extra={"notification": True},
         )
 
         # Add proxy middleware to trust headers from reverse proxy

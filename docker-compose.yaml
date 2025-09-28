@@ -56,6 +56,8 @@ services:
       - v4vapp-backend
     environment:
       - PYTHONPATH=/app/src
+    env_file:
+      - .env
 
   admin-interface:
     build:
@@ -83,6 +85,8 @@ services:
       - redis-pytest-local
     environment:
       - PYTHONPATH=/app/src
+    env_file:
+      - .env
 
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names
