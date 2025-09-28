@@ -304,6 +304,7 @@ async def subscribe_stream(
                     f"{ICON} {collection_name} Resuming after stream error cleared: {error_code}",
                     extra={"notification": True, "error_code_clear": error_code},
                 )
+                error_count = 0
             error_code = f"db_monitor_{collection_name}"
 
             # Close the stream immediately when shutdown is requested
