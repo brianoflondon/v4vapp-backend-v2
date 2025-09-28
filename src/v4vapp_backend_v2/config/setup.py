@@ -11,6 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
+from dotenv import load_dotenv
 from packaging import version
 from pydantic import BaseModel, model_validator
 from pymongo import AsyncMongoClient, MongoClient
@@ -21,6 +22,7 @@ from redis import Redis, RedisError
 from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
 
+load_dotenv()
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
@@ -662,16 +664,16 @@ class InternalConfig:
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
             print(f"Starting initialization... {config_filename} {log_filename}")
             self._initialized = True
             super().__init__()
-            logger.info(f"{ICON} Config filename: {config_filename}")
             InternalConfig.notification_loop = None
             InternalConfig.notification_lock = False
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
             self.setup_redis()
-            self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
+            logger.info(f"{ICON} Config filename: {config_filename}")
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):

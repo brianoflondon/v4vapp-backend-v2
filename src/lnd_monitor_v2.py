@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, List
 
 import typer
+from colorama import Fore, Style
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import AioRpcError  # type: ignore
 from pymongo import UpdateOne
@@ -1169,7 +1170,7 @@ async def main_async_start(connection_name: str) -> None:
         icon = hasattr(lnd_client, "icon") and lnd_client.icon if lnd_client else ""
         logger.info(
             f"{icon} ✅ LND gRPC client shutting down. "
-            f"Monitoring node: {connection_name}. Version: {__version__}",
+            f"Monitoring node: {connection_name}. Version: {__version__} on {InternalConfig().local_machine_name}",
             extra={"notification": True},
         )
         # Let notifications flush before tearing down logging/redis
@@ -1249,8 +1250,8 @@ def main(
         sys.exit(1)
     logger.name = f"lnd_monitor_{lnd_node}"
     logger.info(
-        f"{icon} ✅ LND gRPC client started. "
-        f"Monitoring node: {lnd_node} {icon}. Version: {__version__}",
+        f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
+        f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     asyncio.run(main_async_start(lnd_node))

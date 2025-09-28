@@ -693,7 +693,7 @@ def main(
     # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
-        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__}{Style.RESET_ALL}",
+        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     if not watch_users:

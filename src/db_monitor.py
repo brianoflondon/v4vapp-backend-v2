@@ -8,6 +8,7 @@ from typing import Annotated, Any, Mapping, Sequence
 
 import bson
 import typer
+from colorama import Fore, Style
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import (
     ConnectionFailure,
@@ -499,7 +500,7 @@ async def main_async_start(use_resume: bool = True):
     finally:
         logger.info(f"{ICON} Cleaning up resources...")
         logger.info(
-            f"{ICON} 👋 Goodbye from Database Monitor App. Version: {__version__}",
+            f"{ICON} 👋 Goodbye from Database Monitor App. Version: {__version__} on {InternalConfig().local_machine_name}",
             extra={"notification": True},
         )
         # Cancel all tasks except the current one
@@ -552,7 +553,7 @@ def main(
     """
     _ = InternalConfig(config_filename=config_filename, log_filename="db_monitor.log.jsonl")
     logger.info(
-        f"{ICON} ✅ Database Monitor App. Started. Version: {__version__}",
+        f"{ICON}{Fore.WHITE} ✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     logger.info(
