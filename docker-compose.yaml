@@ -38,6 +38,24 @@ services:
     networks:
       - v4vapp-backend
 
+  db-monitor:
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/hive:/app/logs
+    command: [
+      "python", "src/db_monitor.py",
+      "--config", "devdocker.config.yaml",
+    ]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+
+
   api-v2:
     depends_on:
       - mongo-pytest-local

@@ -506,7 +506,7 @@ async def main_async_start(use_resume: bool = True):
         # Cancel all tasks except the current one
         if hasattr(InternalConfig, "notification_loop"):
             while InternalConfig.notification_lock:
-                logger.info("Waiting for notification loop to complete...")
+                logger.info(f"{ICON} Waiting for notification loop to complete...")
                 await asyncio.sleep(0.5)  # Allow pending notifications to complete
         current_task = asyncio.current_task()
         tasks = [task for task in asyncio.all_tasks() if task is not current_task]
