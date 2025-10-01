@@ -97,6 +97,7 @@ class AccountBalanceLine(BaseModel):
     short_id: str = ""
     ledger_type: str = ""
     ledger_type_str: str = ""
+    link: str = ""
     icon: str = ""
     timestamp: datetime = datetime.now(tz=timezone.utc)
     timestamp_unix: float = 0.0

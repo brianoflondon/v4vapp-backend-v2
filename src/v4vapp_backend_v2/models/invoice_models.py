@@ -527,6 +527,17 @@ class Invoice(TrackedBaseModel):
         """
         return self.memo if self.memo else ""
 
+    @property
+    def link(self) -> str:
+        """
+        Returns "" as a placeholder for a block explorer link.
+        used to maintain consistency with hive models.
+
+        Returns:
+            str: "" because not relevant for invoices.
+        """
+        return ""
+
 
 class ListInvoiceResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

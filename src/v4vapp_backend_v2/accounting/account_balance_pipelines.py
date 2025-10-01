@@ -132,6 +132,7 @@ def all_account_balances_pipeline(
                             "conv": "$debit_conv",
                             "conv_signed": "$conv_signed.debit",
                             "op_type": 1,
+                            "link": 1,
                             "side": "debit",
                         }
                     },
@@ -158,6 +159,7 @@ def all_account_balances_pipeline(
                             "conv": "$credit_conv",
                             "conv_signed": "$conv_signed.credit",
                             "op_type": 1,
+                            "link": 1,
                             "side": "credit",
                         }
                     },

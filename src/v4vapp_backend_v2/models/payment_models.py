@@ -445,6 +445,17 @@ class Payment(TrackedBaseModel):
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
         return age_text
 
+    @property
+    def link(self) -> str:
+        """
+        Returns "" as a placeholder for a block explorer link.
+        used to maintain consistency with hive models.
+
+        Returns:
+            str: "" because not relevant for invoices.
+        """
+        return ""
+
 
 class ListPaymentsResponse(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

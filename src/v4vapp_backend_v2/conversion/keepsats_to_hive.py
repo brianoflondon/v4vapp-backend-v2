@@ -127,6 +127,7 @@ async def conversion_keepsats_to_hive(
         credit_unit=Currency.MSATS,
         credit_amount=conv_result.to_convert_conv.msats,
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(conversion_ledger_entry)
     await conversion_ledger_entry.save()
@@ -153,6 +154,7 @@ async def conversion_keepsats_to_hive(
         credit_unit=to_currency,
         credit_amount=conv_result.to_convert_conv.value_in(to_currency),
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
@@ -182,6 +184,7 @@ async def conversion_keepsats_to_hive(
         credit_unit=Currency.MSATS,
         credit_amount=conv_result.fee_conv.msats,
         credit_conv=conv_result.fee_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(fee_ledger_entry)
     await fee_ledger_entry.save()
@@ -207,6 +210,7 @@ async def conversion_keepsats_to_hive(
             credit_unit=Currency.MSATS,
             credit_amount=conv_result.net_to_receive_conv.msats,  # Changed from to_convert_conv.msats to net_to_receive_conv.msats
             credit_conv=conv_result.net_to_receive_conv,
+            link=tracked_op.link,
         )
         ledger_entries.append(consume_entry)
         await consume_entry.save()
@@ -235,6 +239,7 @@ async def conversion_keepsats_to_hive(
         credit_unit=to_currency,
         credit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
         credit_conv=conv_result.net_to_receive_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
@@ -261,6 +266,7 @@ async def conversion_keepsats_to_hive(
             credit_unit=Currency.MSATS,
             credit_amount=conv_result.to_convert_conv.msats,
             credit_conv=conv_result.to_convert_conv,
+            link=tracked_op.link,
         )
         ledger_entries.append(reclassify_sats_entry)
         await reclassify_sats_entry.save()
@@ -318,6 +324,7 @@ async def conversion_keepsats_to_hive(
         credit_unit=to_currency,
         credit_amount=conv_result.net_to_receive_conv.value_in(to_currency),
         credit_conv=conv_result.net_to_receive_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(reclassify_hive_entry)
     await reclassify_hive_entry.save()

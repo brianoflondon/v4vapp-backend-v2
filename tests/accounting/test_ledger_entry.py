@@ -65,6 +65,7 @@ async def test_ledger_entry_constructor():
         credit_unit=Currency.HIVE,
         credit_amount=conversion_credit_debit_conv.hive,
         credit_conv=conversion_credit_debit_conv,
+        link=payment.link,
     )
     assert isinstance(ledger_entry, LedgerEntry)
     print(ledger_entry)
@@ -115,6 +116,7 @@ async def test_ledger_entry_constructor_conv_account():
         credit_unit=Currency.HIVE,
         credit_amount=conversion_credit_debit_conv.hive,
         credit_conv=conversion_credit_debit_conv,
+        link=payment.link,
     )
     assert isinstance(ledger_entry, LedgerEntry)
     print(ledger_entry)

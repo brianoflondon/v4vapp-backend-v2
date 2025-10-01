@@ -128,6 +128,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=from_currency,
         credit_amount=conv_result.to_convert_conv.value_in(from_currency),
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(conversion_ledger_entry)
     await conversion_ledger_entry.save()
@@ -154,6 +155,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=from_currency,
         credit_amount=conv_result.to_convert_conv.value_in(from_currency),
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
@@ -183,6 +185,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=Currency.MSATS,
         credit_amount=conv_result.to_convert_conv.msats,
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()

@@ -133,6 +133,7 @@ async def process_transfer_op(
         op_type=hive_transfer.op_type,
         user_memo=hive_transfer.user_memo,
         timestamp=datetime.now(tz=timezone.utc),
+        link=hive_transfer.link,
     )
     expense_accounts = ["privex"]
     processed_d_memo = lightning_memo(hive_transfer.d_memo)

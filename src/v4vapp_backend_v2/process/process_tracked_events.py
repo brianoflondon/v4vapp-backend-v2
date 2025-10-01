@@ -236,6 +236,7 @@ async def process_lightning_invoice(
             credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name),
             credit_amount=float(invoice.amt_paid_msat),
             credit_unit=Currency.MSATS,
+            link=invoice.link,
         )
         await ledger_entry.save()
         return [ledger_entry]

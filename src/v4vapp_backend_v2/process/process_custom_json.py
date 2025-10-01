@@ -16,7 +16,7 @@ from v4vapp_backend_v2.actions.tracked_models import ReplyType, TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, process_clean_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
@@ -270,6 +270,7 @@ async def custom_json_internal_transfer(
         credit_conv=custom_json.conv,
         credit_unit=Currency.MSATS,
         credit_amount=debit_credit_amount_msats,
+        link=custom_json.link,
     )
     # TODO: #144 need to look into where else `user_memo` needs to be used
     await transfer_ledger_entry.save()
@@ -340,6 +341,7 @@ async def custom_json_internal_transfer(
             credit_unit=Currency.MSATS,
             credit_amount=keepsats_transfer.msats or 0,
             credit_conv=fee_conv,
+            link=custom_json.link,
         )
         await fee_ledger_entry.save()
         ledger_entries.append(fee_ledger_entry)

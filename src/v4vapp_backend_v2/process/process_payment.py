@@ -199,6 +199,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         credit_unit=Currency.MSATS,
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
+        link=payment.link,
     )
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
@@ -234,6 +235,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
             credit_unit=Currency.MSATS,
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
+            link=payment.link,
         )
         await fee_ledger_entry_sats.save()
         ledger_entries_list.append(fee_ledger_entry_sats)

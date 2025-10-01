@@ -181,6 +181,9 @@ class LedgerEntry(BaseModel):
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
     )
+    link: str = Field(
+        "", description="Link to the Hive block explorer transaction if appropriate"
+    )
 
     @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
     @classmethod
