@@ -19,7 +19,8 @@ services:
     command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
-
+    env_file:
+      - .env
 
   hive-monitor:
     depends_on:
@@ -37,6 +38,8 @@ services:
     stop_grace_period: 20s
     networks:
       - v4vapp-backend
+    env_file:
+      - .env
 
   db-monitor:
     depends_on:
@@ -54,7 +57,8 @@ services:
     stop_grace_period: 20s
     networks:
       - v4vapp-backend
-
+    env_file:
+      - .env
 
   api-v2:
     depends_on:
