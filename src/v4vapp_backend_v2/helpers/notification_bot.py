@@ -176,6 +176,7 @@ class NotificationBot:
         text_original = text
         text = self.strip_ansi(text)
         text = truncate_text(text, 300)
+        text = text + f"- {InternalConfig().local_machine_name}"
 
         # Check if the message should be sent based on pattern frequency
         if not self._check_message_pattern(text):
@@ -190,7 +191,7 @@ class NotificationBot:
         )
 
         text_v2 = None
-        if text.endswith("no_preview"):
+        if re.search(r"no_preview", text):
             kwargs["disable_web_page_preview"] = True
             text = text.rstrip("no_preview").strip()
         if is_markdown(text):
