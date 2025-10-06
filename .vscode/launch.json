@@ -21,7 +21,7 @@
             "program": "${workspaceFolder}/src/api_v2.py",
             "args": [
                 "--config",
-                "devdocker.config.yaml"
+                "devhive.config.yaml"
             ],
             "console": "integratedTerminal",
             "justMyCode": true,
