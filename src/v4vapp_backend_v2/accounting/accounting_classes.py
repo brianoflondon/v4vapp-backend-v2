@@ -312,7 +312,7 @@ class LedgerAccountDetails(LedgerAccount):
         Args:
             hive_accname (str): The Hive account name.
             line_items (bool): If True, includes the full account balance object in 'all_transactions';
-                               otherwise, an empty list.
+                            otherwise, an empty list.
 
         Returns:
             dict: A dictionary with the specified keys and rounded float values.
@@ -333,6 +333,68 @@ class LedgerAccountDetails(LedgerAccount):
             "in_progress_sats": float(in_progress_sats),
             "all_transactions": self if line_items else [],
         }
+
+    def to_api_response_2(self, hive_accname: str, line_items: bool = False) -> dict:
+        """
+        Returns a dictionary representation of the account balance details, optimized for the frontend display,
+        including only the fields used by the table: timestamp, timestamp_unix, icon, ledger_type_str,
+        description, user_memo, link, unit, conv_signed (with sats, hive, hbd), and conv_running_total.sats.
+        Numeric values are rounded to 3 decimal places for hive/hbd and 0 for sats, converted to floats.
+        The all_transactions field is an array to match frontend expectations.
+
+        Args:
+            hive_accname (str): The Hive account name.
+            line_items (bool): If True, includes a simplified list of transaction details;
+                            otherwise, an empty list.
+
+        Returns:
+            dict: A dictionary with essential account details and simplified transaction data.
+        """
+        # Calculate in_progress_sats
+        in_progress_sats = round(
+            Decimal(self.in_progress_msats / 1000).quantize(
+                Decimal("1"), rounding="ROUND_HALF_UP"
+            ),
+            0,
+        )
+
+        # Base response with net balances
+        response = {
+            "hive_accname": hive_accname,
+            "net_msats": float(round(self.msats, 0)),
+            "net_hive": float(round(self.hive, 3)),
+            "net_usd": float(round(self.usd, 3)),
+            "net_hbd": float(round(self.hbd, 3)),
+            "net_sats": float(round(self.sats, 0)),
+            "in_progress_sats": float(in_progress_sats),
+            "all_transactions": [],
+        }
+
+        if line_items:
+            # Simplified transaction data
+            transactions = []
+            for line in self.combined_balance:
+                transaction = {
+                    "timestamp": line.timestamp.isoformat(),
+                    "timestamp_unix": line.timestamp.timestamp() * 1000,
+                    "icon": line.icon,
+                    "ledger_type_str": line.ledger_type_str,
+                    "description": line.description,
+                    "user_memo": line.user_memo,
+                    "link": line.link,
+                    "unit": line.unit,
+                    "conv_signed": {
+                        "sats": float(round(line.conv_signed.sats, 0)),
+                        "hive": float(round(line.conv_signed.hive, 3)),
+                        "hbd": float(round(line.conv_signed.hbd, 3)),
+                    },
+                    "conv_running_total": {"sats": float(round(line.conv_running_total.sats, 0))},
+                }
+                transactions.append(transaction)
+
+            response["all_transactions"] = transactions
+
+        return response
 
 
 class AccountBalances(RootModel):
