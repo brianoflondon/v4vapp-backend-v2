@@ -625,7 +625,7 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                         funding_txid = channel.get("funding_txid_bytes", "Unknown")
                         logger.info(
                             f"{lnd_client.icon} Channel active: funding_txid={funding_txid}",
-                            extra={"notification": True},
+                            extra={"notification": False},
                         )
                     await fill_channel_names(lnd_client, lnd_events_group)
 
@@ -638,7 +638,7 @@ async def channel_events_loop(lnd_client: LNDClient, lnd_events_group: LndEvents
                     )
                     logger.info(
                         f"{lnd_client.icon} Channel inactive: {chan_id} {channel_name} {funding_txid}",
-                        extra={"notification": True},
+                        extra={"notification": False},
                     )
                     await fill_channel_names(lnd_client, lnd_events_group)
 
