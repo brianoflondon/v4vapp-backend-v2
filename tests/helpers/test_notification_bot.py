@@ -116,7 +116,7 @@ async def test_send_message_no_markdown(notification_bot):
     ):
         await notification_bot.send_message("plain text")
         notification_bot.bot.send_message.assert_called_once_with(
-            chat_id=12345, text="plain text- test_machine"
+            chat_id=12345, text="plain text test_machine"
         )
 
 
