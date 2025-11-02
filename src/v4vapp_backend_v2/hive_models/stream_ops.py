@@ -124,7 +124,7 @@ async def stream_ops_async(
             )
             logger.info(
                 f"Starting Hive scanning at {start_block:,} {start_time:%Y-%m-%d %H:%M:%S} Ending at {stop_block:,} "
-                f"using {rpc_url} no_preview ",
+                f"using {rpc_url} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",
                     "notification": True,
@@ -182,7 +182,7 @@ async def stream_ops_async(
                 last_block = op_base.block_num
                 yield op_base
         except SwitchToLiveStream as e:
-            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview ")
+            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
             continue
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"Async streamer received signal to stop. Exiting... {e}")
@@ -218,7 +218,7 @@ async def stream_ops_async(
                 break
             else:
                 logger.info(
-                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {rpc_url} no_preview "
+                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {rpc_url} no_preview"
                 )
             current_node = rpc_url
             if hive and hive.rpc:
@@ -229,7 +229,7 @@ async def stream_ops_async(
                     blockchain = get_blockchain_instance(hive_instance=hive)
 
             logger.info(
-                f"{start_block:,} Switching {current_node} -> {rpc_url} no_preview ",
+                f"{start_block:,} Switching {current_node} -> {rpc_url} no_preview",
                 extra={"notification": True, "error_code": "stream_restart"},
             )
 

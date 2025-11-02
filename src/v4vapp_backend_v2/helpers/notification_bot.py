@@ -176,7 +176,6 @@ class NotificationBot:
         text_original = text
         text = self.strip_ansi(text)
         text = truncate_text(text, 300)
-        text = text + f"- {InternalConfig().local_machine_name}"
 
         # Check if the message should be sent based on pattern frequency
         if not self._check_message_pattern(text):
@@ -197,6 +196,8 @@ class NotificationBot:
         if is_markdown(text):
             kwargs["parse_mode"] = "Markdown"
             text = sanitize_markdown_v1(text)
+
+        text = text + f"- {InternalConfig().local_machine_name}"
         attempt = 0
         while attempt < retries:
             try:

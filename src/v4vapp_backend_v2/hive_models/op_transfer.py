@@ -180,7 +180,7 @@ class TransferBase(OpBase):
         ans = (
             f"{self.from_account.markdown_link} sent {self.amount_str} "
             f"to {self.to_account.markdown_link}{self.recurrence_str} "
-            f"{conversion_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview "
+            f"{conversion_str} {self.lightning_memo} {self.markdown_link}{self.age_str} no_preview"
         )
         return ans
 
