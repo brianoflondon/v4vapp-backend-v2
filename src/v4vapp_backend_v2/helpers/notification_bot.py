@@ -197,7 +197,7 @@ class NotificationBot:
             kwargs["parse_mode"] = "Markdown"
             text = sanitize_markdown_v1(text)
 
-        text = text + f"- {InternalConfig().local_machine_name}"
+        text = text + f" {InternalConfig().local_machine_name}"
         attempt = 0
         while attempt < retries:
             try:
