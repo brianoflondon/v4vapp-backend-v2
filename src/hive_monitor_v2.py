@@ -450,7 +450,7 @@ async def all_ops_loop(
                 logger.info(f"{icon} Shutdown requested; exiting all_ops_loop.")
                 return
             logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
+                f"{icon} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview ",
                 extra={"notification": False},
             )
             if getattr(hive_client, "rpc", None):
