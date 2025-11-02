@@ -122,7 +122,7 @@ async def stream_ops_async(
                 )
             )
             logger.info(
-                f"Starting Hive scanning at {start_block:,} {start_time} Ending at {stop_block:,} "
+                f"Starting Hive scanning at {start_block:,} {start_time:%Y-%m-%d %H:%M:%S} Ending at {stop_block:,} "
                 f"using {hive.rpc.url} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",

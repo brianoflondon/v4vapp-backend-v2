@@ -250,7 +250,10 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
         )
         nodes = response.json()
-        logger.debug("Fetched good nodes Last good nodes", extra={"beacon_response": nodes})
+        logger.debug(
+            "Fetched good nodes Last good nodes",
+            extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
+        )
         good_nodes = [node["endpoint"] for node in nodes if node["score"] == 100]
         good_nodes = [node for node in good_nodes if node not in EXCLUDE_NODES]
         logger.debug(f"Good nodes {good_nodes}", extra={"good_nodes": good_nodes})
@@ -265,9 +268,21 @@ def get_good_nodes() -> List[str]:
         if good_nodes_json and isinstance(good_nodes_json, str):
             good_nodes = json.loads(good_nodes_json)
         if good_nodes:
-            logger.warning(f"Failed to fetch good nodes: {e} using last good nodes.", {"extra": e})
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using last good nodes.",
+                extra={
+                    "error_code": "beacon_nodes_fail",
+                    "notification": True,
+                },
+            )
         else:
-            logger.warning(f"Failed to fetch good nodes: {e} using default nodes.", {"extra": e})
+            logger.warning(
+                f"Failed to fetch good nodes: {e} using default nodes.",
+                extra={
+                    "error_code": "beacon_nodes_fail",
+                    "notification": True,
+                },
+            )
             good_nodes = DEFAULT_GOOD_NODES
             InternalConfig.redis_decoded.setex("good_nodes", 3600, json.dumps(good_nodes))
 
