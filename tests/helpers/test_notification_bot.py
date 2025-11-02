@@ -103,7 +103,7 @@ async def test_send_message_markdown(notification_bot):
     with patch("v4vapp_backend_v2.helpers.general_purpose_funcs.is_markdown", return_value=True):
         await notification_bot.send_message("**bold text**")
         notification_bot.bot.send_message.assert_called_once_with(
-            chat_id=12345, text="\\*\\*bold text\\*\\*- test\\_machine", parse_mode="Markdown"
+            chat_id=12345, text="\\*\\*bold text\\*\\* test_machine", parse_mode="Markdown"
         )
 
 
