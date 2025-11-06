@@ -58,7 +58,7 @@ async def mongo_call(
     while True:
         try:
             result = await op()
-            logger.info(
+            logger.debug(
                 f"{DATABASE_ICON} {context} {summarize_write_result(result)}",
                 extra={"db_result": result},
             )
