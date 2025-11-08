@@ -236,7 +236,7 @@ async def stream_ops_async(
 
             logger.info(
                 f"{start_block:,} Switching {current_node} -> {rpc_url} no_preview",
-                extra={"notification": True, "error_code": "stream_restart"},
+                extra={"notification": True},
             )
 
 
