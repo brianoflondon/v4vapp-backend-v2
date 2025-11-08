@@ -3,6 +3,8 @@ import signal
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
+from random import uniform
+from time import sleep
 from timeit import default_timer as timer
 from typing import Annotated, Dict, List, Tuple
 
@@ -696,6 +698,8 @@ def main(
         f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
     )
+    # sleep for a random amount of time 0.1 to 0.8 seconds
+    sleep(uniform(0.1, 0.8))
     if not watch_users:
         watch_users = CONFIG.hive.watch_users
     if not watch_witnesses:

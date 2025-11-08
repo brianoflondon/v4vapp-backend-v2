@@ -51,6 +51,6 @@ class Witness(BaseModel):
 class WitnessDetails(BaseModel):
     total_operations: int | None = None
     total_pages: int | None = None
-    votes_updated_at: datetime
+    votes_updated_at: datetime | None = None
     witnesses: list[Witness] | None = None
     witness: Witness | None = None

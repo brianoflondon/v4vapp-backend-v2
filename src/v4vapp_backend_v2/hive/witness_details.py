@@ -47,11 +47,15 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     try:
         ttl = InternalConfig.redis_decoded.ttl(cache_key)
         if ttl and ttl > 0 and (1800 - ttl) < 300:
-            cached_data = await InternalConfig.redis_decoded.get(cache_key)
-            answer = json.loads(cached_data)
-            return WitnessDetails.model_validate(answer)
-    except Exception:
-        pass
+            cached_data = InternalConfig.redis_decoded.get(cache_key)
+            if cached_data:
+                answer = json.loads(cached_data)
+                return WitnessDetails.model_validate(answer)
+    except Exception as e:
+        logger.warning(
+            f"Failed to check TTL or retrieve cached witness details from Redis: {e}",
+            extra={"notification": False, "error": e},
+        )
     # Attempt to fetch from API
     failure = False
     try:
@@ -61,7 +65,8 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         for api_url in shuffled_endpoints:
             url = f"{api_url}/{hive_accname}" if hive_accname else api_url
             try:
-                async with httpx.AsyncClient() as client:
+                timeout = httpx.Timeout(20.0, connect=10.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await fetch_witness_details(client, url)
                     response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
 
