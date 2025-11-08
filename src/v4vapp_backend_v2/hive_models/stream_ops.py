@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
@@ -188,10 +189,15 @@ async def stream_ops_async(
             logger.info(f"Async streamer received signal to stop. Exiting... {e}")
             return
         except (NectarException, NumRetriesReached) as e:
-            logger.warning(
-                f"{start_block:,} NectarException in block_stream: {e} restarting",
-                extra={"notification": False, "error_code": "stream_restart", "error": e},
-            )
+            if re.search(r"Block \d+ does not exist", str(e)):
+                logger.info(
+                    f"{start_block:,} | Reached the end of the blockchain at block {last_block:,}. Try Again."
+                )
+            else:
+                logger.warning(
+                    f"{start_block:,} NectarException in block_stream: {e} restarting",
+                    extra={"notification": False, "error_code": "stream_restart", "error": e},
+                )
             await asyncio.sleep(2)
 
         except StopAsyncIteration as e:
