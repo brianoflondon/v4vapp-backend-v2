@@ -108,10 +108,9 @@ async def stream_ops_async(
         stop_block = stop or (2**31) - 1  # Maximum value for a 32-bit signed integer
 
     last_block = start_block or 1
-
     while last_block is not None and stop_block is not None and last_block < stop_block:
         await TrackedBaseModel.update_quote()
-        rpc_url = hive.rpc.url if hive and hive.rpc else "No RPC"
+        rpc_url = str(hive.rpc.url) if hive and hive.rpc else "No RPC"
         try:
             op_in_trx_counter = OpInTrxCounter()
             async_stream_real = sync_to_async_iterable(

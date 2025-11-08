@@ -520,7 +520,7 @@ async def store_rates() -> None:
                 await TrackedBaseModel.update_quote()
                 quote = TrackedBaseModel.last_quote
                 logger.info(
-                    f"{icon} Updating Quotes: {quote.hive_usd:.2f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
+                    f"{icon} Updating Quotes: {quote.hive_usd:.3f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
                     extra={
                         "notification": False,
                         "quote": TrackedBaseModel.last_quote.model_dump(

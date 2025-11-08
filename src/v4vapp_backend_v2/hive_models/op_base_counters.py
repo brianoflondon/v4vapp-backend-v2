@@ -161,7 +161,7 @@ class BlockCounter:
                     min(self.marker_point, self.block_count) * HIVE_BLOCK_TIME
                 ) / last_marker_time
 
-                self.marker_point = (
+                self.marker_point = int(
                     (15 * 60 / HIVE_BLOCK_TIME)
                     if self.time_diff < TIME_DIFFERENCE_CHECK
                     else (5 * 60 / HIVE_BLOCK_TIME)
@@ -169,6 +169,11 @@ class BlockCounter:
                 self.next_marker += self.marker_point
 
                 self.running_time = timer() - self.start
+                rpc_url = (
+                    str(self.hive_client.rpc.url)
+                    if self.hive_client and self.hive_client.rpc
+                    else "No RPC"
+                )
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
                     f"blocks processed in: {last_marker_time_str} "
@@ -176,7 +181,7 @@ class BlockCounter:
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
                     f"running time: {format_time_delta(self.running_time)} "
                     f"events: {self.event_count - self.last_event_count:,} "
-                    f"Node: {old_node} -> {self.hive_client.rpc.url}",
+                    f"Node: {old_node} -> {rpc_url}",
                     extra={
                         "notification": notification,
                         "block_counter": self.log_extra(),
