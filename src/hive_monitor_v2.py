@@ -694,12 +694,13 @@ def main(
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
     # TODO: This is redundant, remove it no setting database here any more
 
+    pause_time = uniform(0.1, 1.5)
     logger.info(
-        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {pause_time:.2f}s",
         extra={"notification": True},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds
-    sleep(uniform(0.1, 0.8))
+    sleep(pause_time)
     if not watch_users:
         watch_users = CONFIG.hive.watch_users
     if not watch_witnesses:
