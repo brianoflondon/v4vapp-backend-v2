@@ -21,6 +21,8 @@ from v4vapp_backend_v2.hive_models.op_all import OpAny, op_any_or_base
 from v4vapp_backend_v2.hive_models.op_base import OP_TRACKED, OpBase, op_realm
 from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
+ICON = "🔗"
+
 
 class SwitchToLiveStream(Exception):
     """
@@ -96,7 +98,7 @@ async def stream_ops_async(
             # work out the number of blocks using 3 seconds per block
             start_block = current_block - int(look_back.total_seconds() / 3)
             logger.warning(
-                f"Error getting start block from time {start_time} using {look_back.total_seconds()} seconds, "
+                f"{ICON} Error getting start block from time {start_time} using {look_back.total_seconds()} seconds, "
                 f"using estimated block number {start_block:,} instead: {e}"
             )
     else:
@@ -123,7 +125,7 @@ async def stream_ops_async(
                 )
             )
             logger.info(
-                f"Starting Hive scanning at {start_block:,} {start_time:%Y-%m-%d %H:%M:%S} Ending at {stop_block:,} "
+                f"{ICON} Starting Hive scanning at {start_block:,} {start_time:%Y-%m-%d %H:%M:%S} Ending at {stop_block:,} "
                 f"using {rpc_url} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",
@@ -152,7 +154,7 @@ async def stream_ops_async(
                             op_virtual_base = op_any_or_base(virtual_event)
                         except ValueError as e:
                             logger.warning(
-                                f"ValidationError in block_stream:{virtual_event.get('block_num')} {virtual_event.get('trx_id')}: {e}",
+                                f"{ICON} ValidationError in block_stream:{virtual_event.get('block_num')} {virtual_event.get('trx_id')}: {e}",
                                 extra={"notification": True, "virtual_event": virtual_event},
                             )
                             continue
@@ -167,7 +169,7 @@ async def stream_ops_async(
                 except ValueError as e:
                     logger.warning(hive_event)
                     logger.warning(
-                        f"ValidationError in block_stream:{hive_event.get('block_num')} {hive_event.get('trx_id')}: {e}",
+                        f"{ICON} ValidationError in block_stream:{hive_event.get('block_num')} {hive_event.get('trx_id')}: {e}",
                         extra={"notification": False, "hive_event": hive_event},
                     )
                     continue
@@ -182,31 +184,31 @@ async def stream_ops_async(
                 last_block = op_base.block_num
                 yield op_base
         except SwitchToLiveStream as e:
-            logger.info(f"{start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
+            logger.info(f"{ICON} {start_block:,} | {e} {last_block:,} {hive.rpc.url} no_preview")
             continue
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
-            logger.info(f"Async streamer received signal to stop. Exiting... {e}")
+            logger.info(f"{ICON} Async streamer received signal to stop. Exiting... {e}")
             return
         except (NectarException, NumRetriesReached) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
-                logger.info(f"{start_block:,} Refetch {last_block:,}. Try Again.")
+                logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again.")
             else:
                 logger.warning(
-                    f"{start_block:,} NectarException in block_stream: {e} restarting",
+                    f"{ICON} {start_block:,} NectarException in block_stream: {e} restarting",
                     extra={"notification": False, "error_code": "stream_restart", "error": e},
                 )
             await asyncio.sleep(2)
 
         except StopAsyncIteration as e:
             logger.error(
-                f"{start_block:,} StopAsyncIteration in block_stream stopped unexpectedly: {e}"
+                f"{ICON} {start_block:,} StopAsyncIteration in block_stream stopped unexpectedly: {e}"
             )
         except TypeError as e:
-            logger.warning(f"{start_block:,} TypeError in block_stream: {e} restarting")
+            logger.warning(f"{ICON} {start_block:,} TypeError in block_stream: {e} restarting")
             logger.exception(e)
         except Exception as e:
             logger.exception(
-                f"{start_block:,} | Error in block_stream: {e} restarting",
+                f"{ICON} {start_block:,} | Error in block_stream: {e} restarting",
                 extra={
                     "notification": False,
                     "error": e,
@@ -216,12 +218,12 @@ async def stream_ops_async(
         finally:
             if last_block >= stop_block:
                 logger.info(
-                    f"{start_block:,} | Reached stop block {stop_block:,}, stopping stream."
+                    f"{ICON} {start_block:,} | Reached stop block {stop_block:,}, stopping stream."
                 )
                 break
             else:
                 logger.info(
-                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} no_preview"
+                    f"{ICON} {start_block:,} Stream running smoothly, continuing from {last_block=:,} no_preview"
                 )
             current_node = rpc_url
             if hive and hive.rpc:
@@ -233,7 +235,7 @@ async def stream_ops_async(
                     rpc_url = str(hive.rpc.url)
 
             logger.info(
-                f"{start_block:,} Switching {current_node} -> {rpc_url} no_preview",
+                f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url} no_preview",
                 extra={"notification": True},
             )
 
@@ -266,7 +268,7 @@ async def main() -> None:
         # print(op.log_str)
         count += 1
         if count % 10_000 == 0:
-            logger.info(f"{op.block_num:,} Processed {count:,} operations")
+            logger.info(f"{ICON} {op.block_num:,} Processed {count:,} operations")
 
 
 # Run the example

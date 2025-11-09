@@ -198,7 +198,8 @@ class CustomNotificationHandler(logging.Handler):
                 self.error_codes.pop(error_code_clear)
                 logger.info(log_message_clear, extra={"notification": True, "record": record})
             else:
-                logger.info(
+                # This should usually be ignored.
+                logger.debug(
                     f"Error code not found in error_codes {error_code_clear}",
                     extra={"notification": False},
                 )
