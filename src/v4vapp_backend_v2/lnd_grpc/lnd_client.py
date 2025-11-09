@@ -5,11 +5,8 @@ from typing import Any, AsyncGenerator, Callable
 
 import backoff
 from google.protobuf.json_format import MessageToDict
-from grpc import (  # type: ignore
-    composite_channel_credentials,
-    metadata_call_credentials,
-    ssl_channel_credentials,
-)
+from grpc import composite_channel_credentials  # type: ignore
+from grpc import metadata_call_credentials, ssl_channel_credentials
 from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
@@ -17,6 +14,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.lnd_grpc import invoices_pb2_grpc as invoicesstub
 from v4vapp_backend_v2.lnd_grpc import lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc import router_pb2_grpc as routerstub
+from v4vapp_backend_v2.lnd_grpc.certificate_paths import get_ca_bundle_path
 from v4vapp_backend_v2.lnd_grpc.lnd_connection import LNDConnectionSettings
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import (
     LNDConnectionError,
@@ -85,7 +83,22 @@ class LNDClient:
         try:
             logger.debug(f"{ICON} Connecting to LND")
 
-            cert_creds = ssl_channel_credentials(self.connection.cert)
+            # Try to load system root certificates
+            ca_bundle_path = get_ca_bundle_path()
+            if ca_bundle_path:
+                try:
+                    with open(ca_bundle_path, "rb") as f:
+                        root_certificates = f.read()
+                    # Combine system root certificates with the server's certificate
+                    combined_cert = root_certificates + b'\n' + self.connection.cert
+                    cert_creds = ssl_channel_credentials(combined_cert)
+                except (FileNotFoundError, PermissionError):
+                    # Fallback to original method
+                    cert_creds = ssl_channel_credentials(self.connection.cert)
+            else:
+                # Fallback to original method
+                cert_creds = ssl_channel_credentials(self.connection.cert)
+
             auth_creds = metadata_call_credentials(self.metadata_callback)
             combined_creds = composite_channel_credentials(cert_creds, auth_creds)
 
@@ -335,6 +348,9 @@ class LNDClient:
             raise LNDConnectionError(f"{self.icon} Error in {method_name} RPC call")
 
         except Exception as e:
+            message = f"{ICON} {self.icon} Error in {method_name} RPC call: {e}"
+            logger.error(message)
+            raise LNDConnectionError(f"Error in {method_name} RPC call")
             message = f"{ICON} {self.icon} Error in {method_name} RPC call: {e}"
             logger.error(message)
             raise LNDConnectionError(f"Error in {method_name} RPC call")

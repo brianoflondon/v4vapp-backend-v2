@@ -17,6 +17,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import from_snake_case
 from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount
+from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -28,12 +29,13 @@ from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
+from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
 
 
-async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
+async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> List[LedgerEntry]:
     """
     Processes a tracked operation and creates a ledger entry if applicable.
     This method handles various types of tracked operations, including
@@ -50,6 +52,8 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         LedgerEntryCreationException: If the ledger entry cannot be created.
         LedgerEntryException: If there is an error processing the tracked operation.
     """
+    finalize = True
+    retry_task = None
     async with LockStr(tracked_op.group_id_p).locked(
         timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
     ):
@@ -68,10 +72,16 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             )
             return []
 
-        if isinstance(tracked_op, BlockMarker) or isinstance(tracked_op, AccountUpdate2):
+        if isinstance(tracked_op, AccountUpdate2):
+            v4vconfig = V4VConfig()
+            if v4vconfig.server_accname == tracked_op.account:
+                v4vconfig.fetch()
+            return []
+
+        if isinstance(tracked_op, BlockMarker):
             # This shouldn't be arrived at.
             logger.warning(
-                "BlockMarker/AccountUpdate2 is not a valid operation.",
+                "BlockMarker is not a valid operation.",
                 extra={"notification": False, **tracked_op.log_extra},
             )
             return []
@@ -85,6 +95,7 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
         cust_id = str(unknown_cust_id) if not cust_id else cust_id
         logger.info(f"{'=*=' * 20}")
+        logger.info(tracked_op.log_str)
         logger.info(f"{tracked_op.op_type} processing tracked operation {tracked_op.short_id}")
         logger.info(f"{tracked_op.log_str}")
         logger.info(
@@ -115,12 +126,32 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
                                 extra={"notification": False},
                             )
                     except Exception as e:
-                        logger.error(
+                        logger.exception(
                             f"Error saving ledger entry: {e}",
                             extra={**ledger_entry.log_extra, "notification": False},
                         )
 
                 return ledger_entries
+
+        except CustomJsonRetryError as e:
+            attempts += 1
+            logger.warning(f"CustomJson processing retry error: {e}")
+            if attempts <= 3:
+                retry_task = process_tracked_event(tracked_op=tracked_op, attempts=attempts)
+
+            if retry_task:
+                sleep_time = 10 * attempts
+                logger.info(
+                    f"Retrying operation {tracked_op.short_id} after {sleep_time} seconds."
+                )
+                await LockStr(tracked_op.group_id_p).release_lock(tracked_op.group_id_p)
+                await asyncio.sleep(sleep_time)
+                asyncio.create_task(retry_task)
+                finalize = False
+                return []
+            else:
+                logger.error(f"CustomJson processing failed after {e.attempts} attempts: {e}")
+                return []
 
         except HiveNotEnoughHiveInAccount as e:
             logger.error(
@@ -142,13 +173,14 @@ async def process_tracked_event(tracked_op: TrackedAny) -> List[LedgerEntry]:
             raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
         finally:
-            process_time = timer() - start
-            tracked_op.process_time = process_time
-            await tracked_op.save()
-            logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
-            logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
-            logger.info(f"{tracked_op.log_str}")
-            logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
+            if finalize:
+                process_time = timer() - start
+                tracked_op.process_time = process_time
+                await tracked_op.save()
+                logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
+                logger.info(tracked_op.log_str)
+                logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
+                logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
 
 
 # MARK: Lightning Transactions
@@ -204,6 +236,7 @@ async def process_lightning_invoice(
             credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name),
             credit_amount=float(invoice.amt_paid_msat),
             credit_unit=Currency.MSATS,
+            link=invoice.link,
         )
         await ledger_entry.save()
         return [ledger_entry]

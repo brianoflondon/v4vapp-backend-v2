@@ -362,13 +362,13 @@ class TestAdminTemplates:
                 LiabilityAccount(name="VSC Liability", sub="testuser"),
             ],
         )
-        mocker.patch(
-            "v4vapp_backend_v2.admin.routers.users.keepsats_balance",
-            side_effect=[
-                (1500000 * 1000, None),  # msats for brianoflondon
-                (-50000 * 1000, None),  # msats for testuser
-            ],
-        )
+        # mocker.patch(
+        #     "v4vapp_backend_v2.admin.routers.users.keepsats_balance",
+        #     side_effect=[
+        #         (1500000 * 1000, None),  # msats for brianoflondon
+        #         (-50000 * 1000, None),  # msats for testuser
+        #     ],
+        # )
         mocker.patch(
             "v4vapp_backend_v2.admin.routers.users.check_hive_conversion_limits",
             return_value=None,  # Mock as needed

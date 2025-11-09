@@ -1,13 +1,14 @@
 import asyncio
-from pprint import pprint
 import signal
 import sys
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
+from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
 import bson
 import typer
+from colorama import Fore, Style
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import (
     ConnectionFailure,
@@ -95,7 +96,10 @@ class ResumeToken(BaseModel):
             # Use the sync_redis client to store the token in Redis
             redis_client.set(self.redis_key, serialized_token)
         except Exception as e:
-            logger.error(f"Error setting resume token for collection '{self.collection}': {e}")
+            logger.error(
+                f"{ICON} Error setting resume token for collection '{self.collection}': {e}",
+                extra={"notification": False},
+            )
             raise e
 
     def delete_token(self):
@@ -107,7 +111,10 @@ class ResumeToken(BaseModel):
             redis_client.delete(self.redis_key)
             logger.info(f"{ICON} Resume token deleted for collection '{self.collection}'")
         except Exception as e:
-            logger.error(f"Error deleting resume token for collection '{self.collection}': {e}")
+            logger.error(
+                f"{ICON} Error deleting resume token for collection '{self.collection}': {e}",
+                extra={"notification": False},
+            )
             raise e
 
     @property
@@ -132,7 +139,10 @@ class ResumeToken(BaseModel):
                 logger.warning(f"No resume token found for collection '{self.collection}'.")
                 return None
         except Exception as e:
-            logger.error(f"Error retrieving resume token for collection '{self.collection}': {e}")
+            logger.error(
+                f"{ICON} Error retrieving resume token for collection '{self.collection}': {e}",
+                extra={"notification": False},
+            )
             return None
 
 
@@ -150,6 +160,10 @@ def ignore_changes(change: Mapping[str, Any]) -> bool:
         bool: True if the "locked" field is found in either the "updatedFields" or
         "removedFields" of the change event, otherwise False.
     """
+    debugging = False
+    if not debugging:
+        return False
+
     update_description = change.get("updateDescription", {})
     updated_fields = update_description.get("updatedFields", {})
     removed_fields = update_description.get("removedFields", [])
@@ -245,7 +259,7 @@ async def subscribe_stream(
     pipeline: Sequence[Mapping[str, Any]] | None = None,
     use_resume=True,
     error_count: int = 0,
-    error_code: str | None = None,
+    error_code: str = "",
 ) -> str | None:
     """
     Asynchronously subscribes to a stream and logs updates.
@@ -261,7 +275,6 @@ async def subscribe_stream(
 
     # Use two different mongo clients, one for the stream and the one for
     # the rest of the app.
-    error_code = ""
     collection = InternalConfig.db[collection_name]
     resume = ResumeToken(collection=collection_name)
     try:
@@ -281,14 +294,18 @@ async def subscribe_stream(
             unix_ts = int(datetime.now(tz=timezone.utc).timestamp()) - 60
             # The second argument (increment) is usually 0 for new watches
             watch_kwargs["start_at_operation_time"] = bson.Timestamp(unix_ts, 0)
-            logger.warning(f"{ICON} {collection_name} stream started from 60s ago.")
+            logger.warning(
+                f"{ICON} {collection_name} stream started from 60s ago.",
+                extra={"notification": False},
+            )
 
         async with await collection.watch(**watch_kwargs) as stream:
             if error_code:
                 logger.info(
-                    f"{ICON} {collection_name} stream error: {error_code}",
+                    f"{ICON} {collection_name} Resuming after stream error cleared: {error_code}",
                     extra={"notification": True, "error_code_clear": error_code},
                 )
+                error_count = 0
             error_code = f"db_monitor_{collection_name}"
 
             # Close the stream immediately when shutdown is requested
@@ -330,15 +347,19 @@ async def subscribe_stream(
                     await closer
 
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
-        logger.info(f"Keyboard interrupt or Cancelled: {__name__} {e}")
+        logger.info(f"Keyboard interrupt or Cancelled: {collection_name} {e}")
         InternalConfig.notification_lock = True
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
+        if await LockStr.any_locks_open():
+            logger.info(f"{ICON} Open locks found. Please release them before shutdown.")
+            while await LockStr.any_locks_open():
+                logger.info(f"{ICON} Waiting for locks to be released...")
+                await asyncio.sleep(5)
         logger.info(
             f"{ICON} 👋 Goodbye! from {collection_name} stream",
-            extra={"notification": True},
+            extra={"notification": False},
         )
-        # Don’t re-raise; let caller’s cancellation proceed cleanly
-        return
+        raise e
 
     except OperationFailure as e:
         error_code = f"db_monitor_{collection_name}"
@@ -367,12 +388,13 @@ async def subscribe_stream(
     ) as e:
         error_count += 1
         error_code = f"db_monitor_{collection_name}"
+        sleep_time = min(30 * error_count, 180)
         logger.error(
-            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry: {str(e)[:20]}",
+            f"{ICON} Error {error_count} {collection_name} MongoDB connection error, will retry in {sleep_time}s: {truncate_text(e, 25)}",
             extra={"error_code": error_code, "notification": True, "error": e},
         )
         # Wait before attempting to reconnect
-        await asyncio.sleep(max(30 * error_count, 180))
+        await asyncio.sleep(sleep_time)
         logger.info(f"{ICON} Attempting to reconnect to {collection_name} stream...")
         if not shutdown_event.is_set():
             asyncio.create_task(
@@ -391,7 +413,9 @@ async def subscribe_stream(
         )
         raise e
     finally:
-        logger.info(f"{ICON} Closed connection to {collection_name} stream.")
+        logger.info(
+            f"{ICON} Closed connection to {collection_name} stream. Error:{error_code} {error_count}"
+        )
 
 
 def handle_shutdown_signal():
@@ -458,29 +482,37 @@ async def main_async_start(use_resume: bool = True):
         await shutdown_event.wait()
         for t in tasks:
             t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # NEW: Check for exceptions in task results and re-raise the first one
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         InternalConfig.notification_lock = True
-        logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
-        logger.info(f"{ICON} 👋 Goodbye! from Database Monitor App", extra={"notification": True})
+        logger.info(f"{ICON} 👋 Received signal to stop. Checking for locks...")
+
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Database Monitor App {e}", extra={"error": e})
         raise e
     finally:
         logger.info(f"{ICON} Cleaning up resources...")
+        logger.info(
+            f"{ICON} 👋 Goodbye from Database Monitor App. Version: {__version__} on {InternalConfig().local_machine_name}",
+            extra={"notification": True},
+        )
         # Cancel all tasks except the current one
         if hasattr(InternalConfig, "notification_loop"):
             while InternalConfig.notification_lock:
-                logger.info("Waiting for notification loop to complete...")
+                logger.info(f"{ICON} Waiting for notification loop to complete...")
                 await asyncio.sleep(0.5)  # Allow pending notifications to complete
         current_task = asyncio.current_task()
         tasks = [task for task in asyncio.all_tasks() if task is not current_task]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
         logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
 
@@ -521,7 +553,7 @@ def main(
     """
     _ = InternalConfig(config_filename=config_filename, log_filename="db_monitor.log.jsonl")
     logger.info(
-        f"{ICON} ✅ Database Monitor App. Started. Version: {__version__}",
+        f"{ICON}{Fore.WHITE} ✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
     )
     logger.info(

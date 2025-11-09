@@ -15,7 +15,10 @@ async def process_create_fill_order_op(
     ledger_entries = []
     tracked_customers = [InternalConfig().server_id]  # Replace with dynamic query if needed
 
-    if isinstance(limit_fill_order, LimitOrderCreate):
+    if (
+        isinstance(limit_fill_order, LimitOrderCreate)
+        and limit_fill_order.owner not in tracked_customers
+    ):
         logger.info(f"Limit order create: {limit_fill_order.orderid}")
         if not limit_fill_order.conv or limit_fill_order.conv.is_unset():
             quote = await TrackedBaseModel.nearest_quote(timestamp=limit_fill_order.timestamp)
@@ -31,6 +34,7 @@ async def process_create_fill_order_op(
             short_id=limit_fill_order.short_id,
             timestamp=limit_fill_order.timestamp,
             op_type=limit_fill_order.op_type,
+            link=limit_fill_order.link,
         )
         ledger_entry.debit = AssetAccount(name="Escrow Hive", sub=limit_fill_order.owner)
         ledger_entry.credit = AssetAccount(
@@ -93,6 +97,7 @@ async def process_create_fill_order_op(
                 credit_unit=limit_fill_order.current_pays.unit,  # HBD
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
                 credit_conv=limit_fill_order.credit_conv,
+                link=limit_fill_order.link,
             )
             ledger_entries.append(buyer_entry)
 
@@ -117,6 +122,7 @@ async def process_create_fill_order_op(
                 credit_unit=limit_fill_order.open_pays.unit,  # HIVE
                 credit_amount=limit_fill_order.open_pays.amount_decimal,
                 credit_conv=limit_fill_order.debit_conv,  # Use debit_conv for seller's credit (HIVE)
+                link=limit_fill_order.link,
             )
             ledger_entries.append(seller_entry)
         elif buyer_tracked and not seller_tracked:
@@ -142,6 +148,7 @@ async def process_create_fill_order_op(
                 credit_unit=limit_fill_order.current_pays.unit,
                 credit_amount=limit_fill_order.current_pays.amount_decimal,
                 credit_conv=limit_fill_order.credit_conv,
+                link=limit_fill_order.link,
             )
             # Optionally, add a suspense entry for the external side (but don't save it if netting)
             # suspense_entry = LedgerEntry(... LiabilityAccount("External Market Suspense", sub="untracked") ...)

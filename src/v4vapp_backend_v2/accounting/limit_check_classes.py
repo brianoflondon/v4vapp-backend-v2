@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Dict, List
 
 from pydantic import BaseModel
@@ -7,11 +8,11 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 
 
 class PeriodResult(BaseModel):
-    hbd: float = 0.0
-    hive: float = 0.0
-    msats: int = 0
-    sats: int = 0
-    usd: float = 0.0
+    hbd: Decimal = Decimal(0)
+    hive: Decimal = Decimal(0)
+    msats: Decimal = Decimal(0)
+    sats: Decimal = Decimal(0)
+    usd: Decimal = Decimal(0)
     limit_hours: int = 0
     limit_sats: int = 0
     details: List[LedgerEntry] | None = None
@@ -86,9 +87,9 @@ class LimitCheckResult(BaseModel):
         return [result.limit_percent for result in self.periods.values()]
 
     @property
-    def sats(self) -> List[int]:
+    def sats(self) -> List[Decimal]:
         return [result.sats for result in self.periods.values()]
 
     @property
     def sats_list_str(self) -> List[str]:
-        return [f"{sats:,}" for sats in self.sats]
+        return [f"{int(sats):,}" for sats in self.sats]

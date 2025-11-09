@@ -19,7 +19,8 @@ services:
     command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
-
+    env_file:
+      - .env
 
   hive-monitor:
     depends_on:
@@ -37,12 +38,34 @@ services:
     stop_grace_period: 20s
     networks:
       - v4vapp-backend
+    env_file:
+      - .env
+
+  db-monitor:
+    depends_on:
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
+    volumes:
+      - ./.certs:/app/.certs
+      - ./config:/app/config
+      - ./logs_docker/hive:/app/logs
+    command: [
+      "python", "src/db_monitor.py",
+      "--config", "devdocker.config.yaml",
+    ]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    networks:
+      - v4vapp-backend
+    env_file:
+      - .env
 
   api-v2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: v4vapp-backend:latest
+    depends_on:
+      - mongo-pytest-local
+      - redis-pytest-local
+      - v4vapp-backend-v2-base
+    image: v4vapp-backend-v2-base:latest
     ports:
       - "0.0.0.0:8000:8000"
     volumes:
@@ -53,11 +76,10 @@ services:
     stop_grace_period: 20s
     networks:
       - v4vapp-backend
-    depends_on:
-      - mongo-pytest-local
-      - redis-pytest-local
     environment:
       - PYTHONPATH=/app/src
+    env_file:
+      - .env
 
   admin-interface:
     build:
@@ -85,6 +107,8 @@ services:
       - redis-pytest-local
     environment:
       - PYTHONPATH=/app/src
+    env_file:
+      - .env
 
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names

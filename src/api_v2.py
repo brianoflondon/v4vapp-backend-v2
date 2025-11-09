@@ -1,4 +1,5 @@
 import argparse
+import socket
 from typing import Any, Dict
 
 import uvicorn
@@ -70,6 +71,7 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
+@crypto_v2_router.post("")
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -168,16 +170,11 @@ async def keepsats(
     net_msats, account_balance = await keepsats_balance(
         cust_id=hive_accname, line_items=line_items
     )
-    return {
-        "hive_accname": hive_accname,
-        "net_msats": account_balance.msats,
-        "net_hive": account_balance.hive,
-        "net_usd": account_balance.usd,
-        "net_hbd": account_balance.hbd,
-        "net_sats": account_balance.sats,
-        "in_progress_sats": 0,
-        "all_transactions": [],
-    }
+
+    if line_items:
+        account_balance = account_balance.remove_balances()
+
+    return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items)
 
 
 @lightning_v1_router.post("/keepsats/transfer")
@@ -350,6 +347,20 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
 
         response = await call_next(request)
         return response
+
+    # Add root endpoint here
+    @app.get("/")
+    @app.get("/health")
+    async def root():
+        return {
+            "message": "Welcome to V4VApp API v2",
+            "version": __version__,
+            "status": "running",
+            "server_id": InternalConfig().server_id,
+            "dns_name": socket.getfqdn(),
+            "local_machine_name": InternalConfig().local_machine_name,
+            "documentation": "/docs",
+        }
 
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])

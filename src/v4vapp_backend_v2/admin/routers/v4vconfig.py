@@ -5,6 +5,7 @@ FastAPI router for managing V4VApp configuration settings.
 """
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict
 
@@ -142,10 +143,10 @@ async def update_v4vconfig_form(
     request: Request,
     hive_return_fee: float = Form(...),
     conv_fee_percent: float = Form(...),
-    conv_fee_sats: int = Form(...),
-    minimum_invoice_payment_sats: int = Form(...),
-    maximum_invoice_payment_sats: int = Form(...),
-    max_acceptable_lnd_fee_msats: int = Form(...),
+    conv_fee_sats: Decimal = Form(...),
+    minimum_invoice_payment_sats: Decimal = Form(...),
+    maximum_invoice_payment_sats: Decimal = Form(...),
+    max_acceptable_lnd_fee_msats: Decimal = Form(...),
     closed_get_lnd: bool = Form(False),
     closed_get_hive: bool = Form(False),
     v4v_frontend_iri: str = Form(""),

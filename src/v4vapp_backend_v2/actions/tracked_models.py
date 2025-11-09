@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import ServerSelectionTimeoutError
 from pymongo.results import UpdateResult
@@ -13,7 +13,10 @@ from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, 
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
-from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals, snake_case
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    convert_decimals_for_mongodb,
+    snake_case,
+)
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 
 ICON = "🔄"
@@ -52,6 +55,20 @@ class ReplyModel(BaseModel):
         exclude=False,
     )
     reply_error: str | None = Field(None, description="Error in the reply, if any", exclude=False)
+
+    @field_validator("reply_msat", mode="before")
+    @classmethod
+    def convert_reply_msat(cls, v):
+        """Convert Decimal values to int for reply_msat field."""
+        from decimal import Decimal
+
+        if isinstance(v, Decimal):
+            if v == v.to_integral_value():
+                return int(v)
+            else:
+                # For fractional values, round to nearest integer
+                return int(v.to_integral_value())
+        return v
 
     def __init__(self, **data):
         """
@@ -138,6 +155,15 @@ class TrackedBaseModel(BaseModel):
         :param reply_type: The type of the reply (optional).
         :param reply_error: Any error associated with the reply (optional).
         """
+        from decimal import Decimal
+
+        # Convert Decimal reply_msat to int if necessary
+        if isinstance(reply_msat, Decimal):
+            if reply_msat == reply_msat.to_integral_value():
+                reply_msat = int(reply_msat)
+            else:
+                reply_msat = int(reply_msat.to_integral_value())
+
         if reply_id and reply_id in self.reply_ids():
             logger.warning(
                 f"{ICON} Reply with ID {reply_id} already exists in {self.name()}",
@@ -304,7 +330,7 @@ class TrackedBaseModel(BaseModel):
             update.pop("replies", None)  # Remove empty replies list if it exists
 
         # Convert Decimal objects to floats for MongoDB compatibility
-        update = convert_decimals(update)
+        update = convert_decimals_for_mongodb(update)
 
         update = {
             "$set": update,

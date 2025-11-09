@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from colorama import Fore, Style
 from nectar.amount import Amount
 
@@ -147,14 +149,16 @@ async def follow_on_transfer(
                 f"Detected keepsats operation in memo: {tracked_op.d_memo}",
                 extra={"notification": False, **tracked_op.log_extra},
             )
-            user_limits_text = await check_user_limits(tracked_op.conv.sats, tracked_op.cust_id)
+            user_limits_text = await check_user_limits(
+                extra_spend_msats=tracked_op.conv.msats, cust_id=tracked_op.cust_id
+            )
             if user_limits_text:
                 raise HiveTransferError(f"{user_limits_text}")
             await conversion_hive_to_keepsats(
                 server_id=server_id,
                 cust_id=cust_id,
                 tracked_op=tracked_op,
-                msats=0,
+                msats=Decimal(0),
                 nobroadcast=nobroadcast,
             )
             return
@@ -198,7 +202,7 @@ async def follow_on_transfer(
                 cust_id=cust_id,
                 tracked_op=tracked_op,
                 nobroadcast=nobroadcast,
-                msats=0,  # Use all the funds sent
+                msats=Decimal(0),  # Use all the funds sent
             )
             return
         else:
@@ -208,7 +212,7 @@ async def follow_on_transfer(
 
             if tracked_op.paywithsats:
                 await hold_keepsats(
-                    amount_msats=pay_req.value_msat + pay_req.fee_estimate,
+                    amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,
                     cust_id=cust_id,
                     tracked_op=tracked_op,
                 )
@@ -432,7 +436,10 @@ async def decode_incoming_and_checks(
     else:  # both these tests are for conversions not paywithsats
         result = await check_amount_sent(pay_req=pay_req, tracked_op=tracked_op)  # type: ignore[assignment]
         if not result:
-            result = await check_user_limits(pay_req.value_msat, tracked_op.cust_id)
+            extra_spend_msats = Decimal(pay_req.value_msat)
+            result = await check_user_limits(
+                extra_spend_msats=extra_spend_msats, cust_id=tracked_op.cust_id
+            )
 
     if result:
         raise HiveConversionLimits(result)
@@ -475,23 +482,25 @@ async def check_amount_sent(
     surplus_msats = tracked_op.max_send_amount_msats() - pay_req.value_msat
     if surplus_msats < -5_000:  # Allow a 5 sat buffer for rounding errors (5,000 msats, 5 sats)
         if tracked_op.unit == Currency.HIVE:
-            surplus_hive = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hive), 3))
+            surplus_hive = abs(
+                round(surplus_msats / Decimal(1_000) / tracked_op.conv.sats_hive, 3)
+            )
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hive:,.3f} HIVE"
             )
         elif tracked_op.unit == Currency.HBD:
-            surplus_hbd = abs(round(surplus_msats / 1_000 / float(tracked_op.conv.sats_hbd), 3))
+            surplus_hbd = abs(round(surplus_msats / Decimal(1_000) / tracked_op.conv.sats_hbd, 3))
             failure_reason = (
                 f"Not enough sent to process this payment request: {surplus_hbd:,.3f} HBD"
             )
         else:
-            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / 1_000:,.0f} sats"
+            failure_reason = f"Not enough sent to process this payment request: {surplus_msats / Decimal(1_000):,.0f} sats"
 
         return failure_reason
     return ""
 
 
-async def check_user_limits(extra_spend_msats: int, cust_id: str) -> str:
+async def check_user_limits(extra_spend_msats: Decimal, cust_id: str) -> str:
     """
     Asynchronously checks if the user associated with a Hive transfer has sufficient limits to process a Lightning payment request.
 
@@ -524,10 +533,10 @@ async def check_keepsats_balance(extra_spend_msats: int, cust_id: str) -> str:
     net_msats, balance = await keepsats_balance(cust_id=cust_id)
     if not balance.balances.get(Currency.MSATS):
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"
+            f"Insufficient Keepsats balance ({round(net_msats / 1000):,.0f} sats) to cover payment request: {round(extra_spend_msats / 1000):,.0f} sats"
         )
     if net_msats < extra_spend_msats:
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({net_msats / 1000:,.0f} sats) to cover payment request: {extra_spend_msats / 1000:,.0f} sats"
+            f"Insufficient Keepsats balance ({round(net_msats / 1000):,.0f} sats) to cover payment request: {round(extra_spend_msats / 1000):,.0f} sats"
         )
     return ""

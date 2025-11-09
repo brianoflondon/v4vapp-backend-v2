@@ -1,9 +1,17 @@
 import textwrap
 from datetime import datetime, timezone
+from decimal import Decimal
 from math import isclose
 from typing import Any, Dict, Self
 
-from pydantic import BaseModel, Field, ValidationError, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import InsertOneResult, UpdateResult
@@ -14,12 +22,13 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import (
     AssetAccount,
     LedgerAccountAny,
 )
-from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    convert_decimals,
+    convert_decimals_for_mongodb,
     lightning_memo,
     snake_case,
 )
@@ -64,8 +73,8 @@ class LedgerEntry(BaseModel):
         credit (LedgerAccountAny): Account to be credited.
 
         __init__(self, **data): Initializes a LedgerEntry instance.
-        debit_amount_signed(self) -> int | float: Returns the debit amount as a signed value.
-        credit_amount_signed(self) -> int | float: Returns the credit amount as a signed value.
+        debit_amount_signed(self) -> Decimal: Returns the debit amount as a signed value.
+        credit_amount_signed(self) -> Decimal: Returns the credit amount as a signed value.
         debit_sign(self) -> int: Returns the sign of the debit amount.
         credit_sign(self) -> int: Returns the sign of the credit amount.
         conv_signed(self) -> Dict[str, CryptoConv]: Returns conversion details as signed values.
@@ -142,14 +151,14 @@ class LedgerEntry(BaseModel):
     cust_id: AccNameType = Field(
         "", description="Customer ID of any type associated with the ledger entry"
     )
-    debit_amount: float = Field(0.0, description="Amount of the debit transaction")
+    debit_amount: Decimal = Field(Decimal(0), description="Amount of the debit transaction")
     debit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the debit transaction"
     )
     debit_conv: CryptoConv = Field(
         default_factory=CryptoConv, description="Conversion details for the debit transaction"
     )
-    credit_amount: float = Field(0.0, description="Amount of the credit transaction")
+    credit_amount: Decimal = Field(Decimal(0), description="Amount of the credit transaction")
     credit_unit: Currency = Field(
         default=Currency.HIVE, description="Unit of the credit transaction"
     )
@@ -172,6 +181,15 @@ class LedgerEntry(BaseModel):
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
     )
+    link: str = Field(
+        "", description="Link to the Hive block explorer transaction if appropriate"
+    )
+
+    @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
+    @classmethod
+    def convert_mongodb_decimals(cls, v):
+        """Convert Decimal128 objects from MongoDB to Decimal objects for Pydantic validation."""
+        return convert_decimal128_to_decimal(v)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -210,7 +228,7 @@ class LedgerEntry(BaseModel):
         return self
 
     @computed_field
-    def debit_amount_signed(self) -> int | float:
+    def debit_amount_signed(self) -> Decimal:
         """
         Returns the debit amount as a signed value.
         This is used to ensure that the debit amount is always positive in accounting terms.
@@ -218,12 +236,17 @@ class LedgerEntry(BaseModel):
         return self.debit_amount * self.debit_sign
 
     @computed_field
-    def credit_amount_signed(self) -> int | float:
+    def credit_amount_signed(self) -> Decimal:
         """
         Returns the credit amount as a signed value.
         This is used to ensure that the credit amount is always positive in accounting terms.
         """
         return self.credit_amount * self.credit_sign
+
+    @property
+    def icon(self) -> str:
+        icon = LedgerTypeIcon.get(self.ledger_type, "❓")
+        return icon
 
     @property
     def debit_sign(self) -> int:
@@ -481,9 +504,10 @@ class LedgerEntry(BaseModel):
         self.db_checks()
         try:
             # Get the model dump and convert Decimal objects to strings for MongoDB compatibility
-            document = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
-            document = convert_decimals(document)
+            document: Any = self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
+            document = convert_decimals_for_mongodb(document)
 
+            ans: InsertOneResult | UpdateResult | None = None
             if not upsert:
                 ans = await InternalConfig.db["ledger"].insert_one(document=document)
             else:
@@ -729,14 +753,12 @@ class LedgerEntry(BaseModel):
                 f"{self.debit_conv.hive:>11,.3f} HIVE "
                 f"{self.debit_conv.hbd:>11,.3f} HBD "
                 f"{self.debit_conv.usd:>11,.3f} USD "
-                f"{self.debit_conv.msats / 1000:>18,.3f} SATS "
+                f"{self.debit_conv.sats_rounded:>18,.3f} SATS "
             )
         else:
             conversion_line = "Converted              N/A"
 
-        entry = (
-            f"J/E NUMBER  : {self.group_id or '#####'}\nLEDGER TYPE : {self.ledger_type_str:<40}\n"
-        )
+        entry = f"J/E NUMBER  : {self.group_id or '#####'}\nLEDGER TYPE : {self.icon}{self.ledger_type_str:<40}\n"
         # Build combined CUSTOMER_ID + right-aligned date line
         line_width = 100  # matches separator width below
 

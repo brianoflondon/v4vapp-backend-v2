@@ -1,3 +1,4 @@
+from decimal import Decimal
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -15,8 +16,8 @@ def test_amount_pyd():
 def test_amount_hive():
     nectar_amount = Amount("42.333 HIVE")
     amount_pyd = AmountPyd.model_validate(nectar_amount)
-    str(amount_pyd) == "42.333 HIVE"
-    assert amount_pyd.amount_decimal == float(nectar_amount.amount_decimal)
+    assert str(amount_pyd) == "42.333 HIVE"
+    assert amount_pyd.amount_decimal == Decimal(nectar_amount.amount_decimal)
 
 
 def test_amount_to_pyd():
@@ -26,7 +27,7 @@ def test_amount_to_pyd():
     assert isinstance(amount_pyd.beam, Amount)
     assert isinstance(str(amount_pyd), str)
     assert len(amount_pyd.fixed_width_str(21)) == 21
-    assert amount_pyd.amount_decimal == float(nectar_amount.amount_decimal)
+    assert amount_pyd.amount_decimal == Decimal(nectar_amount.amount_decimal)
 
 
 def test_amount_pyd_minus_minimum():

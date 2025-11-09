@@ -3,6 +3,8 @@ import signal
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
+from random import uniform
+from time import sleep
 from timeit import default_timer as timer
 from typing import Annotated, Dict, List, Tuple
 
@@ -140,6 +142,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         if hive_acc and hive_acc.active_key:
             # set the amount to the current HBD balance taken from Config
             set_amount_to = Amount(hive_acc.hbd_balance)
+            logger.info(f"{icon} Balancing HBD level for account {use_account} to {set_amount_to}")
             nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
             trx = account_trade(
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
@@ -520,7 +523,7 @@ async def store_rates() -> None:
                 await TrackedBaseModel.update_quote()
                 quote = TrackedBaseModel.last_quote
                 logger.info(
-                    f"{icon} Updating Quotes: {quote.hive_usd} {quote.sats_hive:.0f} fetch date {quote.fetch_date}",
+                    f"{icon} Updating Quotes: {quote.hive_usd:.3f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
                     extra={
                         "notification": False,
                         "quote": TrackedBaseModel.last_quote.model_dump(
@@ -692,10 +695,13 @@ def main(
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
     # TODO: This is redundant, remove it no setting database here any more
 
+    pause_time = uniform(0.1, 1.5)
     logger.info(
-        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__}{Style.RESET_ALL}",
+        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {pause_time:.2f}s",
         extra={"notification": True},
     )
+    # sleep for a random amount of time 0.1 to 0.8 seconds
+    sleep(pause_time)
     if not watch_users:
         watch_users = CONFIG.hive.watch_users
     if not watch_witnesses:

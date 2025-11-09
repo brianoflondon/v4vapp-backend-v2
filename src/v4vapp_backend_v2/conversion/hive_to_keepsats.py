@@ -37,6 +37,7 @@ Notes:
 """
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List
 
 from nectar.amount import Amount
@@ -59,9 +60,11 @@ async def conversion_hive_to_keepsats(
     server_id: str,
     cust_id: str,
     tracked_op: TransferBase,
-    msats: int = 0,
+    msats: Decimal = Decimal(0),
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
+    value_sat_rounded: Decimal = Decimal(0),
+    fee_sat_rounded: Decimal = Decimal(0),
 ) -> None:
     """
     Converts a HIVE or HBD deposit to Keepsats (Lightning msats) and records the corresponding ledger entries.
@@ -109,7 +112,7 @@ async def conversion_hive_to_keepsats(
         timestamp=datetime.now(tz=timezone.utc),
         description=(
             f"Convert {conv_result.to_convert_conv.value_in(from_currency)} "
-            f"into {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id}"
+            f"into {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id}"
         ),
         debit=AssetAccount(
             name="Treasury Lightning",
@@ -125,6 +128,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=from_currency,
         credit_amount=conv_result.to_convert_conv.value_in(from_currency),
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(conversion_ledger_entry)
     await conversion_ledger_entry.save()
@@ -138,7 +142,7 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Contra Conversion: {conv_result.to_convert_conv.msats / 1000:,.0f} sats for {cust_id} Keepsats",
+        description=f"Contra Conversion: {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id} Keepsats",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
         debit_unit=from_currency,
         debit_amount=conv_result.to_convert_conv.value_in(from_currency),
@@ -151,6 +155,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=from_currency,
         credit_amount=conv_result.to_convert_conv.value_in(from_currency),
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
@@ -165,12 +170,11 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}-{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"{conv_result.net_to_receive_conv.amount(from_currency)} to {conv_result.net_to_receive_conv.msats / 1000:,.0f} sats for {cust_id}",
+        description=f"Withdraw {conv_result.to_convert_amount} from {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,
         ),
-        user_memo=f"NEED TO SET USER MEMO {ledger_type.printout}",
         debit_unit=from_currency,
         debit_amount=conv_result.to_convert_conv.value_in(from_currency),
         debit_conv=conv_result.to_convert_conv,
@@ -181,6 +185,7 @@ async def conversion_hive_to_keepsats(
         credit_unit=Currency.MSATS,
         credit_amount=conv_result.to_convert_conv.msats,
         credit_conv=conv_result.to_convert_conv,
+        link=tracked_op.link,
     )
     ledger_entries.append(deposit_ledger_entry)
     await deposit_ledger_entry.save()
@@ -189,7 +194,15 @@ async def conversion_hive_to_keepsats(
     end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
 
     if "⚡️" in tracked_op.lightning_memo:
-        lightning_paid = f"Your Lightning Invoice of {conv_result.net_to_receive_conv.msats / 1000:,.0f} has been paid. | "
+        if value_sat_rounded > 0:
+            fee_text = ""
+            if fee_sat_rounded > 0:
+                fee_text = f" (fee: {fee_sat_rounded:,.0f} sats)"
+            lightning_paid = (
+                f"Your payment of {value_sat_rounded:,.0f} sats has been paid.{fee_text} | "
+            )
+        else:
+            lightning_paid = f"Your Lightning Invoice of {conv_result.net_to_receive_conv.sats_rounded:,.0f} has been paid. | "
     else:
         lightning_paid = ""
 
@@ -197,8 +210,8 @@ async def conversion_hive_to_keepsats(
         tracked_op.change_memo = (
             f"{lightning_paid}"
             f"Deposit {conv_result.to_convert_amount} to "
-            f"{conv_result.net_to_receive_conv.msats / 1000:,.0f} sats "
-            f"with fee: {conv_result.fee_conv.msats / 1000:,.0f} for {cust_id}"
+            f"{conv_result.net_to_receive_conv.sats_rounded:,.0f} sats "
+            f"with fee: {conv_result.fee_conv.sats_rounded:,.0f} for {cust_id}"
             f"{end_memo}"
         )
 
@@ -216,7 +229,7 @@ async def conversion_hive_to_keepsats(
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
-        msats=conv_result.to_convert_conv.msats,
+        msats=int(conv_result.to_convert_conv.msats),
         memo=tracked_op.d_memo,
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
@@ -230,7 +243,7 @@ async def conversion_hive_to_keepsats(
         from_account=cust_id,
         to_account=server_id,
         msats=conv_result.fee_conv.msats,
-        memo=f"Fee for Keepsats {conv_result.fee_conv.msats / 1000:,.0f} sats for {cust_id} #Fee #to_keepsats",
+        memo=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id} #Fee #to_keepsats",
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)

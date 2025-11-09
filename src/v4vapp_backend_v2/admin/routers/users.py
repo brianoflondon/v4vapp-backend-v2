@@ -6,6 +6,7 @@ Handles routes for displaying VSC Liability user accounts.
 
 import asyncio
 from datetime import datetime, timezone
+from decimal import Decimal
 from timeit import default_timer as timer
 from typing import Any, List, Optional, cast
 
@@ -21,7 +22,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -42,9 +42,9 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
 def format_sats_for_label(sats: int) -> str:
     """Format sats for display in labels (e.g., 400000 -> '400k', 1200000 -> '1.2M')"""
     if sats >= 1_000_000:
-        return f"{sats / 1_000_000:.1f}M"
+        return f"{round(sats / 1_000_000, 1):.1f}M"
     elif sats >= 1_000:
-        return f"{sats // 1_000}k"
+        return f"{round(sats // 1_000, 0):.0f}k"
     else:
         return str(sats)
 
@@ -168,7 +168,7 @@ async def users_data_api():
     total_positive_balance = sum(
         balance
         for u in users_data
-        if isinstance(u.get("balance_sats"), int) and u["balance_sats"] > 0
+        if isinstance(u.get("balance_sats"), (int, float, Decimal)) and u["balance_sats"] > 0
         for balance in [u["balance_sats"]]
     )
     error_count = len([u for u in users_data if u.get("error")])

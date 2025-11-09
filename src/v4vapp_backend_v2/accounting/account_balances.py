@@ -5,6 +5,7 @@ from typing import Any, List, Mapping, Tuple
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
+    net_held_msats_balance_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
@@ -18,6 +19,7 @@ from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -28,6 +30,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
 )
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
 UNIT_TOLERANCE = {
     "HIVE": 0.001,
@@ -68,7 +71,7 @@ async def all_account_balances(
                 if items:
                     last_item = items[-1]
                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
-
+        account.in_progress_msats = await in_progress(account.sub)
         account.last_transaction_date = max_timestamp
 
     return account_balances
@@ -129,6 +132,8 @@ async def one_account_balance(
                     max_timestamp = line.timestamp
         ledger_details.last_transaction_date = max_timestamp
 
+    ledger_details.in_progress_msats = await in_progress(account.sub)
+
     return ledger_details
 
 
@@ -143,22 +148,20 @@ async def account_balance_printout(
     quote: QuoteResponse | None = None,
 ) -> Tuple[str, LedgerAccountDetails]:
     """
-    Calculate and display the balance for a specified account (and optional sub-account) from the DataFrame.
-    Optionally lists all debit and credit transactions up to today, or shows only the closing balance.
-    Properly accounts for assets and liabilities, and includes converted values to other units
-    (SATS, HIVE, HBD, USD, msats).
+    Calculate and display the balance for a specified account (and optional sub-account).
+    Optionally lists all debit and credit transactions up to the specified date, or shows only the closing balance.
 
-    Args:
-        account (Account | str): An Account object specifying the account name, type, and optional sub-account. If
-        a str is passed, we assume this is a `VSC Liability` account for customer `account`.
-        df (pd.DataFrame): A DataFrame containing transaction data with columns: timestamp, debit_amount, debit_unit, etc.
-        full_history (bool, optional): If True, shows the full transaction history with running balances.
-                                       If False, shows only the closing balance. Defaults to False.
-        as_of_date (datetime, optional): The date up to which to calculate the balance. Defaults to None (current date).
+        account (LedgerAccount | str): A LedgerAccount object specifying the account name, type, and optional sub-account.
+                                       If a str is passed, it is treated as a 'VSC Liability' account for the customer specified by the string.
+        line_items (bool, optional): If True, includes detailed line items for transactions. Defaults to True.
+        user_memos (bool, optional): If True, includes user memos for transactions. Defaults to True.
+        as_of_date (datetime | None, optional): The date up to which to calculate the balance. Defaults to None (current UTC date).
+        age (timedelta | None, optional): An optional age filter for transactions. Defaults to None.
+        ledger_account_details (LedgerAccountDetails | None, optional): Pre-computed ledger account details. If None, it will be fetched. Defaults to None.
+        quote (QuoteResponse | None, optional): Pre-fetched quote for currency conversions. If None, it will be updated. Defaults to None.
 
-    Returns:
-        str: A formatted string containing either the full transaction history or the closing balance
-             for the specified account and sub-account up to the specified date.
+        Tuple[str, LedgerAccountDetails]: A tuple containing a formatted string with the balance printout and the LedgerAccountDetails object.
+
     """
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
@@ -198,7 +201,7 @@ async def account_balance_printout(
     COL_LEDGER_TYPE = 11
 
     total_usd: Decimal = Decimal(0)
-    total_msats: int = 0
+    total_msats: Decimal = Decimal(0)
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
@@ -225,8 +228,12 @@ async def account_balance_printout(
                     description = truncate_text(row.description, 50)
                     ledger_type = row.ledger_type
                     # Raw numeric values
-                    debit_val = row.amount if row.side == "debit" and row.unit == unit else 0.0
-                    credit_val = row.amount if row.side == "credit" and row.unit == unit else 0.0
+                    debit_val = (
+                        row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
+                    )
+                    credit_val = (
+                        row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
+                    )
                     balance_val = row.amount_running_total
                     if unit.upper() == "MSATS":
                         debit_val /= conversion_factor
@@ -235,12 +242,12 @@ async def account_balance_printout(
 
                     # Number formats
                     if unit.upper() == "MSATS":
-                        debit_fmt = f"{debit_val:,.0f}"
-                        credit_fmt = f"{credit_val:,.0f}"
-                        balance_fmt = f"{balance_val:,.0f}"
+                        debit_fmt = f"{debit_val:,.1f}"
+                        credit_fmt = f"{credit_val:,.1f}"
+                        balance_fmt = f"{balance_val:,.1f}"
                     else:
-                        debit_fmt = f"{debit_val:,.3f}"
-                        credit_fmt = f"{credit_val:,.3f}"
+                        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+                        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
                         balance_fmt = f"{balance_val:,.3f}"
 
                     line = (
@@ -260,11 +267,7 @@ async def account_balance_printout(
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
         # Perform a conversion with the current quote for this Currency unit
-        final_balance = ledger_account_details.balances_net.get(unit, 0)
-        if unit in [Currency.HIVE, Currency.HBD]:
-            final_balance = round(final_balance, 3)
-        else:
-            final_balance = int(final_balance)
+        final_balance = Decimal(ledger_account_details.balances_net.get(unit, 0))
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
         output.append(
@@ -365,7 +368,7 @@ async def account_balance_printout_grouped_by_customer(
     COL_LEDGER_TYPE = 11
 
     total_usd: Decimal = Decimal(0)
-    total_msats: int = 0
+    total_msats: Decimal = Decimal(0)
 
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
@@ -395,7 +398,7 @@ async def account_balance_printout_grouped_by_customer(
                         output.append(f"\n--- Customer: {cust_id} ---")
 
                         # Recalculate running totals for this customer group
-                        running_total = 0.0
+                        running_total = Decimal(0)
                         for row in sorted(
                             cust_rows,
                             key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
@@ -409,10 +412,14 @@ async def account_balance_printout_grouped_by_customer(
 
                             # Raw numeric values
                             debit_val = (
-                                row.amount if row.side == "debit" and row.unit == unit else 0.0
+                                Decimal(row.amount)
+                                if row.side == "debit" and row.unit == unit
+                                else Decimal(0)
                             )
                             credit_val = (
-                                row.amount if row.side == "credit" and row.unit == unit else 0.0
+                                Decimal(row.amount)
+                                if row.side == "credit" and row.unit == unit
+                                else Decimal(0)
                             )
 
                             # Update running total for this customer
@@ -430,12 +437,12 @@ async def account_balance_printout_grouped_by_customer(
 
                             # Number formats
                             if unit.upper() == "MSATS":
-                                debit_fmt = f"{debit_val:,.0f}"
-                                credit_fmt = f"{credit_val:,.0f}"
-                                balance_fmt = f"{balance_val:,.0f}"
+                                debit_fmt = f"{debit_val:,.1f}"
+                                credit_fmt = f"{credit_val:,.1f}"
+                                balance_fmt = f"{balance_val:,.1f}"
                             else:
-                                debit_fmt = f"{debit_val:,.3f}"
-                                credit_fmt = f"{credit_val:,.3f}"
+                                debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+                                credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
                                 balance_fmt = f"{balance_val:,.3f}"
 
                             line = (
@@ -456,7 +463,7 @@ async def account_balance_printout_grouped_by_customer(
                 else:
                     # Single cust_id, recalculate running totals for consistency
                     output.append(f"\n--- Customer: {list(cust_ids)[0]} ---")
-                    running_total = 0.0
+                    running_total = Decimal(0)
                     for row in sorted(
                         date_rows,
                         key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
@@ -513,10 +520,7 @@ async def account_balance_printout_grouped_by_customer(
 
         # Perform a conversion with the current quote for this Currency unit
         final_balance = ledger_account_details.balances_net.get(unit, 0)
-        if unit in [Currency.HIVE, Currency.HBD]:
-            final_balance = round(final_balance, 3)
-        else:
-            final_balance = int(final_balance)
+
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
         output.append(
@@ -569,7 +573,7 @@ async def list_all_accounts() -> List[LedgerAccount]:
 
 
 async def ledger_pipeline_result(
-    cust_id: str,
+    cust_id: CustIDType,
     account: LedgerAccount,
     pipeline: List[Mapping[str, Any]],
     as_of_date: datetime | None = None,
@@ -623,60 +627,8 @@ async def ledger_pipeline_result(
     return ans
 
 
-# async def get_account_lightning_conv(
-#     cust_id: str = "",
-#     as_of_date: datetime | None = None,
-#     age: timedelta = timedelta(hours=4),
-#     line_items: bool = True,
-# ) -> LedgerConvSummary:
-#     """
-#     Retrieves the lightning conversion for a specific customer as of a given date.
-#     This adds up transactions of type LIGHTNING_OUT and DEPOSIT_KEEPSATS & WITHDRAW_KEEPSATS,
-#     i.e. conversions from HIVE/HBD to SATS.
-#     THIS DOES NOT ACCOUNT FOR THE NEGATIVE/POSITIVE AMOUNT FOR DEBITS AND CREDITS
-
-#     Args:
-#         account (LedgerAccount): The account for which to retrieve the lightning spend.
-#         as_of_date (datetime, optional): The date up to which to calculate the spend. Defaults to the current UTC time.
-
-#     Returns:
-#         Tuple[str, AccountBalanceSummary]: A tuple containing a formatted string of the lightning spend and an AccountBalanceSummary object.
-#     """
-#     if as_of_date is None:
-#         as_of_date = datetime.now(tz=timezone.utc)
-#     hive_config = InternalConfig().config.hive
-#     server_id = InternalConfig().server_id
-#     # This account is the transit point through which all keepsats and conversions happen.
-#     account = AssetAccount(
-#         name="Customer Deposits Hive",
-#         sub=server_id,
-#     )
-
-#     pipeline = filter_sum_credit_debit_pipeline(
-#         account=account,
-#         cust_id=cust_id,
-#         age=age,
-#         as_of_date=as_of_date,
-#         ledger_types=[
-#             LedgerType.CONV_HIVE_TO_KEEPSATS,
-#             LedgerType.CONV_KEEPSATS_TO_HIVE,
-#             LedgerType.CONV_HIVE_TO_LIGHTNING,
-#             LedgerType.CONV_LIGHTNING_TO_HIVE,
-#         ],
-#         line_items=line_items,
-#     )
-#     ans = await ledger_pipeline_result(
-#         cust_id=cust_id,
-#         age=age,
-#         account=account,
-#         pipeline=pipeline,
-#         as_of_date=as_of_date,
-#     )
-#     return ans
-
-
 async def check_hive_conversion_limits(
-    cust_id: str, extra_spend_msats: int = 0, line_items: bool = False
+    cust_id: CustIDType, extra_spend_msats: Decimal = Decimal(0), line_items: bool = False
 ) -> LimitCheckResult:
     """
     Checks if a Hive account's recent Lightning conversions are within configured rate limits.
@@ -699,6 +651,7 @@ async def check_hive_conversion_limits(
     )
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
+    results = convert_decimal128_to_decimal(results)
     limit_check = LimitCheckResult.model_validate(results[0]) if results else LimitCheckResult()
     if not limit_check.limit_ok:
         expiry_info = await get_next_limit_expiry(cust_id)
@@ -710,7 +663,7 @@ async def check_hive_conversion_limits(
     return limit_check
 
 
-async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
+async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, int] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
     This looks at the first (shortest) rate limit period and finds the oldest transaction
@@ -729,7 +682,7 @@ async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
 
     first_limit = min(lightning_rate_limits, key=lambda x: x.hours)
 
-    pipeline = limit_check_pipeline(cust_id=cust_id, details=True, extra_spend_sats=0)
+    pipeline = limit_check_pipeline(cust_id=cust_id, details=True)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list(length=None)
 
@@ -760,10 +713,10 @@ async def get_next_limit_expiry(cust_id: str) -> Tuple[datetime, int] | None:
 
 # @async_time_stats_decorator()
 async def keepsats_balance(
-    cust_id: str = "",
+    cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
     line_items: bool = False,
-) -> Tuple[int, LedgerAccountDetails]:
+) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Retrieves the balance of Keepsats for a specific customer as of a given date.
     This looks at the `credit` values because credits to a Liability account
@@ -792,14 +745,14 @@ async def keepsats_balance(
     )
 
     net_msats = account_balance.msats
-    if net_msats < 0 and account_balance.sats == 0:
-        net_msats = 0
+    if net_msats < Decimal(0) and account_balance.sats == Decimal(0):
+        net_msats = Decimal(0)
     return net_msats, account_balance
 
 
 async def keepsats_balance_printout(
-    cust_id: str, previous_msats: int | None = None, line_items: bool = False
-) -> Tuple[int, LedgerAccountDetails]:
+    cust_id: CustIDType, previous_msats: int | Decimal | None = None, line_items: bool = False
+) -> Tuple[Decimal, LedgerAccountDetails]:
     """
     Generates and logs a printout of the Keepsats balance for a given customer.
 
@@ -815,13 +768,44 @@ async def keepsats_balance_printout(
         - Net balance, previous balance (if provided), and the delta between balances.
     """
     net_msats, account_balance = await keepsats_balance(cust_id=cust_id, line_items=line_items)
-
+    sats = (net_msats / 1000).quantize(Decimal("1."))
+    previous_sats = (
+        (Decimal(previous_msats) / 1000).quantize(Decimal("1.")) if previous_msats else None
+    )
     logger.info("_" * 50)
     logger.info(f"Customer ID {cust_id} Keepsats balance:")
-    logger.info(f"  Net balance:      {net_msats // 1000:,.0f} sats")
-    if previous_msats is not None:
-        logger.info(f"  Previous balance: {previous_msats // 1000:,.0f} sats")
-        logger.info(f"  Delta:           {net_msats - previous_msats:,.0f} sats")
+    logger.info(f"  Net balance:      {sats:,.0f} sats")
+    if previous_sats is not None:
+        logger.info(f"  Previous balance: {previous_sats:,.0f} sats")
+        logger.info(f"  Delta:           {sats - previous_sats:,.0f} sats")
     logger.info("_" * 50)
 
     return net_msats, account_balance
+
+
+async def in_progress(cust_id: CustIDType) -> Decimal:
+    """
+    Calculate the in-progress balance for a given customer ID.
+
+    This asynchronous function aggregates ledger entries using a predefined pipeline
+    to compute the net held balance in millisatoshis, converts it to satoshis,
+    quantizes to whole satoshis, and returns the result as a Decimal.
+
+    Args:
+        cust_id (CustIDType): The customer ID for which to calculate the balance.
+
+    Returns:
+        Decimal: The in-progress balance in satoshis, quantized to whole units.
+                 Returns 0 if no results are found.
+    """
+    in_progress_pipeline = net_held_msats_balance_pipeline(cust_id=cust_id)
+    cursor = await LedgerEntry.collection().aggregate(in_progress_pipeline)
+    results = await cursor.to_list(length=None)
+    if results and len(results) > 0:
+        in_progress_sats = Decimal(results[0].get("net_held", 0) / Decimal(1000)).quantize(
+            Decimal("1.")
+        )
+    else:
+        in_progress_sats = Decimal(0)
+
+    return in_progress_sats

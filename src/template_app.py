@@ -95,7 +95,8 @@ def main(
     """
     _ = InternalConfig(config_filename=config_filename, log_filename="template_app.jsonl")
     logger.info(
-        f"{ICON} ✅ Template App. Started. Version: {__version__}", extra={"notification": True}
+        f"{ICON} ✅ Template App. Started. Version: {__version__} on {InternalConfig().local_machine_name}",
+        extra={"notification": True},
     )
 
     asyncio.run(main_async_start())

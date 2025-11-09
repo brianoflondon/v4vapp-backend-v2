@@ -1,7 +1,12 @@
+import decimal
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Generator
+from typing import Any, Dict, Generator
+
+from bson.decimal128 import Decimal128
+
+from v4vapp_backend_v2.config.setup import logger
 
 
 # MARK: General Text
@@ -54,27 +59,118 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: Database
 
 
-def convert_decimals(obj):
+def convert_decimals_for_mongodb(
+    obj: Dict[str, Any] | Dict | list | Decimal | Any,
+) -> Dict | Dict[str, Any] | Dict | list | Decimal128 | int | float | Any:
     """
-    Recursively converts all Decimal instances within a nested structure (dicts, lists) to floats.
+    Recursively converts Decimal instances within a nested structure (dicts, lists) to appropriate MongoDB types:
+    - Whole-number Decimals to Python int (for MongoDB int64).
+    - Fractional Decimals to bson.Decimal128 (for MongoDB Decimal128).
+    - Preserves other types and nested structures.
 
     Args:
         obj: The input object, which can be a dict, list, Decimal, or any other type.
 
     Returns:
-        The input object with all Decimal instances converted to floats. The structure of dicts and lists is preserved.
+        The input object with all Decimal instances converted to int or Decimal128 as appropriate.
+        The structure of dicts and lists is preserved.
 
     Example:
         >>> from decimal import Decimal
-        >>> convert_decimals({'a': Decimal('1.1'), 'b': [Decimal('2.2'), 3]})
-        {'a': 1.1, 'b': [2.2, 3]}
+        >>> from bson.decimal128 import Decimal128
+        >>> convert_decimals({'a': Decimal('12345678901234567890'), 'b': Decimal('1.23'), 'c': [Decimal('2.0'), 3]})
+        {'a': 12345678901234567890, 'b': Decimal128('1.23'), 'c': [2, 3]}
     """
     if isinstance(obj, dict):
-        return {k: convert_decimals(v) for k, v in obj.items()}
+        return {k: convert_decimals_for_mongodb(v) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [convert_decimals(item) for item in obj]
+        return [convert_decimals_for_mongodb(item) for item in obj]
     elif isinstance(obj, Decimal):
-        return float(obj)  # Or str(obj) if you want string precision
+        # Check if the Decimal is a whole number (no fractional part)
+        if obj == obj.to_integral_value():
+            return int(obj)  # Convert to Python int for MongoDB int64
+        else:
+            try:
+                return Decimal128(str(obj))  # Convert to Decimal128 for MongoDB
+            except decimal.Inexact:
+                # If Decimal128 conversion fails due to precision issues,
+                # round to 10 decimal places and try again (more precision than 6)
+                rounded_obj = round(obj, 10)
+                try:
+                    return Decimal128(str(rounded_obj))
+                except Exception:
+                    # If still fails, try with even more aggressive rounding
+                    rounded_obj = round(obj, 6)
+                    try:
+                        return Decimal128(str(rounded_obj))
+                    except Exception:
+                        # As a last resort, round to 4 decimal places for financial data
+                        rounded_obj = round(obj, 4)
+                        try:
+                            return Decimal128(str(rounded_obj))
+                        except Exception:
+                            # Only convert to float as absolute last resort
+                            logger.warning(
+                                f"Failed to convert Decimal {obj} to Decimal128 after multiple rounding attempts, converting to float"
+                            )
+                            return float(rounded_obj)
+            except Exception:
+                # If Decimal128 conversion fails for other reasons, try rounding first
+                try:
+                    # Try rounding to 10 decimal places
+                    rounded_obj = round(obj, 10)
+                    return Decimal128(str(rounded_obj))
+                except Exception:
+                    try:
+                        # Try rounding to 6 decimal places
+                        rounded_obj = round(obj, 6)
+                        return Decimal128(str(rounded_obj))
+                    except Exception:
+                        try:
+                            # Try rounding to 4 decimal places
+                            rounded_obj = round(obj, 4)
+                            return Decimal128(str(rounded_obj))
+                        except Exception:
+                            # Only convert to float as absolute last resort
+                            logger.warning(
+                                f"Failed to convert Decimal {obj} to Decimal128 after multiple attempts, converting to float"
+                            )
+                            return float(obj)
+    else:
+        return obj
+
+
+def convert_decimals_to_float_or_int(obj: Any) -> dict | list | float | int | Any | Dict[str, Any]:
+    """
+    Recursively converts Decimal and Decimal128 instances within a nested structure (dicts, lists) to appropriate Python types:
+    - Whole-number Decimals to Python int.
+    - Fractional Decimals to Python float.
+    - Preserves other types and nested structures.
+
+    Args:
+        obj: The input object, which can be a dict, list, Decimal, Decimal128, or any other type.
+    Returns:
+        The input object with all Decimal and Decimal128 instances converted to int or float as appropriate.
+        The structure of dicts and lists is preserved.
+
+    Example:
+        >>> from decimal import Decimal
+        >>> from bson.decimal128 import Decimal128
+        >>> convert_decimals_to_float_or_int({'a': Decimal('12345678901234567890'), 'b': Decimal('1.23'), 'c': [Decimal('2.0'), 3]})
+        {'a': 12345678901234567890, 'b': 1.23, 'c': [2.0, 3]}
+    """
+    if isinstance(obj, dict):
+        return {k: convert_decimals_to_float_or_int(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals_to_float_or_int(item) for item in obj]
+    elif isinstance(obj, Decimal):
+        # Check if the Decimal is a whole number (no fractional part)
+        if obj == obj.to_integral_value():
+            return int(obj)  # Convert to Python int for MongoDB int64
+        else:
+            return float(obj)  # Convert to Python float for MongoDB Decimal128
+    elif isinstance(obj, Decimal128):
+        return float(str(obj))  # Convert Decimal128 to float
     else:
         return obj
 
@@ -153,7 +249,7 @@ def get_in_flight_time(creation_date: datetime) -> str:
 def detect_keepsats(memo: str) -> bool:
     """
     Detects if the given memo contains keywords related to keeping sats.
-    Notice does not find any occurance of "sats" as a bare word only.
+    Notice does not find any occurrence of "sats" as a bare word only.
 
     Args:
         memo (str): The memo to be checked.
@@ -193,20 +289,20 @@ def detect_paywithsats(memo: str) -> bool:
     return False
 
 
-def paywithsats_amount(memo: str) -> int:
+def paywithsats_amount(memo: str) -> Decimal:
     """
     Extracts the amount specified in a memo string formatted as "paywithsats:amount".
     Args:
         memo (str): The memo string containing the amount, expected in the format "paywithsats:amount".
     Returns:
-        int: The extracted amount as an integer if found; otherwise, 0.
+        Decimal: The extracted amount as a Decimal if found; otherwise, 0.
     """
 
     # Extract the amount from the memo, which is expected to be in the format "paywithsats:amount"
     match = re.search(r"paywithsats:(\d+)", memo)
     if match:
-        return int(match.group(1))
-    return 0
+        return Decimal(match.group(1))
+    return Decimal(0)
 
 
 def detect_hbd(memo: str) -> bool:
@@ -247,6 +343,22 @@ def is_clean_memo(memo: str) -> bool:
     if "#clean" in memo.lower():
         return True
     return False
+
+
+def received_lightning_message(memo: str, sats: Decimal) -> str:
+    """
+    Detects if the given memo contains keywords related to receiving a Lightning payment.
+    Args:
+        memo (str): The memo to be checked.
+    Returns:
+        bool: True if the memo contains keywords related to receiving a Lightning payment, False otherwise.
+    """
+    if is_clean_memo(memo):
+        memo = process_clean_memo(memo)
+        return memo
+    memo = process_clean_memo(memo)
+    memo = f"You received {sats:,.0f} sats from Lightning | {memo}"
+    return memo
 
 
 def process_clean_memo(
@@ -548,9 +660,10 @@ def sanitize_filename(filename: str) -> str:
 def lightning_memo(memo: str) -> str:
     """
     Removes and shortens a lightning invoice from a memo for output.
+    If no invoice is found, it just adds a chat bubble to the start.
 
     Returns:
-        str: The shortened memo string.
+        str: The shortened memo string or just the original memo with a chat bubble.
     """
     # Regex pattern to capture 'lnbc' followed by numbers and one letter
     pattern = r"(lnbc\d+[a-zA-Z])"
@@ -563,7 +676,7 @@ def lightning_memo(memo: str) -> str:
     return memo
 
 
-def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
+def truncate_text(text: str | BaseException, max_length: int = 20, centered: bool = False) -> str:
     """
     Truncates a given text to a specified maximum length, optionally centering it.
 
@@ -579,6 +692,9 @@ def truncate_text(text: str, max_length: int, centered: bool = False) -> str:
     Returns:
         str: The truncated (and optionally centered) text.
     """
+    if isinstance(text, BaseException):
+        text = str(text)
+
     if centered:
         text = text[: max_length - 3] + "..." if len(text) > max_length else text
         return text.center(max_length)

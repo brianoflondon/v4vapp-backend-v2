@@ -1,6 +1,7 @@
+from decimal import Decimal
 from typing import Any, Dict, List, Type, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
@@ -61,12 +62,12 @@ class KeepsatsTransfer(BaseModel):
 
     from_account: AccNameType = Field("", alias="hive_accname_from")
     to_account: AccNameType = Field("", alias="hive_accname_to")
-    sats: int | None = Field(
+    sats: Decimal | None = Field(
         None,
         ge=0,
         description="The amount of sats being transferred. Not needed if we are sending a fixed amount invoice, used if we are using a lightning address or zero value invoice (used as an upper limit sometimes)",
     )
-    msats: int | None = Field(
+    msats: Decimal | None = Field(
         None,
         ge=0,
         description=(
@@ -83,11 +84,11 @@ class KeepsatsTransfer(BaseModel):
     parent_id: str | None = Field(
         None, description="The short ID of the parent transaction, if applicable"
     )
-    hive: float | None = Field(
+    hive: Decimal | None = Field(
         default=None,
         description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
     )
-    hbd: float | None = Field(
+    hbd: Decimal | None = Field(
         default=None,
         description="If converting from Keepsats to Hive/HBD, this amount will be used to calculate how many keepsats to debit",
     )
@@ -169,6 +170,13 @@ class KeepsatsTransfer(BaseModel):
             str: The user memo.
         """
         return process_user_memo(self.memo)
+
+    @field_validator("sats", "msats", mode="before")
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        return v
 
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]

@@ -52,6 +52,17 @@ class CustomJsonAuthorizationError(HiveLightningError):
     pass
 
 
+class CustomJsonRetryError(HiveLightningError):
+    """
+    Custom exception for errors related to retrying CustomJson processing.
+    This can be used to handle specific cases where retries are exhausted or fail.
+    """
+
+    def __init__(self, message: str, attempts: int = 0):
+        super().__init__(message)
+        self.attempts = attempts
+
+
 class InsufficientBalanceError(HiveLightningError):
     """
     Custom exception for errors related to insufficient balance.

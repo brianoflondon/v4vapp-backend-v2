@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 from typing import Any, override
 
 from nectar.hive import Hive
@@ -110,7 +111,7 @@ class TransferBase(OpBase):
             self.d_memo = self.memo
 
     @property
-    def amount_decimal(self) -> float:
+    def amount_decimal(self) -> Decimal:
         """Convert string amount to decimal with proper precision"""
         return self.amount.amount_decimal
 
@@ -267,13 +268,13 @@ class TransferBase(OpBase):
         return detect_paywithsats(self.d_memo)
 
     @property
-    def paywithsats_amount(self) -> int:
+    def paywithsats_amount(self) -> Decimal:
         """
         Extracts and returns the 'paywithsats' amount from the memo if present.
         This is in sats, not msats.
 
         Returns:
-            int: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+            Decimal: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
 
         Notes:
             - The memo is expected to be in the format "paywithsats:amount".
@@ -310,7 +311,7 @@ class TransferBase(OpBase):
         if self.change_amount:
             self.change_conv = CryptoConversion(amount=self.change_amount, quote=quote).conversion
 
-    def max_send_amount_msats(self) -> int:
+    def max_send_amount_msats(self) -> Decimal:
         """
         Calculate the maximum amount that can be sent after deducting fees and estimating Lightning fees.
         This method calculates the maximum amount that can be sent in millisatoshis (msats) based on
@@ -320,15 +321,19 @@ class TransferBase(OpBase):
             self (TrackedTransfer): The tracked transfer object.
 
         Returns:
-            int: The maximum amount that can be sent after fees and fee estimates.
+            Decimal: The maximum amount that can be sent after fees and fee estimates.
         """
         if self.paywithsats:
-            return self.paywithsats_amount * 1_000
+            return Decimal(self.paywithsats_amount * 1_000)
         lnd_config = InternalConfig().config.lnd_config
-        amount_sent = self.conv.msats - self.conv.msats_fee
-        max_payment_amount = amount_sent - lnd_config.lightning_fee_base_msats
-        fee_estimate = int(max_payment_amount * lnd_config.lightning_fee_estimate_ppm / 1_000_000)
-        return max_payment_amount - fee_estimate
+        if self.conv:
+            amount_sent = self.conv.msats - self.conv.msats_fee
+            max_payment_amount = amount_sent - Decimal(lnd_config.lightning_fee_base_msats)
+            fee_estimate = Decimal(
+                max_payment_amount * lnd_config.lightning_fee_estimate_ppm / 1_000_000
+            )
+            return max_payment_amount - fee_estimate
+        return Decimal(0)
 
     def get_cust_id(self):
         """

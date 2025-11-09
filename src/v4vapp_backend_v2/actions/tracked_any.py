@@ -11,7 +11,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
-from v4vapp_backend_v2.hive_models.op_transfer import Transfer
+from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
@@ -85,7 +85,8 @@ TrackedAny = Annotated[
     | Annotated[Invoice, Tag("invoice")]
     | Annotated[Payment, Tag("payment")]
     | Annotated[CustomJson, Tag("custom_json")]
-    | Annotated[AccountUpdate2, Tag("account_update2")],
+    | Annotated[AccountUpdate2, Tag("account_update2")]
+    | Annotated[TransferBase, Tag("transfer_base")],
     Discriminator(get_tracked_any_type),
 ]
 

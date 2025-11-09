@@ -20,7 +20,7 @@ from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.process.process_custom_json import process_custom_json_func
-from v4vapp_backend_v2.process.process_errors import HiveLightningError
+from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError, HiveLightningError
 from v4vapp_backend_v2.process.process_orders import process_create_fill_order_op
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow_on_transfer
@@ -87,6 +87,9 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
             return ledger_entries
         return []
 
+    except CustomJsonRetryError as e:
+        raise e
+
     except LedgerEntryException as e:
         logger.error(f"Error processing transfer operation: {e}")
         return []
@@ -130,6 +133,7 @@ async def process_transfer_op(
         op_type=hive_transfer.op_type,
         user_memo=hive_transfer.user_memo,
         timestamp=datetime.now(tz=timezone.utc),
+        link=hive_transfer.link,
     )
     expense_accounts = ["privex"]
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
@@ -234,6 +238,7 @@ async def process_transfer_op(
         ledger_entry.credit = LiabilityAccount("VSC Liability", sub=customer)
         ledger_entry.description = f"Deposit: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_IN
+        ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         # Now we need to see if we can take action for this invoice
         # This will be handled in a separate task
         follow_on_task = follow_on_transfer(tracked_op=hive_transfer, nobroadcast=nobroadcast)

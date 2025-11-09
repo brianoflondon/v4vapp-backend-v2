@@ -108,12 +108,15 @@ async def _log_outstanding_locks() -> None:
                 f"{ICON} {Fore.MAGENTA}Active Redis locks:\n"
                 + "\n".join(lines)
                 + f"{Style.RESET_ALL}",
-                extra={"notification": False},
+                extra={"notification": False, "error_code_clear": "redis_locks"},
             )
         else:
             logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
     except Exception as e:
-        logger.warning(f"{ICON} Failed to list Redis locks: {e}", extra={"notification": False})
+        logger.warning(
+            f"{ICON} Failed to list Redis locks: {e}",
+            extra={"notification": True, "error_code": "redis_error", "error": str(e)},
+        )
 
 
 async def _reporter_loop() -> None:
@@ -312,6 +315,16 @@ class LockStr(AccName):
                 logger.info(f"{ICON} No object ID locks found to clear.")
         except Exception as e:
             logger.error(f"{ICON} Error clearing all locks: {e}")
+
+    @staticmethod
+    async def any_locks_open() -> bool:
+        redis_instance = InternalConfig.redis_async
+        try:
+            keys = await redis_instance.keys("lock_str:*")
+            return len(keys) > 0
+        except Exception as e:
+            logger.error(f"Error checking for open locks: {e}")
+            return False
 
     @asynccontextmanager
     async def locked(

@@ -1,6 +1,7 @@
 import math
 from asyncio import TaskGroup
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Dict, Tuple
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
@@ -9,6 +10,7 @@ from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import (
     balance_sheet_pipeline,
     profit_loss_pipeline,
 )
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 
 
@@ -48,6 +50,10 @@ async def generate_balance_sheet_mongodb(
     balance_sheet = balance_sheet_list[0] if balance_sheet_list else {}
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
 
+    # Convert Decimal128 values to Decimal for arithmetic operations
+    balance_sheet = convert_decimal128_to_decimal(balance_sheet)
+    profit_loss = convert_decimal128_to_decimal(profit_loss)
+
     if "Equity" not in balance_sheet:
         balance_sheet["Equity"] = {}
 
@@ -63,20 +69,22 @@ async def generate_balance_sheet_mongodb(
             "msats": values["msats"],
         }
 
-    # Compute section totals
-    currencies = ["hbd", "hive", "msats", "sats", "usd"]
-    for section in ["Assets", "Liabilities", "Equity"]:
-        if section in balance_sheet:
-            section_total = {cur: 0.0 for cur in currencies}
-            for account in balance_sheet[section]:
-                if account != "Total" and "Total" in balance_sheet[section][account]:
-                    for cur in currencies:
-                        section_total[cur] += balance_sheet[section][account]["Total"].get(
-                            cur, 0.0
-                        )
-            balance_sheet[section]["Total"] = section_total
-
-    # Calculate grand total (Assets vs Liabilities + Equity)
+        # Compute section totals
+        currencies = ["hbd", "hive", "msats", "sats", "usd"]
+        for section in ["Assets", "Liabilities", "Equity"]:
+            if section in balance_sheet:
+                section_total = {cur: Decimal(0) for cur in currencies}
+                for account in balance_sheet[section]:
+                    if account != "Total" and "Total" in balance_sheet[section][account]:
+                        for cur in currencies:
+                            section_total[cur] += Decimal(
+                                balance_sheet[section][account]["Total"].get(cur, Decimal(0))
+                            )
+                balance_sheet[section]["Total"] = section_total
+            else:
+                balance_sheet[section] = {
+                    "Total": {cur: Decimal(0) for cur in currencies}
+                }  # Calculate grand total (Assets vs Liabilities + Equity)
     assets_total = balance_sheet["Assets"]["Total"]
     liabilities_total = balance_sheet["Liabilities"]["Total"]
     equity_total = balance_sheet["Equity"]["Total"]
@@ -89,8 +97,13 @@ async def generate_balance_sheet_mongodb(
         "msats": liabilities_total["msats"] + equity_total["msats"],
     }
 
-    tolerance_msats_check = assets_total["msats"] - (
-        liabilities_total["msats"] + equity_total["msats"]
+    # Convert Decimal128 values to Decimal for arithmetic operations before math.isclose
+    assets_msats_decimal = convert_decimal128_to_decimal(assets_total["msats"])
+    liabilities_msats_decimal = convert_decimal128_to_decimal(liabilities_total["msats"])
+    equity_msats_decimal = convert_decimal128_to_decimal(equity_total["msats"])
+
+    tolerance_msats_check = assets_msats_decimal - (
+        liabilities_msats_decimal + equity_msats_decimal
     )
     # Use math.isclose to avoid brittle exact equality on computed sums
     if not math.isclose(tolerance_msats_check, tolerance_msats, rel_tol=0.0, abs_tol=1_000):
@@ -108,7 +121,7 @@ async def generate_balance_sheet_mongodb(
 
 async def check_balance_sheet_mongodb(
     as_of_date: datetime | None = None, age: timedelta | None = None
-) -> Tuple[bool, float]:
+) -> Tuple[bool, Decimal]:
     """
     Checks if the balance sheet is balanced using MongoDB data.
 
@@ -128,16 +141,23 @@ async def check_balance_sheet_mongodb(
 
     # Database is empty or no data found
     if not bs_check:
-        return True, 0.0
+        return True, Decimal(0)
 
-    tolerance_msats = 10_000  # tolerance of 10 sats.
+    tolerance_msats = Decimal(10_000)  # tolerance of 10 sats.
+
+    # Convert Decimal128 values to Decimal for arithmetic operations
+    assets_msats = convert_decimal128_to_decimal(bs_check[0]["assets_msats"])
+    liabilities_msats = convert_decimal128_to_decimal(bs_check[0]["liabilities_msats"])
+    equity_msats = convert_decimal128_to_decimal(bs_check[0]["equity_msats"])
+
     is_balanced = math.isclose(
-        bs_check[0]["assets_msats"],
-        bs_check[0]["liabilities_msats"] + bs_check[0]["equity_msats"],
+        assets_msats,
+        liabilities_msats + equity_msats,
         rel_tol=0.01,
         abs_tol=tolerance_msats,
     )
-    return is_balanced, bs_check[0]["total_msats"]
+    msats_tolerance = convert_decimal128_to_decimal(bs_check[0]["total_msats"])
+    return is_balanced, msats_tolerance
 
 
 def balance_sheet_printout(balance_sheet: Dict, vsc_details: bool = False) -> str:

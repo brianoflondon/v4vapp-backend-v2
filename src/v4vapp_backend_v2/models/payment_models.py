@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Any, ClassVar, Dict, List, Optional, override
 
@@ -363,6 +364,22 @@ class Payment(TrackedBaseModel):
         return 0
 
     @property
+    def value_sat_rounded(self) -> Decimal:
+        """
+        Returns the value of the payment in millisatoshis, rounded to the nearest integer.
+        """
+        sats = Decimal(self.value_msat) / Decimal(1000)
+        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    @property
+    def fee_sat_rounded(self) -> Decimal:
+        """
+        Returns the fee of the payment in sats, rounded to the nearest integer.
+        """
+        sats = Decimal(self.fee_msat) / Decimal(1000)
+        return sats.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    @property
     def log_str(self) -> str:
         """
         Returns a string representation of the payment log.
@@ -427,6 +444,17 @@ class Payment(TrackedBaseModel):
         """
         age_text = f" {format_time_delta(self.age)}" if self.age > 120 else ""
         return age_text
+
+    @property
+    def link(self) -> str:
+        """
+        Returns "" as a placeholder for a block explorer link.
+        used to maintain consistency with hive models.
+
+        Returns:
+            str: "" because not relevant for invoices.
+        """
+        return ""
 
 
 class ListPaymentsResponse(BaseModel):

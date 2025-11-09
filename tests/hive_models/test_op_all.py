@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import httpx
@@ -37,8 +38,9 @@ def test_all_validate():
                 assert op.op_type == op.name()
                 assert op.markdown_link
                 if op.link:
-                    response = httpx_client.head(op.link)
-                    assert response.status_code == 200
+                    if not os.getenv("GITHUB_ACTIONS") == "true":
+                        response = httpx_client.head(op.link)
+                        assert response.status_code == 200
 
             except ValueError as e:
                 assert "Unknown operation type" in str(e) or "Invalid CustomJson data" in str(e)
@@ -83,7 +85,7 @@ def test_all_block_explorer_links(mocker):
                     op = op_any(hive_event)
                     assert op.op_type == op.name()
                     print(hive_event.get("type"), op.op_type, op.link)
-                    if op.link:
+                    if op.link and not os.getenv("GITHUB_ACTIONS") == "true":
                         response = httpx_client.get(op.link)
                         assert response.status_code == 200
 
@@ -122,7 +124,7 @@ def test_hive_account_name_links(mocker):
                 op = op_any(hive_event)
                 print(op.short_id, OpBase.short_id_query(op.short_id))
                 assert op.op_type == op.name()
-                if op.op_type == "transfer":
+                if op.op_type == "transfer" and not os.getenv("GITHUB_ACTIONS") == "true":
                     assert isinstance(op, Transfer)
                     if link_from := op.from_account.link:
                         response = httpx_client.head(link_from)

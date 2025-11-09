@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from pprint import pprint
 from unittest.mock import AsyncMock, patch
@@ -62,7 +63,7 @@ async def test_conversion_hive_to_keepsats_with_change(mock_hive_to_keepsats_dep
     server_account = "devser.v4vapp"
     customer_account = "v4vapp-test"
 
-    msats = 9_111_000
+    msats = Decimal(9_111_000)
 
     tracked_op = Transfer(
         from_account=server_account,
@@ -96,7 +97,7 @@ async def test_conversion_hive_to_keepsats_msats(mock_hive_to_keepsats_deps):
     convert_amount = Amount("13.456 HIVE")
     server_account = "v4vapp_server"
     customer_account = "customer123"
-    msats = 0
+    msats = Decimal(0)
 
     tracked_op = Transfer(
         from_account=server_account,
@@ -130,7 +131,7 @@ async def test_keepsats_to_hive(mock_hive_to_keepsats_deps):
     convert_amount = Amount("13.456 HIVE")
     server_account = "v4vapp_server"
     customer_account = "customer123"
-    msats = 0
+    msats = Decimal(0)
 
     tracked_op = CustomJson(
         op_type="custom_json",

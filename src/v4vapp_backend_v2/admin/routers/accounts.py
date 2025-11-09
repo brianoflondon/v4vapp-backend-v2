@@ -19,6 +19,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+from v4vapp_backend_v2.config.setup import logger
 
 router = APIRouter()
 
@@ -533,6 +534,8 @@ async def get_account_balance(
         )
 
     except Exception as e:
+        logger.error("Error fetching account balance")
+        logger.exception(e)
         nav_items = nav_manager.get_navigation_items("/admin/accounts")
         return templates.TemplateResponse(
             "accounts/balance_error.html",

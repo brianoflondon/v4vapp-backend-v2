@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 from nectar.amount import Amount
@@ -61,10 +62,10 @@ class AmountPyd(BaseModel):
         return f"{number_str} {currency_str}"
 
     @property
-    def amount_decimal(self) -> float:
+    def amount_decimal(self) -> Decimal:
         """Convert string amount to decimal with proper precision"""
         # return self.beam.amount_decimal
-        return float(self.amount) / (10**self.precision)
+        return self.beam.amount_decimal
 
     @property
     def symbol(self) -> str:
@@ -115,9 +116,11 @@ class AmountPyd(BaseModel):
         0.001 Hive or HBD from the amount.
         """
         buffer = 1
+        # Subtract buffer at the integer level to avoid float precision issues
+        adjusted_amount = str(int(self.amount) - buffer)
         return Amount(
             {
-                "amount": str(float(self.amount) - buffer),
+                "amount": adjusted_amount,
                 "nai": self.nai,
                 "precision": self.precision,
             }

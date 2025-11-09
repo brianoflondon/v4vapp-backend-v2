@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, List
 
-from bson import Int64
+from bson import Decimal128, Int64
 from pydantic import GetCoreSchemaHandler, ValidationInfo
 from pydantic_core import CoreSchema, core_schema
 
@@ -58,12 +59,12 @@ def convert_datetime_fields(
     item: dict[str, Any] | List[dict[str, Any]],
 ) -> dict[str, Any] | List[dict[str, Any]]:
     """
-    Converts timestamp fields in an item dictionary to datetime objects.
+    Converts timestamp fields and Decimal128 fields in an item dictionary to datetime and Decimal objects.
 
     This function checks for the presence of specific timestamp fields in the
     provided item dictionary and converts them to datetime objects using
-    the `convert_timestamp_to_datetime` function. The fields that are converted
-    include:
+    the `convert_timestamp_to_datetime` function. It also converts Decimal128
+    fields to Decimal objects. The fields that are converted include:
     - "creation_date"
     - "settle_date"
     - "accept_time" (within each HTLC in the "htlcs" list)
@@ -72,13 +73,14 @@ def convert_datetime_fields(
     - "creation_time_ns" (converted from nanoseconds to seconds)
     - "resolve_time_ns" (converted from nanoseconds to seconds)
     - "attempt_time_ns" (converted from nanoseconds to seconds)
+    - Any Decimal128 values are converted to Decimal
 
     Args:
-        item (dict): The item dictionary containing timestamp fields.
+        item (dict): The item dictionary containing timestamp and Decimal128 fields.
 
     Returns:
         dict: The item dictionary with the specified timestamp fields
-              converted to datetime objects.
+              converted to datetime objects and Decimal128 to Decimal.
     """
 
     def convert_field(value: Any) -> datetime:
@@ -98,13 +100,16 @@ def convert_datetime_fields(
                 return dt.astimezone(timezone.utc)
             except ValueError:
                 pass
-            bsonint60 = BSONInt64.validate(value, None)
-            if bsonint60 > 1e12:
-                timestamp = bsonint60 / 1e9
-                try:
-                    return convert_timestamp_to_datetime(timestamp=timestamp)
-                except ValueError:
-                    pass
+            try:
+                bsonint64 = BSONInt64.validate(value, None)  # type: ignore
+                if bsonint64 > 1e12:
+                    timestamp = bsonint64 / 1e9
+                    try:
+                        return convert_timestamp_to_datetime(timestamp=timestamp)
+                    except ValueError:
+                        pass
+            except (ValueError, TypeError):
+                pass
             try:
                 return convert_timestamp_to_datetime(float(value))
             except ValueError:
@@ -112,8 +117,22 @@ def convert_datetime_fields(
         # Always return a UTC tz-aware datetime as fallback
         return datetime.now(tz=timezone.utc)
 
+    def convert_value(value: Any) -> Any:
+        if isinstance(value, Decimal128):
+            return Decimal(str(value))
+        elif isinstance(value, dict):
+            return convert_datetime_fields(value)
+        elif isinstance(value, list):
+            return [convert_value(v) for v in value]
+        else:
+            return value
+
     if isinstance(item, list):
-        return [convert_datetime_fields(i) for i in item]
+        return [convert_datetime_fields(i) for i in item]  # type: ignore
+
+    # Convert Decimal128 fields recursively
+    for key, value in item.items():
+        item[key] = convert_value(value)
 
     keys = [
         "creation_date",

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from random import choice
 from secrets import token_hex
@@ -83,6 +84,9 @@ def test_op_base_model_dump():
 
 
 # TODO: need far better testing of this
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 def test_get_hive_block_explorer_link():
     trx_id = "fd321bb9a7ac53ec1a7a04fcca0d0913a089ac2b"
     for block_explorer in HiveExp:

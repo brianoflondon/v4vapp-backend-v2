@@ -5,6 +5,7 @@ FastAPI application for V4VApp backend administration.
 """
 
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -48,6 +49,10 @@ class AdminApp:
             version="1.0.0",
             docs_url="/admin/docs",
             redoc_url="/admin/redoc",
+        )
+        logger.info(
+            f"Initializing Admin Interface on {InternalConfig().local_machine_name} {self.app.version}",
+            extra={"notification": True},
         )
 
         # Add proxy middleware to trust headers from reverse proxy
@@ -199,9 +204,9 @@ class AdminApp:
                     hbd_actual = hive_balances[server_id].get("HBD", 0.0)
 
                     # Check with tolerance
-                    tolerance = 0.001
-                    hive_match = abs(hive_deposits - hive_actual) <= tolerance
-                    hbd_match = abs(hbd_deposits - hbd_actual) <= tolerance
+                    tolerance = Decimal(0.001)
+                    hive_match = abs(Decimal(hive_deposits) - Decimal(hive_actual)) <= tolerance
+                    hbd_match = abs(Decimal(hbd_deposits) - Decimal(hbd_actual)) <= tolerance
 
                     if hive_match and hbd_match:
                         server_balance_check = {"status": "match", "icon": "✅"}
@@ -229,6 +234,7 @@ class AdminApp:
                         "config_file": self.config.config_filename,
                         "server_account": server_id,
                         "server_balance_check": server_balance_check,
+                        "local_machine_name": InternalConfig().local_machine_name,
                     },
                 },
             )
@@ -246,6 +252,8 @@ class AdminApp:
                 "admin_version": "1.0.0",
                 "project_version": project_version,
                 "config": self.config.config_filename,
+                "local_machine_name": InternalConfig().local_machine_name,
+                "server_id": InternalConfig().server_id,
             }
 
         @self.app.get("/favicon.ico", include_in_schema=False)

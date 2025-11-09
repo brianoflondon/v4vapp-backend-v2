@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import (
@@ -83,7 +84,7 @@ async def process_payment_success(
     if isinstance(initiating_op, TransferBase) and not initiating_op.paywithsats:
         # First we must convert the correct amount of Hive to Keepsats
         # This will also send the answer reply (either a hive transfer or custom_json)
-        cost_of_payment_msat = payment.value_msat + payment.fee_msat
+        cost_of_payment_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
         try:
             await conversion_hive_to_keepsats(
                 server_id=initiating_op.to_account,
@@ -91,6 +92,8 @@ async def process_payment_success(
                 tracked_op=initiating_op,
                 msats=cost_of_payment_msat,
                 nobroadcast=nobroadcast,
+                value_sat_rounded=payment.value_sat_rounded,
+                fee_sat_rounded=payment.fee_sat_rounded,
             )
         except Exception as e:
             raise HiveToLightningError(f"Failed to convert Hive to Keepsats for payment: {e}")
@@ -175,7 +178,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
 
     # MARK: 1 Withdraw Lightning
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
-    cost_of_payment_msat = payment.value_msat + payment.fee_msat
+    cost_of_payment_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
     outgoing_conv = payment.conv
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
@@ -184,7 +187,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         group_id=f"{payment.group_id}-{ledger_type.value}",
         op_type=payment.op_type,
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Send {cost_of_payment_msat / 1000:,.0f} sats to Node {payment.destination}",
+        description=f"Send {payment.value_sat_rounded} sats to Node {payment.destination} (fee: {payment.fee_sat_rounded})",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,  # This is the CUSTOMER
@@ -196,6 +199,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         credit_unit=Currency.MSATS,
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
+        link=payment.link,
     )
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
@@ -231,6 +235,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
             credit_unit=Currency.MSATS,
             credit_amount=payment.fee_msat,
             credit_conv=lightning_fee_conv,
+            link=payment.link,
         )
         await fee_ledger_entry_sats.save()
         ledger_entries_list.append(fee_ledger_entry_sats)

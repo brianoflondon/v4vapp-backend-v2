@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.pipelines.balance_sheet_pipelines import profit_loss_pipeline
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 
 
 async def generate_profit_and_loss_report(
@@ -30,11 +32,14 @@ async def generate_profit_and_loss_report(
     profit_loss_list = await pl_cursor.to_list()
     profit_loss = profit_loss_list[0] if profit_loss_list else {}
 
+    # Convert Decimal128 values to Decimal for formatting operations
+    profit_loss = convert_decimal128_to_decimal(profit_loss)
+
     return profit_loss
 
 
 async def profit_and_loss_printout(
-    pl_report: dict | None = None,
+    pl_report: dict[str, Any] | None = None,
     as_of_date: datetime | None = None,
     age: timedelta = timedelta(days=0),
 ) -> str:
@@ -110,4 +115,5 @@ async def profit_and_loss_printout(
     )
     output.append("=" * max_width)
 
+    return "\n".join(output)
     return "\n".join(output)

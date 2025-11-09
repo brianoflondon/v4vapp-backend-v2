@@ -1,5 +1,6 @@
 from cmath import isclose
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from pprint import pprint
 
@@ -34,7 +35,7 @@ async def test_keepsats_to_hive_convert_from_msats():
     TrackedBaseModel.last_quote = last_quote()
     for sats in [500, 4_000, 50_234, 201_000]:
         for currency in [Currency.HIVE, Currency.HBD]:
-            msats = sats * 1_000
+            msats = Decimal(sats * 1_000)
             conversion_result = await calc_keepsats_to_hive(
                 msats=msats, quote=last_quote(), to_currency=currency
             )

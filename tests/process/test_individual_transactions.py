@@ -39,6 +39,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
+from v4vapp_backend_v2.process.lock_str_class import LockStr
 
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
@@ -68,6 +69,7 @@ async def test_just_clear():
     Test to clear the database and reset the environment.
     This test clears the database and resets the environment to ensure a clean state for subsequent tests.
     """
+    await LockStr.clear_all_locks()
     await clear_and_reset()
     print("Database cleared and reset.")
 
@@ -159,12 +161,17 @@ async def test_hive_and_hbd_to_lnd_only():
         pprint(trx)
         assert trx.get("trx_id"), "Transaction failed to send"
 
-    all_ledger_entries = await watch_for_ledger_count(ledger_count + 23, timeout=60)
+        await asyncio.sleep(2)
+        mid_ledger_count = await get_ledger_count()
+        print(f"Ledger count mid: {mid_ledger_count}")
+
+    all_ledger_entries = await watch_for_ledger_count(ledger_count + 24, timeout=60)
 
     await asyncio.sleep(1)
     found_len = len(all_ledger_entries) - ledger_count
+    # 12 Ledger Entries per transfer.
 
-    assert found_len == 23, f"Expected 23 new ledger entries found {found_len}"
+    assert found_len == 24, f"Expected 24 new ledger entries found {found_len}"
     limits_after = await check_hive_conversion_limits(cust_id="v4vapp-test")
     limit_used = limits_after.first_period().sats - limits_before.first_period().sats
     logger.info(f"Limit used: {limit_used} sats")
@@ -415,6 +422,7 @@ async def test_send_internal_keepsats_transfer_by_hive_transfer():
     assert "Transfer v4vapp-test -> v4vapp.qrc" in custom_json.memo
 
 
+@pytest.mark.skip(reason="This test creates a pending transaction which blocks further tests")
 async def test_pending_hive_payment():
     await test_deposit_hive_to_keepsats(5_000, timeout=120, message="test_pending_hive_payment")
 

@@ -4,16 +4,21 @@ from colorama import Fore, Style
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.hive.hive_extras import (
+from v4vapp_backend_v2.hive.hive_extras import (  # Assuming this function exists for sending custom JSONs
+    CustomJsonSendError,
+    HiveMissingKeyError,
     account_hive_balances,
     get_verified_hive_client,
-    send_custom_json,  # Assuming this function exists for sending custom JSONs
+    send_custom_json,
     send_pending,
 )
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
 )
+
+# icon with a clock
+ICON = "🕒"
 
 
 async def resend_transactions() -> None:
@@ -39,9 +44,9 @@ async def resend_pending_transactions() -> None:
     """
     all_pending = await PendingTransaction.list_all()
     if len(all_pending) == 0:
-        logger.info("No pending Hive transactions to resend.")
+        logger.info(f"{ICON} No pending Hive transactions to resend.")
         return
-    logger.info(f"Resending pending Hive transaction {len(all_pending)}")
+    logger.info(f"{ICON} Resending pending Hive transaction {len(all_pending)}")
 
     server_id = InternalConfig().server_id
     server_balance = account_hive_balances(hive_accname=server_id)
@@ -79,12 +84,17 @@ async def resend_pending_transactions() -> None:
     hive_client, _ = await get_verified_hive_client(nobroadcast=nobroadcast)
     for pending in sending:
         try:
+            pending.resend_attempt += 1
             trx = await send_pending(pending=pending, hive_client=hive_client)
             logger.info(
                 f"{Fore.GREEN}Resent pending transaction {pending}, trx: {trx.get('trx_id')}{Style.RESET_ALL}"
             )
             await pending.delete()
+        except HiveMissingKeyError as e:
+            logger.warning(f"MissingKeyError when resending pending transaction {pending}: {e}")
+            await pending.delete()  # Consider whether to delete or keep for future attempts
         except Exception as e:
+            await pending.save()
             logger.warning(f"Failed to resend pending transaction {pending}: {e}")
 
 
@@ -105,9 +115,9 @@ async def resend_pending_custom_jsons():
     """
     all_pending_cj = await PendingCustomJson.list_all()
     if len(all_pending_cj) == 0:
-        logger.info("No pending custom JSONs to resend.")
+        logger.info(f"{ICON} No pending custom JSONs to resend.")
         return
-    logger.info(f"Resending {len(all_pending_cj)} pending custom JSONs.")
+    logger.info(f"{ICON} Resending {len(all_pending_cj)} pending custom JSONs.")
 
     sending_cj: List[PendingCustomJson] = []
 
@@ -127,14 +137,25 @@ async def resend_pending_custom_jsons():
             continue
         try:
             # Note: Adjust parameters based on actual send_custom_json signature
+            pending.resend_attempt += 1
             trx = await send_custom_json(
                 json_data=pending.json_data,
                 send_account=pending.send_account,
                 id=pending.cj_id,
                 hive_client=hive_client,
                 nobroadcast=pending.nobroadcast,
+                resend_attempt=pending.resend_attempt,
             )
             logger.info(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
             await pending.delete()
+        except CustomJsonSendError as e:
+            logger.error(f"CustomJsonSendError when resending custom JSON {pending}: {e}")
+            await pending.delete()  # Consider whether to delete or keep for future attempts
+
         except Exception as e:
+            if pending.resend_attempt >= 3:
+                logger.error(
+                    f"Failed to resend pending custom JSON {pending} after {pending.resend_attempt} attempts: {e}"
+                )
+                await pending.delete()  # Consider whether to delete or keep for future attempts
             logger.warning(f"Failed to resend pending custom JSON {pending}: {e}")

@@ -21,10 +21,9 @@ from v4vapp_backend_v2.helpers.notification_bot import (
 def mock_internal_config(tmp_path):
     class MockInternalConfig:
         base_config_path = tmp_path
+        local_machine_name = "test_machine"
 
-    with patch(
-        "v4vapp_backend_v2.helpers.notification_bot.InternalConfig", MockInternalConfig
-    ):
+    with patch("v4vapp_backend_v2.helpers.notification_bot.InternalConfig", MockInternalConfig):
         yield MockInternalConfig
 
 
@@ -80,9 +79,7 @@ def test_init_no_token_no_name_no_configs(mock_internal_config, mock_bot):
             return_value=[],
         ),
     ):
-        with pytest.raises(
-            NotificationNotSetupError, match="No token or name set for bot."
-        ):
+        with pytest.raises(NotificationNotSetupError, match="No token or name set for bot."):
             NotificationBot()
 
 
@@ -103,12 +100,10 @@ async def test_get_bot_name_invalid_token(notification_bot):
 # Test send_message with markdown
 @pytest.mark.asyncio
 async def test_send_message_markdown(notification_bot):
-    with patch(
-        "v4vapp_backend_v2.helpers.general_purpose_funcs.is_markdown", return_value=True
-    ):
+    with patch("v4vapp_backend_v2.helpers.general_purpose_funcs.is_markdown", return_value=True):
         await notification_bot.send_message("**bold text**")
         notification_bot.bot.send_message.assert_called_once_with(
-            chat_id=12345, text="\\*\\*bold text\\*\\*", parse_mode="Markdown"
+            chat_id=12345, text="\\*\\*bold text\\*\\* test_machine", parse_mode="Markdown"
         )
 
 
@@ -121,7 +116,7 @@ async def test_send_message_no_markdown(notification_bot):
     ):
         await notification_bot.send_message("plain text")
         notification_bot.bot.send_message.assert_called_once_with(
-            chat_id=12345, text="plain text"
+            chat_id=12345, text="plain text test_machine"
         )
 
 
@@ -203,13 +198,9 @@ def test_load_config(notification_bot, mock_config):
 # Test load_config_no_file
 def test_load_config_no_file(mock_internal_config, mock_bot):
     with patch("v4vapp_backend_v2.helpers.notification_bot.Bot", return_value=mock_bot):
-        with pytest.raises(
-            NotificationNotSetupError, match="No configuration file found"
-        ):
+        with pytest.raises(NotificationNotSetupError, match="No configuration file found"):
             bot = NotificationBot(name="nonexistent")
-            with pytest.raises(
-                NotificationNotSetupError, match="No configuration file found"
-            ):
+            with pytest.raises(NotificationNotSetupError, match="No configuration file found"):
                 bot.load_config()
 
 

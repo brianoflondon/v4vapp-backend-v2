@@ -22,6 +22,7 @@ class PendingBase(BaseModel):
     pending_type: str = Field(
         default="pending_base"
     )  # Renamed from 'type' to avoid keyword conflict
+    resend_attempt: int = 0  # Track number of resend attempts
 
     model_config = ConfigDict(
         populate_by_name=True,

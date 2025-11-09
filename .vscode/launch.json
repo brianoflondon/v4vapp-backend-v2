@@ -21,10 +21,10 @@
             "program": "${workspaceFolder}/src/api_v2.py",
             "args": [
                 "--config",
-                "devdocker.config.yaml"
+                "devhive.config.yaml"
             ],
             "console": "integratedTerminal",
-            "justMyCode": false,
+            "justMyCode": true,
         },
         {
             "name": "DEV Admin Interface",
@@ -73,7 +73,8 @@
                 "--config",
                 "devhive.config.yaml"
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false
         },
         {
             "name": "DEV Umbrel Monitor",
