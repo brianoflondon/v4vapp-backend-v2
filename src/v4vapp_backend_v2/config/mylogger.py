@@ -186,26 +186,29 @@ class CustomNotificationHandler(logging.Handler):
             logger.debug(f"Error codes: {self.error_codes}")
         # Do something special here with error codes or details
         if self.error_codes and hasattr(record, "error_code_clear"):
-            error_code_obj = self.error_codes.get(record.error_code_clear)
+            error_code_clear = record.error_code_clear  # type: ignore[attr-defined]
+            error_code_obj = self.error_codes.get(error_code_clear)
             elapsed_time = error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
+            error_code_clear = error_code_clear  # type: ignore[attr-defined]
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message_clear = (
-                f"✅ Error code {record.error_code_clear} cleared after {elapsed_time_str}"
+                f"✅ Error code {error_code_clear} cleared after {elapsed_time_str}"
             )
-            if record.error_code_clear in self.error_codes:
-                self.error_codes.pop(record.error_code_clear)
+            if error_code_clear in self.error_codes:
+                self.error_codes.pop(error_code_clear)
                 logger.info(log_message_clear, extra={"notification": True, "record": record})
             else:
-                logger.warning(
-                    f"Error code not found in error_codes {record.error_code_clear}",
+                logger.info(
+                    f"Error code not found in error_codes {error_code_clear}",
                     extra={"notification": False},
                 )
             self.sender.send_notification(log_message, record)
             return
         if hasattr(record, "error_code"):
-            if record.error_code not in self.error_codes:
+            error_code = record.error_code  # type: ignore[attr-defined]
+            if error_code not in self.error_codes:
                 self.sender.send_notification(log_message, record, bot_name=bot_name)
-                self.error_codes[record.error_code] = ErrorCode(code=record.error_code)
+                self.error_codes[error_code] = ErrorCode(code=error_code)
             else:
                 # Do not send the same error code to Notification
                 pass
