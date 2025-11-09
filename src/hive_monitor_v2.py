@@ -142,6 +142,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         if hive_acc and hive_acc.active_key:
             # set the amount to the current HBD balance taken from Config
             set_amount_to = Amount(hive_acc.hbd_balance)
+            logger.info(f"{icon} Balancing HBD level for account {use_account} to {set_amount_to}")
             nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
             trx = account_trade(
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast

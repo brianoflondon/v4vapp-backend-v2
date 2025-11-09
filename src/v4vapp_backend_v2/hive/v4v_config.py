@@ -16,6 +16,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client, get_verified_hive_client
 
 CONFIG_ROOT_KEY = "v4vapp_hiveconfig"
+ICON = "⚙️v"
 
 
 class V4VConfigRateLimits(BaseModel):
@@ -137,14 +138,16 @@ class V4VConfig:
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()
-            logger.info(f"V4VConfig initialized {self.server_accname}", extra={**self.log_extra})
+            logger.info(
+                f"{ICON} V4VConfig initialized {self.server_accname}", extra={**self.log_extra}
+            )
             return
         if hive:
             self.hive = hive
 
         if server_accname and self.server_accname != server_accname:
             logger.info(
-                f"Server account name changed from {self.server_accname} to {server_accname}"
+                f"{ICON} Server account name changed from {self.server_accname} to {server_accname}"
             )
             self.server_accname = server_accname
             self.fetch()
@@ -166,13 +169,13 @@ class V4VConfig:
         if self.timestamp and self.data and isinstance(self.data, V4VConfigData):
             if (datetime.now(tz=timezone.utc) - self.timestamp).total_seconds() > 3600:
                 logger.info(
-                    "HiveConfig data is older than 1 hour, fetching new data.",
+                    f"{ICON} HiveConfig data is older than 1 hour, fetching new data.",
                     extra={**self.log_extra},
                 )
                 self.fetch()
         if not self.data:
             logger.warning(
-                "HiveConfig data is empty or invalid, fetching new data.",
+                f"{ICON} HiveConfig data is empty or invalid, fetching new data.",
                 extra={**self.log_extra},
             )
             self.fetch()
@@ -207,7 +210,7 @@ class V4VConfig:
         try:
             if not self.server_accname:
                 # Uses the default values and doesn't check Hive.
-                logger.info("No server account name provided, using default values.")
+                logger.info(f"{ICON} No server account name provided, using default values.")
                 self.data = V4VConfigData()
                 return False
 
@@ -218,21 +221,21 @@ class V4VConfig:
                     self.data = V4VConfigData.model_validate(existing_hive_config_raw)
                     self.timestamp = datetime.now(tz=timezone.utc)
                     logger.info(
-                        f"Fetched settings from Hive. {self.server_accname}",
+                        f"{ICON} Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
                     )
                     return True
             else:
                 metadata = {}
                 logger.info(
-                    f"No settings found in Hive. {self.server_accname}",
+                    f"{ICON} No settings found in Hive. {self.server_accname}",
                 )
                 self.data = V4VConfigData()
                 return False
         except Exception as ex:
             self.data = V4VConfigData()
             logger.warning(
-                f"Error fetching settings from Hive: {ex} using default values.",
+                f"{ICON} Error fetching settings from Hive: {ex} using default values.",
                 extra={"hive_config": self.data.model_dump()},
             )
         return True if self.data else False
@@ -269,13 +272,13 @@ class V4VConfig:
             existing_hive_config = V4VConfigData(**existing_hive_config_raw)
             if self.data == existing_hive_config:
                 logger.info(
-                    "Settings in Hive do not need to change",
+                    f"{ICON} Settings in Hive do not need to change",
                     extra={"settings": {**self.data.model_dump()}},
                 )
                 return
 
         if not self.data or not isinstance(self.data, V4VConfigData):
-            logger.warning("No settings found to update to Hive")
+            logger.warning(f"{ICON} No settings found to update to Hive")
         # If the settings are different, update them in Hive
         # and add the new settings to the metadata
         # Serialize the new settings
@@ -306,18 +309,18 @@ class V4VConfig:
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
         try:
-            logger.info("Updating Hive settings")
+            logger.info(f"{ICON} Updating Hive settings")
             pprint(new_meta)
             trx = acc.update_account_jsonmetadata(new_meta)
             logger.info(
-                f"Settings in Hive changed: {trx.get('trx_id')}",
+                f"{ICON} Settings in Hive changed: {trx.get('trx_id')}",
                 extra={**self.log_extra, "trx": trx},
             )
             asyncio.create_task(self._update_public_api_server())
             return
         except Exception as ex:
             logger.error(
-                f"Error updating settings in Hive: {ex} {ex.__class__.__name__}",
+                f"{ICON} Error updating settings in Hive: {ex} {ex.__class__.__name__}",
                 extra={"hive_config": new_meta, **self.log_extra},
             )
             return
@@ -337,12 +340,12 @@ class V4VConfig:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(f"{public_api_host}/v1/reload_config")
                     logger.info(
-                        f"Config updated on {public_api_host}: {response.status_code}",
+                        f"{ICON} Config updated on {public_api_host}: {response.status_code}",
                         extra={"response": response.json()},
                     )
                     response.raise_for_status()
             except httpx.HTTPError as e:
-                logger.error(f"Error updating public API server: {e}")
+                logger.error(f"{ICON} Error updating public API server: {e}")
 
     def _get_posting_metadata(self) -> dict | None:
         """
@@ -372,7 +375,7 @@ class V4VConfig:
                 return metadata
             except ValueError as e:
                 logger.error(
-                    f"Error parsing posting_json_metadata: {e}",
+                    f"{ICON} Error parsing posting_json_metadata: {e}",
                     extra={**self.log_extra},
                 )
                 raise ValueError("Error parsing posting_json_metadata. Invalid JSON format.")
