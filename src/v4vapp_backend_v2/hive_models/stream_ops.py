@@ -189,9 +189,7 @@ async def stream_ops_async(
             return
         except (NectarException, NumRetriesReached) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
-                logger.info(
-                    f"{start_block:,} | Reached the end of the blockchain at block {last_block:,}. Try Again."
-                )
+                logger.info(f"{start_block:,} Refetch {last_block:,}. Try Again.")
             else:
                 logger.warning(
                     f"{start_block:,} NectarException in block_stream: {e} restarting",
@@ -223,7 +221,7 @@ async def stream_ops_async(
                 break
             else:
                 logger.info(
-                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} {rpc_url} no_preview"
+                    f"{start_block:,} Stream running smoothly, continuing from {last_block=:,} no_preview"
                 )
             current_node = rpc_url
             if hive and hive.rpc:
@@ -232,6 +230,7 @@ async def stream_ops_async(
                     good_nodes = get_good_nodes()
                     hive.set_default_nodes(good_nodes)
                     blockchain = get_blockchain_instance(hive_instance=hive)
+                    rpc_url = str(hive.rpc.url)
 
             logger.info(
                 f"{start_block:,} Switching {current_node} -> {rpc_url} no_preview",
