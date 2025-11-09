@@ -3,9 +3,14 @@ import os
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
+import httpx  # Add this import for HTTPStatusError
 import pytest
 
-from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
+from v4vapp_backend_v2.hive.witness_details import (
+    API_ENDPOINTS,
+    fix_witness_at_root,
+    get_hive_witness_details,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -73,8 +78,8 @@ async def test_get_hive_witness_details(mocker):
         "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
     )
 
-    # Sample response data
-    sample_response = {
+    # OLD Sample response data
+    old_sample_response = {
         "votes_updated_at": "2025-03-25T09:30:43.082106",
         "witness": {
             "witness_name": "brianoflondon",
@@ -88,13 +93,33 @@ async def test_get_hive_witness_details(mocker):
             "bias": 0,
             "feed_updated_at": "2025-03-25T07:39:45",
             "block_size": 65536,
-            "signing_key": "STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg",
+            "signing_key": "STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg",  # gitleaks:allow,generic-api-key  # Allow this public signing key in test data
             "version": "1.27.6",
             "missed_blocks": 15,
             "hbd_interest_rate": 1000,
             "last_confirmed_block_num": 94440770,
             "account_creation_fee": 3000,
         },
+    }
+
+    sample_response = {
+        "witness_name": "brianoflondon",
+        "rank": 38,
+        "url": "https://v4v.app/",
+        "vests": "37703374977229290",
+        "votes_daily_change": "0",
+        "voters_num": 615,
+        "voters_num_daily_change": 0,
+        "price_feed": 0.119,
+        "bias": 0,
+        "feed_updated_at": "2025-11-09T03:03:30",
+        "block_size": 65536,
+        "signing_key": "STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg",  # gitleaks:allow,generic-api-key  # Allow this public signing key in test data
+        "version": "1.27.6",
+        "missed_blocks": 37,
+        "hbd_interest_rate": 1000,
+        "last_confirmed_block_num": 101022074,
+        "account_creation_fee": 3000,
     }
 
     # Configure the mock to return a response with the sample data
@@ -116,15 +141,10 @@ async def test_get_hive_witness_details(mocker):
     assert witness_details.witness.missed_blocks >= 0
     assert witness_details.witness.rank > 0
 
-    # # Ensure the httpx get method was called with the correct URL
-    # assert any(
-    #     mock_httpx_get.call_args_list[i][0][0] == f"{api}/brianoflondon"
-    #     for i, api in enumerate(API_ENDPOINTS)
-    # ), "None of the API calls succeeded with the expected URL"
-
+    fixed_response = fix_witness_at_root(sample_response)
     # Ensure the Redis set method was called with the correct parameters
     mock_redis_instance.setex.assert_called_with(
-        name="witness_brianoflondon", value=json.dumps(sample_response), time=1800
+        name="witness_brianoflondon", value=json.dumps(fixed_response), time=1800
     )
 
 
@@ -175,8 +195,19 @@ async def test_get_hive_witness_details_mock_error(mocker):
         "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
     )
 
-    # Configure the mock to return a response with an error
-    mock_httpx_get.return_value.status_code = 404
+    # Create a mock response object
+    mock_response = Mock()
+    mock_response.status_code = 502
+    # Configure raise_for_status to raise HTTPStatusError for 502
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "502 Bad Gateway", request=Mock(), response=mock_response
+    )
+    mock_response.json = Mock(return_value=None)  # Optional: Mock json() if needed
+
+    # Configure the mock to return the response
+    mock_httpx_get.return_value = mock_response
+
+    # Mock Redis get to return None (no cache)
     mock_redis_instance.get.return_value = None
 
     # Call the function
@@ -185,4 +216,9 @@ async def test_get_hive_witness_details_mock_error(mocker):
     # Assertions
     assert witness_details is None
 
-    assert mock_httpx_get.call_count == 2
+    # Ensure httpx.get was called for each API endpoint (since it retries on failure)
+    assert mock_httpx_get.call_count == len(API_ENDPOINTS)
+    assert witness_details is None
+
+    # Ensure httpx.get was called for each API endpoint (since it retries on failure)
+    assert mock_httpx_get.call_count == len(API_ENDPOINTS)

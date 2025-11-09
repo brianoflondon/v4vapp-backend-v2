@@ -28,6 +28,15 @@ async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Re
     return await client.get(url, timeout=20)
 
 
+def fix_witness_at_root(answer: dict) -> dict:
+    """
+    Fixes the witness details if they are at the root of the response.
+    """
+    if "witness_name" in answer:
+        return {"witness": answer}
+    return answer
+
+
 async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
     """
     Fetches details about a Hive witness.
@@ -50,6 +59,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
             cached_data = InternalConfig.redis_decoded.get(cache_key)
             if cached_data:
                 answer = json.loads(cached_data)
+                answer = fix_witness_at_root(answer)
                 return WitnessDetails.model_validate(answer)
     except Exception as e:
         logger.warning(
@@ -69,8 +79,8 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await fetch_witness_details(client, url)
                     response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
-
                     answer = response.json()
+                    answer = fix_witness_at_root(answer)
                     # Cache the result in Redis
                     try:
                         InternalConfig.redis_decoded.setex(
