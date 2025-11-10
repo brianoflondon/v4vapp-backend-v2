@@ -189,9 +189,12 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
             last_good_block = int(ans["block_num"])
         else:
             try:
-                last_good_block = get_hive_client().get_dynamic_global_properties()[
-                    "head_block_number"
-                ]
+                hive = get_hive_client()
+                global_properties = hive.get_dynamic_global_properties()
+                if not global_properties:
+                    raise Exception("Could not get global properties from hive client")
+                else:
+                    last_good_block = global_properties["head_block_number"]
             except Exception as e:
                 logger.error(e)
                 last_good_block = 93692232

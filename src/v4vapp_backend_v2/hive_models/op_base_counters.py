@@ -81,7 +81,7 @@ class BlockCounter:
     error_code: str = ""
     id: str = ""
     next_marker: int = 0
-    marker_point: int = 30 * 60 / HIVE_BLOCK_TIME  # 30 minutes in blocks
+    marker_point: int = int(30 * 60 / HIVE_BLOCK_TIME)  # 30 minutes in blocks
     icon: str = "🧱"
     last_marker: float = timer()
     start: float = 0
@@ -102,13 +102,16 @@ class BlockCounter:
         Returns:
             dict: A dictionary containing the current state of the BlockCounter instance.
         """
+        rpc_url = (
+            self.hive_client.rpc.url if self.hive_client and self.hive_client.rpc else "No RPC"
+        )
         return {
             "last_good_block": self.last_good_block,
             "current_block": self.current_block,
             "block_count": self.block_count,
             "last_event_count": self.last_event_count,
             "event_count": self.event_count,
-            "hive_client": self.hive_client.rpc.url,
+            "hive_client": rpc_url,
             "time_diff": str(self.time_diff),
             "running_time": str(self.running_time),
             "error_code": self.error_code,
@@ -147,8 +150,10 @@ class BlockCounter:
             if self.block_count >= self.next_marker:
                 marker = True
                 self.log_time_difference_errors(timestamp=timestamp)
-                old_node = self.hive_client.rpc.url
-                self.hive_client.rpc.next()
+                old_node = ""
+                if self.hive_client and self.hive_client.rpc:
+                    old_node = self.hive_client.rpc.url
+                    self.hive_client.rpc.next()
                 last_marker_time = timer() - self.last_marker
                 last_marker_time_str = format_time_delta(last_marker_time)
                 catch_up_in = format_time_delta(
