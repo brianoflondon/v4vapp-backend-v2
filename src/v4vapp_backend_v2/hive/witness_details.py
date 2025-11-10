@@ -10,14 +10,16 @@ from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 API_ENDPOINTS = [
     "https://api.syncad.com/hafbe-api/witnesses",
     "https://techcoderx.com/hafbe-api/witnesses",
+    "https://hiveapi.actifit.io/hafbe-api/witnesses",
+    
 ]
 
 
 @retry(
-    stop=stop_after_attempt(3),  # Retry up to 3 times
+    stop=stop_after_attempt(5),  # Retry up to 5 times
     wait=wait_exponential(multiplier=1, min=1, max=10),  # Exponential backoff: 1s, 2s, 4s
     retry=retry_if_exception_type(
-        (httpx.ConnectError, httpx.ConnectTimeout)
+        (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout)
     ),  # Retry on connection issues
     reraise=True,  # Reraise the last exception if all retries fail
 )
@@ -25,7 +27,8 @@ async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Re
     """
     Helper function to fetch witness details with retry logic.
     """
-    return await client.get(url, timeout=20)
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    return await client.get(url, timeout=timeout)
 
 
 def fix_witness_at_root(answer: dict) -> dict:
