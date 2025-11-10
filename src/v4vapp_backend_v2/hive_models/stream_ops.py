@@ -210,7 +210,7 @@ async def stream_ops_async(
             logger.exception(
                 f"{ICON} {start_block:,} | Error in block_stream: {e} restarting",
                 extra={
-                    "notification": False,
+                    "notification": True,
                     "error": e,
                     "error_code": "stream_restart",
                 },
@@ -222,9 +222,7 @@ async def stream_ops_async(
                 )
                 break
             else:
-                logger.info(
-                    f"{ICON} {start_block:,} Stream running smoothly, continuing from {last_block=:,} no_preview"
-                )
+                logger.info(f"{ICON} {start_block:,} Stream restarting from {last_block=:,}")
             current_node = rpc_url
             if hive and hive.rpc:
                 hive.rpc.next()
@@ -235,8 +233,8 @@ async def stream_ops_async(
                 rpc_url = str(hive.rpc.url)
 
             logger.info(
-                f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url} no_preview",
-                extra={"notification": True},
+                f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url}",
+                extra={"notification": False},
             )
 
 
