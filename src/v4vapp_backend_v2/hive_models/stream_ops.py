@@ -191,7 +191,7 @@ async def stream_ops_async(
             return
         except (NectarException, NumRetriesReached) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
-                logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again.")
+                logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
             else:
                 logger.warning(
                     f"{ICON} {start_block:,} NectarException in block_stream: {e} restarting",
@@ -208,7 +208,7 @@ async def stream_ops_async(
             logger.exception(e)
         except Exception as e:
             logger.exception(
-                f"{ICON} {start_block:,} | Error in block_stream: {e} restarting",
+                f"{ICON} {start_block:,} | Error in block_stream: {e} restarting {rpc_url}",
                 extra={
                     "notification": True,
                     "error": e,
@@ -222,7 +222,9 @@ async def stream_ops_async(
                 )
                 break
             else:
-                logger.info(f"{ICON} {start_block:,} Stream restarting from {last_block=:,}")
+                logger.info(
+                    f"{ICON} {start_block:,} Stream restarting from {last_block=:,} {rpc_url}"
+                )
             current_node = rpc_url
             if hive and hive.rpc:
                 hive.rpc.next()
