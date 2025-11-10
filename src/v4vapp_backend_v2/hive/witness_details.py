@@ -2,32 +2,24 @@ import json
 from random import shuffle
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.witness_details import WitnessDetails
 
 API_ENDPOINTS = [
-    "https://api.syncad.com/hafbe-api/witnesses",
-    "https://techcoderx.com/hafbe-api/witnesses",
-    "https://hiveapi.actifit.io/hafbe-api/witnesses",
-    
+    "https://hiveapi.actifit.io/hafbe-api/",
+    "https://api.dev.openhive.network/hafbe-api/",
+    "https://api.syncad.com/hafbe-api/",
+    "https://techcoderx.com/hafbe-api/",
 ]
 
 
-@retry(
-    stop=stop_after_attempt(5),  # Retry up to 5 times
-    wait=wait_exponential(multiplier=1, min=1, max=10),  # Exponential backoff: 1s, 2s, 4s
-    retry=retry_if_exception_type(
-        (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout)
-    ),  # Retry on connection issues
-    reraise=True,  # Reraise the last exception if all retries fail
-)
 async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Response:
     """
     Helper function to fetch witness details with retry logic.
     """
-    timeout = httpx.Timeout(60.0, connect=10.0)
+    timeout = httpx.Timeout(20.0, connect=10.0)
+    logger.info(f"Trying to fetch witness details from {url}")
     return await client.get(url, timeout=timeout)
 
 
@@ -71,12 +63,12 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         )
     # Attempt to fetch from API
     failure = False
+    url: str = "not set"
     try:
         shuffled_endpoints = API_ENDPOINTS[:]
         shuffle(shuffled_endpoints)
-        url: str = ""
         for api_url in shuffled_endpoints:
-            url = f"{api_url}/{hive_accname}" if hive_accname else api_url
+            url = f"{api_url}witnesses/{hive_accname}" if hive_accname else f"{api_url}witnesses/"
             try:
                 timeout = httpx.Timeout(20.0, connect=10.0)
                 async with httpx.AsyncClient(timeout=timeout) as client:
