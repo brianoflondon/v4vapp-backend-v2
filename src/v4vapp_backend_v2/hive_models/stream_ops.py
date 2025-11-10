@@ -129,7 +129,7 @@ async def stream_ops_async(
                 f"using {rpc_url} no_preview",
                 extra={
                     "error_code_clear": "stream_restart",
-                    "notification": True,
+                    "notification": False,
                     "opNames": opNames,
                 },
             )
@@ -195,7 +195,7 @@ async def stream_ops_async(
             else:
                 logger.warning(
                     f"{ICON} {start_block:,} NectarException in block_stream: {e} restarting",
-                    extra={"notification": False, "error_code": "stream_restart", "error": e},
+                    extra={"notification": True, "error_code": "stream_restart", "error": e},
                 )
             await asyncio.sleep(2)
 
@@ -232,7 +232,7 @@ async def stream_ops_async(
                     good_nodes = get_good_nodes()
                     hive.set_default_nodes(good_nodes)
                     blockchain = get_blockchain_instance(hive_instance=hive)
-                    rpc_url = str(hive.rpc.url)
+                rpc_url = str(hive.rpc.url)
 
             logger.info(
                 f"{ICON} {start_block:,} Switching {current_node} -> {rpc_url} no_preview",
