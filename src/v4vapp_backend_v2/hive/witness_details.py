@@ -96,14 +96,12 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                     f"API returned status {e.response.status_code} for {url}",
                     extra={"notification": False, "error": e},
                 )
-            except httpx.ConnectError as e:
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 logger.error(
-                    f"Connection failed to {url}: {e}", extra={"notification": False, "error": e}
+                    f"Connection failed to {url}: {e}",
+                    extra={"notification": False, "error": e},
                 )
-            except httpx.ConnectTimeout as e:
-                logger.warning(
-                    f"Connection timeout to {url}: {e}", extra={"notification": False, "error": e}
-                )
+
             except ValueError as e:
                 logger.warning(
                     f"Failed to parse JSON response from {url}, trying again...",

@@ -30,6 +30,7 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.hive_models.op_base_counters import BlockCounter
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
@@ -418,6 +419,13 @@ async def all_ops_loop(
                         log_it = True
                         db_store = True
 
+                elif isinstance(op, ProducerMissed):
+                    await op.get_witness_details()
+                    if op.producer in watch_witnesses:
+                        notification = True
+                    log_it = True
+                    db_store = True
+
                 elif OpBase.proposals_tracked and isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
                     log_it = True
@@ -495,6 +503,7 @@ async def combined_logging(
         asyncio.create_task(db_store_op(op))
 
     if log_it:
+        message = f"{icon} {op.log_str}"
         log_extras = {
             "notification": notification,
             "notification_str": f"{icon} {op.notification_str}",
@@ -504,7 +513,7 @@ async def combined_logging(
         # so we don't double notify.
         if extra_bots:
             log_extras["extra_bot_names"] = extra_bots
-        logger.info(f"{icon} {op.log_str}", extra=log_extras)
+        logger.info(message, extra=log_extras)
 
 
 async def store_rates() -> None:

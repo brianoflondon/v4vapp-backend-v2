@@ -16,7 +16,6 @@ class VestingShares(AmountPyd):
 class ProducerRewardRaw(OpBase):
     producer: AccNameType = Field(description="Producer of the reward")
     vesting_shares: VestingShares = Field(description="Vesting shares awarded")
-    timestamp: datetime = Field(description="Timestamp of the reward")
 
     model_config = ConfigDict(populate_by_name=True)
 

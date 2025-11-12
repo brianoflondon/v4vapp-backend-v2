@@ -128,3 +128,4 @@ def test_sanitize_markdown_v1_nested_brackets():
     text = "[Not a *link*](not a url) [Real](http://real.com)"
     result = sanitize_markdown_v1(text)
     assert result == "[Not a \\*link\\*](not a url) [Real](http://real.com)"
+

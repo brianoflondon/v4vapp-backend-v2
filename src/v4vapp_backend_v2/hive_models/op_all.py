@@ -9,6 +9,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
@@ -26,6 +27,7 @@ OP_MAP: dict[str, Any] = {
     "account_update2": AccountUpdate2,
     "fill_recurrent_transfer": FillRecurrentTransfer,
     "recurrent_transfer": RecurrentTransfer,
+    "producer_missed": ProducerMissed,
 }
 
 
@@ -68,6 +70,7 @@ OpAny = Annotated[
     | Annotated[AccountUpdate2, Tag("account_update2")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
+    | Annotated[ProducerMissed, Tag("producer_missed")]
     | Annotated[OpBase, Tag("op_base")],  # Default case for any other type
     Discriminator(get_op_type),
 ]
