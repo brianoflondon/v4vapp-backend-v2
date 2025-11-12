@@ -18,7 +18,7 @@ class ProducerMissedRaw(OpBase):
 
     @property
     def log_str(self):
-        log_str = f"{self.producer} Missed block {self.block_num:,} {self.age_str}"
+        log_str = f"{self.producer:<17} Missed block {self.block_num:,} {self.age_str}"
         return log_str
 
     @property
@@ -33,7 +33,7 @@ class ProducerMissed(ProducerMissedRaw):
 
     @property
     def log_str(self):
-        log_str = f"{self.producer} Missed block {self.block_num:,} {self.age_str} | Key: {self.missing_key}"
+        log_str = f"{self.producer:<17} Missed block {self.block_num:,} {self.age_str} | Key: {self.missing_key}"
         return log_str
 
     @property
