@@ -96,9 +96,10 @@
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "config.yaml",
+                "live-v4vapp-server-hive.config.yaml",
                 "--watch-only",
-                // "--start-block",
+                "--start-block",
+                "101083883"
                 // "96228302"
             ],
             "justMyCode": true,
