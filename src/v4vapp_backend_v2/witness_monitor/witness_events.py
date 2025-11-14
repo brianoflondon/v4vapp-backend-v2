@@ -1,3 +1,4 @@
+import os
 from timeit import default_timer as timer
 
 import httpx
@@ -127,7 +128,7 @@ async def send_kuma_heartbeat(
             extra={"notification": False},
         )
         return
-
+    webhook_url = os.getenv(witness_config.kuma_webhook_url, witness_config.kuma_webhook_url)
     try:
         async with httpx.AsyncClient() as client:
             params = {
@@ -135,9 +136,7 @@ async def send_kuma_heartbeat(
                 "msg": msg,
                 "ping": f"{ping:.3f}" if ping is not None else "",
             }
-            response = await client.get(
-                witness_config.kuma_webhook_url, params=params, timeout=10.0
-            )
+            response = await client.get(webhook_url, params=params, timeout=10.0)
             if response.status_code == 200:
                 logger.info(
                     f"{ICON} Successfully sent heartbeat to Kuma webhook.",
