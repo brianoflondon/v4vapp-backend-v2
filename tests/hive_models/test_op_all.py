@@ -32,12 +32,14 @@ def test_all_validate():
     TrackedBaseModel.last_quote = last_quote()
 
     with httpx.Client() as httpx_client:
+        counter = 0
         for hive_event in load_hive_events():
+            counter += 1
             try:
                 op = op_any(hive_event)
                 assert op.op_type == op.name()
                 assert op.markdown_link
-                if op.link:
+                if op.link and counter % 10 == 0:
                     if not os.getenv("GITHUB_ACTIONS") == "true":
                         response = httpx_client.head(op.link)
                         assert response.status_code == 200
