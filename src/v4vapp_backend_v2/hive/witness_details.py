@@ -13,13 +13,14 @@ API_ENDPOINTS = [
     "https://techcoderx.com/hafbe-api/",
 ]
 
+ICON = "🔍"
 
 async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Response:
     """
     Helper function to fetch witness details with retry logic.
     """
     timeout = httpx.Timeout(20.0, connect=10.0)
-    logger.info(f"Trying to fetch witness details from {url}")
+    logger.info(f"{ICON} fetching witness details from {url}")
     return await client.get(url, timeout=timeout)
 
 
@@ -58,7 +59,7 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                 return WitnessDetails.model_validate(answer)
     except Exception as e:
         logger.warning(
-            f"Failed to check TTL or retrieve cached witness details from Redis: {e}",
+            f"{ICON} Failed to check TTL or retrieve cached witness details from Redis: {e}",
             extra={"notification": False, "error": e},
         )
     # Attempt to fetch from API
@@ -93,25 +94,25 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
                     return WitnessDetails.model_validate(answer)
             except httpx.HTTPStatusError as e:
                 logger.warning(
-                    f"API returned status {e.response.status_code} for {url}",
+                    f"{ICON} API returned status {e.response.status_code} for {url}",
                     extra={"notification": False, "error": e},
                 )
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 logger.error(
-                    f"Connection failed to {url}: {e}",
+                    f"{ICON} Connection failed to {url}: {e}",
                     extra={"notification": False, "error": e},
                 )
 
             except ValueError as e:
                 logger.warning(
-                    f"Failed to parse JSON response from {url}, trying again...",
+                    f"{ICON} Failed to parse JSON response from {url}, trying again...",
                     extra={"notification": False, "error": e},
                 )
                 failure = True
 
     except Exception as e:
         logger.exception(
-            f"Unexpected error fetching witness details from {url}: {e}",
+            f"{ICON} Unexpected error fetching witness details from {url}: {e}",
             extra={"notification": False, "error": e},
         )
 
@@ -119,30 +120,30 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     try:
         if not InternalConfig.redis_decoded.ping():
             logger.error(
-                "Redis is unavailable, cannot fetch cached data", extra={"notification": False}
+                f"{ICON} Redis is unavailable, cannot fetch cached data", extra={"notification": False}
             )
             return None
 
         cached_data = InternalConfig.redis_decoded.get(cache_key)
         if cached_data:
             answer = json.loads(cached_data)
-            logger.info(f"Successfully retrieved witness details from cache for {hive_accname}")
+            logger.info(f"{ICON} Successfully retrieved witness details from cache for {hive_accname}")
             return WitnessDetails.model_validate(answer)
         else:
-            logger.warning(f"No cached data found for {cache_key}")
+            logger.warning(f"{ICON} No cached data found for {cache_key}")
     except ValueError as e:
         logger.warning(
-            f"Failed to parse JSON response from {url}",
+            f"{ICON} Failed to parse JSON response from {url}",
             extra={"notification": False, "error": e},
         )
     except Exception as redis_error:
         logger.error(
-            f"Failed to retrieve witness details from Redis cache: {redis_error}",
+            f"{ICON} Failed to retrieve witness details from Redis cache: {redis_error}",
             extra={"notification": False, "error": redis_error},
         )
 
     logger.warning(
-        f"Failed to get witness details for {hive_accname} from both API and cache",
+        f"{ICON} Failed to get witness details for {hive_accname} from both API and cache",
         extra={"notification": True},
     )
     return None
