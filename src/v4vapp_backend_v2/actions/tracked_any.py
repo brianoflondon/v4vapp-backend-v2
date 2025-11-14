@@ -10,6 +10,8 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_fill_recurrent_transfer import FillRecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
+from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
 from v4vapp_backend_v2.models.invoice_models import Invoice
@@ -48,6 +50,8 @@ def get_tracked_any_type(value: Any) -> str:
             "fill_recurrent_transfer",
             "custom_json",
             "account_update2",
+            "producer_missed",
+            "producer_reward",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -76,6 +80,19 @@ def get_tracked_any_type(value: Any) -> str:
     raise ValueError(f"Invalid operation type {value}")
 
 
+"""
+Union: OpAny
+Purpose: A broad union for parsing and representing any Hive blockchain
+operation. It covers all known operation types (e.g., transfer,
+producer_reward, producer_missed, custom_json) and falls back to OpBase
+for unknown ones.
+
+Union: TrackedAny
+Purpose: A narrower union for tracked objects that trigger specific
+business logic, such as financial transactions, invoices, or payments.
+It focuses on operations/invoices/payments that the app monitors for
+accounting, conversions, or notifications.
+"""
 TrackedAny = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
@@ -86,7 +103,9 @@ TrackedAny = Annotated[
     | Annotated[Payment, Tag("payment")]
     | Annotated[CustomJson, Tag("custom_json")]
     | Annotated[AccountUpdate2, Tag("account_update2")]
-    | Annotated[TransferBase, Tag("transfer_base")],
+    | Annotated[TransferBase, Tag("transfer_base")]
+    | Annotated[ProducerMissed, Tag("producer_missed")]
+    | Annotated[ProducerReward, Tag("producer_reward")],
     Discriminator(get_tracked_any_type),
 ]
 

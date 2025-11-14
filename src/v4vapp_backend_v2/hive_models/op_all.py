@@ -58,7 +58,19 @@ def get_op_type(value: Any) -> str:
     raise ValueError("Invalid operation type")
 
 
-# Define the discriminated union type using Annotated and Tag for each class
+"""
+Union: OpAny
+Purpose: A broad union for parsing and representing any Hive blockchain
+operation. It covers all known operation types (e.g., transfer,
+producer_reward, producer_missed, custom_json) and falls back to OpBase
+for unknown ones.
+
+Union: TrackedAny
+Purpose: A narrower union for tracked objects that trigger specific
+business logic, such as financial transactions, invoices, or payments.
+It focuses on operations/invoices/payments that the app monitors for
+accounting, conversions, or notifications.
+"""
 OpAny = Annotated[
     Annotated[CustomJson, Tag("custom_json")]
     | Annotated[Transfer, Tag("transfer")]
