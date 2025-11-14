@@ -230,7 +230,19 @@ hive:
     - vsc.withdraw
     - vsc.withdraw_hbd
     - vsc.deposit
-
+  watch_witnesses:
+    - brianoflondon
+  witness_config:
+    blocktrades:
+      kuma_webhook_url: WEBHOOK_TEST_URL
+      kuma_heartbeat_time: 60  # seconds
+      witness_machines:
+        - name: hive-blog
+          url: https://api.hive.blog
+          signing_key: STM73EW8YMXWAMrCUosEuvLEqEPALzFijghyL2KyAQnWZep3whEZD
+        - name: hive-blog2
+          url: https://api.hive.blog
+          signing_key: STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg
 
 
 ########### TEST CONFIG NO SECRETS #################
