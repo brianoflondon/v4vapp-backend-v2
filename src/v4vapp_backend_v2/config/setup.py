@@ -206,12 +206,25 @@ class HiveAccountConfig(BaseConfig):
         return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
 
 
+class WitnessMachineConfig(BaseConfig):
+    name: str
+    url: str
+    signing_key: str
+
+
+class WitnessConfig(BaseConfig):
+    kuma_webhook_url: str = ""
+    kuma_heartbeat_time: int = 60  # seconds
+    witness_machines: List[WitnessMachineConfig]
+
+
 class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
     watch_users: List[str] = []
     proposals_tracked: List[int] = []
     watch_witnesses: List[str] = []
     custom_json_ids_tracked: List[str] = []
+    witness_config: Dict[str, WitnessConfig] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

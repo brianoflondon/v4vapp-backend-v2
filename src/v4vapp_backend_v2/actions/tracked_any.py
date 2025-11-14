@@ -109,6 +109,12 @@ TrackedAny = Annotated[
     Discriminator(get_tracked_any_type),
 ]
 
+TrackedProducer = Annotated[
+    Annotated[ProducerMissed, Tag("producer_missed")]
+    | Annotated[ProducerReward, Tag("producer_reward")],
+    Discriminator(get_tracked_any_type),
+]
+
 TrackedTransfer = Annotated[
     Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]

@@ -35,6 +35,7 @@ from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
+from v4vapp_backend_v2.witness_monitor.witness_events import process_witness_event
 
 
 async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> List[LedgerEntry]:
@@ -82,7 +83,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         if isinstance(tracked_op, ProducerReward) or isinstance(tracked_op, ProducerMissed):
             # No ledger entry necessary for producer rewards or missed blocks
-            logger.info(f"Received: {tracked_op.op_type:<16} {tracked_op.log_str}")
+            asyncio.create_task(process_witness_event(tracked_op=tracked_op))
             return []
 
         if isinstance(tracked_op, BlockMarker):
