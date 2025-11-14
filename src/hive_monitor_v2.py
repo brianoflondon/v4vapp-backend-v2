@@ -672,7 +672,7 @@ def main(
         int,
         typer.Option(
             "--start-block",
-            help="""The block number to start from. 0 will start from the last good block,
+            help="""The block number to start from. Default or 0 will start from the last good block,
             -1 will start from the current head block.""",
             show_default=True,
         ),
