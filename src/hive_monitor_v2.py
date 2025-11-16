@@ -35,6 +35,7 @@ from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer
 from v4vapp_backend_v2.hive_models.op_update_proposal_votes import UpdateProposalVotes
 from v4vapp_backend_v2.hive_models.stream_ops import stream_ops_async
+from v4vapp_backend_v2.witness_monitor.witness_events import check_witness_heartbeat
 
 HIVE_DATABASE_CONNECTION = ""
 HIVE_DATABASE = ""
@@ -50,7 +51,7 @@ COMMAND_LINE_WATCH_ONLY = False
 
 
 app = typer.Typer()
-icon = "🐝"
+ICON = "🐝"
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
 
@@ -109,8 +110,8 @@ async def db_store_op(
         return None
 
     except Exception as e:
-        logger.error(f"{icon} Error occurred while saving to MongoDB: {e}")
-        logger.warning(f"{icon} {op.log_str}", extra={"notification": False, **op.log_extra})
+        logger.error(f"{ICON} Error occurred while saving to MongoDB: {e}")
+        logger.warning(f"{ICON} {op.log_str}", extra={"notification": False, **op.log_extra})
         return None
 
 
@@ -143,7 +144,7 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         if hive_acc and hive_acc.active_key:
             # set the amount to the current HBD balance taken from Config
             set_amount_to = Amount(hive_acc.hbd_balance)
-            logger.info(f"{icon} Balancing HBD level for account {use_account} to {set_amount_to}")
+            logger.info(f"{ICON} Balancing HBD level for account {use_account} to {set_amount_to}")
             nobroadcast = True if COMMAND_LINE_WATCH_ONLY else False
             trx = account_trade(
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
@@ -152,19 +153,19 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
                 logger.info(f"Transaction broadcast: {trx.get('trx_id')}", extra={"trx": trx})
     except ValueError as ve:
         logger.error(
-            f"{icon} ValueError in {__name__}: {ve} Maybe misconfigured account? No hbd_balance set?",
+            f"{ICON} ValueError in {__name__}: {ve} Maybe misconfigured account? No hbd_balance set?",
             extra={"notification": False, "error": ve},
         )
         if use_account:
             logger.error(
-                f"{icon} Account {use_account} miss config, "
+                f"{ICON} Account {use_account} miss config, "
                 f"please check your config file {DEFAULT_CONFIG_FILENAME}",
                 extra={"notification": False, "error": ve},
             )
 
     except Exception as e:
         logger.exception(
-            f"{icon} Error in {__name__}: {e}",
+            f"{ICON} Error in {__name__}: {e}",
             extra={"notification": False, "error": e},
         )
 
@@ -184,7 +185,7 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
         if ans and "block_num" in ans:
             time_diff = check_time_diff(ans["timestamp"])
             logger.info(
-                f"{icon} Last good block: {ans['block_num']:,} {ans['timestamp']} {time_diff} ago",
+                f"{ICON} Last good block: {ans['block_num']:,} {ans['timestamp']} {time_diff} ago",
                 extra={"db": ans},
             )
             last_good_block = int(ans["block_num"])
@@ -229,7 +230,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         await producer_reward.get_witness_details()
         time_diff = check_time_diff(producer_reward.timestamp)
         logger.info(
-            f"{icon} Last recorded witness producer block: "
+            f"{ICON} Last recorded witness producer block: "
             f"{producer_reward.block_num:,} "
             f"for {producer_reward.producer} "
             f"{producer_reward.timestamp} "
@@ -252,7 +253,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
             op.delta = op.timestamp - last_witness_timestamp
             await db_store_op(op)
             logger.info(
-                f"{icon} {op.log_str}",
+                f"{ICON} {op.log_str}",
                 extra={
                     "notification": False,
                     **op.log_extra,
@@ -301,7 +302,7 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
         mean_time_diff_seconds = sum(time_differences) / len(time_differences)
     except ZeroDivisionError:
         logger.info(
-            f"{icon} No time differences found for witness {watch_witness}",
+            f"{ICON} No time differences found for witness {watch_witness}",
             extra={"notification": True},
         )
         return timedelta(seconds=0), datetime.now(tz=timezone.utc) - timedelta(days=1)
@@ -310,6 +311,69 @@ async def witness_average_block_time(watch_witness: str) -> Tuple[timedelta, dat
     mean_time_diff = seconds_only(timedelta(seconds=mean_time_diff_seconds))
 
     return mean_time_diff, block_timestamps[0]
+
+
+async def witness_check_heartbeat_loop(witness_name: str) -> None:
+    """
+    Asynchronously checks the heartbeat of a specified witness.
+
+    This function checks the heartbeat of a specified witness by retrieving
+    the last good block produced by the witness from the database and comparing
+    its timestamp to the current time. If the time difference exceeds a certain
+    threshold, a warning is logged.
+
+    Args:
+        watch_witness (str): The name of the witness to monitor.
+
+    Returns:
+
+        None
+    """
+    witness_configs = InternalConfig().config.hive.witness_configs
+    witness_config = witness_configs.get(witness_name, None)
+    if not witness_config:
+        logger.warning(
+            f"{ICON} Witness {witness_name} configuration not found.",
+            extra={"notification": False},
+        )
+        return
+    try:
+        while True:
+            await check_witness_heartbeat(witness=witness_name)
+            await asyncio.sleep(witness_config.kuma_heartbeat_time)
+    except (KeyboardInterrupt, asyncio.CancelledError) as e:
+        logger.info(f"{ICON} {e}: Stopping Witness Check {witness_name}.")
+        # Exit loop on cancellation
+        return
+    except Exception as e:
+        logger.exception(f"{ICON} {e}", extra={"notification": False})
+        raise e
+    finally:
+        logger.info(
+            f"{ICON} Witness {witness_name} check complete.", extra={"notification": False}
+        )
+    return
+
+
+async def witness_check_startup() -> None:
+    """
+    Asynchronously performs the initial heartbeat check for all configured witnesses.
+
+    This function initiates the heartbeat check for all witnesses configured
+    in the system by calling the `witness_check_heartbeat_loop` function.
+
+    Returns:
+        None
+    """
+    try:
+        witness_configs = InternalConfig().config.hive.witness_configs
+        for witness_name in witness_configs.keys():
+            asyncio.create_task(witness_check_heartbeat_loop(witness_name=witness_name))
+    except Exception as e:
+        logger.exception(
+            f"{ICON} Error in Witness Check startup {e}", extra={"notification": False}
+        )
+        raise e
 
 
 async def all_ops_loop(
@@ -333,7 +397,7 @@ async def all_ops_loop(
         Exception: For any other exceptions that occur during processing.
     """
     logger.info(
-        f"{icon} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
+        f"{ICON} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
     )
     OpBase.watch_users = watch_users
     OpBase.proposals_tracked = InternalConfig().config.hive.proposals_tracked
@@ -452,19 +516,19 @@ async def all_ops_loop(
                     start = timer()
 
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            logger.info(f"{icon} {e}: Stopping event listener.")
+            logger.info(f"{ICON} {e}: Stopping event listener.")
             # Exit loop on cancellation
             return
         except Exception as e:
-            logger.exception(f"{icon} {e}", extra={"notification": False})
+            logger.exception(f"{ICON} {e}", extra={"notification": False})
             raise e
         finally:
             # Do not restart if we’re shutting down
             if shutdown_event.is_set():
-                logger.info(f"{icon} Shutdown requested; exiting all_ops_loop.")
+                logger.info(f"{ICON} Shutdown requested; exiting all_ops_loop.")
                 return
             logger.warning(
-                f"{icon} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
+                f"{ICON} Restarting real_ops_loop after error from {getattr(hive_client.rpc, 'url', 'unknown')} no_preview",
                 extra={"notification": False},
             )
             if getattr(hive_client, "rpc", None):
@@ -474,7 +538,7 @@ async def all_ops_loop(
                     pass
             else:
                 logger.error(
-                    f"{icon} Hive client not available, re-fetching new hive-client",
+                    f"{ICON} Hive client not available, re-fetching new hive-client",
                     extra={"notification": False},
                 )
                 hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
@@ -503,10 +567,10 @@ async def combined_logging(
         asyncio.create_task(db_store_op(op))
 
     if log_it:
-        message = f"{icon} {op.log_str}"
+        message = f"{ICON} {op.log_str}"
         log_extras = {
             "notification": notification,
-            "notification_str": f"{icon} {op.notification_str}",
+            "notification_str": f"{ICON} {op.notification_str}",
             **op.log_extra,
         }
         # Only send extra notifications if the bot is not in watch-only mode
@@ -527,7 +591,7 @@ async def store_rates() -> None:
         None
     """
     await asyncio.sleep(
-        10
+        6 + uniform(0, 4)
     )  # Initial sleep to avoid immediate execution and duplicate hits to check rates.
     try:
         while not shutdown_event.is_set():
@@ -535,7 +599,7 @@ async def store_rates() -> None:
                 await TrackedBaseModel.update_quote()
                 quote = TrackedBaseModel.last_quote
                 logger.info(
-                    f"{icon} Updating Quotes: {quote.hive_usd:.3f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
+                    f"{ICON} Updating Quotes: {quote.hive_usd:.3f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
                     extra={
                         "notification": False,
                         "quote": TrackedBaseModel.last_quote.model_dump(
@@ -545,7 +609,7 @@ async def store_rates() -> None:
                 )
             except Exception as e:
                 logger.error(
-                    f"{icon} Error storing rates: {e}", extra={"error": e, "notification": False}
+                    f"{ICON} Error storing rates: {e}", extra={"error": e, "notification": False}
                 )
             # Wait for up to 10 minutes, but wake up early if shutdown_event is set
             try:
@@ -553,7 +617,7 @@ async def store_rates() -> None:
             except asyncio.TimeoutError:
                 continue  # Timeout means 10 minutes passed, so loop again
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
-        logger.info(f"{icon} store_rates cancelled or interrupted, exiting.")
+        logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
         raise e
 
 
@@ -579,10 +643,11 @@ async def main_async_start(
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-    logger.info(f"{icon} Main Loop running in thread: {threading.get_ident()}")
+    logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
         # Create tasks so we can cancel them on shutdown_event
+        await witness_check_startup()
         tasks = [
             asyncio.create_task(
                 all_ops_loop(
@@ -601,11 +666,11 @@ async def main_async_start(
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
-        logger.info(f"{icon} 👋 Received signal to stop. Exiting...")
+        logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
         raise e
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
-        logger.error(f"{icon} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
+        logger.error(f"{ICON} Irregular shutdown in Hive Monitor {e}", extra={"error": e})
         raise e
     finally:
         # Cancel all other tasks and exit cleanly
@@ -614,8 +679,8 @@ async def main_async_start(
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        logger.info(f"{icon} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
-        logger.info(f"{icon} Clearing notifications")
+        logger.info(f"{ICON} 👋 Goodbye! from Hive Monitor", extra={"notification": True})
+        logger.info(f"{ICON} Clearing notifications")
         await asyncio.sleep(2)
         InternalConfig().shutdown()
 
@@ -709,7 +774,7 @@ def main(
 
     pause_time = uniform(0.1, 1.5)
     logger.info(
-        f"{icon}{Fore.WHITE}✅ Hive Monitor v2: {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {pause_time:.2f}s",
+        f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {pause_time:.2f}s",
         extra={"notification": True},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds
