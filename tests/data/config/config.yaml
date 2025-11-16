@@ -232,8 +232,8 @@ hive:
     - vsc.deposit
   watch_witnesses:
     - brianoflondon
-  witness_config:
-    blocktrades:
+  witness_configs:
+    brianoflondon:
       kuma_webhook_url: WEBHOOK_TEST_URL
       kuma_heartbeat_time: 60  # seconds
       witness_machines:

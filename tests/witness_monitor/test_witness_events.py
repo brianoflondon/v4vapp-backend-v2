@@ -42,5 +42,5 @@ async def test_send_kuma_heartbeat():
 
 async def test_check_witness_heartbeat():
     await check_witness_heartbeat(
-        witness="blocktrades",
+        witness="brianoflondon",
     )
