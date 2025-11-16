@@ -45,7 +45,7 @@ class ProducerReward(ProducerRewardRaw):
                 f"{self.log_common()}"
                 f"Missed: {self.witness.missed_blocks} | "
                 f"Rank: {self.witness.rank} | {self.producer} | "
-                f"Key: {self.witness.signing_key[-5:]} "
+                f"Key: {self.witness.signing_key[-5:]} | {self.witness.witness_machine} "
                 f"{self.age_str}"
             )
             return log_str
@@ -58,7 +58,7 @@ class ProducerReward(ProducerRewardRaw):
                 f"{self.log_common()}"
                 f"Missed: {self.witness.missed_blocks} | "
                 f"Rank: {self.witness.rank} | {self.producer.markdown_link} {self.markdown_link} "
-                f"Key: {self.witness.signing_key[-5:]} "
+                f"Key: {self.witness.signing_key[-5:]} | {self.witness.witness_machine} "
                 f"{self.age_str}"
             )
             return notification_str
