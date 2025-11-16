@@ -12,6 +12,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import (
+    BLOCK_STREAM_ONLY,
     get_blockchain_instance,
     get_good_nodes,
     get_hive_client,
