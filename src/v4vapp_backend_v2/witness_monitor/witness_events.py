@@ -2,9 +2,11 @@ import os
 from timeit import default_timer as timer
 
 import httpx
+from colorama import Fore, Style
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedProducer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 
@@ -19,7 +21,7 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
     )
     if tracked_op.producer not in InternalConfig().config.hive.watch_witnesses:
         return
-    witness_config = InternalConfig().config.hive.witness_config.get(tracked_op.producer, None)
+    witness_config = InternalConfig().config.hive.witness_configs.get(tracked_op.producer, None)
     if not witness_config:
         return
     try:
@@ -64,7 +66,7 @@ async def check_witness_heartbeat(
     Returns:
         None
     """
-    witness_config = InternalConfig().config.hive.witness_config.get(witness, None)
+    witness_config = InternalConfig().config.hive.witness_configs.get(witness, None)
     if not witness_config:
         logger.warning(
             f"{ICON} Witness {witness} configuration not found.",
@@ -72,24 +74,45 @@ async def check_witness_heartbeat(
         )
         return
 
+    witness_details = await get_hive_witness_details(hive_accname=witness)
+
     execution_times = []
     failures = 0
     for machine in witness_config.witness_machines:
+        machine_is_primary = False
+        if witness_details and witness_details.witness:
+            if witness_details.witness.signing_key == machine.signing_key:
+                machine_is_primary = True
+                logger.info(
+                    f"{ICON}{Fore.YELLOW} Witness {witness} signing key held by {machine.name}. {Style.RESET_ALL}",
+                    extra={"notification": False},
+                )
+            else:
+                logger.info(
+                    f"{ICON} Backup {witness} on {machine.name}.",
+                    extra={"notification": False},
+                )
         result, execution_time = await call_hive_api(machine.url)
         execution_times.append(execution_time)
         if result is None:
             failures += 1
-            logger.warning(
-                f"{ICON} Witness {witness} machine {machine.name} is down or unreachable.",
+            if machine_is_primary:
+                msg = f"🚨 PRIMARY Witness {witness} machine {machine.name} is down."
+                log_func = logger.error
+            else:
+                msg = f"Backup Witness {witness} machine {machine.name} is down."
+                log_func = logger.warning
+            log_func(
+                f"{ICON} {msg}",
                 extra={
-                    "notification": False,
+                    "notification": machine_is_primary,
                     "extra": {"machine": machine.name, "witness": witness, "result": result},
                 },
             )
             await send_kuma_heartbeat(
                 witness=witness,
                 status="down",
-                msg=f"Witness {witness} machine {machine.name} is down.",
+                msg=msg,
                 ping=execution_time,
             )
     if failures == 0:
@@ -121,13 +144,15 @@ async def send_kuma_heartbeat(
     Returns:
         None
     """
-    witness_config = InternalConfig().config.hive.witness_config.get(witness, None)
+    witness_config = InternalConfig().config.hive.witness_configs.get(witness, None)
     if not witness_config:
         logger.warning(
             f"{ICON} Kuma webhook URL not configured. Skipping heartbeat.",
             extra={"notification": False},
         )
         return
+    # Use the config webhook URL as an environment variable if set or use it directly
+    # This allows for obfuscation of the webhook URL in github actions
     webhook_url = os.getenv(witness_config.kuma_webhook_url, witness_config.kuma_webhook_url)
     try:
         async with httpx.AsyncClient() as client:
@@ -137,16 +162,21 @@ async def send_kuma_heartbeat(
                 "ping": f"{ping:.3f}" if ping is not None else "",
             }
             response = await client.get(webhook_url, params=params, timeout=10.0)
-            if response.status_code == 200:
-                logger.info(
-                    f"{ICON} Successfully sent heartbeat to Kuma webhook.",
-                    extra={"notification": False},
-                )
-            else:
-                logger.warning(
-                    f"{ICON} Failed to send heartbeat to Kuma webhook. Status code: {response.status_code}",
-                    extra={"notification": False},
-                )
+            response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
+            logger.info(
+                f"{ICON} Successfully sent heartbeat to Kuma webhook.",
+                extra={"notification": False},
+            )
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            f"{ICON} Failed to send heartbeat to Kuma webhook. Status code: {e.response.status_code}",
+            extra={"notification": False, "error": e},
+        )
+    except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+        logger.error(
+            f"{ICON} Timeout error sending heartbeat to Kuma webhook: {e}",
+            extra={"notification": False, "error": e},
+        )
     except Exception as e:
         logger.exception(
             f"{ICON} Error sending heartbeat to Kuma webhook: {e}",
@@ -199,6 +229,16 @@ async def call_hive_api(url: str) -> tuple[dict | None, float]:
                     f"{ICON} HTTP error from Hive API at {url}: {response.status_code}",
                     extra={"notification": False},
                 )
+    except (
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+    ) as e:  # Fixed syntax: tuple for multiple exceptions
+        execution_time = timer() - start_time
+        logger.error(
+            f"{ICON} Timeout error calling Hive API at {url}: {e}",
+            extra={"notification": False, "error": e},
+        )
+
     except Exception as e:
         execution_time = timer() - start_time
         logger.exception(
