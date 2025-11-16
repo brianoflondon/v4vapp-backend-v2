@@ -64,7 +64,7 @@ class ProducerReward(ProducerRewardRaw):
             return notification_str
         return f"{self.block_num:,} {self.producer.markdown_link} | {self.markdown_link} {self.age_str}"
 
-    async def get_witness_details(self):
+    async def get_witness_details(self, ignore_cache: bool = False):
         """
         Asynchronously retrieves and sets the witness details for the producer.
 
@@ -73,11 +73,16 @@ class ProducerReward(ProducerRewardRaw):
         function. If witness details are found, it sets the `witness` attribute
         with the retrieved witness information.
 
+        Args:
+            ignore_cache (bool): Whether to ignore the cache when fetching witness details.
+
         Returns:
             None
         """
 
         if self.producer:
-            witness_details = await get_hive_witness_details(self.producer)
+            witness_details = await get_hive_witness_details(
+                self.producer, ignore_cache=ignore_cache
+            )
             if witness_details:
                 self.witness = witness_details.witness

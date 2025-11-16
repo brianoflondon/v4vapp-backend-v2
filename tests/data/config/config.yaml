@@ -222,6 +222,8 @@ hive:
       role: funding
     fiction:
       role: exchange
+    brianoflondon:
+      role: witness
   proposals_tracked:
     - 342
     - 303
@@ -237,10 +239,10 @@ hive:
       kuma_webhook_url: WEBHOOK_TEST_URL
       kuma_heartbeat_time: 60  # seconds
       witness_machines:
-        - name: hive-blog
+        - name: bol-1
           url: https://api.hive.blog
           signing_key: STM73EW8YMXWAMrCUosEuvLEqEPALzFijghyL2KyAQnWZep3whEZD
-        - name: hive-blog2
+        - name: bol-2
           url: https://api.hive.blog
           signing_key: STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg
 

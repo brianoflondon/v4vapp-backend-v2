@@ -174,6 +174,7 @@ class HiveRoles(StrEnum):
     funding = "funding"
     exchange = "exchange"
     customer = "customer"
+    witness = "witness"
 
 
 class HiveAccountConfig(BaseConfig):

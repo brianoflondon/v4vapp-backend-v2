@@ -1,11 +1,18 @@
 import os
+from pprint import pprint
 from timeit import default_timer as timer
+from typing import Any, Dict
 
 import httpx
 from colorama import Fore, Style
+from nectar.witness import Witness as NectarWitness
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedProducer
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.hive.hive_extras import (
+    get_hive_client,
+    get_verified_hive_client_for_accounts,
+)
 from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
@@ -74,10 +81,15 @@ async def check_witness_heartbeat(
         )
         return
 
-    witness_details = await get_hive_witness_details(hive_accname=witness)
+    witness_details = await get_hive_witness_details(hive_accname=witness, ignore_cache=False)
 
     execution_times = []
+    machine_results: dict[str, bool] = {}
+    primary_failure = False
+    primary_machine = ""
     failures = 0
+
+    # Loop through each witness machine and check its status
     for machine in witness_config.witness_machines:
         machine_is_primary = False
         if witness_details and witness_details.witness:
@@ -87,26 +99,36 @@ async def check_witness_heartbeat(
                     f"{ICON}{Fore.YELLOW} Witness {witness} signing key held by {machine.name}. {Style.RESET_ALL}",
                     extra={"notification": False},
                 )
+                primary_machine = machine.name
             else:
                 logger.info(
                     f"{ICON} Backup {witness} on {machine.name}.",
                     extra={"notification": False},
                 )
-        result, execution_time = await call_hive_api(machine.url)
+        result, execution_time = await call_hive_api(machine.url, machine.name)
         execution_times.append(execution_time)
         if result is None:
+            machine_results[machine.name] = False
             failures += 1
             if machine_is_primary:
                 msg = f"🚨 PRIMARY Witness {witness} machine {machine.name} is down."
                 log_func = logger.error
+                primary_failure = True
+                error_code = "primary_witness_down"
             else:
                 msg = f"Backup Witness {witness} machine {machine.name} is down."
                 log_func = logger.warning
+                error_code = "backup_witness_down"
             log_func(
                 f"{ICON} {msg}",
                 extra={
                     "notification": machine_is_primary,
-                    "extra": {"machine": machine.name, "witness": witness, "result": result},
+                    "extra": {
+                        "machine": machine.name,
+                        "witness": witness,
+                        "result": result,
+                        "error_code": error_code,
+                    },
                 },
             )
             await send_kuma_heartbeat(
@@ -115,16 +137,79 @@ async def check_witness_heartbeat(
                 msg=msg,
                 ping=execution_time,
             )
-    if failures == 0:
-        avg_execution_time = sum(execution_times) / len(execution_times)
+        else:
+            error_code_clear = (
+                "primary_witness_down" if machine_is_primary else "backup_witness_down"
+            )
+            logger.info(
+                f"{ICON} Witness {witness} machine {machine.name} is UP. Response time: {execution_time:.3f}s",
+                extra={"notification": False, "error_code_clear": error_code_clear},
+            )
+            machine_results[machine.name] = True
+
+    avg_execution_time = sum(execution_times) / len(execution_times)
+
+    if primary_failure:
+        logger.error(
+            f"{ICON} 🚨 PRIMARY Witness {witness} is DOWN! Immediate attention required!",
+            extra={"notification": True},
+        )
+        working_machines = [name for name, status in machine_results.items() if status]
         logger.info(
-            f"{ICON} All Witness Machines for {witness} are up. Average response time: {avg_execution_time:.3f}s",
+            f"{ICON} Working machines for {witness}: {', '.join(working_machines) if working_machines else 'None'}",
+            extra={"notification": False},
+        )
+        if working_machines:
+            trx_id = await update_witness_properties_switch_machine(
+                witness_name=witness,
+                machine_name=working_machines[0],
+                nobroadcast=False,
+            )
+            if trx_id:
+                await send_kuma_heartbeat(
+                    witness=witness,
+                    status="up",
+                    msg=f"PRIMARY Witness {witness} switched to machine {working_machines[0]} {trx_id}.",
+                    ping=avg_execution_time,
+                )
+            else:
+                await send_kuma_heartbeat(
+                    witness=witness,
+                    status="down",
+                    msg=f"🚨 FAILED to SWITCH PRIMARY Witness {witness} switched to machine {working_machines[0]}.",
+                    ping=avg_execution_time,
+                )
+
+    # Everything is working normally.
+    if failures == 0:
+        working_backups = [
+            name for name, status in machine_results.items() if status and name != primary_machine
+        ]
+        working_backups_str = ", ".join(working_backups) if working_backups else "None"
+        msg = f"Witness {witness} is operational on {primary_machine}, backup(s) {working_backups_str} working."
+        logger.info(
+            f"{ICON} {msg} Average response time: {avg_execution_time:.3f}s",
             extra={"notification": False},
         )
         await send_kuma_heartbeat(
             witness=witness,
             status="up",
-            msg=f"Witness {witness} is operational.",
+            msg=msg,
+            ping=avg_execution_time,
+        )
+    else:
+        failed_machines = [name for name, status in machine_results.items() if not status]
+        message = (
+            f"Witness {witness} has {failures} failed machine(s) {', '.join(failed_machines)}."
+        )
+        logger.warning(
+            f"{ICON} {message} Average response time: {avg_execution_time:.3f}s",
+            extra={"notification": False},
+        )
+        await send_kuma_heartbeat(
+            witness=witness,
+            status="down",
+            msg=message,
             ping=avg_execution_time,
         )
 
@@ -184,7 +269,7 @@ async def send_kuma_heartbeat(
         )
 
 
-async def call_hive_api(url: str) -> tuple[dict | None, float]:
+async def call_hive_api(url: str, machine_name: str) -> tuple[dict | None, float]:
     """
     Calls the Hive API at the given IP and port with a POST request containing
     the get_dynamic_global_properties JSON-RPC payload. Measures execution time
@@ -215,7 +300,7 @@ async def call_hive_api(url: str) -> tuple[dict | None, float]:
                 data = response.json()
                 if "result" in data and data.get("id") == 1:
                     logger.info(
-                        f"{ICON} Successfully called Hive API at {url}. Execution time: {execution_time:.4f}s",
+                        f"{ICON} Successfully called {machine_name} Hive API at {url}. Execution time: {execution_time:.4f}s",
                         extra={"notification": False},
                     )
                     return data["result"], execution_time
@@ -226,7 +311,7 @@ async def call_hive_api(url: str) -> tuple[dict | None, float]:
                     )
             else:
                 logger.warning(
-                    f"{ICON} HTTP error from Hive API at {url}: {response.status_code}",
+                    f"{ICON} HTTP error from Hive API {machine_name} at {url}: {response.status_code}",
                     extra={"notification": False},
                 )
     except (
@@ -235,14 +320,14 @@ async def call_hive_api(url: str) -> tuple[dict | None, float]:
     ) as e:  # Fixed syntax: tuple for multiple exceptions
         execution_time = timer() - start_time
         logger.error(
-            f"{ICON} Timeout error calling Hive API at {url}: {e}",
+            f"{ICON} Timeout error calling Hive API {machine_name}at {url}: {e}",
             extra={"notification": False, "error": e},
         )
 
     except Exception as e:
         execution_time = timer() - start_time
         logger.exception(
-            f"{ICON} Error calling Hive API at {url}: {e}",
+            f"{ICON} Error calling Hive API {machine_name} at {url}: {e}",
             extra={"notification": False, "error": e},
         )
 
@@ -286,3 +371,83 @@ This helps track performance trends over time, such as average response
 times on the monitor's dashboard.
 
 """
+
+
+async def update_witness_properties_switch_machine(
+    witness_name: str, machine_name: str, nobroadcast: bool = False
+) -> str | None:
+    """
+    Updates the witness properties for a given witness switching to a specified machine.
+
+    Args:
+        witness_name (str): The name of the witness.
+        machine_name (str): The name of the machine to use.
+
+    Returns:
+        None
+    """
+    logger.info(
+        f"{ICON} Updating witness properties for {witness_name} on machine {machine_name}.",
+        extra={"notification": False},
+    )
+    # Implementation for updating witness properties goes here
+    hive = get_hive_client()
+    hive = await get_verified_hive_client_for_accounts(
+        accounts=[witness_name], nobroadcast=nobroadcast
+    )
+    if not hive or not hive.rpc:
+        logger.warning(
+            f"{ICON} Could not get Hive client for {witness_name}.", extra={"notification": False}
+        )
+        return
+    witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+    if not witness_info or "props" not in witness_info:
+        logger.warning(
+            f"{ICON} Could not retrieve witness info for {witness_name}.",
+            extra={"notification": False},
+        )
+        return
+    pprint(witness_info)
+
+    witness = NectarWitness(witness_name, blockchain_instance=hive)
+    new_signing_key = ""
+    for machine in InternalConfig().config.hive.witness_configs[witness_name].witness_machines:
+        if machine.name == machine_name:
+            new_signing_key = machine.signing_key
+            break
+
+    if new_signing_key == witness_info.get("signing_key"):
+        logger.info(
+            f"{ICON} Witness {witness_name} is already using the signing key for machine {machine_name}. No update needed.",
+            extra={"notification": False},
+        )
+        return
+
+    # Prepare the props dict with current values, updating only what's needed
+    props = {
+        "account_creation_fee": witness_info["props"]["account_creation_fee"],
+        "maximum_block_size": witness_info["props"]["maximum_block_size"],
+        "hbd_interest_rate": witness_info["props"]["hbd_interest_rate"],
+    }
+
+    try:
+        # Use the Witness.update() method to update the signing key
+        # Note: This assumes the witness account has the necessary keys set up in the Hive client
+        trx = witness.update(
+            signing_key=new_signing_key,
+            url=witness_info.get("url", ""),
+            props=props,
+            account=witness_name,
+        )
+        trx_id: str = trx.get("trx_id", "N/A")
+        logger.info(
+            f"{ICON} {trx_id} Successfully updated witness {witness_name} signing key to {new_signing_key[:10]}... for machine {machine_name}.",
+            extra={"notification": False},
+        )
+        return trx_id
+    except Exception as e:
+        logger.exception(
+            f"{ICON} Error updating witness {witness_name}: {e}",
+            extra={"notification": False, "error": e},
+        )
+    return

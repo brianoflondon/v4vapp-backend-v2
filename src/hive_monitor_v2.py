@@ -242,6 +242,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
 
     # Empty database
     look_back = timedelta(hours=3)
+    op = None
     async for op in stream_ops_async(
         opNames=["producer_reward"], look_back=look_back, stop_now=True
     ):
@@ -259,7 +260,7 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
                     **op.log_extra,
                 },
             )
-    if op:
+    if op and isinstance(op, ProducerReward):
         return op
     return None
 
@@ -475,7 +476,7 @@ async def all_ops_loop(
                 elif isinstance(op, ProducerReward):
                     if op.producer in watch_witnesses:
                         notification = True
-                        await op.get_witness_details()
+                        await op.get_witness_details(ignore_cache=True)
                         op.mean, last_witness_timestamp = await witness_average_block_time(
                             op.producer
                         )
@@ -484,7 +485,7 @@ async def all_ops_loop(
                         db_store = True
 
                 elif isinstance(op, ProducerMissed):
-                    await op.get_witness_details()
+                    await op.get_witness_details(ignore_cache=True)
                     if op.producer in watch_witnesses:
                         notification = True
                     log_it = True

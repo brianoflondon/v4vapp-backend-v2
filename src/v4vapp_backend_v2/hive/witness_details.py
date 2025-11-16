@@ -15,6 +15,7 @@ API_ENDPOINTS = [
 
 ICON = "🔍"
 
+
 async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Response:
     """
     Helper function to fetch witness details with retry logic.
@@ -33,7 +34,9 @@ def fix_witness_at_root(answer: dict) -> dict:
     return answer
 
 
-async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | None:
+async def get_hive_witness_details(
+    hive_accname: str = "", ignore_cache: bool = False
+) -> WitnessDetails | None:
     """
     Fetches details about a Hive witness.
 
@@ -49,19 +52,22 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
     """
     cache_key = f"witness_{hive_accname}"
-    try:
-        ttl = InternalConfig.redis_decoded.ttl(cache_key)
-        if ttl and ttl > 0 and (1800 - ttl) < 300:
-            cached_data = InternalConfig.redis_decoded.get(cache_key)
-            if cached_data:
-                answer = json.loads(cached_data)
-                answer = fix_witness_at_root(answer)
-                return WitnessDetails.model_validate(answer)
-    except Exception as e:
-        logger.warning(
-            f"{ICON} Failed to check TTL or retrieve cached witness details from Redis: {e}",
-            extra={"notification": False, "error": e},
-        )
+    if not ignore_cache:
+        logger.info(f"{ICON} Checking Redis cache for witness details with key: {cache_key}")
+        try:
+            ttl = InternalConfig.redis_decoded.ttl(cache_key)
+            if ttl and ttl > 0 and (1800 - ttl) < 300:
+                cached_data = InternalConfig.redis_decoded.get(cache_key)
+                if cached_data:
+                    answer = json.loads(cached_data)
+                    answer = fix_witness_at_root(answer)
+                    logger.info(f"{ICON} Cache hit for {hive_accname}")
+                    return WitnessDetails.model_validate(answer)
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to check TTL or retrieve cached witness details from Redis: {e}",
+                extra={"notification": False, "error": e},
+            )
     # Attempt to fetch from API
     failure = False
     url: str = "not set"
@@ -120,14 +126,17 @@ async def get_hive_witness_details(hive_accname: str = "") -> WitnessDetails | N
     try:
         if not InternalConfig.redis_decoded.ping():
             logger.error(
-                f"{ICON} Redis is unavailable, cannot fetch cached data", extra={"notification": False}
+                f"{ICON} Redis is unavailable, cannot fetch cached data",
+                extra={"notification": False},
             )
             return None
 
         cached_data = InternalConfig.redis_decoded.get(cache_key)
         if cached_data:
             answer = json.loads(cached_data)
-            logger.info(f"{ICON} Successfully retrieved witness details from cache for {hive_accname}")
+            logger.info(
+                f"{ICON} Successfully retrieved witness details from cache for {hive_accname}"
+            )
             return WitnessDetails.model_validate(answer)
         else:
             logger.warning(f"{ICON} No cached data found for {cache_key}")
