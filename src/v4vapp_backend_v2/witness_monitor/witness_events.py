@@ -1,5 +1,4 @@
 import os
-from pprint import pprint
 from timeit import default_timer as timer
 from typing import Any, Dict
 
@@ -61,7 +60,8 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
 
 async def check_witness_heartbeat(
     witness: str = "",
-) -> None:
+    failure_state: bool = False,
+) -> bool:
     """
     Checks the heartbeat of a Hive witness and logs warnings if the witness is down.
 
@@ -79,7 +79,7 @@ async def check_witness_heartbeat(
             f"{ICON} Witness {witness} configuration not found.",
             extra={"notification": False},
         )
-        return
+        return False
 
     witness_details = await get_hive_witness_details(hive_accname=witness, ignore_cache=False)
 
@@ -95,13 +95,13 @@ async def check_witness_heartbeat(
         if witness_details and witness_details.witness:
             if witness_details.witness.signing_key == machine.signing_key:
                 machine_is_primary = True
-                logger.info(
+                logger.debug(
                     f"{ICON}{Fore.YELLOW} Witness {witness} signing key held by {machine.name}. {Style.RESET_ALL}",
                     extra={"notification": False},
                 )
                 primary_machine = machine.name
             else:
-                logger.info(
+                logger.debug(
                     f"{ICON} Backup {witness} on {machine.name}.",
                     extra={"notification": False},
                 )
@@ -114,21 +114,17 @@ async def check_witness_heartbeat(
                 msg = f"🚨 PRIMARY Witness {witness} machine {machine.name} is down."
                 log_func = logger.error
                 primary_failure = True
-                error_code = "primary_witness_down"
             else:
                 msg = f"Backup Witness {witness} machine {machine.name} is down."
                 log_func = logger.warning
-                error_code = "backup_witness_down"
             log_func(
                 f"{ICON} {msg}",
                 extra={
-                    "notification": machine_is_primary,
-                    "extra": {
-                        "machine": machine.name,
-                        "witness": witness,
-                        "result": result,
-                        "error_code": error_code,
-                    },
+                    "notification": True,
+                    "machine": machine.name,
+                    "witness": witness,
+                    "result": result,
+                    "error_code": "witness_error",
                 },
             )
             await send_kuma_heartbeat(
@@ -138,12 +134,12 @@ async def check_witness_heartbeat(
                 ping=execution_time,
             )
         else:
-            error_code_clear = (
-                "primary_witness_down" if machine_is_primary else "backup_witness_down"
-            )
-            logger.info(
+            # error_code_clear = (
+            #     "primary_witness_down" if machine_is_primary else "backup_witness_down"
+            # )
+            logger.debug(
                 f"{ICON} Witness {witness} machine {machine.name} is UP. Response time: {execution_time:.3f}s",
-                extra={"notification": False, "error_code_clear": error_code_clear},
+                extra={"notification": False},
             )
             machine_results[machine.name] = True
 
@@ -155,7 +151,7 @@ async def check_witness_heartbeat(
             extra={"notification": True},
         )
         working_machines = [name for name, status in machine_results.items() if status]
-        logger.info(
+        logger.warning(
             f"{ICON} Working machines for {witness}: {', '.join(working_machines) if working_machines else 'None'}",
             extra={"notification": False},
         )
@@ -187,9 +183,16 @@ async def check_witness_heartbeat(
         ]
         working_backups_str = ", ".join(working_backups) if working_backups else "None"
         msg = f"Witness {witness} is operational on {primary_machine}, backup(s) {working_backups_str} working."
-        logger.info(
-            f"{ICON} {msg} Average response time: {avg_execution_time:.3f}s",
-            extra={"notification": False},
+        if failure_state:
+            msg = f"{Fore.WHITE}RECOVERY: {msg}"
+            log_func = logger.info
+            notification = True
+        else:
+            log_func = logger.debug
+            notification = False
+        log_func(
+            f"{ICON} {msg} Average response time: {avg_execution_time:.3f}s {Style.RESET_ALL}",
+            extra={"notification": notification, "error_code_clear": "witness_error"},
         )
         await send_kuma_heartbeat(
             witness=witness,
@@ -197,6 +200,7 @@ async def check_witness_heartbeat(
             msg=msg,
             ping=avg_execution_time,
         )
+        return False
     else:
         failed_machines = [name for name, status in machine_results.items() if not status]
         message = (
@@ -212,6 +216,7 @@ async def check_witness_heartbeat(
             msg=message,
             ping=avg_execution_time,
         )
+        return True
 
 
 async def send_kuma_heartbeat(
@@ -248,7 +253,7 @@ async def send_kuma_heartbeat(
             }
             response = await client.get(webhook_url, params=params, timeout=10.0)
             response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
-            logger.info(
+            logger.debug(
                 f"{ICON} Successfully sent heartbeat to Kuma webhook.",
                 extra={"notification": False},
             )
@@ -299,7 +304,7 @@ async def call_hive_api(url: str, machine_name: str) -> tuple[dict | None, float
             if response.status_code == 200:
                 data = response.json()
                 if "result" in data and data.get("id") == 1:
-                    logger.info(
+                    logger.debug(
                         f"{ICON} Successfully called {machine_name} Hive API at {url}. Execution time: {execution_time:.4f}s",
                         extra={"notification": False},
                     )
@@ -314,10 +319,7 @@ async def call_hive_api(url: str, machine_name: str) -> tuple[dict | None, float
                     f"{ICON} HTTP error from Hive API {machine_name} at {url}: {response.status_code}",
                     extra={"notification": False},
                 )
-    except (
-        httpx.ConnectTimeout,
-        httpx.ReadTimeout,
-    ) as e:  # Fixed syntax: tuple for multiple exceptions
+    except httpx.HTTPError as e:
         execution_time = timer() - start_time
         logger.error(
             f"{ICON} Timeout error calling Hive API {machine_name}at {url}: {e}",
@@ -407,7 +409,6 @@ async def update_witness_properties_switch_machine(
             extra={"notification": False},
         )
         return
-    pprint(witness_info)
 
     witness = NectarWitness(witness_name, blockchain_instance=hive)
     new_signing_key = ""
@@ -442,7 +443,7 @@ async def update_witness_properties_switch_machine(
         trx_id: str = trx.get("trx_id", "N/A")
         logger.info(
             f"{ICON} {trx_id} Successfully updated witness {witness_name} signing key to {new_signing_key[:10]}... for machine {machine_name}.",
-            extra={"notification": False},
+            extra={"notification": True},
         )
         return trx_id
     except Exception as e:

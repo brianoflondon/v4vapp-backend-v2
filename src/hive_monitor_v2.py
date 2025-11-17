@@ -330,6 +330,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
 
         None
     """
+    failure_state = False
     witness_configs = InternalConfig().config.hive.witness_configs
     witness_config = witness_configs.get(witness_name, None)
     if not witness_config:
@@ -340,7 +341,9 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
         return
     try:
         while True:
-            await check_witness_heartbeat(witness=witness_name)
+            failure_state = await check_witness_heartbeat(
+                witness=witness_name, failure_state=failure_state
+            )
             await asyncio.sleep(witness_config.kuma_heartbeat_time)
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
         logger.info(f"{ICON} {e}: Stopping Witness Check {witness_name}.")
