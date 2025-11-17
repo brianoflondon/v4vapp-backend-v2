@@ -175,6 +175,22 @@ async def check_witness_heartbeat(
                     msg=f"🚨 FAILED to SWITCH PRIMARY Witness {witness} switched to machine {working_machines[0]}.",
                     ping=avg_execution_time,
                 )
+        else:
+            # No working machines available
+            logger.critical(
+                f"{ICON} 🚨 No working machines available to switch PRIMARY Witness {witness} Disabling Witness"
+            )
+            trx_id = await update_witness_properties_switch_machine(
+                witness_name=witness,
+                machine_name="",
+                nobroadcast=False,
+            )
+            await send_kuma_heartbeat(
+                witness=witness,
+                status="down",
+                msg=f"🚨 No working machines available to switch PRIMARY Witness {witness} Disabling Witness {trx_id}",
+                ping=avg_execution_time,
+            )
 
     # Everything is working normally.
     if failures == 0:
@@ -411,11 +427,15 @@ async def update_witness_properties_switch_machine(
         return
 
     witness = NectarWitness(witness_name, blockchain_instance=hive)
-    new_signing_key = ""
-    for machine in InternalConfig().config.hive.witness_configs[witness_name].witness_machines:
-        if machine.name == machine_name:
-            new_signing_key = machine.signing_key
-            break
+
+    if machine_name == "":
+        new_signing_key = "STM1111111111111111111111111111111114T1Anm"  # Disable witness
+    else:
+        new_signing_key = ""
+        for machine in InternalConfig().config.hive.witness_configs[witness_name].witness_machines:
+            if machine.name == machine_name:
+                new_signing_key = machine.signing_key
+                break
 
     if new_signing_key == witness_info.get("signing_key"):
         logger.info(

@@ -55,3 +55,6 @@ async def test_update_witness_properties_switch_machine():
     await update_witness_properties_switch_machine(
         witness_name=witness_name, machine_name="bol-1", nobroadcast=True
     )
+    await update_witness_properties_switch_machine(
+        witness_name="", machine_name="bol-1", nobroadcast=True
+    )
