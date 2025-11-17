@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar, OrderedDict, override
 
+from colorama import Fore, Style
+
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -134,7 +136,7 @@ class ErrorCode:
     def __init__(self, code: Any):
         self.code = code
         self.start_time = datetime.now(tz=timezone.utc)
-        logger.info(f"❌ Error code set: {self.code}")
+        logger.info(f"❌ {Fore.RED}Error code set: {self.code}{Style.RESET_ALL}")
 
     @property
     def elapsed_time(self) -> timedelta:
@@ -172,7 +174,7 @@ class CustomNotificationHandler(logging.Handler):
     @override
     def emit(self, record: logging.LogRecord):
         if hasattr(record, "bot_name"):
-            bot_name = record.bot_name
+            bot_name = record.bot_name  # type: ignore[attr-defined]
         else:
             bot_name = InternalConfig().config.logging.default_notification_bot_name
 
@@ -191,9 +193,7 @@ class CustomNotificationHandler(logging.Handler):
             elapsed_time = error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
             error_code_clear = error_code_clear  # type: ignore[attr-defined]
             elapsed_time_str = timedelta_display(elapsed_time)
-            log_message_clear = (
-                f"✅ Error code {error_code_clear} cleared after {elapsed_time_str}"
-            )
+            log_message_clear = f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after {elapsed_time_str}{Style.RESET_ALL}"
             if error_code_clear in self.error_codes:
                 self.error_codes.pop(error_code_clear)
                 logger.info(log_message_clear, extra={"notification": True, "record": record})
@@ -239,12 +239,12 @@ class CustomNotificationHandler(logging.Handler):
                         self.sender.send_notification(log_message, record, bot_name=bot_name)
 
         # Check for extra_bot_name
-        if hasattr(record, "extra_bot_name") and record.extra_bot_name:
-            process_bot_names(record.extra_bot_name)
+        if hasattr(record, "extra_bot_name") and record.extra_bot_name:  # type: ignore[attr-defined]
+            process_bot_names(record.extra_bot_name)  # type: ignore[attr-defined]
 
         # Check for extra_bot_names
-        elif hasattr(record, "extra_bot_names") and record.extra_bot_names:
-            process_bot_names(record.extra_bot_names)
+        elif hasattr(record, "extra_bot_names") and record.extra_bot_names:  # type: ignore[attr-defined]
+            process_bot_names(record.extra_bot_names)  # type: ignore[attr-defined]
 
 
 class NotificationFilter(logging.Filter):
@@ -272,13 +272,13 @@ class NotificationFilter(logging.Filter):
 
         # If the record.notification flag is set to False,
         # do not send the message to Notification
-        if hasattr(record, "notification") and not record.notification:
+        if hasattr(record, "notification") and not record.notification:  # type: ignore[attr-defined]
             return False
 
         # Send everything with level WARNING or higher to Notification
         # unless the record.notification flag is set to False
         return record.levelno >= logging.WARNING or (
-            hasattr(record, "notification") and record.notification
+            hasattr(record, "notification") and record.notification  # type: ignore[attr-defined]
         )
 
 
