@@ -8,7 +8,7 @@ from nectar.hive import Hive
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, format_time_delta
-from v4vapp_backend_v2.hive.hive_extras import HIVE_BLOCK_TIME
+from v4vapp_backend_v2.hive.hive_extras import DEFAULT_GOOD_NODES, HIVE_BLOCK_TIME
 from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
@@ -75,7 +75,7 @@ class BlockCounter:
     block_count: int = 0
     event_count: int = 0
     last_event_count: int = 0
-    hive_client: Hive = Hive()
+    hive_client: Hive = Hive(node=DEFAULT_GOOD_NODES[0])
     time_diff: timedelta = timedelta(seconds=0)
     running_time: float = 0
     error_code: str = ""

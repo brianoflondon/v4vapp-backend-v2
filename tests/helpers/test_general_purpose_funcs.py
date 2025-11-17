@@ -190,6 +190,7 @@ def test_is_markdown():
         "- List item",
         "1. Numbered list",
         "_italic_",
+        "🐝 **liondani Missed block** 101,084,197  1 day, 0 hours",
     ]
     assert is_markdown("plain text message") is False
 

@@ -215,6 +215,14 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
             # remove the first node from the list
             kwargs["node"] = kwargs["node"][1:]
             errors += 1
+        except Exception as e:
+            logger.warning(
+                f"Node {kwargs['node'][0]} not working {e} error: {errors}",
+                extra={"notification": True, "nodes": kwargs["node"]},
+            )
+            # remove the first node from the list
+            kwargs["node"] = kwargs["node"][1:]
+            errors += 1
     raise ValueError(f"No working node found {errors} errors")
 
 
@@ -362,11 +370,13 @@ async def get_verified_hive_client_for_accounts(
             hive_config.server_account.memo_key,
             hive_config.server_account.active_key,
         ]
-
-    hive_client = get_hive_client(
-        keys=keys,
-        nobroadcast=nobroadcast,
-    )
+    if keys == ["", ""]:
+        hive_client = get_hive_client(nobroadcast=nobroadcast)
+    else:
+        hive_client = get_hive_client(
+            keys=keys,
+            nobroadcast=nobroadcast,
+        )
     return hive_client
 
 

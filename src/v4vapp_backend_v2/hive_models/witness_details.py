@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
@@ -46,6 +47,15 @@ class Witness(BaseModel):
     hbd_interest_rate: int
     last_confirmed_block_num: int
     account_creation_fee: int
+    witness_machine: str | None = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Ensure witness_machine is set to witness_name if not provided
+        if InternalConfig().config.hive:
+            self.witness_machine = InternalConfig().config.hive.witness_key_to_machine_name(
+                self.witness_name, self.signing_key
+            )
 
 
 class WitnessDetails(BaseModel):

@@ -18,6 +18,7 @@ OP_TRACKED = [
     "account_update2",
     "fill_recurrent_transfer",
     "recurrent_transfer",
+    "producer_missed",
 ]
 
 # I don't think I need the recurrent_transfer_cancel op because it doesn't affect me.

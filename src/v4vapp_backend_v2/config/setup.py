@@ -174,6 +174,7 @@ class HiveRoles(StrEnum):
     funding = "funding"
     exchange = "exchange"
     customer = "customer"
+    witness = "witness"
 
 
 class HiveAccountConfig(BaseConfig):
@@ -206,17 +207,48 @@ class HiveAccountConfig(BaseConfig):
         return [key for key in [self.posting_key, self.active_key, self.memo_key] if key]
 
 
+class WitnessMachineConfig(BaseConfig):
+    name: str
+    url: str
+    signing_key: str
+
+
+class WitnessConfig(BaseConfig):
+    kuma_webhook_url: str = ""
+    kuma_heartbeat_time: int = 60  # seconds
+    witness_machines: List[WitnessMachineConfig]
+
+
 class HiveConfig(BaseConfig):
     hive_accs: Dict[str, HiveAccountConfig] = {"_none": HiveAccountConfig()}
     watch_users: List[str] = []
     proposals_tracked: List[int] = []
     watch_witnesses: List[str] = []
     custom_json_ids_tracked: List[str] = []
+    witness_configs: Dict[str, WitnessConfig] = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name, acc in self.hive_accs.items():
             acc.name = name
+
+    def witness_key_to_machine_name(self, witness_name: str, signing_key: str) -> str:
+        """
+        Given a witness name and signing key, return the corresponding machine name.
+
+        Args:
+            witness_name (str): The name of the witness.
+            signing_key (str): The signing key of the witness machine.
+        Returns:
+            str: The name of the witness machine associated with the signing key.
+        """
+        witness_config = self.witness_configs.get(witness_name)
+        if not witness_config:
+            return "unknown"
+        for machine in witness_config.witness_machines:
+            if machine.signing_key == signing_key:
+                return machine.name
+        return "unknown"
 
     @property
     def valid_hive_config(self) -> bool:

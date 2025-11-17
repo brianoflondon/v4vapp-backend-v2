@@ -23,6 +23,8 @@ from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
+from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
+from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
@@ -33,6 +35,7 @@ from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
+from v4vapp_backend_v2.witness_monitor.witness_events import process_witness_event
 
 
 async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> List[LedgerEntry]:
@@ -76,6 +79,11 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             v4vconfig = V4VConfig()
             if v4vconfig.server_accname == tracked_op.account:
                 v4vconfig.fetch()
+            return []
+
+        if isinstance(tracked_op, ProducerReward) or isinstance(tracked_op, ProducerMissed):
+            # No ledger entry necessary for producer rewards or missed blocks
+            asyncio.create_task(process_witness_event(tracked_op=tracked_op))
             return []
 
         if isinstance(tracked_op, BlockMarker):

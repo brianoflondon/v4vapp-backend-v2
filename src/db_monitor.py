@@ -2,7 +2,7 @@ import asyncio
 import signal
 import sys
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pprint import pprint
 from typing import Annotated, Any, Mapping, Sequence
 
@@ -136,7 +136,7 @@ class ResumeToken(BaseModel):
                 )
                 return self.data
             else:
-                logger.warning(f"No resume token found for collection '{self.collection}'.")
+                logger.warning(f"{ICON} No resume token found for collection '{self.collection}'.")
                 return None
         except Exception as e:
             logger.error(
@@ -212,7 +212,17 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         None
     """
     # server_account_names = InternalConfig().config.hive.server_account_names
-    full_document = change.get("fullDocument", {})
+    try:
+        full_document = change.get("fullDocument", {})
+        if not full_document:
+            logger.warning(
+                f"{ICON} No fullDocument found in change: {change}",
+                extra={"notification": False, "extra": {"change": change}},
+            )
+            return
+    except Exception as e:
+        logger.error(f"{ICON} Error extracting fullDocument: {e}", extra={"error": e})
+        return
     o_id = full_document.get("_id")
     mongo_id = str(o_id) if o_id is not None else "unknown_id"
     async with LockStr(mongo_id).locked(
@@ -450,9 +460,7 @@ async def main_async_start(use_resume: bool = True):
     # Register signal handlers for SIGTERM and SIGINT
     loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
-    db_pipelines = db_monitor_pipelines(
-        start_date=datetime.now(tz=timezone.utc) - timedelta(hours=1)
-    )
+    db_pipelines = db_monitor_pipelines()
     try:
         logger.info(f"{ICON} Database Monitor App started.")
         # Start streams once and wait for shutdown_event; then cancel streams
