@@ -21,7 +21,7 @@ async def fetch_witness_details(client: httpx.AsyncClient, url: str) -> httpx.Re
     Helper function to fetch witness details with retry logic.
     """
     timeout = httpx.Timeout(20.0, connect=10.0)
-    logger.info(f"{ICON} fetching witness details from {url}")
+    logger.debug(f"{ICON} fetching witness details from {url}")
     return await client.get(url, timeout=timeout)
 
 
@@ -53,7 +53,7 @@ async def get_hive_witness_details(
     """
     cache_key = f"witness_{hive_accname}"
     if not ignore_cache:
-        logger.info(f"{ICON} Checking Redis cache for witness details with key: {cache_key}")
+        logger.debug(f"{ICON} Checking Redis cache for witness details with key: {cache_key}")
         try:
             ttl = InternalConfig.redis_decoded.ttl(cache_key)
             if ttl and ttl > 0 and (1800 - ttl) < 300:
@@ -61,7 +61,7 @@ async def get_hive_witness_details(
                 if cached_data:
                     answer = json.loads(cached_data)
                     answer = fix_witness_at_root(answer)
-                    logger.info(f"{ICON} Cache hit for {hive_accname}")
+                    logger.debug(f"{ICON} Cache hit for {hive_accname}")
                     return WitnessDetails.model_validate(answer)
         except Exception as e:
             logger.warning(
