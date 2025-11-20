@@ -47,7 +47,7 @@ BLOCK_STREAM_ONLY = ["https://rpc.podping.org"]
 
 EXCLUDE_NODES = [
     "https://rpc.mahdiyari.info",
-    "https://api.hive.blog",
+    # "https://api.hive.blog",
     # "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
     # "https://api.openhive.network",
@@ -1034,6 +1034,35 @@ def process_user_memo(memo: str) -> str:
     if memo.startswith("#"):
         return memo[1:]
     return memo
+
+
+def witness_signing_key(witness_name: str) -> str | None:
+    """
+    Retrieves the current signing key for a given Hive witness.
+
+    Args:
+        witness_name (str): The name of the witness.
+
+    Returns:
+        str | None: The current signing key of the witness, or None if not found.
+
+    """
+    ICON = "X"
+    hive = get_hive_client()
+    if not hive or not hive.rpc:
+        logger.warning(
+            f"{ICON} Could not get Hive client to retrieve signing key for witness {witness_name}.",
+            extra={"notification": False},
+        )
+        return None
+    witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+    if not witness_info or "signing_key" not in witness_info:
+        logger.warning(
+            f"{ICON} Could not retrieve witness info for {witness_name}.",
+            extra={"notification": False},
+        )
+        return None
+    return witness_info["signing_key"]
 
 
 if __name__ == "__main__":

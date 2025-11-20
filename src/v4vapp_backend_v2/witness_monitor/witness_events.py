@@ -11,8 +11,8 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.hive_extras import (
     get_hive_client,
     get_verified_hive_client_for_accounts,
+    witness_signing_key,
 )
-from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 
@@ -20,7 +20,23 @@ ICON = "📡"
 
 
 async def process_witness_event(tracked_op: TrackedProducer) -> None:
-    """Process a witness-related event, such as ProducerReward or ProducerMissed."""
+    """
+    Asynchronously processes a witness event for a tracked producer.
+
+    This function logs the witness event, checks if the producer is being watched and has a valid configuration,
+    then handles the event based on its type (ProducerReward or ProducerMissed). If the event type is unknown,
+    it logs a warning. Any exceptions during processing are caught and logged.
+
+    Args:
+        tracked_op (TrackedProducer): The tracked producer operation containing the event details.
+
+    Returns:
+        None
+
+    Raises:
+        None: Exceptions are caught internally and logged.
+    """
+
     logger.info(
         f"Witness Event: {tracked_op.op_type:<16} for {tracked_op.producer}",
         extra={"notification": False},
@@ -59,7 +75,7 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
 
 
 async def check_witness_heartbeat(
-    witness: str = "",
+    witness_name: str = "",
     failure_state: bool = False,
 ) -> bool:
     """
@@ -73,132 +89,137 @@ async def check_witness_heartbeat(
     Returns:
         None
     """
-    witness_config = InternalConfig().config.hive.witness_configs.get(witness, None)
+    witness_config = InternalConfig().config.hive.witness_configs.get(witness_name, None)
     if not witness_config:
         logger.warning(
-            f"{ICON} Witness {witness} configuration not found.",
+            f"{ICON} Witness {witness_name} configuration not found.",
             extra={"notification": False},
         )
         return False
 
-    witness_details = await get_hive_witness_details(hive_accname=witness, ignore_cache=False)
-
-    execution_times = []
-    machine_results: dict[str, bool] = {}
     primary_failure = False
     primary_machine = ""
     failures = 0
+    signing_key = witness_signing_key(witness_name)
 
     # Loop through each witness machine and check its status
     for machine in witness_config.witness_machines:
-        machine_is_primary = False
-        if witness_details and witness_details.witness:
-            if witness_details.witness.signing_key == machine.signing_key:
-                machine_is_primary = True
-                logger.debug(
-                    f"{ICON}{Fore.YELLOW} Witness {witness} signing key held by {machine.name}. {Style.RESET_ALL}",
-                    extra={"notification": False},
-                )
-                primary_machine = machine.name
-            else:
-                logger.debug(
-                    f"{ICON} Backup {witness} on {machine.name}.",
-                    extra={"notification": False},
-                )
-        result, execution_time = await call_hive_api(machine.url, machine.name)
-        execution_times.append(execution_time)
+        if signing_key == machine.signing_key:
+            machine.primary = True
+            logger.debug(
+                f"{ICON}{Fore.YELLOW} Witness {witness_name} signing key held by {machine.name}. {Style.RESET_ALL}",
+                extra={"notification": False},
+            )
+            primary_machine = machine.name
+        else:
+            machine.primary = False
+            logger.debug(
+                f"{ICON} Backup {witness_name} on {machine.name}.",
+                extra={"notification": False},
+            )
+        result, machine.execution_time = await verify_hive_witness_rpc_alive(
+            machine.url, machine.name
+        )
         if result is None:
-            machine_results[machine.name] = False
+            # Failure is detected
+            machine.working = False
             failures += 1
-            if machine_is_primary:
-                msg = f"🚨 PRIMARY Witness {witness} machine {machine.name} is down."
+            if machine.primary:
+                msg = (
+                    f"🚨 PRIMARY Witness {witness_name} machine {machine.name} is down. {machine}"
+                )
                 log_func = logger.error
                 primary_failure = True
             else:
-                msg = f"Backup Witness {witness} machine {machine.name} is down."
+                msg = f"Backup Witness {witness_name} machine {machine.name} is down. {machine}"
                 log_func = logger.warning
             log_func(
                 f"{ICON} {msg}",
                 extra={
                     "notification": True,
-                    "machine": machine.name,
-                    "witness": witness,
+                    "machine": machine,
+                    "witness": witness_name,
                     "result": result,
                     "error_code": "witness_error",
                 },
             )
             await send_kuma_heartbeat(
-                witness=witness,
+                witness=witness_name,
                 status="down",
                 msg=msg,
-                ping=execution_time,
+                ping=machine.execution_time,
             )
         else:
-            # error_code_clear = (
-            #     "primary_witness_down" if machine_is_primary else "backup_witness_down"
-            # )
-            logger.debug(
-                f"{ICON} Witness {witness} machine {machine.name} is UP. Response time: {execution_time:.3f}s",
-                extra={"notification": False},
-            )
-            machine_results[machine.name] = True
+            # Success
+            machine.working = True
 
-    avg_execution_time = sum(execution_times) / len(execution_times)
+        logger.debug(
+            f"{ICON} {machine}",
+            extra={"notification": False, "machine": machine},
+        )
+
+    avg_execution_time = sum(
+        machine.execution_time for machine in witness_config.witness_machines
+    ) / len(witness_config.witness_machines)
 
     if primary_failure:
         logger.error(
-            f"{ICON} 🚨 PRIMARY Witness {witness} is DOWN! Immediate attention required!",
+            f"{ICON} 🚨 PRIMARY Witness {witness_name} is DOWN! Immediate attention required!",
             extra={"notification": True},
         )
-        working_machines = [name for name, status in machine_results.items() if status]
+        working_machines = [
+            machine.name for machine in witness_config.witness_machines if machine.working
+        ]
         logger.warning(
-            f"{ICON} Working machines for {witness}: {', '.join(working_machines) if working_machines else 'None'}",
+            f"{ICON} Working machines for {witness_name}: {', '.join(working_machines) if working_machines else 'None'}",
             extra={"notification": False},
         )
         if working_machines:
             trx_id = await update_witness_properties_switch_machine(
-                witness_name=witness,
+                witness_name=witness_name,
                 machine_name=working_machines[0],
                 nobroadcast=False,
             )
             if trx_id:
                 await send_kuma_heartbeat(
-                    witness=witness,
+                    witness=witness_name,
                     status="up",
-                    msg=f"PRIMARY Witness {witness} switched to machine {working_machines[0]} {trx_id}.",
+                    msg=f"PRIMARY Witness {witness_name} switched to machine {working_machines[0]} {trx_id}.",
                     ping=avg_execution_time,
                 )
             else:
                 await send_kuma_heartbeat(
-                    witness=witness,
+                    witness=witness_name,
                     status="down",
-                    msg=f"🚨 FAILED to SWITCH PRIMARY Witness {witness} switched to machine {working_machines[0]}.",
+                    msg=f"🚨 FAILED to SWITCH PRIMARY Witness {witness_name} switched to machine {working_machines[0]}.",
                     ping=avg_execution_time,
                 )
         else:
             # No working machines available
             logger.critical(
-                f"{ICON} 🚨 No working machines available to switch PRIMARY Witness {witness} Disabling Witness"
+                f"{ICON} 🚨 No working machines available to switch PRIMARY Witness {witness_name} Disabling Witness"
             )
             trx_id = await update_witness_properties_switch_machine(
-                witness_name=witness,
+                witness_name=witness_name,
                 machine_name="",
                 nobroadcast=False,
             )
             await send_kuma_heartbeat(
-                witness=witness,
+                witness=witness_name,
                 status="down",
-                msg=f"🚨 No working machines available to switch PRIMARY Witness {witness} Disabling Witness {trx_id}",
+                msg=f"🚨 No working machines available to switch PRIMARY Witness {witness_name} Disabling Witness {trx_id}",
                 ping=avg_execution_time,
             )
 
     # Everything is working normally.
     if failures == 0:
         working_backups = [
-            name for name, status in machine_results.items() if status and name != primary_machine
+            machine.name
+            for machine in witness_config.witness_machines
+            if machine.working and machine.name != primary_machine
         ]
         working_backups_str = ", ".join(working_backups) if working_backups else "None"
-        msg = f"Witness {witness} is operational on {primary_machine}, backup(s) {working_backups_str} working."
+        msg = f"Witness {witness_name} is operational on {primary_machine}, backup(s) {working_backups_str} working."
         if failure_state:
             msg = f"{Fore.WHITE}RECOVERY: {msg}"
             log_func = logger.info
@@ -211,23 +232,23 @@ async def check_witness_heartbeat(
             extra={"notification": notification, "error_code_clear": "witness_error"},
         )
         await send_kuma_heartbeat(
-            witness=witness,
+            witness=witness_name,
             status="up",
             msg=msg,
             ping=avg_execution_time,
         )
         return False
     else:
-        failed_machines = [name for name, status in machine_results.items() if not status]
-        message = (
-            f"Witness {witness} has {failures} failed machine(s) {', '.join(failed_machines)}."
-        )
+        failed_machines = [
+            machine.name for machine in witness_config.witness_machines if not machine.working
+        ]
+        message = f"Witness {witness_name} has {failures} failed machine(s) {', '.join(failed_machines)}."
         logger.warning(
             f"{ICON} {message} Average response time: {avg_execution_time:.3f}s",
             extra={"notification": False},
         )
         await send_kuma_heartbeat(
-            witness=witness,
+            witness=witness_name,
             status="down",
             msg=message,
             ping=avg_execution_time,
@@ -290,7 +311,7 @@ async def send_kuma_heartbeat(
         )
 
 
-async def call_hive_api(url: str, machine_name: str) -> tuple[dict | None, float]:
+async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[dict | None, float]:
     """
     Calls the Hive API at the given IP and port with a POST request containing
     the get_dynamic_global_properties JSON-RPC payload. Measures execution time
