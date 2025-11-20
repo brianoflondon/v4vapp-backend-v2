@@ -104,6 +104,7 @@ async def track_events(
                     "notification": notification,
                     "silent": silent,
                     type(htlc_event).__name__: ans_dict,
+                    "htlc_event": htlc_event,
                 },
             )
         asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))
