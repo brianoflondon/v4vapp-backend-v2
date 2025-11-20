@@ -49,6 +49,7 @@ AUTO_BALANCE_SERVER = True
 COMMAND_LINE_WATCH_USERS: List[str] = []
 COMMAND_LINE_WATCH_ONLY = False
 
+TIME_DELAY: int = 0
 
 app = typer.Typer()
 ICON = "🐝"
@@ -330,6 +331,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
 
         None
     """
+    global TIME_DELAY
     failure_state = False
     witness_configs = InternalConfig().config.hive.witness_configs
     witness_config = witness_configs.get(witness_name, None)
@@ -341,6 +343,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
         return
     try:
         while True:
+            await asyncio.sleep(TIME_DELAY)
             failure_state = await check_witness_heartbeat(
                 witness_name=witness_name, failure_state=failure_state
             )
@@ -400,6 +403,7 @@ async def all_ops_loop(
         asyncio.CancelledError: If the asyncio task is cancelled.
         Exception: For any other exceptions that occur during processing.
     """
+    global TIME_DELAY
     logger.info(
         f"{ICON} Combined Loop Watching users: {watch_users} and witnesses {watch_witnesses}"
     )
@@ -450,7 +454,7 @@ async def all_ops_loop(
 
                 elif is_op_all_transfer(op):
                     if op.is_watched:
-                        await TrackedBaseModel.update_quote()
+                        await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
                         await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             asyncio.create_task(balance_server_hbd_level(op))
@@ -468,7 +472,7 @@ async def all_ops_loop(
                 elif (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
-                    await TrackedBaseModel.update_quote()
+                    await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
                     await op.update_conv()
                     notification = (
                         False if isinstance(op, FillOrder) and not op.completed_order else True
@@ -479,7 +483,7 @@ async def all_ops_loop(
                 elif isinstance(op, ProducerReward):
                     if op.producer in watch_witnesses:
                         notification = True
-                        await op.get_witness_details(ignore_cache=True)
+                        await op.get_witness_details(ignore_cache=True, time_delay=TIME_DELAY)
                         op.mean, last_witness_timestamp = await witness_average_block_time(
                             op.producer
                         )
@@ -490,7 +494,7 @@ async def all_ops_loop(
                 elif isinstance(op, ProducerMissed):
                     # Only check details for missed blocks if we are watching the witnesses
                     if watch_witnesses:
-                        await op.get_witness_details(ignore_cache=False)
+                        await op.get_witness_details(ignore_cache=False, time_delay=TIME_DELAY)
                         if op.producer in watch_witnesses:
                             notification = True
                         log_it = True
@@ -602,7 +606,7 @@ async def store_rates() -> None:
     try:
         while not shutdown_event.is_set():
             try:
-                await TrackedBaseModel.update_quote()
+                await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
                 quote = TrackedBaseModel.last_quote
                 logger.info(
                     f"{ICON} Updating Quotes: {quote.hive_usd:.3f} hive/usd {quote.sats_hive:.0f} sats/hive fetch date {quote.fetch_date}",
@@ -748,6 +752,17 @@ def main(
             show_default=True,
         ),
     ] = 0,
+    time_delay: Annotated[
+        int,
+        typer.Option(
+            "--time-delay",
+            help="""After a block is received, time delay before taking actions.
+            If this is running alongside another instance, this will help stagger actions and
+            improve the use of any shared cache for things
+            like Witness details and exchange rates.""",
+            show_default=True,
+        ),
+    ] = 0,
 ):
     """
     Watch the Hive blockchain for transactions.
@@ -769,6 +784,8 @@ def main(
     global HIVE_DATABASE
     global HIVE_DATABASE_CONNECTION
     global HIVE_DATABASE_USER
+    global TIME_DELAY
+    TIME_DELAY = time_delay
 
     if not database_connection:
         HIVE_DATABASE_CONNECTION = CONFIG.dbs_config.default_connection
@@ -778,13 +795,12 @@ def main(
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
     # TODO: This is redundant, remove it no setting database here any more
 
-    pause_time = uniform(0.1, 1.5)
     logger.info(
-        f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {pause_time:.2f}s",
+        f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {time_delay:.2f}s",
         extra={"notification": True},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds
-    sleep(pause_time)
+    sleep(time_delay)
     if not watch_users:
         watch_users = CONFIG.hive.watch_users
     if not watch_witnesses:

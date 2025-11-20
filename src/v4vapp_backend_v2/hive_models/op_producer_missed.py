@@ -42,7 +42,7 @@ class ProducerMissed(ProducerMissedRaw):
         notification_str = f"*{self.producer} Missed block* {self.block_num:,} {self.age_str} | Key: {self.missing_key}"
         return notification_str
 
-    async def get_witness_details(self, ignore_cache: bool = False):
+    async def get_witness_details(self, ignore_cache: bool = False, time_delay: int = 0) -> None:
         """
         Asynchronously retrieves and sets the witness details for the producer.
 
@@ -56,7 +56,9 @@ class ProducerMissed(ProducerMissedRaw):
         """
 
         if self.producer:
-            witness_details = await get_hive_witness_details(self.producer, ignore_cache=True)
+            witness_details = await get_hive_witness_details(
+                self.producer, ignore_cache=ignore_cache, time_delay=time_delay
+            )
             if witness_details:
                 self.witness = witness_details.witness
                 if self.witness:

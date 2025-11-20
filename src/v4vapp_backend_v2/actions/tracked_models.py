@@ -1,3 +1,4 @@
+import asyncio
 import re
 from asyncio import get_event_loop
 from datetime import datetime, timedelta, timezone
@@ -391,7 +392,11 @@ class TrackedBaseModel(BaseModel):
 
     @classmethod
     async def update_quote(
-        cls, quote: QuoteResponse | None = None, use_cache: bool = True, store_db: bool = True
+        cls,
+        quote: QuoteResponse | None = None,
+        use_cache: bool = True,
+        store_db: bool = True,
+        time_delay: int = 0,
     ) -> QuoteResponse:
         """
         Asynchronously updates the last quote for the class.
@@ -403,10 +408,16 @@ class TrackedBaseModel(BaseModel):
         Args:
             quote (QuoteResponse | None): The quote to update.
                 If None, fetches all quotes.
+            use_cache (bool): Whether to use cached quotes when fetching.
+            store_db (bool): Whether to store the fetched quotes in the database.
+            time_delay (int): Optional delay in seconds before fetching quotes to allow
+                for a prior quote to complete and be in the cache.
 
         Returns:
             None
         """
+        if time_delay:
+            await asyncio.sleep(time_delay)
         if quote:
             cls.last_quote = quote
         else:

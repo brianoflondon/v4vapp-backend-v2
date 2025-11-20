@@ -35,7 +35,7 @@ def fix_witness_at_root(answer: dict) -> dict:
 
 
 async def get_hive_witness_details(
-    hive_accname: str = "", ignore_cache: bool = False
+    hive_accname: str = "", ignore_cache: bool = False, time_delay: int = 0
 ) -> WitnessDetails | None:
     """
     Fetches details about a Hive witness.
@@ -47,6 +47,8 @@ async def get_hive_witness_details(
 
     Args:
         hive_accname (str): The account name of the Hive witness. If empty, fetches all witnesses.
+        ignore_cache (bool): If True, ignores the Redis cache and fetches fresh data from the API.
+        time_delay (int): Optional delay in seconds before fetching to allow for cache updates.
 
     Returns:
         WitnessDetails | None: A WitnessDetails object containing the witness details, or None if the request fails.
