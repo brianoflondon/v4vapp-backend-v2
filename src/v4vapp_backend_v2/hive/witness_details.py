@@ -103,12 +103,13 @@ async def get_hive_witness_details(
                     f"{ICON} API returned status {e.response.status_code} for {url}",
                     extra={"notification": False, "error": e},
                 )
+                failure = True
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 logger.error(
                     f"{ICON} Connection failed to {url}: {e}",
                     extra={"notification": False, "error": e},
                 )
-
+                failure = True
             except ValueError as e:
                 logger.warning(
                     f"{ICON} Failed to parse JSON response from {url}, trying again...",
