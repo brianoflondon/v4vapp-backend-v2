@@ -43,7 +43,7 @@ DEFAULT_GOOD_NODES = [
     "https://api.syncad.com",
 ]
 
-BLOCK_STREAM_ONLY = ["https://rpc.podping.org"]
+BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
     "https://rpc.mahdiyari.info",

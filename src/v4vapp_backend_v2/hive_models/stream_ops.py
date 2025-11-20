@@ -12,7 +12,6 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.async_wrapper import sync_to_async_iterable
 from v4vapp_backend_v2.hive.hive_extras import (
-    BLOCK_STREAM_ONLY,
     get_blockchain_instance,
     get_good_nodes,
     get_hive_client,
@@ -76,8 +75,8 @@ async def stream_ops_async(
         - Logging is used to provide information about the streaming process and errors.
 
     """
-    hive = hive or get_hive_client()
     good_nodes = get_good_nodes()
+    hive = get_hive_client() if hive is None else hive
     hive.set_default_nodes(good_nodes)
     blockchain = get_blockchain_instance(hive_instance=hive)
     # This ensures the Transaction class has a hive instance with memo keys
