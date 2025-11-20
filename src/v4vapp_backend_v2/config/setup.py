@@ -211,6 +211,13 @@ class WitnessMachineConfig(BaseConfig):
     name: str
     url: str
     signing_key: str
+    priority: int = 0
+    working: bool = True
+    primary: bool = False
+    execution_time: float = 0.0
+
+    def __str__(self) -> str:
+        return f"Witness {self.name:<18} {'(*)' if self.primary else '(b)'} {'is UP' if self.working else 'is DOWN'} Response time: {self.execution_time:.3f}s"
 
 
 class WitnessConfig(BaseConfig):

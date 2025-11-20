@@ -11,6 +11,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_blockchain_instance,
     get_hive_client,
     send_custom_json,
+    witness_signing_key,
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 
@@ -289,6 +290,12 @@ def test_account_hive_balances():
     assert isinstance(balances, dict)
     assert "HIVE" in balances
     assert "HBD" in balances
+
+
+def test_witness_signing_key():
+    signing_key = witness_signing_key("brianoflondon")
+    assert signing_key is not None
+    print(f"Signing key: {signing_key}")
 
 
 if __name__ == "__main__":

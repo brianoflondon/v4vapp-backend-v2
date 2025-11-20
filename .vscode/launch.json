@@ -97,8 +97,8 @@
                 "--config-filename",
                 "live-v4vapp-server-hive.config.yaml",
                 "--watch-only",
-                "--start-block",
-                "101084197"
+                // "--start-block",
+                // "101084197"
                 // "96228302"
             ],
             "justMyCode": true,

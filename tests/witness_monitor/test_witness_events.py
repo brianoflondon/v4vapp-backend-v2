@@ -3,11 +3,12 @@ from pprint import pprint
 
 import pytest
 
+from v4vapp_backend_v2.hive.hive_extras import witness_signing_key
 from v4vapp_backend_v2.witness_monitor.witness_events import (
-    call_hive_api,
     check_witness_heartbeat,
     send_kuma_heartbeat,
     update_witness_properties_switch_machine,
+    verify_hive_witness_rpc_alive,
 )
 
 
@@ -31,7 +32,7 @@ async def test_call_hive_api():
     test_rpc_nodes = ["https://api.hive.blog", "https://rpc.podping.org"]
 
     for rpc_node in test_rpc_nodes:
-        result, execution_time = await call_hive_api(rpc_node, "example_machine")
+        result, execution_time = await verify_hive_witness_rpc_alive(rpc_node, "example_machine")
         assert result is not None
         pprint(result)
         print(f"Execution time for {rpc_node}: {execution_time:.3f} seconds")
@@ -43,7 +44,7 @@ async def test_send_kuma_heartbeat():
 
 async def test_check_witness_heartbeat():
     await check_witness_heartbeat(
-        witness="brianoflondon",
+        witness_name="brianoflondon",
     )
 
 
@@ -58,3 +59,4 @@ async def test_update_witness_properties_switch_machine():
     await update_witness_properties_switch_machine(
         witness_name="", machine_name="bol-1", nobroadcast=True
     )
+

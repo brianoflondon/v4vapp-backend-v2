@@ -78,6 +78,17 @@ async def get_channel_name(
         # node_info = MessageToDict(response, preserving_proto_field_name=True)
 
         return LndChannelName(channel_id=channel_id, name=node_info.node.alias)
+    except LNDConnectionError as e:
+        try:
+            if "edge not found" in str(e.details()).lower():
+                logger.warning(
+                    f"{lnd_client.icon} get_channel_name: channel {channel_id} not found"
+                )
+                return LndChannelName(channel_id=channel_id, name="Unknown")
+        except Exception:
+            pass
+        logger.exception(e)
+        return LndChannelName(channel_id=channel_id, name="Unknown")
     except Exception as e:
         logger.exception(e)
         return LndChannelName(channel_id=channel_id, name="Unknown")

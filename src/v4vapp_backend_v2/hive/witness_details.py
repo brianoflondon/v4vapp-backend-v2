@@ -77,7 +77,7 @@ async def get_hive_witness_details(
         for api_url in shuffled_endpoints:
             url = f"{api_url}witnesses/{hive_accname}" if hive_accname else f"{api_url}witnesses/"
             try:
-                timeout = httpx.Timeout(20.0, connect=10.0)
+                timeout = httpx.Timeout(5.0, connect=5.0)
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await fetch_witness_details(client, url)
                     response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
@@ -103,12 +103,13 @@ async def get_hive_witness_details(
                     f"{ICON} API returned status {e.response.status_code} for {url}",
                     extra={"notification": False, "error": e},
                 )
+                failure = True
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 logger.error(
                     f"{ICON} Connection failed to {url}: {e}",
                     extra={"notification": False, "error": e},
                 )
-
+                failure = True
             except ValueError as e:
                 logger.warning(
                     f"{ICON} Failed to parse JSON response from {url}, trying again...",
@@ -153,6 +154,6 @@ async def get_hive_witness_details(
 
     logger.warning(
         f"{ICON} Failed to get witness details for {hive_accname} from both API and cache",
-        extra={"notification": True},
+        extra={"notification": False},
     )
     return None

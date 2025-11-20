@@ -1,5 +1,6 @@
 from pydantic import ConfigDict, Field
 
+from v4vapp_backend_v2.hive.hive_extras import witness_signing_key
 from v4vapp_backend_v2.hive.witness_details import get_hive_witness_details
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -60,3 +61,5 @@ class ProducerMissed(ProducerMissedRaw):
                 self.witness = witness_details.witness
                 if self.witness:
                     self.missing_key = self.witness.signing_key
+            else:
+                self.missing_key = witness_signing_key(self.producer)

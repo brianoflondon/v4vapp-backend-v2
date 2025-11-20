@@ -342,7 +342,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
     try:
         while True:
             failure_state = await check_witness_heartbeat(
-                witness=witness_name, failure_state=failure_state
+                witness_name=witness_name, failure_state=failure_state
             )
             await asyncio.sleep(witness_config.kuma_heartbeat_time)
     except (KeyboardInterrupt, asyncio.CancelledError) as e:
@@ -488,11 +488,13 @@ async def all_ops_loop(
                         db_store = True
 
                 elif isinstance(op, ProducerMissed):
-                    await op.get_witness_details(ignore_cache=True)
-                    if op.producer in watch_witnesses:
-                        notification = True
-                    log_it = True
-                    db_store = True
+                    # Only check details for missed blocks if we are watching the witnesses
+                    if watch_witnesses:
+                        await op.get_witness_details(ignore_cache=False)
+                        if op.producer in watch_witnesses:
+                            notification = True
+                        log_it = True
+                        db_store = True
 
                 elif OpBase.proposals_tracked and isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
