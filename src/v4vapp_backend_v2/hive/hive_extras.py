@@ -3,6 +3,7 @@ import random
 import struct
 from typing import Any, Dict, List, Tuple
 
+import backoff
 import httpx
 from ecdsa import MalformedPointError  # type: ignore
 from nectar.account import Account
@@ -1036,6 +1037,13 @@ def process_user_memo(memo: str) -> str:
     return memo
 
 
+@backoff.on_exception(
+    backoff.expo,
+    (Exception,),
+    max_tries=3,
+    jitter=backoff.full_jitter,
+    logger=logger,
+)
 def witness_signing_key(witness_name: str) -> str | None:
     """
     Retrieves the current signing key for a given Hive witness.
@@ -1048,21 +1056,28 @@ def witness_signing_key(witness_name: str) -> str | None:
 
     """
     ICON = "X"
-    hive = get_hive_client()
-    if not hive or not hive.rpc:
-        logger.warning(
-            f"{ICON} Could not get Hive client to retrieve signing key for witness {witness_name}.",
+    try:
+        hive = get_hive_client()
+        if not hive or not hive.rpc:
+            logger.warning(
+                f"{ICON} Could not get Hive client to retrieve signing key for witness {witness_name}.",
+                extra={"notification": False},
+            )
+            return None
+        witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
+        if not witness_info or "signing_key" not in witness_info:
+            logger.warning(
+                f"{ICON} Could not retrieve witness info for {witness_name}.",
+                extra={"notification": False},
+            )
+            return None
+        return witness_info["signing_key"]
+    except Exception as e:
+        logger.error(
+            f"{ICON} Error retrieving signing key for witness {witness_name}: {e}",
             extra={"notification": False},
         )
         return None
-    witness_info: Dict[str, Any] | None = hive.rpc.get_witness_by_account(witness_name)
-    if not witness_info or "signing_key" not in witness_info:
-        logger.warning(
-            f"{ICON} Could not retrieve witness info for {witness_name}.",
-            extra={"notification": False},
-        )
-        return None
-    return witness_info["signing_key"]
 
 
 if __name__ == "__main__":
