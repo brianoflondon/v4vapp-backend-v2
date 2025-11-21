@@ -436,6 +436,7 @@ async def all_ops_loop(
             async for op in stream_ops_async(
                 opNames=OpBase.op_tracked, start=last_good_block, stop_now=False, hive=hive_client
             ):
+                time_delay = TIME_DELAY if not block_counter.is_catching_up else 0
                 notification = False
                 log_it = False
                 extra_bots: List[str] = []
@@ -454,7 +455,7 @@ async def all_ops_loop(
 
                 elif is_op_all_transfer(op):
                     if op.is_watched:
-                        await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
+                        await TrackedBaseModel.update_quote(time_delay=time_delay)
                         await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
                             asyncio.create_task(balance_server_hbd_level(op))
@@ -472,7 +473,7 @@ async def all_ops_loop(
                 elif (
                     isinstance(op, LimitOrderCreate) or isinstance(op, FillOrder)
                 ) and op.is_watched:
-                    await TrackedBaseModel.update_quote(time_delay=TIME_DELAY)
+                    await TrackedBaseModel.update_quote(time_delay=time_delay)
                     await op.update_conv()
                     notification = (
                         False if isinstance(op, FillOrder) and not op.completed_order else True
@@ -483,7 +484,7 @@ async def all_ops_loop(
                 elif isinstance(op, ProducerReward):
                     if op.producer in watch_witnesses:
                         notification = True
-                        await op.get_witness_details(ignore_cache=True, time_delay=TIME_DELAY)
+                        await op.get_witness_details(ignore_cache=True, time_delay=time_delay)
                         op.mean, last_witness_timestamp = await witness_average_block_time(
                             op.producer
                         )
@@ -494,7 +495,7 @@ async def all_ops_loop(
                 elif isinstance(op, ProducerMissed):
                     # Only check details for missed blocks if we are watching the witnesses
                     if watch_witnesses:
-                        await op.get_witness_details(ignore_cache=False, time_delay=TIME_DELAY)
+                        await op.get_witness_details(ignore_cache=False, time_delay=time_delay)
                         if op.producer in watch_witnesses:
                             notification = True
                         log_it = True

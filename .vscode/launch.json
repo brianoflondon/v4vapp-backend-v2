@@ -99,6 +99,8 @@
                 "--config-filename",
                 "live-v4vapp-server-hive.config.yaml",
                 "--watch-only",
+                "--time-delay",
+                "2",
                 // "--start-block",
                 // "101084197"
                 // "96228302"

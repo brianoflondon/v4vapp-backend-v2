@@ -120,6 +120,17 @@ class BlockCounter:
             "marker_point": self.marker_point,
         }
 
+    @property
+    def is_catching_up(self) -> bool:
+        """
+        Determines if the BlockCounter is currently catching up based on the time difference.
+
+        Returns:
+            bool: True if the time difference exceeds the predefined threshold, indicating
+                  that the BlockCounter is catching up; False otherwise.
+        """
+        return self.time_diff > TIME_DIFFERENCE_CHECK
+
     def inc(self, hive_event: dict, notification: bool = False) -> Tuple[bool, bool]:
         """
         Increment the block counter and handle marker updates based on the provided hive event.
@@ -168,7 +179,7 @@ class BlockCounter:
 
                 self.marker_point = int(
                     (15 * 60 / HIVE_BLOCK_TIME)
-                    if self.time_diff < TIME_DIFFERENCE_CHECK
+                    if self.is_catching_up
                     else (5 * 60 / HIVE_BLOCK_TIME)
                 )
                 self.next_marker += self.marker_point
