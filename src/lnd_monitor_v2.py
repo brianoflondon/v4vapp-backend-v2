@@ -70,6 +70,11 @@ async def track_events(
     # dest_alias=dest_alias)
     # The delay is necessary to allow the group to complete because sometimes
     # Invoices and Payments are not received in the right order with the HtlcEvents
+    try:
+        htlc_event_dict = MessageToDict(htlc_event, preserving_proto_field_name=True)
+    except Exception:
+        htlc_event_dict = {}
+    invoice_dict = {}
     if lnd_events_group.complete_group(event=htlc_event):
         incoming_invoice = None
         notification = True if isinstance(htlc_event, routerrpc.HtlcEvent) else False
@@ -88,6 +93,9 @@ async def track_events(
                     amount = int(incoming_invoice.value_msat / 1000)
                     settled = incoming_invoice.settled
                     notification = False if amount < 10 or not settled else notification
+                    invoice_dict = MessageToDict(
+                        incoming_invoice, preserving_proto_field_name=True
+                    )
             except Exception as e:
                 logger.exception(e)
                 pass
@@ -105,8 +113,8 @@ async def track_events(
                     "notification": notification,
                     "silent": silent,
                     type(htlc_event).__name__: ans_dict,
-                    "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True),
-                    "incoming_invoice": incoming_invoice if incoming_invoice else None,
+                    "htlc_event": htlc_event_dict,
+                    "incoming_invoice": invoice_dict if incoming_invoice else None,
                 },
             )
         asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))
