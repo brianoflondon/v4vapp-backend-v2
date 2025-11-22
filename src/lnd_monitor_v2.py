@@ -86,7 +86,8 @@ async def track_events(
                 if incoming_invoice:
                     # logger.info(f"Found incoming invoice... {htlc_id}")
                     amount = int(incoming_invoice.value_msat / 1000)
-                    notification = False if amount < 10 else notification
+                    settled = incoming_invoice.settled
+                    notification = False if amount < 10 or not settled else notification
             except Exception as e:
                 logger.exception(e)
                 pass
@@ -105,6 +106,7 @@ async def track_events(
                     "silent": silent,
                     type(htlc_event).__name__: ans_dict,
                     "htlc_event": MessageToDict(htlc_event, preserving_proto_field_name=True),
+                    "incoming_invoice": incoming_invoice if incoming_invoice else None,
                 },
             )
         asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))
