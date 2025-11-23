@@ -599,19 +599,44 @@ class Config(BaseModel):
 
 class ConsoleLogFilter(logging.Filter):
     """
-    A logging filter that allows only log records with a level greater than DEBUG.
+    A logging filter that allows only log records with a level greater than D EBUG.
 
     This is referenced in the logging configuration json file.
 
     Methods:
         filter(record: logging.LogRecord) -> bool | logging.LogRecord:
             Determines if the given log record should be logged. Returns True
-            if the log level is more than DEBUG, otherwise False.
+            if the log level is more than D EBUG, otherwise False.
     """
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         return record.levelno >= BASE_DISPLAY_LOG_LEVEL
+
+
+class AddNotificationBellFilter(logging.Filter):
+    """
+    A logging filter that adds a notification bell emoji to log messages
+    that are warnings or higher, or have the 'notification' attribute set to True.
+
+    Methods:
+        filter(record: logging.LogRecord) -> logging.LogRecord:
+            Modifies the log record to add a notification bell emoji if
+            the log level is WARNING or higher, or if the 'notification'
+            attribute is set to True.
+    """
+
+    @override
+    def filter(self, record: logging.LogRecord) -> logging.LogRecord:
+        if record.levelno >= logging.WARNING or (
+            hasattr(record, "notification") and record.notification  # type: ignore[attr-defined]
+        ):
+            if hasattr(record, "msg"):
+                record.msg += " 🔔"
+            if hasattr(record, "message"):
+                record.message += " 🔔"
+
+        return record
 
 
 class LoggerFunction(Protocol):
@@ -886,6 +911,7 @@ class InternalConfig:
             # Optional: keep any existing filter behavior
             try:
                 handler.addFilter(ConsoleLogFilter())
+                handler.addFilter(AddNotificationBellFilter())
             except Exception:
                 pass
 

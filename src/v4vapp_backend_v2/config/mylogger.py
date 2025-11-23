@@ -277,9 +277,11 @@ class NotificationFilter(logging.Filter):
 
         # Send everything with level WARNING or higher to Notification
         # unless the record.notification flag is set to False
-        return record.levelno >= logging.WARNING or (
+        if record.levelno >= logging.WARNING or (
             hasattr(record, "notification") and record.notification  # type: ignore[attr-defined]
-        )
+        ):
+            return True
+        return False
 
 
 class NonErrorFilter(logging.Filter):

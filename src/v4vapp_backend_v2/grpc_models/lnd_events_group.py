@@ -1,11 +1,11 @@
-from datetime import datetime,  timezone
+from datetime import datetime, timezone
 from typing import List, Tuple, Union
 
 from google.protobuf.json_format import MessageToDict
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from v4vapp_backend_v2.helpers.general_purpose_funcs import  get_in_flight_time
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_in_flight_time
 
 
 def event_type_name(event_type: routerrpc.HtlcEvent.EventType) -> str:
@@ -128,8 +128,7 @@ class LndEventsGroup:
                 self.htlc_events = [
                     event
                     for event in self.htlc_events
-                    if event.incoming_htlc_id != htlc_id
-                    and event.outgoing_htlc_id != htlc_id
+                    if event.incoming_htlc_id != htlc_id and event.outgoing_htlc_id != htlc_id
                 ]
             case "Invoice":
                 invoice_group = self.get_invoice_list_by_pre_image(event.r_preimage)
@@ -178,7 +177,7 @@ class LndEventsGroup:
                 return self.message_htlc_event(event, dest_alias)
             case "Invoice":
                 return (
-                    f"🧾 Invoice: {event.value_msat//1000:,.0f} ({event.add_index})",
+                    f"🧾 Invoice: {event.value_msat // 1000:,.0f} ({event.add_index})",
                     MessageToDict(event, preserving_proto_field_name=True),
                 )
             case "Payment":
@@ -215,9 +214,7 @@ class LndEventsGroup:
     ) -> Tuple[str, dict]:
         if not isinstance(event, lnrpc.Payment):
             return "", {}
-        creation_date = datetime.fromtimestamp(
-            event.creation_time_ns / 1e9, tz=timezone.utc
-        )
+        creation_date = datetime.fromtimestamp(event.creation_time_ns / 1e9, tz=timezone.utc)
         # in_flight_time = format_time_delta(
         #     datetime.now(tz=timezone.utc) - creation_date
         # )
@@ -228,7 +225,7 @@ class LndEventsGroup:
             "dest_alias": dest_alias,
         }
         ans = (
-            f"💸 Payment: {event.value_msat//1000:,.0f} sats "
+            f"💸 Payment: {event.value_msat // 1000:,.0f} sats "
             f"({event.payment_index}) "
             f"to: {dest_alias or 'Unknown'} "
             f"in flight: {in_flight_time} "
@@ -264,10 +261,7 @@ class LndEventsGroup:
 
     def list_htlc_ids(self) -> List[int]:
         return list(
-            {
-                event.incoming_htlc_id or event.outgoing_htlc_id
-                for event in self.htlc_events
-            }
+            {event.incoming_htlc_id or event.outgoing_htlc_id for event in self.htlc_events}
         )
 
     def list_groups_htlc(self) -> List[List[routerrpc.HtlcEvent]]:
@@ -373,9 +367,7 @@ class LndEventsGroup:
                         primary_event.link_fail_event.info
                         and primary_event.link_fail_event.info.incoming_amt_msat
                     ):
-                        amount = (
-                            primary_event.link_fail_event.info.incoming_amt_msat / 1000
-                        )
+                        amount = primary_event.link_fail_event.info.incoming_amt_msat / 1000
                     else:
                         amount = 0
                     failure_string = primary_event.link_fail_event.failure_string
@@ -387,10 +379,7 @@ class LndEventsGroup:
                 group_list[2].forward_fail_event or group_list[2].link_fail_event
             ):
                 end_message = "❌ Forward Fail"
-            elif (
-                group_list[2].final_htlc_event
-                and group_list[2].final_htlc_event.settled
-            ):
+            elif group_list[2].final_htlc_event and group_list[2].final_htlc_event.settled:
                 start_message = "💰 Forwarded"
                 end_message = (
                     f"✅ Earned {self.forward_amt_fee(primary_event).fee:,.3f} "
@@ -434,9 +423,7 @@ class LndEventsGroup:
                 return payment
         return None
 
-    def message_send_event(
-        self, htlc_id: int, dest_alias: str = None
-    ) -> Tuple[str, dict]:
+    def message_send_event(self, htlc_id: int, dest_alias: str = None) -> Tuple[str, dict]:
         """
         Constructs a message string based on the HTLC (Hashed Time-Locked Contract) event details.
         Args:
@@ -451,9 +438,7 @@ class LndEventsGroup:
         primary_event = group_list[0]
         secondary_event = group_list[1]
         if secondary_event.settle_event:
-            payment = self.search_payment_preimage(
-                secondary_event.settle_event.preimage
-            )
+            payment = self.search_payment_preimage(secondary_event.settle_event.preimage)
             if payment:
                 fee = payment.fee_msat / 1000 if payment.fee_msat else 0
             else:
@@ -508,13 +493,9 @@ class LndEventsGroup:
             if incoming_invoice:
                 amount = int(incoming_invoice.value_msat / 1000)
                 htlc_id_str = f" ({htlc_id})"
-                for_memo = (
-                    f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
-                )
+                for_memo = f" for {incoming_invoice.memo}" if incoming_invoice.memo else ""
 
-        message_str = (
-            f"💵 Received {amount:,}{for_memo} via " f"{received_via}{htlc_id_str}"
-        )
+        message_str = f"💵 Receiving {amount:,}{for_memo} via {received_via}{htlc_id_str}"
         ans_dict = {
             "htlc_id": htlc_id,
             "amount": amount,
@@ -534,9 +515,7 @@ class LndEventsGroup:
 
     def clear_expired_invoices(self) -> None:
         self.lnrpc_invoices = [
-            invoice
-            for invoice in self.lnrpc_invoices
-            if not self.is_invoice_expired(invoice)
+            invoice for invoice in self.lnrpc_invoices if not self.is_invoice_expired(invoice)
         ]
 
     def lookup_invoice_by_htlc_id(self, htlc_id: int) -> lnrpc.Invoice:
@@ -643,12 +622,8 @@ class LndEventsGroup:
     def to_dict(self) -> dict:
         return {
             "htlc_events": [self._event_to_dict(event) for event in self.htlc_events],
-            "invoices": [
-                self._event_to_dict(invoice) for invoice in self.lnrpc_invoices
-            ],
-            "payments": [
-                self._event_to_dict(payment) for payment in self.lnrpc_payments
-            ],
+            "invoices": [self._event_to_dict(invoice) for invoice in self.lnrpc_invoices],
+            "payments": [self._event_to_dict(payment) for payment in self.lnrpc_payments],
         }
 
     def _event_to_dict(self, event: EventItem) -> dict:

@@ -316,6 +316,7 @@ async def invoice_report(
         time_to_expire = timedelta(seconds=0)
     time_to_expire_str = format_time_delta(time_to_expire)
     invoice_dict = MessageToDict(htlc_event, preserving_proto_field_name=True)
+    notification = True if invoice_dict.get("state") == "SETTLED" else False
     logger.info(
         (
             f"{lnd_client.icon} Invoice: {htlc_event.add_index:>6} "
@@ -323,7 +324,7 @@ async def invoice_report(
             f"expiry: {time_to_expire_str} "
             f"{invoice_dict.get('r_hash')}"
         ),
-        extra={"invoice": invoice_dict},
+        extra={"notification": notification, "invoice": invoice_dict},
     )
 
 
