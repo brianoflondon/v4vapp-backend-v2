@@ -222,3 +222,33 @@ async def test_get_hive_witness_details_mock_error(mocker):
 
     # Ensure httpx.get was called for each API endpoint (since it retries on failure)
     assert mock_httpx_get.call_count == len(API_ENDPOINTS)
+
+
+async def test_check_witness_vote_no_cache(mocker):
+    from v4vapp_backend_v2.hive.witness_details import check_witness_vote
+
+    # Mock the Redis context manager
+    mock_redis_instance = mocker.patch(
+        "v4vapp_backend_v2.config.setup.InternalConfig.redis_decoded"
+    )
+    # Mock Redis get to return None (no cache)
+    mock_redis_instance.get.return_value = None
+
+    is_voting = await check_witness_vote("brianoflondon", "brianoflondon")
+    assert is_voting is True
+
+    is_voting = await check_witness_vote("podping", "podping")
+    assert is_voting is False
+
+
+async def test_check_witness_vote_with_cache(mocker):
+    from v4vapp_backend_v2.hive.witness_details import check_witness_vote
+
+    is_voting = await check_witness_vote("brianoflondon", "brianoflondon")
+    assert is_voting is True
+
+    is_voting = await check_witness_vote("podping", "podping")
+    assert is_voting is False
+
+    is_voting = await check_witness_vote("brianoflondon", "brianoflondon")
+    assert is_voting is True

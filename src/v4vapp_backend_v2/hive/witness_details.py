@@ -159,3 +159,58 @@ async def get_hive_witness_details(
         extra={"notification": False},
     )
     return None
+
+
+async def check_witness_vote(hive_accname: str, witness_name: str) -> bool:
+    """
+    Checks if a Hive account has voted for a specific witness.
+
+    Args:
+        hive_accname (str): The account name of the Hive user.
+        witness_name (str): The name of the witness to check.
+
+    Returns:
+        bool: True if the account has voted for the witness, False otherwise.
+    """
+    cache_key = f"witness_vote_{hive_accname}_votes_for_{witness_name}"
+    cache_result = InternalConfig.redis_decoded.get(cache_key)
+    if cache_result is not None and cache_result in ["True", "False"]:
+        return cache_result == "True"
+
+    shuffled_endpoints = API_ENDPOINTS[:]
+    shuffle(shuffled_endpoints)
+    for api_url in shuffled_endpoints:
+        url = f"{api_url}accounts/{hive_accname}"
+        try:
+            timeout = httpx.Timeout(5.0, connect=5.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await fetch_witness_details(client, url)
+                response.raise_for_status()  # Raises an exception for 4xx/5xx status codes
+                answer = response.json()
+                witness_votes = answer.get("witness_votes", [])
+                if witness_name in witness_votes:
+                    InternalConfig.redis_decoded.setex(name=cache_key, value="True", time=600)
+                    return True
+                InternalConfig.redis_decoded.setex(name=cache_key, value="False", time=600)
+                return False
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                f"{ICON} API returned status {e.response.status_code} for {url}",
+                extra={"notification": False, "error": e},
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            logger.error(
+                f"{ICON} Connection failed to {url}: {e}",
+                extra={"notification": False, "error": e},
+            )
+        except ValueError as e:
+            logger.warning(
+                f"{ICON} Failed to parse JSON response from {url}, trying again...",
+                extra={"notification": False, "error": e},
+            )
+    logger.warning(
+        f"{ICON} Failed to check witness vote for {hive_accname} from all API endpoints",
+        extra={"notification": False},
+    )
+    return False
