@@ -632,9 +632,9 @@ class AddNotificationBellFilter(logging.Filter):
         if record.levelno >= logging.WARNING or (
             hasattr(record, "notification") and record.notification  # type: ignore[attr-defined]
         ):
-            if hasattr(record, "msg"):
+            if hasattr(record, "msg") and isinstance(record.msg, str):
                 record.msg += " 🔔"
-            if hasattr(record, "message"):
+            if hasattr(record, "message") and isinstance(record.message, str):
                 record.message += " 🔔"
 
         return record
@@ -686,9 +686,9 @@ class AddJsonDataIndicatorFilter(logging.Filter):
             extra_text = " ["
             extra_text += ", ".join(f"{field}" for field in extra_fields)
             extra_text += "]"
-            if hasattr(record, "msg"):
+            if hasattr(record, "msg") and isinstance(record.msg, str):
                 record.msg += extra_text
-            if hasattr(record, "message"):
+            if hasattr(record, "message") and isinstance(record.message, str):
                 record.message += extra_text
         return record
 
