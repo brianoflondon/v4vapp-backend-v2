@@ -597,16 +597,17 @@ class Config(BaseModel):
         return bot_names[0]
 
 
+# MARK: Logging filters
 class ConsoleLogFilter(logging.Filter):
     """
-    A logging filter that allows only log records with a level greater than D EBUG.
+    A logging filter that allows only log records with a level greater than debug.
 
     This is referenced in the logging configuration json file.
 
     Methods:
         filter(record: logging.LogRecord) -> bool | logging.LogRecord:
             Determines if the given log record should be logged. Returns True
-            if the log level is more than D EBUG, otherwise False.
+            if the log level is more than debug, otherwise False.
     """
 
     @override
@@ -636,6 +637,59 @@ class AddNotificationBellFilter(logging.Filter):
             if hasattr(record, "message"):
                 record.message += " 🔔"
 
+        return record
+
+
+LOG_RECORD_BUILTIN_ATTRS = {
+    "args",
+    "asctime",
+    "created",
+    "exc_info",
+    "exc_text",
+    "filename",
+    "funcName",
+    "levelname",
+    "levelno",
+    "lineno",
+    "module",
+    "msecs",
+    "message",
+    "msg",
+    "name",
+    "pathname",
+    "process",
+    "processName",
+    "relativeCreated",
+    "stack_info",
+    "thread",
+    "threadName",
+    "taskName",
+    "notification",  # specifically exclude this because we use this separately for the bell
+}
+
+
+class AddJsonDataIndicatorFilter(logging.Filter):
+    """
+    A logging filter that adds a JSON data indicator to log messages
+    that have the 'json_data' attribute set to True.
+
+    Methods:
+        filter(record: logging.LogRecord) -> logging.LogRecord:
+            Modifies the log record to add a JSON data indicator if
+            the 'json_data' attribute is set to True.
+    """
+
+    @override
+    def filter(self, record: logging.LogRecord) -> logging.LogRecord:
+        extra_fields = set(record.__dict__.keys()) - LOG_RECORD_BUILTIN_ATTRS
+        if extra_fields:
+            extra_text = " ["
+            extra_text += ", ".join(f"{field}" for field in extra_fields)
+            extra_text += "]"
+            if hasattr(record, "msg"):
+                record.msg += extra_text
+            if hasattr(record, "message"):
+                record.message += extra_text
         return record
 
 
@@ -911,6 +965,7 @@ class InternalConfig:
             # Optional: keep any existing filter behavior
             try:
                 handler.addFilter(ConsoleLogFilter())
+                handler.addFilter(AddJsonDataIndicatorFilter())
                 handler.addFilter(AddNotificationBellFilter())
             except Exception:
                 pass
