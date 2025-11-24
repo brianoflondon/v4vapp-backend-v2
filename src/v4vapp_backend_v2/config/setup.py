@@ -946,7 +946,7 @@ class InternalConfig:
                 handler.setFormatter(
                     colorlog.ColoredFormatter(
                         "%(log_color)s" + format_str,
-                        datefmt="%Y-%m-%dT%H:%M:%S%z",
+                        datefmt="%m-%dT%H:%M:%S",
                         log_colors={
                             "DEBUG": "cyan",
                             "INFO": "blue",
