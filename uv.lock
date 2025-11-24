@@ -1001,7 +1001,7 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.1.3"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
@@ -1017,9 +1017,9 @@ dependencies = [
     { name = "scrypt" },
     { name = "types-requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/d2/95202163a6211c204473a8a716e42a3cec4debf557a53eaa8c2abbcd3ffa/hive_nectar-0.1.3.tar.gz", hash = "sha256:172647caef9ce3281fd9a44dbb0205b753976b08612bb3e7abba021fa3c21fb2", size = 722320, upload-time = "2025-09-19T08:30:53.463Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/b8/9e1b455a4658cc63570c2e32666d383b3fa0a9c9db9549e9712caec13d9a/hive_nectar-0.1.5.tar.gz", hash = "sha256:6d5f38945161101a4a223561d76803d8077b15d0d29e64a58d2acbfbb9279fad", size = 727935, upload-time = "2025-11-04T11:26:16.015Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/77/f7e79732d7e9f118aa7a44cfc2e0d6ee9fecaf89fef3c65c02eb82ec8795/hive_nectar-0.1.3-py3-none-any.whl", hash = "sha256:db997c3884768b0df09b5f0d122c12be6c6ea015065f141265dd6ba85e99d31f", size = 456104, upload-time = "2025-09-19T08:30:50.339Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/fe/9c20b6a8f0e6f44c0a33100981c2d74de7db30c229b84d2742b07d93a59e/hive_nectar-0.1.5-py3-none-any.whl", hash = "sha256:aeaf5160207d4b376f404ef760bf93c3e7986ba7df1defaf88f6647ecb4edf4c", size = 459112, upload-time = "2025-11-04T11:26:13.992Z" },
 ]
 
 [[package]]
@@ -3569,7 +3569,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "hive-nectar", specifier = "==0.1.3" },
+    { name = "hive-nectar", specifier = "==0.1.5" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
     { name = "packaging", specifier = ">=25.0" },
