@@ -532,7 +532,8 @@ async def all_ops_loop(
             return
         except Exception as e:
             logger.exception(f"{ICON} {e}", extra={"notification": False})
-            raise e
+            # Removing a RAISE here to allow automatic restart of the loop
+            # raise e
         finally:
             # Do not restart if we’re shutting down
             if shutdown_event.is_set():
