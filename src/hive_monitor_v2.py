@@ -1,12 +1,14 @@
 import asyncio
+import os
 import signal
 import sys
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from random import uniform
 from time import sleep
 from timeit import default_timer as timer
-from typing import Annotated, Dict, List, Tuple
+from typing import Annotated, Any, Dict, List, Tuple
 
 import typer
 from colorama import Fore, Style
@@ -14,6 +16,7 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
+from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -72,6 +75,32 @@ BLOCK_LIST = [
     "95822927",
     "95823857",
 ]
+
+
+@dataclass
+class StatusObject:
+    last_good_block: int = 0
+
+
+STATUS_OBJ = StatusObject()
+
+
+async def health_check() -> Dict[str, Any]:
+    # Your custom health check logic here (e.g., check DB connection, etc.)
+    # Raise an exception if unhealthy
+    # check if the all_ops_loop task is running
+    exceptions = []
+    if not any(
+        task.get_name() == "all_ops_loop" and not task.done() for task in asyncio.all_tasks()
+    ):
+        exceptions.append("all_ops_loop task is not running")
+    if not any(
+        task.get_name() == "store_rates" and not task.done() for task in asyncio.all_tasks()
+    ):
+        exceptions.append("store_rates task is not running")
+    if exceptions:
+        raise Exception(", ".join(exceptions))
+    return {"last_good_block": STATUS_OBJ.last_good_block}
 
 
 def handle_shutdown_signal():
@@ -521,6 +550,7 @@ async def all_ops_loop(
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
+                STATUS_OBJ.last_good_block = op.block_num
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
                     await db_store_op(block_marker)
@@ -646,6 +676,16 @@ async def main_async_start(
     Returns:
         None
     """
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    status_api = StatusAPI(
+        port=6001,
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__,
+    )  # Use a port from config if needed
+    asyncio.create_task(status_api.start(), name="status_api")
+
     db_conn = DBConn()
     await db_conn.setup_database()
 
