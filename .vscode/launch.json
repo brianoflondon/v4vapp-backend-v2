@@ -57,8 +57,8 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
-                "--time-delay",
-                "2",
+                // "--time-delay",
+                // "2",
                 // "--start-block",
                 // "101170560"
             ],
