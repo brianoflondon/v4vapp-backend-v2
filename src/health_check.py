@@ -38,7 +38,12 @@ def healthcheck(
                 sys.exit(0)
             else:
                 typer.echo(f"Health check failed: HTTP {response.status}")
-                typer.echo(response)
+                if response.headers.get("Content-Type") == "application/json":
+                    typer.echo(response.json())
+                elif response.headers.get("Content-Type") == "text/plain":
+                    typer.echo(response.read().decode())
+                elif response.headers.get("Content-Type") == "text/html":
+                    typer.echo(response.read().decode())
                 sys.exit(1)
     except Exception as e:
         typer.echo(f"Health check failed: {e}")
