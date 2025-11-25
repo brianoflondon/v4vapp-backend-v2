@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 from nectar.blockchain import Blockchain
 from nectar.exceptions import NectarException
 from nectar.hive import Hive
-from nectarapi.exceptions import NumRetriesReached
+from nectarapi.exceptions import NumRetriesReached, UnhandledRPCError
 
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import logger
@@ -189,7 +189,7 @@ async def stream_ops_async(
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"{ICON} Async streamer received signal to stop. Exiting... {e}")
             return
-        except (NectarException, NumRetriesReached) as e:
+        except (NectarException, NumRetriesReached, UnhandledRPCError) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
             else:
