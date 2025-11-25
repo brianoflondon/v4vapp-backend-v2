@@ -1,9 +1,11 @@
 import asyncio
 import contextlib
+import os
 import signal
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, List
+from typing import Annotated, Any, Dict, List
 
 import typer
 from colorama import Fore, Style
@@ -14,6 +16,7 @@ from pymongo.errors import BulkWriteError
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
+from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
@@ -36,10 +39,53 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
+ICON = "⚡"
+
 app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+
+
+@dataclass
+class StatusObject:
+    """
+    Used to store status information for the StatusAPI health check.
+    """
+
+
+STATUS_OBJ = StatusObject()
+
+
+async def health_check() -> Dict[str, Any]:
+    """
+    Asynchronous health check function that verifies the status of critical background tasks.
+    Used with the `StatusAPI` to provide health monitoring API endpoint especially for docker
+    containers.
+
+    This function checks if the 'all_ops_loop' and 'store_rates' tasks are currently running
+    among all asyncio tasks. It also formats the time difference in STATUS_OBJ. If any tasks
+    are not running, it raises a StatusAPIException with details. Otherwise, it returns the
+    STATUS_OBJ dictionary.
+
+    Returns:
+        Dict[str, Any]: The dictionary representation of STATUS_OBJ containing status information.
+
+    Raises:
+        StatusAPIException: If one or more critical tasks are not running, with a message
+            listing the issues and extra data from STATUS_OBJ.
+    """
+
+    exceptions = []
+    check_for_tasks = ["invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"]
+    for task in check_for_tasks:
+        if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
+            exceptions.append(f"{task} task is not running")
+            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+
+    if exceptions:
+        raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    return STATUS_OBJ.__dict__
 
 
 def handle_shutdown_signal():
@@ -1069,6 +1115,16 @@ async def main_async_start(connection_name: str) -> None:
     Returns:
         None
     """
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
+    status_api = StatusAPI(
+        port=int(health_check_port),
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__,
+    )  # Use a port from config if needed
+
     lnd_client = None
     running_tasks: list[asyncio.Task] = []
     try:
@@ -1117,6 +1173,7 @@ async def main_async_start(connection_name: str) -> None:
                     payments_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                     name="payments_loop",
                 ),
+                asyncio.create_task(status_api.start(), name="status_api"),
             ]
 
             # If we haven't synced for a long time, do the sync first to avoid massive DB load

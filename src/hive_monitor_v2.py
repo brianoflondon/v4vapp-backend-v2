@@ -83,6 +83,10 @@ BLOCK_LIST = [
 
 @dataclass
 class StatusObject:
+    """
+    Used to store status information for the StatusAPI health check.
+    """
+
     last_good_block: int = 0
     time_diff: timedelta = timedelta(0)
     time_diff_str: str = ""
@@ -93,18 +97,31 @@ STATUS_OBJ = StatusObject()
 
 
 async def health_check() -> Dict[str, Any]:
-    # Your custom health check logic here (e.g., check DB connection, etc.)
-    # Raise an exception if unhealthy
-    # check if the all_ops_loop task is running
+    """
+    Asynchronous health check function that verifies the status of critical background tasks.
+    Used with the `StatusAPI` to provide health monitoring API endpoint especially for docker
+    containers.
+
+    This function checks if the 'all_ops_loop' and 'store_rates' tasks are currently running
+    among all asyncio tasks. It also formats the time difference in STATUS_OBJ. If any tasks
+    are not running, it raises a StatusAPIException with details. Otherwise, it returns the
+    STATUS_OBJ dictionary.
+
+    Returns:
+        Dict[str, Any]: The dictionary representation of STATUS_OBJ containing status information.
+
+    Raises:
+        StatusAPIException: If one or more critical tasks are not running, with a message
+            listing the issues and extra data from STATUS_OBJ.
+    """
+
     exceptions = []
-    if not any(
-        task.get_name() == "all_ops_loop" and not task.done() for task in asyncio.all_tasks()
-    ):
-        exceptions.append("all_ops_loop task is not running")
-    if not any(
-        task.get_name() == "store_rates" and not task.done() for task in asyncio.all_tasks()
-    ):
-        exceptions.append("store_rates task is not running")
+    check_for_tasks = ["all_ops_loop", "store_rates"]
+    for task in check_for_tasks:
+        if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
+            exceptions.append(f"{task} task is not running")
+            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
@@ -687,8 +704,9 @@ async def main_async_start(
         None
     """
     process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
     status_api = StatusAPI(
-        port=6001,
+        port=int(health_check_port),
         health_check_func=health_check,
         shutdown_event=shutdown_event,
         process_name=process_name,
