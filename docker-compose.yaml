@@ -41,7 +41,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6001/status"]
+      test: ["CMD", "python", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:6001/status'); sys.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
