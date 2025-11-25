@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""
+Standalone healthcheck script for Docker Compose.
+
+This script performs a simple HTTP GET request to a status endpoint and exits with code 0 on success or 1 on failure.
+It replicates the behavior of the Docker healthcheck command:
+test: ["CMD", "python", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:6001/status'); sys.exit(0)"]
+
+Usage:
+    python healthcheck.py --host localhost --port 6001
+
+Or in Docker Compose:
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py", "--host", "localhost", "--port", "6001"]
+"""
+
+import sys
+import urllib.request
+
+import typer
+
+app = typer.Typer()
+
+
+@app.command()
+def healthcheck(
+    host: str = typer.Option("localhost", "--host", help="Host to check (e.g., localhost)"),
+    port: int = typer.Option(6001, "--port", help="Port to check (e.g., 6001)"),
+):
+    """
+    Perform a health check by attempting to open the /status endpoint.
+    Exits with 0 on success, 1 on failure.
+    """
+    url = f"http://{host}:{port}/status"
+    try:
+        with urllib.request.urlopen(url) as response:
+            if response.status == 200:
+                sys.exit(0)
+            else:
+                typer.echo(f"Health check failed: HTTP {response.status}")
+                typer.echo(response)
+                sys.exit(1)
+    except Exception as e:
+        typer.echo(f"Health check failed: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    app()
