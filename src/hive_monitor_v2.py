@@ -16,12 +16,16 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
-from status.status_api import StatusAPI
+from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    check_time_diff,
+    format_time_delta,
+    seconds_only,
+)
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -80,6 +84,9 @@ BLOCK_LIST = [
 @dataclass
 class StatusObject:
     last_good_block: int = 0
+    time_diff: timedelta = timedelta(0)
+    time_diff_str: str = ""
+    is_catching_up: bool = False
 
 
 STATUS_OBJ = StatusObject()
@@ -98,9 +105,10 @@ async def health_check() -> Dict[str, Any]:
         task.get_name() == "store_rates" and not task.done() for task in asyncio.all_tasks()
     ):
         exceptions.append("store_rates task is not running")
+    STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:
-        raise Exception(", ".join(exceptions))
-    return {"last_good_block": STATUS_OBJ.last_good_block}
+        raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    return STATUS_OBJ.__dict__
 
 
 def handle_shutdown_signal():
@@ -551,6 +559,8 @@ async def all_ops_loop(
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
                 STATUS_OBJ.last_good_block = op.block_num
+                STATUS_OBJ.time_diff = block_counter.time_diff
+                STATUS_OBJ.is_catching_up = block_counter.is_catching_up
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
                     await db_store_op(block_marker)
@@ -684,7 +694,6 @@ async def main_async_start(
         process_name=process_name,
         version=__version__,
     )  # Use a port from config if needed
-    asyncio.create_task(status_api.start(), name="status_api")
 
     db_conn = DBConn()
     await db_conn.setup_database()
@@ -710,6 +719,7 @@ async def main_async_start(
                 name="all_ops_loop",
             ),
             asyncio.create_task(store_rates(), name="store_rates"),
+            asyncio.create_task(status_api.start(), name="status_api"),
         ]
         # Wait until shutdown is requested
         await shutdown_event.wait()
