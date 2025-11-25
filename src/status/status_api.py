@@ -1,7 +1,9 @@
 import asyncio
+import socket
 from typing import Any, Awaitable, Callable, Dict
 
 import uvicorn
+from colorama import Fore, Style
 from fastapi import FastAPI, HTTPException
 
 # Import your logger and config paths from setup.py
@@ -25,6 +27,10 @@ class StatusAPIException(Exception):
         self.extra = extra
 
 
+class StatusAPIPortInUseException(Exception):
+    pass
+
+
 class StatusAPI:
     """
     A simple FastAPI-based status API server.
@@ -33,6 +39,19 @@ class StatusAPI:
     - Exposes a /status endpoint that calls a provided async health check function.
     - Returns "OK" (200) on success or an error (500) on failure.
     - Integrates with asyncio shutdown events for graceful stopping.
+
+    Start up with the `start` method, which runs until the provided shutdown event is set.
+    Pass in a `health_check_func` that performs necessary health checks.
+    Also takes in a `shutdown_event` to listen for shutdown signals.
+
+    Attributes:
+        port (int): The port to run the server on.
+        health_check_func (Callable[[], Awaitable[Dict[str, Any]]]): An async function to run for health checks.
+        shutdown_event (asyncio.Event): The event to wait for shutdown.
+        app (FastAPI): The FastAPI application instance.
+
+
+
     """
 
     def __init__(
@@ -72,11 +91,29 @@ class StatusAPI:
                 logger.error(f"Health check failed: {str(e)}", extra={**getattr(e, "extra", {})})
                 raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
 
+    def _is_port_available(self, port: int) -> bool:
+        """Check if the port is available by attempting to bind a socket."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("0.0.0.0", port))
+                return True
+            except OSError:
+                return False
+
     async def start(self):
         """
-        Start the FastAPI server asynchronously.
-        Runs in the background until shutdown_event is set.
+        Asynchronously start the FastAPI server and run it in the background until the shutdown event is set.
+
+        This method first checks if the specified port is available. If not, it logs an error and returns without starting the server.
+        If the port is available, it configures and starts a Uvicorn server with the FastAPI app, using minimal logging.
+        The server runs as an asynchronous task, and the method waits for the shutdown event to be set.
+        It handles various exceptions, including cancellation, OS errors, and general exceptions, logging errors appropriately.
+        In the finally block, it ensures the server task is properly shut down.
+
+        Raises:
+            No exceptions are raised directly; errors are logged internally.
         """
+        # Check if port is available before starting
         config = uvicorn.Config(
             self.app,
             host="0.0.0.0",
@@ -85,16 +122,30 @@ class StatusAPI:
             access_log=False,
         )
         server = uvicorn.Server(config)
-        logger.info(f"Starting Status API for {self.app.title} on port {self.port}")
-
-        # Run the server in a task, but allow shutdown
-        server_task = asyncio.create_task(server.serve())
-
-        # Wait for shutdown signal
+        server_task = None
         try:
+            if not self._is_port_available(self.port):
+                raise StatusAPIPortInUseException(f"Port {self.port} is already in use.")
+
+            logger.info(
+                f"{Fore.WHITE}Starting Status API for {self.app.title} on port {self.port}{Style.RESET_ALL}"
+            )
+
+            # Run the server in a task, but allow shutdown
+            server_task = asyncio.create_task(server.serve())
             await self.shutdown_event.wait()
         except asyncio.CancelledError:
             pass
+        except (OSError, SystemExit, StatusAPIPortInUseException) as e:
+            # Trap binding errors (e.g., address already in use)
+            logger.error(f"Failed to start Status API on port {self.port}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error while running Status API: {str(e)}")
         finally:
-            server.should_exit = True
-            await server_task
+            if server_task:
+                server.should_exit = True
+                try:
+                    await server_task
+                except (OSError, SystemExit):
+                    # Suppress re-raising of binding errors in finally
+                    pass
