@@ -114,6 +114,7 @@ class StatusAPI:
             No exceptions are raised directly; errors are logged internally.
         """
         # Check if port is available before starting
+        logger.info(f"Checking availability of port {self.port} for Status API...")
         config = uvicorn.Config(
             self.app,
             host="0.0.0.0",
