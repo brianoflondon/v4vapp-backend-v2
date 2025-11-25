@@ -87,7 +87,10 @@
                 "--config",
                 "devhive.config.yaml"
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "HEALTH_CHECK_PORT": "6001"
+            }
         },
         {
             "name": "Hive Monitor v4vapp",
@@ -105,6 +108,10 @@
                 // "101084197"
                 // "96228302"
             ],
+            "env": {
+                "HEALTH_CHECK_PORT": "6001"
+            }
+
             "justMyCode": true,
         },
         {
