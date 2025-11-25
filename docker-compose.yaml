@@ -40,6 +40,12 @@ services:
       - v4vapp-backend
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6001/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   db-monitor:
     depends_on:
