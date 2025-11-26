@@ -518,6 +518,9 @@ async def all_ops_loop(
                                 op.from_account in server_accounts
                                 and op.to_account not in server_accounts
                             ):
+                                logger.info(
+                                    f"Rebalance triggered by transfer {op.from_account} to {op.to_account} {op.amount}"
+                                )
                                 asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
