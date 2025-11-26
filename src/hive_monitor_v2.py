@@ -518,7 +518,6 @@ async def all_ops_loop(
                                 op.from_account in server_accounts
                                 and op.to_account not in server_accounts
                             ):
-                                extra_bots.append("internal_market_bot")
                                 asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
