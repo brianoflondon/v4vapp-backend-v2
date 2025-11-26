@@ -512,7 +512,14 @@ async def all_ops_loop(
                         await TrackedBaseModel.update_quote(time_delay=time_delay)
                         await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
-                            asyncio.create_task(balance_server_hbd_level(op))
+                            # Now only balance the server account HBD level if this is a send back to a customer
+                            # i.e. after a successful conversion.
+                            if isinstance(op, Transfer) and (
+                                op.from_account in server_accounts
+                                and op.to_account not in server_accounts
+                            ):
+                                extra_bots.append("internal_market_bot")
+                                asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
                         notification = True
