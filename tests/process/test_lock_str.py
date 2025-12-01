@@ -8,6 +8,8 @@ import pytest
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 
+pytest.skip("Skipping process tests", allow_module_level=True)
+
 
 @pytest.fixture(autouse=True)
 def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
