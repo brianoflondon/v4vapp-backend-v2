@@ -59,7 +59,8 @@
                 "devhive.config.yaml",
                 // "--time-delay",
                 // "2",
-                // "--start-block",
+                "--start-block",
+                "-1"
                 // "101170560"
             ],
             "justMyCode": true,
