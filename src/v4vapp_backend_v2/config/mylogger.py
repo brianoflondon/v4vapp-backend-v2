@@ -2,14 +2,13 @@ import asyncio
 import datetime as dt
 import json
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, ClassVar, OrderedDict, override
+from datetime import datetime, timedelta
+from typing import OrderedDict, override
 
 from colorama import Fore, Style
 
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import ErrorCode, InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -79,9 +78,38 @@ class MyJSONFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
+        """
+        Formats the given log record into a JSON string.
+        Runs for every line written to the log
+        This method attempts to prepare a dictionary representation of the log record
+        using the _prepare_log_dict method and then serializes it to a JSON string.
+        If an exception occurs during this process, it prints an error message and
+        falls back to the parent class's format method.
+        Args:
+            record (logging.LogRecord): The log record to be formatted.
+        Returns:
+            str: The formatted log message as a JSON string, or the result of the
+                 parent class's format method if an error occurs.
+        """
         try:
             message = self._prepare_log_dict(record)
-            return json.dumps(message, default=str)
+            ans_str = json.dumps(message, default=str)
+            if hasattr(record, "error_code"):
+                error_code = record.error_code  # type: ignore[attr-defined]
+                error_state = InternalConfig().error_codes.get(error_code, None)
+                if hasattr(record, "re_alert_time"):
+                    re_alert_time = record.re_alert_time  # type: ignore[attr-defined]
+                else:
+                    re_alert_time = timedelta(hours=1)
+                if error_state and error_state.check_time_since_last_log(re_alert_time):
+                    error_state.reset_last_log_time()
+                    return ans_str
+                elif error_state is None:
+                    return ans_str
+                else:
+                    return ""
+
+            return ans_str
         except Exception as e:
             print(f"Error formatting log record: {e}")
             return super().format(record)
@@ -128,21 +156,6 @@ class MyJSONFormatter(logging.Formatter):
         return message
 
 
-@dataclass
-class ErrorCode:
-    code: Any
-    start_time: datetime = datetime.now(tz=timezone.utc)
-
-    def __init__(self, code: Any):
-        self.code = code
-        self.start_time = datetime.now(tz=timezone.utc)
-        logger.info(f"❌ {Fore.RED}Error code set: {self.code}{Style.RESET_ALL}")
-
-    @property
-    def elapsed_time(self) -> timedelta:
-        return datetime.now(tz=timezone.utc) - self.start_time
-
-
 class CustomNotificationHandler(logging.Handler):
     """
     Custom logging handler to send log messages to Notification with special
@@ -168,7 +181,6 @@ class CustomNotificationHandler(logging.Handler):
             This method needs to be implemented to integrate with the Notification API.
     """
 
-    error_codes: ClassVar[dict[Any, ErrorCode]] = {}
     sender: NotificationProtocol = BotNotification()
 
     @override
@@ -184,18 +196,18 @@ class CustomNotificationHandler(logging.Handler):
                 logger.info(f"Pending tasks: {len(pending_tasks)}")
 
         log_message = record.getMessage()
-        if self.error_codes:
-            logger.debug(f"Error codes: {self.error_codes}")
+        if InternalConfig().error_codes:
+            logger.debug(f"Error codes: {InternalConfig().error_codes}")
         # Do something special here with error codes or details
-        if self.error_codes and hasattr(record, "error_code_clear"):
+        if InternalConfig().error_codes and hasattr(record, "error_code_clear"):
             error_code_clear = record.error_code_clear  # type: ignore[attr-defined]
-            error_code_obj = self.error_codes.get(error_code_clear)
+            error_code_obj = InternalConfig().error_codes.get(error_code_clear)
             elapsed_time = error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=33)
             error_code_clear = error_code_clear  # type: ignore[attr-defined]
             elapsed_time_str = timedelta_display(elapsed_time)
             log_message_clear = f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after {elapsed_time_str}{Style.RESET_ALL}"
-            if error_code_clear in self.error_codes:
-                self.error_codes.pop(error_code_clear)
+            if error_code_clear in InternalConfig().error_codes:
+                InternalConfig().error_codes.pop(error_code_clear)
                 logger.info(log_message_clear, extra={"notification": True, "record": record})
             else:
                 # This should usually be ignored.
@@ -207,9 +219,9 @@ class CustomNotificationHandler(logging.Handler):
             return
         if hasattr(record, "error_code"):
             error_code = record.error_code  # type: ignore[attr-defined]
-            if error_code not in self.error_codes:
+            if error_code not in InternalConfig().error_codes:
                 self.sender.send_notification(log_message, record, bot_name=bot_name)
-                self.error_codes[error_code] = ErrorCode(code=error_code)
+                InternalConfig().error_codes[error_code] = ErrorCode(code=error_code)
             else:
                 # Do not send the same error code to Notification
                 pass

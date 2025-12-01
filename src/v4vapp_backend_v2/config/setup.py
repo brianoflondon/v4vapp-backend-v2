@@ -7,10 +7,13 @@ import logging.handlers
 import os
 import sys
 import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
 
+from colorama import Fore, Style
 from dotenv import load_dotenv
 from packaging import version
 from pydantic import BaseModel, model_validator
@@ -697,6 +700,48 @@ class LoggerFunction(Protocol):
     def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
 
 
+@dataclass
+class ErrorCode:
+    code: Any
+    start_time: datetime = datetime.now(tz=timezone.utc)
+    last_log_time: datetime = datetime.now(tz=timezone.utc)
+
+    def __init__(self, code: Any):
+        self.code = code
+        self.start_time = datetime.now(tz=timezone.utc)
+        logger.info(f"❌ {Fore.RED}Error code set: {self.code}{Style.RESET_ALL}")
+
+    @property
+    def code_str(self) -> str:
+        return str(self.code)
+
+    @property
+    def elapsed_time(self) -> timedelta:
+        return datetime.now(tz=timezone.utc) - self.start_time
+
+    @property
+    def time_since_last_log(self) -> timedelta:
+        return datetime.now(tz=timezone.utc) - self.last_log_time
+
+    def reset_last_log_time(self) -> None:
+        self.last_log_time = datetime.now(tz=timezone.utc)
+
+    def check_time_since_last_log(self, interval: timedelta | int) -> bool:
+        """
+        Checks if the time elapsed since the last log entry is greater than or equal to the specified interval.
+        Args:
+            interval (timedelta | int): The time interval to check against. If an integer, it is treated as seconds. If a timedelta, its total seconds are used.
+        Returns:
+            bool: True if the time since the last log is at least the interval, False otherwise.
+        """
+
+        if isinstance(interval, timedelta):
+            interval_seconds = interval.total_seconds()
+        else:
+            interval_seconds = interval
+        return self.time_since_last_log >= timedelta(seconds=interval_seconds)
+
+
 # MARK: InternalConfig class
 class InternalConfig:
     """
@@ -765,6 +810,8 @@ class InternalConfig:
     redis: ClassVar[Redis] = Redis()
     redis_decoded: ClassVar[Redis] = Redis(decode_responses=True)
     redis_async: ClassVar[AsyncRedis] = AsyncRedis()
+
+    error_codes: ClassVar[dict[Any, ErrorCode]] = {}
 
     local_machine_name: str = "unknown"
 

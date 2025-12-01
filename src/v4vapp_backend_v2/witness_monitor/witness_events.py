@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from timeit import default_timer as timer
 from typing import Any, Dict
 
@@ -141,6 +142,7 @@ async def check_witness_heartbeat(
                     "witness": witness_name,
                     "result": result,
                     "error_code": "witness_error",
+                    "re_alert_time": timedelta(minutes=10),
                 },
             )
             await send_kuma_heartbeat(
@@ -343,31 +345,48 @@ async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[di
                 if "result" in data and data.get("id") == 1:
                     logger.debug(
                         f"{ICON} Successfully called {machine_name} Hive API at {url}. Execution time: {execution_time:.4f}s",
-                        extra={"notification": False},
+                        extra={
+                            "notification": False,
+                            "error_code_clear": f"witness_api_invalid_{machine_name}_response",
+                        },
                     )
                     return data["result"], execution_time
                 else:
                     logger.warning(
                         f"{ICON} Invalid response from Hive API at {url}: {data}",
-                        extra={"notification": False},
+                        extra={
+                            "notification": False,
+                            "error_code": f"witness_api_invalid_{machine_name}_response",
+                        },
                     )
             else:
                 logger.warning(
                     f"{ICON} HTTP error from Hive API {machine_name} at {url}: {response.status_code}",
-                    extra={"notification": False},
+                    extra={
+                        "notification": False,
+                        "error_code": f"witness_api_invalid_{machine_name}_response",
+                    },
                 )
     except httpx.HTTPError as e:
         execution_time = timer() - start_time
         logger.error(
             f"{ICON} Timeout error calling Hive API {machine_name}at {url}: {e}",
-            extra={"notification": False, "error": e},
+            extra={
+                "notification": False,
+                "error": e,
+                "error_code": f"witness_api_invalid_{machine_name}_response",
+            },
         )
 
     except Exception as e:
         execution_time = timer() - start_time
         logger.exception(
             f"{ICON} Error calling Hive API {machine_name} at {url}: {e}",
-            extra={"notification": False, "error": e},
+            extra={
+                "notification": False,
+                "error": e,
+                "error_code": f"witness_api_invalid_{machine_name}_response",
+            },
         )
 
     return None, execution_time
