@@ -53,7 +53,6 @@ dev = [
     "types-aiofiles>=24.1.0.20241221,<25.0.0",
     "types-colorama>=0.4.15.20240311,<1.0.0",
     "dill>=0.3.9,<1.0.0",
-    "hive-nectar>=0.0.3",
     "pre-commit>=4.2.0",
     "pandas-stubs>=2.2.3.250308",
     "matplotlib>=3.10.3",

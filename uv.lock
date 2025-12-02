@@ -3603,7 +3603,6 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "dill" },
-    { name = "hive-nectar" },
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "matplotlib" },
@@ -3662,7 +3661,6 @@ requires-dist = [
 dev = [
     { name = "black", specifier = ">=25.1.0,<26.0.0" },
     { name = "dill", specifier = ">=0.3.9,<1.0.0" },
-    { name = "hive-nectar", specifier = ">=0.0.3" },
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "matplotlib", specifier = ">=3.10.3" },

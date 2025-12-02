@@ -101,7 +101,7 @@
             "args": [
                 "--config-filename",
                 "live-v4vapp-server-hive.config.yaml",
-                "--watch-only",
+                // "--watch-only",
                 // "--start-block",
                 // "101517700"
                 // "--time-delay",
