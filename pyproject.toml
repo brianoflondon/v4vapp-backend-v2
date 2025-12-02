@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "0.7.9"
+version = "0.8.0"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
@@ -104,3 +104,6 @@ asyncio_default_test_loop_scope = "module"
 
 [tool.mypy]
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
+
+[tool.uv.sources]
+hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git", rev = "v0.2.0" }
