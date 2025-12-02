@@ -109,8 +109,7 @@
             ],
             "env": {
                 "HEALTH_CHECK_PORT": "6001"
-            }
-
+            },
             "justMyCode": true,
         },
         {
