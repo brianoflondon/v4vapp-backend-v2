@@ -133,6 +133,7 @@ class StatusAPI:
         server_task = None
         try:
             if not self._is_port_available(self.port):
+                logger.error(f"Port {self.port} is already in use. Cannot start Status API.")
                 raise StatusAPIPortInUseException(f"Port {self.port} is already in use.")
 
             logger.info(
