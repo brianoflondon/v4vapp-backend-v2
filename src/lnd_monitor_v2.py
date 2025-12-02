@@ -45,6 +45,7 @@ app = typer.Typer()
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+startup_complete_event = asyncio.Event()
 
 
 @dataclass
@@ -78,6 +79,9 @@ async def health_check() -> Dict[str, Any]:
 
     exceptions = []
     check_for_tasks = ["invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"]
+    if not startup_complete_event.is_set():
+        logger.info(f"{ICON} LND Monitor Startup not complete", extra={"notification": False})
+        return STATUS_OBJ.__dict__
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
@@ -1189,7 +1193,6 @@ async def main_async_start(connection_name: str) -> None:
                         name="synchronize_db",
                     )
                 )
-
             running_tasks += [
                 asyncio.create_task(
                     htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
@@ -1200,6 +1203,7 @@ async def main_async_start(connection_name: str) -> None:
                     name="channel_events_loop",
                 ),
             ]
+            startup_complete_event.set()
 
             # Wait for shutdown signal, then cancel streams immediately
             await shutdown_event.wait()

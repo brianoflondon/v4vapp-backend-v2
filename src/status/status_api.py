@@ -122,15 +122,6 @@ class StatusAPI:
         """
         # Check if port is available before starting
         logger.info(f"Checking availability of port {self.port} for Status API...")
-        config = uvicorn.Config(
-            self.app,
-            host="0.0.0.0",
-            port=self.port,
-            log_level="critical",  # Only log critical errors (effectively disables most logs)
-            access_log=False,
-        )
-        server = uvicorn.Server(config)
-        server_task = None
         try:
             if not self._is_port_available(self.port):
                 logger.error(f"Port {self.port} is already in use. Cannot start Status API.")
@@ -140,6 +131,15 @@ class StatusAPI:
                 f"{Fore.WHITE}Starting Status API for {self.app.title} on port {self.port}{Style.RESET_ALL}"
             )
 
+            config = uvicorn.Config(
+                self.app,
+                host="0.0.0.0",
+                port=self.port,
+                log_level="critical",  # Only log critical errors (effectively disables most logs)
+                access_log=False,
+            )
+            server = uvicorn.Server(config)
+            server_task = None
             # Run the server in a task, but allow shutdown
             server_task = asyncio.create_task(server.serve())
 
