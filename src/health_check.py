@@ -34,6 +34,7 @@ def healthcheck(
     retry_delay: float = typer.Option(
         1.0, "--retry-delay", help="Delay in seconds between retries"
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Print the response body"),
 ):
     """
     Perform a health check by attempting to open the /status endpoint.
@@ -46,6 +47,8 @@ def healthcheck(
         try:
             with urllib.request.urlopen(url, timeout=timeout) as response:
                 if response.status == 200:
+                    if verbose:
+                        typer.echo(response.read().decode())
                     sys.exit(0)
                 else:
                     typer.echo(f"Health check failed: HTTP {response.status}")
