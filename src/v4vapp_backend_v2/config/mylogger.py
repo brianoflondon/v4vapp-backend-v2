@@ -404,6 +404,13 @@ class AddNotificationBellFilter(logging.Filter):
         return record
 
 
+IGNORE_REPORT_FIELDS = LOG_RECORD_BUILTIN_ATTRS | {
+    "notification",
+    "_error_tracking_processed",
+    "_error_tracking_result",
+}
+
+
 class AddJsonDataIndicatorFilter(logging.Filter):
     """
     A logging filter that adds a JSON data indicator to log messages
@@ -417,7 +424,7 @@ class AddJsonDataIndicatorFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> logging.LogRecord:
-        extra_fields = set(record.__dict__.keys()) - (LOG_RECORD_BUILTIN_ATTRS - {"notification"})
+        extra_fields = set(record.__dict__.keys()) - IGNORE_REPORT_FIELDS
         if extra_fields:
             extra_text = " ["
             extra_text += ", ".join(f"{field}" for field in extra_fields)
