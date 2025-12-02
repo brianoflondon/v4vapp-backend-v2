@@ -104,7 +104,7 @@ class StatusAPI:
             except OSError:
                 return False
 
-    async def start(self, startup_timeout: float = 10.0, shutdown_timeout: float = 5.0):
+    async def start(self, shutdown_timeout: float = 5.0):
         """
         Asynchronously start the FastAPI server and run it in the background until the shutdown event is set.
 
@@ -115,7 +115,6 @@ class StatusAPI:
         In the finally block, it ensures the server task is properly shut down.
 
         Args:
-            startup_timeout (float): Timeout in seconds to wait for server startup. Default is 10.0.
             shutdown_timeout (float): Timeout in seconds to wait for server shutdown. Default is 5.0.
 
         Raises:
@@ -142,21 +141,6 @@ class StatusAPI:
 
             # Run the server in a task, but allow shutdown
             server_task = asyncio.create_task(server.serve())
-
-            # Wait for the server to start with a timeout by checking if it's started
-            try:
-                start_time = asyncio.get_event_loop().time()
-                while not server.started:
-                    if asyncio.get_event_loop().time() - start_time > startup_timeout:
-                        raise asyncio.TimeoutError()
-                    await asyncio.sleep(0.1)
-                logger.info(f"Status API started successfully on port {self.port}")
-            except asyncio.TimeoutError:
-                logger.error(
-                    f"Status API startup timed out after {startup_timeout}s on port {self.port}"
-                )
-                server.should_exit = True
-                return
 
             await self.shutdown_event.wait()
         except asyncio.CancelledError:
