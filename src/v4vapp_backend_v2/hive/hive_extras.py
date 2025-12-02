@@ -47,8 +47,8 @@ DEFAULT_GOOD_NODES = [
 BLOCK_STREAM_ONLY = ["https://rpc.podping.org/"]
 
 EXCLUDE_NODES = [
-    "https://rpc.mahdiyari.info",
-    # "https://api.hive.blog",
+    # "https://rpc.mahdiyari.info",
+    "https://api.hive.blog",
     # "https://api.deathwing.me",
     # "https://hive-api.arcange.eu",
     # "https://api.openhive.network",
