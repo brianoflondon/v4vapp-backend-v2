@@ -14,6 +14,7 @@ Or in Docker Compose:
       test: ["CMD", "python", "healthcheck.py", "--host", "localhost", "--port", "6001"]
 """
 
+import json
 import sys
 import time
 import urllib.request
@@ -35,6 +36,7 @@ def healthcheck(
         1.0, "--retry-delay", help="Delay in seconds between retries"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print the response body"),
+    pretty: bool = typer.Option(False, "--pretty", "-p", help="Pretty print JSON output"),
 ):
     """
     Perform a health check by attempting to open the /status endpoint.
@@ -47,8 +49,16 @@ def healthcheck(
         try:
             with urllib.request.urlopen(url, timeout=timeout) as response:
                 if response.status == 200:
-                    if verbose:
-                        typer.echo(response.read().decode())
+                    if verbose or pretty:
+                        body = response.read().decode()
+                        if pretty:
+                            try:
+                                data = json.loads(body)
+                                typer.echo(json.dumps(data, indent=2))
+                            except json.JSONDecodeError:
+                                typer.echo(body)
+                        else:
+                            typer.echo(body)
                     sys.exit(0)
                 else:
                     typer.echo(f"Health check failed: HTTP {response.status}")

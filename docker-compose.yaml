@@ -22,7 +22,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--verbose"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -47,7 +47,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--verbose"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
