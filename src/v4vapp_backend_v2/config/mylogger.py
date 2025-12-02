@@ -406,6 +406,7 @@ class AddNotificationBellFilter(logging.Filter):
 
 IGNORE_REPORT_FIELDS = LOG_RECORD_BUILTIN_ATTRS | {
     "notification",
+    "notification_str",
     "_error_tracking_processed",
     "_error_tracking_result",
 }
