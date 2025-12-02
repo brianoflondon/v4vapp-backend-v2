@@ -1,12 +1,14 @@
 import asyncio
+import os
 import signal
 import sys
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from random import uniform
 from time import sleep
 from timeit import default_timer as timer
-from typing import Annotated, Dict, List, Tuple
+from typing import Annotated, Any, Dict, List, Tuple
 
 import typer
 from colorama import Fore, Style
@@ -14,11 +16,16 @@ from nectar.amount import Amount
 from pymongo.errors import DuplicateKeyError
 from pymongo.results import UpdateResult
 
+from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.general_purpose_funcs import check_time_diff, seconds_only
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    check_time_diff,
+    format_time_delta,
+    seconds_only,
+)
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 from v4vapp_backend_v2.hive.internal_market_trade import account_trade
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -72,6 +79,53 @@ BLOCK_LIST = [
     "95822927",
     "95823857",
 ]
+
+
+@dataclass
+class StatusObject:
+    """
+    Used to store status information for the StatusAPI health check.
+    """
+
+    last_good_block: int = 0
+    time_diff: timedelta = timedelta(0)
+    time_diff_str: str = ""
+    is_catching_up: bool = False
+
+
+STATUS_OBJ = StatusObject()
+
+
+async def health_check() -> Dict[str, Any]:
+    """
+    Asynchronous health check function that verifies the status of critical background tasks.
+    Used with the `StatusAPI` to provide health monitoring API endpoint especially for docker
+    containers.
+
+    This function checks if the 'all_ops_loop' and 'store_rates' tasks are currently running
+    among all asyncio tasks. It also formats the time difference in STATUS_OBJ. If any tasks
+    are not running, it raises a StatusAPIException with details. Otherwise, it returns the
+    STATUS_OBJ dictionary.
+
+    Returns:
+        Dict[str, Any]: The dictionary representation of STATUS_OBJ containing status information.
+
+    Raises:
+        StatusAPIException: If one or more critical tasks are not running, with a message
+            listing the issues and extra data from STATUS_OBJ.
+    """
+
+    exceptions = []
+    check_for_tasks = ["all_ops_loop", "store_rates"]
+    for task in check_for_tasks:
+        if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
+            exceptions.append(f"{task} task is not running")
+            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+
+    STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
+    if exceptions:
+        raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    return STATUS_OBJ.__dict__
 
 
 def handle_shutdown_signal():
@@ -131,8 +185,8 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         None: The function does not return any value.
     """
     CONFIG = InternalConfig().config
-    logger.info("Waiting for 30 seconds to re-balance HBD level")
-    await asyncio.sleep(30)  # Sleeps to make sure we only balance HBD after time for a return
+    logger.info("Waiting for 120 seconds to re-balance HBD level")
+    await asyncio.sleep(120)  # Sleeps to make sure we only balance HBD after time for a return
     use_account = None
     try:
         if transfer.from_account in CONFIG.hive.server_account_names:
@@ -458,7 +512,16 @@ async def all_ops_loop(
                         await TrackedBaseModel.update_quote(time_delay=time_delay)
                         await op.update_conv()
                         if not COMMAND_LINE_WATCH_ONLY:
-                            asyncio.create_task(balance_server_hbd_level(op))
+                            # Now only balance the server account HBD level if this is a send back to a customer
+                            # i.e. after a successful conversion.
+                            if isinstance(op, Transfer) and (
+                                op.from_account in server_accounts
+                                and op.to_account not in server_accounts
+                            ):
+                                logger.info(
+                                    f"Rebalance triggered by transfer {op.from_account} to {op.to_account} {op.amount}"
+                                )
+                                asyncio.create_task(balance_server_hbd_level(op))
                         log_it = True
                         db_store = True
                         notification = True
@@ -521,6 +584,9 @@ async def all_ops_loop(
 
                 await combined_logging(op, log_it, notification, db_store, extra_bots)
 
+                STATUS_OBJ.last_good_block = op.block_num
+                STATUS_OBJ.time_diff = block_counter.time_diff
+                STATUS_OBJ.is_catching_up = block_counter.is_catching_up
                 if timer() - start > 55:
                     block_marker = BlockMarker(op.block_num, op.timestamp)
                     await db_store_op(block_marker)
@@ -646,6 +712,16 @@ async def main_async_start(
     Returns:
         None
     """
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
+    status_api = StatusAPI(
+        port=int(health_check_port),
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__,
+    )  # Use a port from config if needed
+
     db_conn = DBConn()
     await db_conn.setup_database()
 
@@ -670,6 +746,7 @@ async def main_async_start(
                 name="all_ops_loop",
             ),
             asyncio.create_task(store_rates(), name="store_rates"),
+            asyncio.create_task(status_api.start(), name="status_api"),
         ]
         # Wait until shutdown is requested
         await shutdown_event.wait()

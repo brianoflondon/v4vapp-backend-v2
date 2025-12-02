@@ -45,6 +45,7 @@ def test_get_producer_rewards():
     )
     witnesses = []
     witness_counts = {}
+    print(f"Producer Rewards Events from {hive_client.rpc.url}:")
     for hive_event in stream:
         print(
             f"Event: {hive_event['timestamp']} {hive_event['block_num']} {hive_event['producer']}"
@@ -53,7 +54,7 @@ def test_get_producer_rewards():
         witnesses.append(hive_event["producer"])
         witness_counts[witness] = witness_counts.get(witness, 0) + 1
     # give count of each time each witness produced a block
-
+    print(f"Producer Rewards Events from {hive_client.rpc.url}:")
     # give the total number of blocks produced
     print(f"Total blocks produced: {len(witnesses)}")
     assert len(witnesses) == 401

@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
-from v4vapp_backend_v2.database.db_retry import summarize_write_result  # optional pretty log
-from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_retry import (
+    mongo_call,
+    summarize_write_result,  # optional pretty log
+)
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
@@ -448,7 +450,8 @@ class AllQuotes(BaseModel):
         """
         start = timer()
         global_cache = await self.check_global_cache()
-        logger.info(f"{ICON} Global rate check cache hit: {global_cache}, use_cache: {use_cache}")
+        log_func = logger.debug if global_cache else logger.info
+        log_func(f"{ICON} Global rate check cache hit: {global_cache}, use_cache: {use_cache}")
         if use_cache and global_cache:
             logger.debug(
                 f"{ICON} Quotes fetched from main cache in {timer() - start:.4f} seconds",
@@ -489,7 +492,7 @@ class AllQuotes(BaseModel):
                 logger.error(f"Error fetching quote from {service_name}: {e}")
                 self.quotes[service_name] = QuoteResponse(error=str(e))
 
-        logger.info(
+        log_func(
             f"{ICON} Quotes fetched successfully in {timer() - start:.4f} seconds",
             extra={
                 "quotes": self.quotes,

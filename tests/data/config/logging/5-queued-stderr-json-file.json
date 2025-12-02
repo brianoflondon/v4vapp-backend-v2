@@ -26,6 +26,9 @@
         },
         "notification_filter": {
             "()": "v4vapp_backend_v2.config.mylogger.NotificationFilter"
+        },
+        "error_tracking": {
+            "()": "v4vapp_backend_v2.config.mylogger.ErrorTrackingFilter"
         }
     },
     "handlers": {
@@ -41,7 +44,8 @@
             "formatter": "json",
             "filename": "logs/v4vapp-backend-v2.log.jsonl",
             "maxBytes": 1000000,
-            "backupCount": 3
+            "backupCount": 3,
+            "filters": ["error_tracking"]
         },
         "queue_handler": {
             "class": "logging.handlers.QueueHandler",
@@ -55,7 +59,7 @@
             "class": "v4vapp_backend_v2.config.mylogger.CustomNotificationHandler",
             "level": "DEBUG",
             "formatter": "simple",
-            "filters" : ["notification_filter"]
+            "filters" : ["error_tracking", "notification_filter"]
         }
     },
     "loggers": {

@@ -245,7 +245,10 @@ async def check_witness_heartbeat(
         message = f"Witness {witness_name} has {failures} failed machine(s) {', '.join(failed_machines)}."
         logger.warning(
             f"{ICON} {message} Average response time: {avg_execution_time:.3f}s",
-            extra={"notification": False},
+            extra={
+                "notification": True,
+                "error_code": "witness_error",
+            },
         )
         await send_kuma_heartbeat(
             witness=witness_name,
@@ -333,6 +336,7 @@ async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[di
     }
 
     start_time = timer()
+    error_code = "witness_api_invalid_response"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload)
@@ -343,31 +347,49 @@ async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[di
                 if "result" in data and data.get("id") == 1:
                     logger.debug(
                         f"{ICON} Successfully called {machine_name} Hive API at {url}. Execution time: {execution_time:.4f}s",
-                        extra={"notification": False},
+                        extra={
+                            "notification": False,
+                            "error_code_clear": error_code,
+                        },
                     )
                     return data["result"], execution_time
                 else:
                     logger.warning(
-                        f"{ICON} Invalid response from Hive API at {url}: {data}",
-                        extra={"notification": False},
+                        f"{ICON} Invalid response from Hive API at {url}",
+                        extra={
+                            "notification": True,
+                            "error_code": error_code,
+                            "response_data": data,
+                        },
                     )
             else:
                 logger.warning(
                     f"{ICON} HTTP error from Hive API {machine_name} at {url}: {response.status_code}",
-                    extra={"notification": False},
+                    extra={
+                        "notification": True,
+                        "error_code": error_code,
+                    },
                 )
     except httpx.HTTPError as e:
         execution_time = timer() - start_time
         logger.error(
             f"{ICON} Timeout error calling Hive API {machine_name}at {url}: {e}",
-            extra={"notification": False, "error": e},
+            extra={
+                "notification": True,
+                "error": e,
+                "error_code": error_code,
+            },
         )
 
     except Exception as e:
         execution_time = timer() - start_time
         logger.exception(
             f"{ICON} Error calling Hive API {machine_name} at {url}: {e}",
-            extra={"notification": False, "error": e},
+            extra={
+                "notification": False,
+                "error": e,
+                "error_code": error_code,
+            },
         )
 
     return None, execution_time

@@ -102,9 +102,12 @@ class VotingPower:
         self.proxy_value = hive.vests_to_token_power(acc["proxied_vsf_votes"][0] / 1000000)
         self.vote_value = self.vesting_power
         self.total_value = self.vote_value + self.proxy_value
-        # Proposal 233 is the Stabiliser proposal until May 2023
+        if not hive.rpc:
+            raise Exception("No RPC nodes available to check proposal votes")
+        # Proposal 233 is the Stabilizer proposal until May 2023
         # Change this to proposal 0 to get return proposal
         rpc_node_count = len(hive.rpc.nodes)
+        proposals = []
         while rpc_node_count > 0:
             try:
                 proposals = hive.rpc.find_proposals([proposal, 0])
@@ -112,7 +115,7 @@ class VotingPower:
             except Exception as ex:
                 logging.error(
                     f"Problem checking proposal votes {ex} {hive.rpc.url} no_preview",
-                    exc_info=True,
+                    exc_info=False,
                 )
                 rpc_node_count -= 1
                 hive.rpc.next()
@@ -126,7 +129,7 @@ class VotingPower:
         this_prop = float(proposals[0]["total_votes"]) / 1e6
         self.proposal_total_votes = hive.vests_to_token_power(this_prop)
         try:
-            # What perecentage of the proposal total votes is this voter
+            # What percentage of the proposal total votes is this voter
             self.prop_percent = (self.total_value / self.proposal_total_votes) * 100
             # What percentage of the votes up to the return proposal is this vote
             self.total_percent = (self.total_value / return_prop) * 100

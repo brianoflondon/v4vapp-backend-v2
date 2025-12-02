@@ -417,7 +417,7 @@ class TrackedBaseModel(BaseModel):
             None
         """
         if time_delay:
-            logger.info(f"Delaying quote update by {time_delay} seconds")
+            logger.debug(f"Delaying quote update by {time_delay} seconds")
             await asyncio.sleep(time_delay)
         if quote:
             cls.last_quote = quote
