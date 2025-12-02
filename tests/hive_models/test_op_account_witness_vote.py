@@ -1,10 +1,10 @@
 from pathlib import Path
 
 import pytest
+from nectar import Hive
 
 from tests.load_data import load_hive_events
-from v4vapp_backend_v2.hive_models.op_account_witness_vote import \
-    AccountWitnessVote
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_types_enums import OpTypes
 
 
@@ -51,3 +51,11 @@ def test_op_account_witness_vote():
             assert isinstance(account_witness_vote.log_str, str)
             assert isinstance(account_witness_vote.notification_str, str)
     assert count == 14
+
+
+def test_nectar_only():
+    hive = Hive()
+    rpc = hive.rpc
+    if rpc:
+        proposals = rpc.find_proposals([342, 0])
+        assert isinstance(proposals, list)
