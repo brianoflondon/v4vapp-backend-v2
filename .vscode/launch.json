@@ -103,15 +103,14 @@
                 "--config-filename",
                 "live-v4vapp-server-hive.config.yaml",
                 "--watch-only",
-                "--start-block",
-                "101517700"
+                // "--start-block",
+                // "101517700"
                 // "--time-delay",
                 // "2",
             ],
             "env": {
                 "HEALTH_CHECK_PORT": "6001"
-            }
-
+            },
             "justMyCode": true,
         },
         {

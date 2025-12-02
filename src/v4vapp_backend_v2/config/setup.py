@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Protocol, override
+from typing import Any, ClassVar, Dict, List, Optional, Protocol
 
 from colorama import Fore, Style
 from dotenv import load_dotenv
@@ -601,99 +601,6 @@ class Config(BaseModel):
 
 
 # MARK: Logging filters
-class ConsoleLogFilter(logging.Filter):
-    """
-    A logging filter that allows only log records with a level greater than debug.
-
-    This is referenced in the logging configuration json file.
-
-    Methods:
-        filter(record: logging.LogRecord) -> bool | logging.LogRecord:
-            Determines if the given log record should be logged. Returns True
-            if the log level is more than debug, otherwise False.
-    """
-
-    @override
-    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        return record.levelno >= BASE_DISPLAY_LOG_LEVEL
-
-
-class AddNotificationBellFilter(logging.Filter):
-    """
-    A logging filter that adds a notification bell emoji to log messages
-    that are warnings or higher, or have the 'notification' attribute set to True.
-
-    Methods:
-        filter(record: logging.LogRecord) -> logging.LogRecord:
-            Modifies the log record to add a notification bell emoji if
-            the log level is WARNING or higher, or if the 'notification'
-            attribute is set to True.
-    """
-
-    @override
-    def filter(self, record: logging.LogRecord) -> logging.LogRecord:
-        if record.levelno >= logging.WARNING or (
-            hasattr(record, "notification") and record.notification  # type: ignore[attr-defined]
-        ):
-            if hasattr(record, "msg") and isinstance(record.msg, str):
-                record.msg += " 🔔"
-            if hasattr(record, "message") and isinstance(record.message, str):
-                record.message += " 🔔"
-
-        return record
-
-
-LOG_RECORD_BUILTIN_ATTRS = {
-    "args",
-    "asctime",
-    "created",
-    "exc_info",
-    "exc_text",
-    "filename",
-    "funcName",
-    "levelname",
-    "levelno",
-    "lineno",
-    "module",
-    "msecs",
-    "message",
-    "msg",
-    "name",
-    "pathname",
-    "process",
-    "processName",
-    "relativeCreated",
-    "stack_info",
-    "thread",
-    "threadName",
-    "taskName",
-    "notification",  # specifically exclude this because we use this separately for the bell
-}
-
-
-class AddJsonDataIndicatorFilter(logging.Filter):
-    """
-    A logging filter that adds a JSON data indicator to log messages
-    that have the 'json_data' attribute set to True.
-
-    Methods:
-        filter(record: logging.LogRecord) -> logging.LogRecord:
-            Modifies the log record to add a JSON data indicator if
-            the 'json_data' attribute is set to True.
-    """
-
-    @override
-    def filter(self, record: logging.LogRecord) -> logging.LogRecord:
-        extra_fields = set(record.__dict__.keys()) - LOG_RECORD_BUILTIN_ATTRS
-        if extra_fields:
-            extra_text = " ["
-            extra_text += ", ".join(f"{field}" for field in extra_fields)
-            extra_text += "]"
-            if hasattr(record, "msg") and isinstance(record.msg, str):
-                record.msg += extra_text
-            if hasattr(record, "message") and isinstance(record.message, str):
-                record.message += extra_text
-        return record
 
 
 class LoggerFunction(Protocol):
@@ -703,13 +610,18 @@ class LoggerFunction(Protocol):
 @dataclass
 class ErrorCode:
     code: Any
-    start_time: datetime = datetime.now(tz=timezone.utc)
-    last_log_time: datetime = datetime.now(tz=timezone.utc)
+    start_time: datetime
+    last_log_time: datetime
 
     def __init__(self, code: Any):
         self.code = code
         self.start_time = datetime.now(tz=timezone.utc)
+        self.last_log_time = datetime.now(tz=timezone.utc)
         logger.info(f"❌ {Fore.RED}Error code set: {self.code}{Style.RESET_ALL}")
+        super().__init__()
+
+    def __str__(self) -> str:
+        return f"{self.code} (elapsed: {self.elapsed_time}, since last log: {self.time_since_last_log})"
 
     @property
     def code_str(self) -> str:
@@ -740,6 +652,18 @@ class ErrorCode:
         else:
             interval_seconds = interval
         return self.time_since_last_log >= timedelta(seconds=interval_seconds)
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the ErrorCode to a dictionary with elapsed_time and time_since_last_log as strings.
+        """
+        return {
+            "code": self.code,
+            "start_time": self.start_time.isoformat(),
+            "last_log_time": self.last_log_time.isoformat(),
+            "elapsed_time": str(self.elapsed_time),
+            "time_since_last_log": str(self.time_since_last_log),
+        }
 
 
 # MARK: InternalConfig class
@@ -977,7 +901,7 @@ class InternalConfig:
         root_logger = logging.getLogger()
         root_logger.setLevel(self.config.logging.default_log_level)
 
-        # Idempotent console handler install (avoid duplicates if pytest/live logging already added one)
+        # Independent console handler install (avoid duplicates if pytest/live logging already added one)
         STDOUT_HANDLER_NAME = "stdout_color"
         force_console = os.getenv("V4VAPP_FORCE_CONSOLE_LOG") == "1"
 
@@ -1011,6 +935,15 @@ class InternalConfig:
 
             # Optional: keep any existing filter behavior
             try:
+                # Lazy import to avoid circular import
+                from v4vapp_backend_v2.config.mylogger import (
+                    AddJsonDataIndicatorFilter,
+                    AddNotificationBellFilter,
+                    ConsoleLogFilter,
+                    ErrorTrackingFilter,
+                )
+
+                handler.addFilter(ErrorTrackingFilter())
                 handler.addFilter(ConsoleLogFilter())
                 handler.addFilter(AddJsonDataIndicatorFilter())
                 handler.addFilter(AddNotificationBellFilter())
@@ -1045,6 +978,16 @@ class InternalConfig:
         # Ensure we don't stick on lock forever
         InternalConfig.notification_lock = False
         return
+
+    def error_codes_to_dict(self) -> dict[Any, dict[str, Any]]:
+        """
+        Convert the error_codes dictionary to a dictionary of dictionaries.
+
+        Returns:
+            dict[Any, dict[str, Any]]: A dictionary where each key is an error code and
+            each value is a dictionary representation of the corresponding ErrorCode object.
+        """
+        return {code: error_code.to_dict() for code, error_code in self.error_codes.items()}
 
     def shutdown_logging(self):
         for handler in logging.root.handlers[:]:

@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 
 # Import your logger and config paths from setup.py
 from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
     logger,  # Use this logger for any custom logging in this file
 )
 
@@ -85,6 +86,9 @@ class StatusAPI:
         async def status() -> Dict[str, Any]:
             try:
                 ans = await self.health_check_func()
+                error_codes_dict = InternalConfig().error_codes_to_dict()
+                if error_codes_dict:
+                    ans["error_codes"] = error_codes_dict
                 return {"status": "OK", **ans}
             except Exception as e:
                 # Use your imported logger for consistent logging
@@ -100,7 +104,7 @@ class StatusAPI:
             except OSError:
                 return False
 
-    async def start(self):
+    async def start(self, shutdown_timeout: float = 5.0):
         """
         Asynchronously start the FastAPI server and run it in the background until the shutdown event is set.
 
@@ -109,6 +113,9 @@ class StatusAPI:
         The server runs as an asynchronous task, and the method waits for the shutdown event to be set.
         It handles various exceptions, including cancellation, OS errors, and general exceptions, logging errors appropriately.
         In the finally block, it ensures the server task is properly shut down.
+
+        Args:
+            shutdown_timeout (float): Timeout in seconds to wait for server shutdown. Default is 5.0.
 
         Raises:
             No exceptions are raised directly; errors are logged internally.
@@ -126,6 +133,7 @@ class StatusAPI:
         server_task = None
         try:
             if not self._is_port_available(self.port):
+                logger.error(f"Port {self.port} is already in use. Cannot start Status API.")
                 raise StatusAPIPortInUseException(f"Port {self.port} is already in use.")
 
             logger.info(
@@ -134,6 +142,7 @@ class StatusAPI:
 
             # Run the server in a task, but allow shutdown
             server_task = asyncio.create_task(server.serve())
+
             await self.shutdown_event.wait()
         except asyncio.CancelledError:
             pass
@@ -146,7 +155,16 @@ class StatusAPI:
             if server_task:
                 server.should_exit = True
                 try:
-                    await server_task
+                    await asyncio.wait_for(server_task, timeout=shutdown_timeout)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"Status API shutdown timed out after {shutdown_timeout}s, cancelling task"
+                    )
+                    server_task.cancel()
+                    try:
+                        await server_task
+                    except asyncio.CancelledError:
+                        pass
                 except (OSError, SystemExit):
                     # Suppress re-raising of binding errors in finally
                     pass
