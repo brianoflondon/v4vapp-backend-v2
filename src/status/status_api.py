@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 
 # Import your logger and config paths from setup.py
 from v4vapp_backend_v2.config.setup import (
+    InternalConfig,
     logger,  # Use this logger for any custom logging in this file
 )
 
@@ -85,6 +86,9 @@ class StatusAPI:
         async def status() -> Dict[str, Any]:
             try:
                 ans = await self.health_check_func()
+                error_codes_dict = InternalConfig().error_codes_to_dict()
+                if error_codes_dict:
+                    ans["error_codes"] = error_codes_dict
                 return {"status": "OK", **ans}
             except Exception as e:
                 # Use your imported logger for consistent logging

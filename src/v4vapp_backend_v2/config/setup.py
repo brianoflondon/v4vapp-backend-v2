@@ -653,6 +653,18 @@ class ErrorCode:
             interval_seconds = interval
         return self.time_since_last_log >= timedelta(seconds=interval_seconds)
 
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the ErrorCode to a dictionary with elapsed_time and time_since_last_log as strings.
+        """
+        return {
+            "code": self.code,
+            "start_time": self.start_time.isoformat(),
+            "last_log_time": self.last_log_time.isoformat(),
+            "elapsed_time": str(self.elapsed_time),
+            "time_since_last_log": str(self.time_since_last_log),
+        }
+
 
 # MARK: InternalConfig class
 class InternalConfig:
@@ -966,6 +978,16 @@ class InternalConfig:
         # Ensure we don't stick on lock forever
         InternalConfig.notification_lock = False
         return
+
+    def error_codes_to_dict(self) -> dict[Any, dict[str, Any]]:
+        """
+        Convert the error_codes dictionary to a dictionary of dictionaries.
+
+        Returns:
+            dict[Any, dict[str, Any]]: A dictionary where each key is an error code and
+            each value is a dictionary representation of the corresponding ErrorCode object.
+        """
+        return {code: error_code.to_dict() for code, error_code in self.error_codes.items()}
 
     def shutdown_logging(self):
         for handler in logging.root.handlers[:]:
