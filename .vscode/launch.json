@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": false,
+            "justMyCode": false
         },
         {
             "name": "DEV API",
@@ -24,7 +24,7 @@
                 "devhive.config.yaml"
             ],
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": true
         },
         {
             "name": "DEV Admin Interface",
@@ -63,7 +63,7 @@
                 "-1"
                 // "101170560"
             ],
-            "justMyCode": true,
+            "justMyCode": true
         },
         {
             "name": "DEV DB Monitor App",
@@ -101,7 +101,7 @@
             "program": "${workspaceFolder}/src/hive_monitor_v2.py",
             "args": [
                 "--config-filename",
-                "live-v4vapp-server-hive.config.yaml",
+                "live-v4vapp-server-hive.config.yaml"
                 // "--watch-only",
                 // "--start-block",
                 // "101517700"
@@ -111,7 +111,7 @@
             "env": {
                 "HEALTH_CHECK_PORT": "6001"
             },
-            "justMyCode": true,
+            "justMyCode": true
         },
         {
             "name": "DB Monitor App",
@@ -168,11 +168,11 @@
             "args": [
                 "--config-filename",
                 "hive.vsc.config.yaml",
-                "--watch-only",
+                "--watch-only"
                 // "--start-block",
                 // "101517700"
             ],
-            "justMyCode": true,
+            "justMyCode": true
         },
         {
             "name": "Umbrel Monitor v2",
@@ -229,7 +229,7 @@
             "console": "integratedTerminal",
             "args": [
                 "logs_docker/umbrel/",
-                "-f",
+                "-f"
                 // "--tail",
                 // "200"
             ]
@@ -242,9 +242,9 @@
             "program": "src/template_app.py",
             "args": [
                 "--config",
-                "devhive.config.yaml",
+                "devhive.config.yaml"
             ],
             "console": "integratedTerminal"
-        },
+        }
     ]
 }
