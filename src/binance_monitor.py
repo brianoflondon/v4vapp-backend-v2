@@ -227,11 +227,14 @@ async def main_async_start():
         await check_notifications()
 
 
-async def check_notifications():
+async def check_notifications() -> None:
     await asyncio.sleep(1)
-    while InternalConfig().notification_loop.is_running() or InternalConfig().notification_lock:
+    notification_loop = InternalConfig().notification_loop
+    while (
+        notification_loop and notification_loop.is_running()
+    ) or InternalConfig().notification_lock:
         print(
-            f"Notification loop: {InternalConfig().notification_loop.is_running()} "
+            f"Notification loop: {notification_loop.is_running() if notification_loop else False} "
             f"Notification lock: {InternalConfig().notification_lock}"
         )
         await asyncio.sleep(0.1)
