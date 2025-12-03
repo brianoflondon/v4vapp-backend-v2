@@ -3644,7 +3644,6 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "dill" },
-    { name = "hive-nectar" },
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "matplotlib" },

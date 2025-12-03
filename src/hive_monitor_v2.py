@@ -170,7 +170,7 @@ async def db_store_op(
         return None
 
 
-async def balance_server_hbd_level(transfer: Transfer) -> None:
+async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
     """
     This function identifies the relevant Hive account from the provided transfer
     object and attempts to balance its HBD level by initiating a conversion transaction.
@@ -185,16 +185,19 @@ async def balance_server_hbd_level(transfer: Transfer) -> None:
         None: The function does not return any value.
     """
     CONFIG = InternalConfig().config
-    logger.info("Waiting for 120 seconds to re-balance HBD level")
-    await asyncio.sleep(120)  # Sleeps to make sure we only balance HBD after time for a return
+    logger.info("Waiting for 60 seconds to re-balance HBD level")
+    await asyncio.sleep(60)  # Sleeps to make sure we only balance HBD after time for a return
     use_account = None
     try:
-        if transfer.from_account in CONFIG.hive.server_account_names:
-            use_account = transfer.from_account
-        elif transfer.to_account in CONFIG.hive.server_account_names:
-            use_account = transfer.to_account
+        if not transfer:
+            use_account = CONFIG.hive.server_account_names[0]
         else:
-            return
+            if transfer.from_account in CONFIG.hive.server_account_names:
+                use_account = transfer.from_account
+            elif transfer.to_account in CONFIG.hive.server_account_names:
+                use_account = transfer.to_account
+            else:
+                return
         hive_acc = CONFIG.hive.hive_accs.get(use_account, None)
         if hive_acc and hive_acc.active_key:
             # set the amount to the current HBD balance taken from Config
@@ -734,6 +737,7 @@ async def main_async_start(
     logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
+        await balance_server_hbd_level()
         # Create tasks so we can cancel them on shutdown_event
         await witness_check_startup()
         tasks = [
