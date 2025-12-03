@@ -1211,7 +1211,13 @@ async def main_async_start(connection_name: str) -> None:
                 ),
             ]
             startup_complete_event.set()
-
+            lnd_node = InternalConfig().config.lnd_config.default
+            icon = InternalConfig().config.lnd_config.connections[lnd_node].icon
+            logger.info(
+                f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
+                f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+                extra={"notification": True},
+            )
             # Wait for shutdown signal, then cancel streams immediately
             await shutdown_event.wait()
             for t in running_tasks:
@@ -1332,7 +1338,7 @@ def main(
     logger.info(
         f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
-        extra={"notification": True},
+        extra={"notification": False},
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")

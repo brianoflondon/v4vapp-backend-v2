@@ -762,6 +762,10 @@ async def main_async_start(
             asyncio.create_task(status_api.start(), name="status_api"),
         ]
         startup_complete_event.set()
+        logger.info(
+            f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+            extra={"notification": True},
+        )
         # Wait until shutdown is requested
         await shutdown_event.wait()
         # Cancel tasks and wait for them to finish
@@ -889,8 +893,8 @@ def main(
     # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
-        f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {time_delay:.2f}s",
-        extra={"notification": True},
+        f"{ICON}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name} pause: {time_delay:.2f}s",
+        extra={"notification": False},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds
     sleep(time_delay)
