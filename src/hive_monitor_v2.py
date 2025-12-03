@@ -737,7 +737,7 @@ async def main_async_start(
     logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
-        await balance_server_hbd_level()
+        asyncio.create_task(balance_server_hbd_level(), name="initial_balance_hbd_level")
         # Create tasks so we can cancel them on shutdown_event
         await witness_check_startup()
         tasks = [
