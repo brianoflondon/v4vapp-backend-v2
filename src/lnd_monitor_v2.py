@@ -43,9 +43,9 @@ ICON = "⚡"
 
 app = typer.Typer()
 
-# Define a global flag to track shutdown
-shutdown_event = asyncio.Event()
+# Define a global flag to track shutdown and startup completion
 startup_complete_event = asyncio.Event()
+shutdown_event = asyncio.Event()
 
 
 @dataclass
@@ -85,10 +85,17 @@ async def health_check() -> Dict[str, Any]:
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
-            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+            logger.warning(
+                f"{ICON} {task} task is not running",
+                extra={"notification": True, "error_code": "hive_monitor_task_failure"},
+            )
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    logger.debug(
+        f"{ICON} Health check passed",
+        extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
+    )
     return STATUS_OBJ.__dict__
 
 

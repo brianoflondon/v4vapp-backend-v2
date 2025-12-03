@@ -63,9 +63,9 @@ ICON = "🐝"
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
 
-# Define a global flag to track shutdown
+# Define a global flag to track shutdown and startup completion
+startup_complete_event = asyncio.Event()
 shutdown_event = asyncio.Event()
-
 
 BLOCK_LIST = [
     "95793083",
@@ -117,14 +117,23 @@ async def health_check() -> Dict[str, Any]:
 
     exceptions = []
     check_for_tasks = ["all_ops_loop", "store_rates"]
+    if not startup_complete_event.is_set():
+        logger.warning(f"{ICON} Startup not complete", extra={"notification": False})
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
-            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+            logger.warning(
+                f"{ICON} {task} task is not running",
+                extra={"notification": True, "error_code": "hive_monitor_task_failure"},
+            )
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    logger.debug(
+        f"{ICON} Health check passed",
+        extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
+    )
     return STATUS_OBJ.__dict__
 
 
@@ -752,6 +761,7 @@ async def main_async_start(
             asyncio.create_task(store_rates(), name="store_rates"),
             asyncio.create_task(status_api.start(), name="status_api"),
         ]
+        startup_complete_event.set()
         # Wait until shutdown is requested
         await shutdown_event.wait()
         # Cancel tasks and wait for them to finish
