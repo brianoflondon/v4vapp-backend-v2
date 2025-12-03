@@ -5,13 +5,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import OrderedDict, override
 
+from v4vapp_backend_v2.config.error_code_class import ErrorCode
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
-from v4vapp_backend_v2.config.setup import (
-    BASE_DISPLAY_LOG_LEVEL,
-    ErrorCode,
-    InternalConfig,
-    logger,
-)
+from v4vapp_backend_v2.config.setup import BASE_DISPLAY_LOG_LEVEL, InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -261,11 +257,11 @@ class ErrorTrackingFilter(logging.Filter):
                     error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=0)
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
-                InternalConfig().error_codes.pop(error_code_clear)
-                logger.debug(
-                    f"✅ Error code {error_code_clear} cleared after {elapsed_time_str}",
-                    extra={"notification": False},
+                logger.info(
+                    f"✅ Error code {error_code_clear} cleared after {elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}",
+                    extra={"notification": True, "error_code_obj": error_code_obj},
                 )
+                InternalConfig().error_codes.pop(error_code_clear)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
             record._error_tracking_result = True  # type: ignore[attr-defined]
             return True  # Allow the clear message through
@@ -282,7 +278,15 @@ class ErrorTrackingFilter(logging.Filter):
 
             if error_code not in InternalConfig().error_codes:
                 # New error code - add it and allow the log through
-                InternalConfig().error_codes[error_code] = ErrorCode(code=error_code)
+                error_code_obj = ErrorCode(code=error_code, message=record.getMessage())
+                InternalConfig().error_codes[error_code_obj.code] = error_code_obj
+                logger.error(
+                    f"❌ New error: {error_code}",
+                    extra={
+                        "notification": True,
+                        "error_code_obj": error_code_obj,
+                    },
+                )
                 record._error_tracking_processed = True  # type: ignore[attr-defined]
                 record._error_tracking_result = True  # type: ignore[attr-defined]
                 return True
