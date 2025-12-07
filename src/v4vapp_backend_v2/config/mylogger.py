@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import OrderedDict, override
 
+from colorama import Fore
+
 from v4vapp_backend_v2.config.error_code_class import ErrorCode
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
 from v4vapp_backend_v2.config.setup import BASE_DISPLAY_LOG_LEVEL, InternalConfig, logger
@@ -258,7 +260,9 @@ class ErrorTrackingFilter(logging.Filter):
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
                 logger.info(
-                    f"✅ Error code {error_code_clear} cleared after {elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}",
+                    f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
+                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}",
+                    f"{Style.RESET_ALL}",
                     extra={"notification": True, "error_code_obj": error_code_obj},
                 )
                 InternalConfig().error_codes.pop(error_code_clear)

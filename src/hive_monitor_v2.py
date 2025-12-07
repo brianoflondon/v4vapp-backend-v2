@@ -573,8 +573,8 @@ async def all_ops_loop(
                         await op.get_witness_details(ignore_cache=False, time_delay=time_delay)
                         if op.producer in watch_witnesses:
                             notification = True
+                            db_store = True
                         log_it = True
-                        db_store = True
 
                 elif OpBase.proposals_tracked and isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
