@@ -7,7 +7,7 @@ import logging.handlers
 import os
 import sys
 import time
-from enum import StrEnum
+from enum import StrEnum, auto
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Protocol
 
@@ -435,6 +435,11 @@ class HiveConfig(BaseConfig):
         return []
 
 
+class ExchangeMode(StrEnum):
+    live = auto()
+    testnet = auto()
+
+
 class DevelopmentConfig(BaseModel):
     """
     DevelopmentConfig is a configuration class for development mode settings.
@@ -445,8 +450,13 @@ class DevelopmentConfig(BaseModel):
     """
 
     enabled: bool = False
+    exchange_mode: ExchangeMode = ExchangeMode.live
     env_var: str = "V4VAPP_DEV_MODE"
     allowed_hive_accounts: List[str] = []
+
+    @property
+    def testnet(self) -> bool:
+        return self.exchange_mode == ExchangeMode.testnet
 
 
 class Config(BaseModel):
