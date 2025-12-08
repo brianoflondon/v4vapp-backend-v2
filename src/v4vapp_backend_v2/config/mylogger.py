@@ -261,8 +261,7 @@ class ErrorTrackingFilter(logging.Filter):
                 elapsed_time_str = timedelta_display(elapsed_time)
                 logger.info(
                     f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
-                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}",
-                    f"{Style.RESET_ALL}",
+                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}",
                     extra={"notification": True, "error_code_obj": error_code_obj},
                 )
                 InternalConfig().error_codes.pop(error_code_clear)
