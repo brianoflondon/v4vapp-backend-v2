@@ -876,9 +876,7 @@ class TestGetNetPosition:
         return mock
 
     @pytest.mark.asyncio
-    async def test_get_net_position_sell_dominant(
-        self, mock_exchange, mock_pending_collection
-    ):
+    async def test_get_net_position_sell_dominant(self, mock_exchange, mock_pending_collection):
         """Test get_net_position when sells > buys."""
         sell_data = {
             "base_asset": "HIVE",
@@ -944,9 +942,7 @@ class TestGetNetPosition:
         assert result.can_execute is True
 
     @pytest.mark.asyncio
-    async def test_get_net_position_buy_dominant(
-        self, mock_exchange, mock_pending_collection
-    ):
+    async def test_get_net_position_buy_dominant(self, mock_exchange, mock_pending_collection):
         """Test get_net_position when buys > sells."""
         sell_data = {
             "base_asset": "HIVE",
@@ -1008,9 +1004,7 @@ class TestGetNetPosition:
         assert result.can_execute is True
 
     @pytest.mark.asyncio
-    async def test_get_net_position_balanced(
-        self, mock_exchange, mock_pending_collection
-    ):
+    async def test_get_net_position_balanced(self, mock_exchange, mock_pending_collection):
         """Test get_net_position when buys == sells (balanced)."""
         sell_data = {
             "base_asset": "HIVE",
@@ -1074,9 +1068,7 @@ class TestGetNetPosition:
         assert "Balanced" in result.reason
 
     @pytest.mark.asyncio
-    async def test_get_net_position_below_minimum(
-        self, mock_exchange, mock_pending_collection
-    ):
+    async def test_get_net_position_below_minimum(self, mock_exchange, mock_pending_collection):
         """Test get_net_position when net is below minimum threshold."""
         sell_data = {
             "base_asset": "HIVE",

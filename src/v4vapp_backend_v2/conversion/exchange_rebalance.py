@@ -779,9 +779,7 @@ async def execute_net_rebalance(
                 quantity=abs_net_qty,
             )
 
-        logger.info(
-            order_result.log_str, extra={"notification": True, **order_result.log_extra}
-        )
+        logger.info(order_result.log_str, extra={"notification": True, **order_result.log_extra})
 
         # Update both pending records to reflect the netting
         await _update_pending_after_net_execution(
