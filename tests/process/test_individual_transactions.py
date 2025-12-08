@@ -54,7 +54,7 @@ This must be run after the three watchers are running, as it relies on the watch
 
 """
 
-pytest.skip("Skipping process tests", allow_module_level=True)
+# pytest.skip("Skipping process tests", allow_module_level=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
