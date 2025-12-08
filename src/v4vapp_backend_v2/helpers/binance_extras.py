@@ -1,3 +1,4 @@
+import os
 from decimal import Decimal
 
 from binance.error import ClientError  # type: ignore
@@ -28,11 +29,22 @@ def get_client(testnet: bool = False) -> Client:
     internal_config = InternalConfig()
     try:
         if testnet:
-            client = Client(
-                api_key=internal_config.config.api_keys.binance_testnet_api_key,
-                api_secret=internal_config.config.api_keys.binance_testnet_api_secret,
-                base_url="https://testnet.binance.vision",
-            )
+            if (
+                "test_binance" in internal_config.config.api_keys.binance_testnet_api_key.lower()
+                and os.getenv("BINANCE_TESTNET_API_KEY")
+                and os.getenv("BINANCE_TESTNET_API_SECRET")
+            ):
+                client = Client(
+                    api_key=os.getenv("BINANCE_TESTNET_API_KEY", ""),
+                    api_secret=os.getenv("BINANCE_TESTNET_API_SECRET", ""),
+                    base_url="https://testnet.binance.vision",
+                )
+            else:
+                client = Client(
+                    api_key=internal_config.config.api_keys.binance_testnet_api_key,
+                    api_secret=internal_config.config.api_keys.binance_testnet_api_secret,
+                    base_url="https://testnet.binance.vision",
+                )
         else:
             client = Client(
                 api_key=internal_config.config.api_keys.binance_api_key,
