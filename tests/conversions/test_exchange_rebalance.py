@@ -305,6 +305,60 @@ class TestRebalanceResult:
         assert result.executed is False
         assert result.error == "Connection timeout"
 
+    def test_result_has_timestamp(self):
+        """Test that RebalanceResult has a timestamp."""
+        result = RebalanceResult(
+            executed=True,
+            reason="Test",
+        )
+        assert result.timestamp is not None
+
+    @pytest.mark.asyncio
+    async def test_save_executed_result(self, mock_rebalance_results_collection):
+        """Test saving an executed result to database."""
+        order = ExchangeOrderResult(
+            exchange="binance",
+            symbol="HIVEBTC",
+            order_id="12345",
+            side="SELL",
+            status="FILLED",
+            requested_qty=Decimal("100"),
+            executed_qty=Decimal("100"),
+            quote_qty=Decimal("0.00123"),
+            avg_price=Decimal("0.0000123"),
+            fee=Decimal("0.0000001"),
+            fee_asset="BTC",
+            raw_response={},
+        )
+
+        result = RebalanceResult(
+            executed=True,
+            reason="Trade executed successfully",
+            pending_qty=Decimal("0"),
+            pending_notional=Decimal("0"),
+            order_result=order,
+        )
+
+        await result.save()
+
+        # Verify insert_one was called
+        assert mock_rebalance_results_collection.insert_one.called
+
+    @pytest.mark.asyncio
+    async def test_save_not_executed_result_does_not_save(self, mock_rebalance_results_collection):
+        """Test that non-executed results are not saved."""
+        result = RebalanceResult(
+            executed=False,
+            reason="Below minimum",
+            pending_qty=Decimal("50"),
+            pending_notional=Decimal("0.0005"),
+        )
+
+        await result.save()
+
+        # Verify insert_one was NOT called
+        assert not mock_rebalance_results_collection.insert_one.called
+
 
 # Mock exchange adapter for testing
 class MockExchangeAdapter(BaseExchangeAdapter):
@@ -403,7 +457,21 @@ def mock_exchange():
 
 
 @pytest.fixture
-def mock_pending_collection():
+def mock_rebalance_results_collection():
+    """Mock the MongoDB collection for RebalanceResult."""
+    mock_collection = MagicMock()
+
+    async def async_insert_one(*args, **kwargs):
+        return MagicMock(inserted_id="mock_id")
+
+    mock_collection.insert_one = MagicMock(side_effect=lambda *a, **kw: async_insert_one(*a, **kw))
+
+    with patch.object(RebalanceResult, "collection", return_value=mock_collection):
+        yield mock_collection
+
+
+@pytest.fixture
+def mock_pending_collection(mock_rebalance_results_collection):
     """Mock the MongoDB collection for PendingRebalance."""
     mock_collection = MagicMock()
 

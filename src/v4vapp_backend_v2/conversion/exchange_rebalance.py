@@ -16,7 +16,8 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import ClassVar
 
-from pydantic import BaseModel, Field
+from bson.decimal128 import Decimal128
+from pydantic import BaseModel, Field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -101,6 +102,22 @@ class PendingRebalance(BaseModel):
         default=0,
         description="Number of successful trade executions",
     )
+
+    @field_validator(
+        "pending_qty",
+        "pending_quote_value",
+        "min_qty_threshold",
+        "min_notional_threshold",
+        "total_executed_qty",
+        mode="before",
+    )
+    @classmethod
+    def convert_to_decimal(cls, v):
+        if isinstance(v, (int, float)):
+            return Decimal(str(v))
+        if isinstance(v, Decimal128):
+            return Decimal(str(v))
+        return v
 
     @classmethod
     def collection(cls) -> AsyncCollection:
@@ -250,6 +267,7 @@ class RebalanceResult(BaseModel):
     """Result of a rebalance attempt."""
 
     model_config = {"arbitrary_types_allowed": True}
+    db_client: ClassVar[AsyncCollection | None] = None
 
     executed: bool = Field(default=False, description="Whether a trade was executed")
     reason: str = Field(default="", description="Reason for result")
@@ -261,6 +279,24 @@ class RebalanceResult(BaseModel):
         default=None, description="Order result if executed"
     )
     error: str | None = Field(default=None, description="Error message if failed")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        """Get the MongoDB collection for rebalance results."""
+        if cls.db_client is None:
+            cls.db_client = InternalConfig.db["rebalance_results"]
+        return cls.db_client
+
+    async def save(self) -> None:
+        """Save the rebalance result to MongoDB (only for executed trades)."""
+        if not self.executed:
+            return  # Only save successful executions
+
+        collection = self.collection()
+        data = convert_decimals_for_mongodb(self.model_dump())
+
+        await mongo_call(lambda: collection.insert_one(data))
 
 
 async def add_pending_rebalance(
@@ -359,13 +395,15 @@ async def add_pending_rebalance(
             f"@ avg price {order_result.avg_price}"
         )
 
-        return RebalanceResult(
+        result = RebalanceResult(
             executed=True,
             reason="Trade executed successfully",
             pending_qty=pending.pending_qty,
             pending_notional=pending.pending_quote_value,
             order_result=order_result,
         )
+        await result.save()
+        return result
 
     except ExchangeBelowMinimumError as e:
         logger.warning(f"Rebalance below minimum: {e}")
@@ -479,13 +517,15 @@ async def force_execute_pending(
         pending.reset_after_execution(order_result.executed_qty)
         await pending.save()
 
-        return RebalanceResult(
+        result = RebalanceResult(
             executed=True,
             reason="Forced execution successful",
             pending_qty=pending.pending_qty,
             pending_notional=pending.pending_quote_value,
             order_result=order_result,
         )
+        await result.save()
+        return result
     except Exception as e:
         return RebalanceResult(
             executed=False,
