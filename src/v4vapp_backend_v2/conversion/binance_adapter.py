@@ -5,7 +5,8 @@ This adapter wraps the binance_extras functions to provide a standardized
 interface for the rebalancing system.
 """
 
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
+from typing import ClassVar
 
 from v4vapp_backend_v2.conversion.exchange_protocol import (
     BaseExchangeAdapter,
@@ -32,11 +33,59 @@ class BinanceAdapter(BaseExchangeAdapter):
     Binance exchange adapter.
 
     Implements the ExchangeProtocol using the binance_extras module.
+
+    Asset-specific decimal precision is configured via ASSET_DECIMALS.
+    Assets not in the dict default to 8 decimal places.
     """
+
+    # Asset-specific decimal precision for lot sizes
+    # Binance requires HIVE to be traded in whole numbers (0 decimals)
+    ASSET_DECIMALS: ClassVar[dict[str, int]] = {
+        "HIVE": 0,  # HIVE must be traded in whole numbers
+        "BTC": 8,  # BTC has high precision
+        "BNB": 2,  # BNB typically 2 decimals
+        "USDT": 2,  # USDT typically 2 decimals
+    }
+
+    DEFAULT_DECIMALS: ClassVar[int] = 8  # Default precision for unknown assets
 
     @property
     def exchange_name(self) -> str:
         return "binance"
+
+    def get_asset_decimals(self, asset: str) -> int:
+        """
+        Get the number of decimal places for an asset.
+
+        Args:
+            asset: The asset symbol (e.g., 'HIVE', 'BTC')
+
+        Returns:
+            Number of decimal places allowed for the asset
+        """
+        return self.ASSET_DECIMALS.get(asset.upper(), self.DEFAULT_DECIMALS)
+
+    def round_quantity(self, asset: str, quantity: Decimal) -> Decimal:
+        """
+        Round a quantity to the appropriate decimal places for an asset.
+
+        Uses ROUND_DOWN to ensure we don't exceed the original quantity.
+
+        Args:
+            asset: The asset symbol (e.g., 'HIVE', 'BTC')
+            quantity: The quantity to round
+
+        Returns:
+            Rounded quantity as Decimal
+        """
+        decimals = self.get_asset_decimals(asset)
+        if decimals == 0:
+            # Round down to whole number
+            return quantity.quantize(Decimal("1"), rounding=ROUND_DOWN)
+        else:
+            # Round down to specified decimal places
+            quantizer = Decimal(10) ** -decimals
+            return quantity.quantize(quantizer, rounding=ROUND_DOWN)
 
     def get_min_order_requirements(self, base_asset: str, quote_asset: str) -> ExchangeMinimums:
         """
@@ -136,6 +185,9 @@ class BinanceAdapter(BaseExchangeAdapter):
         """
         Execute a market sell order on Binance.
 
+        The quantity is automatically rounded to the appropriate decimal places
+        for the base asset (e.g., HIVE is rounded to whole numbers).
+
         Args:
             base_asset: The asset to sell (e.g., 'HIVE')
             quote_asset: The asset to receive (e.g., 'BTC')
@@ -145,9 +197,18 @@ class BinanceAdapter(BaseExchangeAdapter):
             ExchangeOrderResult with execution details
         """
         symbol = self.build_symbol(base_asset, quote_asset)
+        # Round quantity to asset-specific decimal places
+        rounded_qty = self.round_quantity(base_asset, quantity)
+
+        if rounded_qty <= Decimal("0"):
+            raise ExchangeBelowMinimumError(
+                f"Quantity {quantity} rounds to {rounded_qty} for {base_asset} "
+                f"(requires {self.get_asset_decimals(base_asset)} decimals)"
+            )
+
         try:
-            result = market_sell(symbol=symbol, quantity=quantity, testnet=self.testnet)
-            return self._convert_result(result, "SELL", quantity)
+            result = market_sell(symbol=symbol, quantity=rounded_qty, testnet=self.testnet)
+            return self._convert_result(result, "SELL", rounded_qty)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
         except BinanceErrorBadConnection as e:
@@ -159,6 +220,9 @@ class BinanceAdapter(BaseExchangeAdapter):
         """
         Execute a market buy order on Binance.
 
+        The quantity is automatically rounded to the appropriate decimal places
+        for the base asset (e.g., HIVE is rounded to whole numbers).
+
         Args:
             base_asset: The asset to buy (e.g., 'HIVE')
             quote_asset: The asset to spend (e.g., 'BTC')
@@ -168,9 +232,18 @@ class BinanceAdapter(BaseExchangeAdapter):
             ExchangeOrderResult with execution details
         """
         symbol = self.build_symbol(base_asset, quote_asset)
+        # Round quantity to asset-specific decimal places
+        rounded_qty = self.round_quantity(base_asset, quantity)
+
+        if rounded_qty <= Decimal("0"):
+            raise ExchangeBelowMinimumError(
+                f"Quantity {quantity} rounds to {rounded_qty} for {base_asset} "
+                f"(requires {self.get_asset_decimals(base_asset)} decimals)"
+            )
+
         try:
-            result = market_buy(symbol=symbol, quantity=quantity, testnet=self.testnet)
-            return self._convert_result(result, "BUY", quantity)
+            result = market_buy(symbol=symbol, quantity=rounded_qty, testnet=self.testnet)
+            return self._convert_result(result, "BUY", rounded_qty)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
         except BinanceErrorBadConnection as e:
