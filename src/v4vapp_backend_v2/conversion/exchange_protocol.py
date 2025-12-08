@@ -8,7 +8,7 @@ without coupling to a specific implementation.
 
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Protocol, runtime_checkable
+from typing import Any, Dict, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -33,6 +33,29 @@ class ExchangeOrderResult(BaseModel):
     fee: Decimal  # Total fees paid
     fee_asset: str  # Asset used for fees (e.g., "BTC", "BNB")
     raw_response: dict  # Original exchange response for debugging
+
+    @property
+    def log_str(self) -> str:
+        """Formatted string for logging the order result."""
+        return (
+            f"Exchange: {self.exchange}, Symbol: {self.symbol}, Order ID: {self.order_id}, "
+            f"Side: {self.side}, Status: {self.status}, Requested Qty: {self.requested_qty}, "
+            f"Executed Qty: {self.executed_qty}, Quote Qty: {self.quote_qty}, "
+            f"Avg Price: {self.avg_price}, Fee: {self.fee} {self.fee_asset}"
+        )
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """Dictionary of key order details for structured logging."""
+        return {"exchange_order_result": self.model_dump()}
+
+    @property
+    def notification_str(self) -> str:
+        """Formatted string for user notifications."""
+        return (
+            f"Executed {self.side} order on {self.exchange}: {self.executed_qty} units of "
+            f"{self.symbol} at avg price {self.avg_price}, total {self.quote_qty} spent/received."
+        )
 
 
 class ExchangeMinimums(BaseModel):
