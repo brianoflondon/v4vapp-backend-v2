@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+from typing import Dict
 
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
@@ -56,7 +57,7 @@ def get_client(testnet: bool = False) -> Client:
         raise e
 
 
-def get_balances(symbols: list, testnet: bool = False) -> dict:
+def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | int]:
     """
     Get balances for a list of symbols.
     This will work always on testnet. If the IP address is not whitelisted on Binance
@@ -75,7 +76,7 @@ def get_balances(symbols: list, testnet: bool = False) -> dict:
             if balance["asset"] in symbols:
                 balances[balance["asset"]] = Decimal(balance["free"])
         if "BTC" in balances and balances["BTC"] > Decimal("0"):
-            balances["SATS"] = int(balances["BTC"] * Decimal("100000000"))
+            balances["SATS"] = Decimal(balances["BTC"] * Decimal("100000000"))
         return balances
     except ClientError as error:
         logger.error(
