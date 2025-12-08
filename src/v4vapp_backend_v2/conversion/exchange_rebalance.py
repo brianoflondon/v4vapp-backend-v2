@@ -27,6 +27,7 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
     ExchangeOrderResult,
 )
 from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
 
 class RebalanceDirection(StrEnum):
@@ -162,13 +163,8 @@ class PendingRebalance(BaseModel):
             "exchange": self.exchange,
         }
 
-        # Convert Decimals to strings for MongoDB
-        data = self.model_dump(mode="json")
-        data["pending_qty"] = str(self.pending_qty)
-        data["pending_quote_value"] = str(self.pending_quote_value)
-        data["min_qty_threshold"] = str(self.min_qty_threshold)
-        data["min_notional_threshold"] = str(self.min_notional_threshold)
-        data["total_executed_qty"] = str(self.total_executed_qty)
+        # Convert Decimals to MongoDB-compatible types (Decimal128 or int)
+        data = convert_decimals_for_mongodb(self.model_dump())
 
         await mongo_call(lambda: collection.update_one(filter_query, {"$set": data}, upsert=True))
 
@@ -345,8 +341,8 @@ async def add_pending_rebalance(
 
         # Execute the trade
         logger.info(
-            f"Executing rebalance: {direction.value} {pending.pending_qty} {base_asset} "
-            f"for {quote_asset}"
+            f"Executing rebalance: {direction.value} {pending.pending_qty:.3f} {base_asset} "
+            f"for {pending.pending_quote_value:.8f} {quote_asset}"
         )
 
         order_result = await execute_rebalance_trade(
@@ -409,17 +405,19 @@ async def execute_rebalance_trade(
         ExchangeOrderResult with trade details
     """
     if pending.direction == RebalanceDirection.SELL_BASE_FOR_QUOTE:
-        return exchange_adapter.market_sell(
+        exchange_result = exchange_adapter.market_sell(
             base_asset=pending.base_asset,
             quote_asset=pending.quote_asset,
             quantity=pending.pending_qty,
         )
     else:
-        return exchange_adapter.market_buy(
+        exchange_result = exchange_adapter.market_buy(
             base_asset=pending.base_asset,
             quote_asset=pending.quote_asset,
             quantity=pending.pending_qty,
         )
+    logger.info(exchange_result.log_str, extra={"notification": True, **exchange_result.log_extra})
+    return exchange_result
 
 
 async def get_pending_rebalances() -> list[PendingRebalance]:
