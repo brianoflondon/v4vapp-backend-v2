@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import OrderedDict, override
 
-from colorama import Fore
+from colorama import Fore, Style
 
 from v4vapp_backend_v2.config.error_code_class import ErrorCode
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol

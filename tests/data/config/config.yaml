@@ -52,7 +52,6 @@ tailscale:
   notification_server: https://something
   notification_server_port: 8000
 
-
 ########### TEST CONFIG NO SECRETS #################
 
 dbs_config:
@@ -79,7 +78,7 @@ dbs_config:
         admin: # The Database name
           db_users:
             admin:
-              password: test-admin-password     # This will be ignored if replica set is called rsPytest
+              password: test-admin-password # This will be ignored if replica set is called rsPytest
               roles:
                 - root
                 - readWrite
@@ -91,7 +90,7 @@ dbs_config:
         admin: # The Database name
           db_users:
             admin:
-              password: test-admin-password     # This will be ignored if replica set is called rsPytest
+              password: test-admin-password # This will be ignored if replica set is called rsPytest
               roles:
                 - root
   dbs:
@@ -146,10 +145,16 @@ dbs_config:
               index_key: [["credit.sub", 1]]
               unique: false
             debit_compound:
-              index_key: [["debit.account_type", 1], ["debit.name", 1], ["debit.sub", 1]]
+              index_key:
+                [["debit.account_type", 1], ["debit.name", 1], ["debit.sub", 1]]
               unique: false
             credit_compound:
-              index_key: [["credit.account_type", 1], ["credit.name", 1], ["credit.sub", 1]]
+              index_key:
+                [
+                  ["credit.account_type", 1],
+                  ["credit.name", 1],
+                  ["credit.sub", 1],
+                ]
               unique: false
         test_collection3: {}
       timeseries:
@@ -193,7 +198,6 @@ dbs_config:
               index_key: [["timestamp", 1]]
               unique: false
 
-
 ########### TEST CONFIG NO SECRETS #################
 
 redis:
@@ -202,9 +206,10 @@ redis:
   db: 0
 ########### TEST CONFIG NO SECRETS #################
 
-binance:
-  api_key: binance-api-key
-  api_secret: binance-secret-key
+api_keys:
+  binance_testnet_api_key: test_binance_testnet_api_key
+  binance_testnet_api_secret: test_binance_testnet_api_secret
+
 ########### TEST CONFIG NO SECRETS #################
 
 hive:
@@ -237,7 +242,7 @@ hive:
   witness_configs:
     brianoflondon:
       kuma_webhook_url: WEBHOOK_TEST_URL
-      kuma_heartbeat_time: 60  # seconds
+      kuma_heartbeat_time: 60 # seconds
       witness_machines:
         - name: bol-1
           url: https://api.hive.blog
@@ -245,7 +250,6 @@ hive:
         - name: bol-2
           url: https://api.hive.blog
           signing_key: STM6Yvdz6HtdhyzAi6oimvm5MFevSWeThYZJvbLGSmq4UeUxAEztg
-
 
 ########### TEST CONFIG NO SECRETS #################
 
