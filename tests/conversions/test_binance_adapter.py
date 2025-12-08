@@ -326,6 +326,144 @@ class TestBinanceAdapterConvertResult:
         assert result.fee_asset == ""
 
 
+class TestBinanceAdapterAssetDecimals:
+    """Tests for asset decimal precision and rounding."""
+
+    def test_get_asset_decimals_known_assets(self):
+        """Test get_asset_decimals returns correct values for known assets."""
+        adapter = BinanceAdapter()
+
+        assert adapter.get_asset_decimals("HIVE") == 0
+        assert adapter.get_asset_decimals("BTC") == 8
+        assert adapter.get_asset_decimals("BNB") == 2
+        assert adapter.get_asset_decimals("USDT") == 2
+
+    def test_get_asset_decimals_unknown_asset(self):
+        """Test get_asset_decimals returns default for unknown assets."""
+        adapter = BinanceAdapter()
+
+        # Unknown assets should get DEFAULT_DECIMALS (8)
+        assert adapter.get_asset_decimals("UNKNOWN") == BinanceAdapter.DEFAULT_DECIMALS
+        assert adapter.get_asset_decimals("XYZ") == 8
+
+    def test_round_quantity_hive_integer(self):
+        """Test HIVE is rounded to whole numbers."""
+        adapter = BinanceAdapter()
+
+        # Should round down to nearest integer
+        assert adapter.round_quantity("HIVE", Decimal("199.999")) == Decimal("199")
+        assert adapter.round_quantity("HIVE", Decimal("100.5")) == Decimal("100")
+        assert adapter.round_quantity("HIVE", Decimal("50.1")) == Decimal("50")
+
+    def test_round_quantity_hive_already_integer(self):
+        """Test HIVE integers are unchanged."""
+        adapter = BinanceAdapter()
+
+        assert adapter.round_quantity("HIVE", Decimal("100")) == Decimal("100")
+        assert adapter.round_quantity("HIVE", Decimal("1")) == Decimal("1")
+
+    def test_round_quantity_btc_8_decimals(self):
+        """Test BTC is rounded to 8 decimal places."""
+        adapter = BinanceAdapter()
+
+        assert adapter.round_quantity("BTC", Decimal("0.123456789")) == Decimal("0.12345678")
+        assert adapter.round_quantity("BTC", Decimal("1.000000001")) == Decimal("1.00000000")
+
+    def test_round_quantity_bnb_2_decimals(self):
+        """Test BNB is rounded to 2 decimal places."""
+        adapter = BinanceAdapter()
+
+        assert adapter.round_quantity("BNB", Decimal("10.555")) == Decimal("10.55")
+        assert adapter.round_quantity("BNB", Decimal("5.999")) == Decimal("5.99")
+
+    def test_round_quantity_always_rounds_down(self):
+        """Test that rounding always uses ROUND_DOWN."""
+        adapter = BinanceAdapter()
+
+        # Even with .9999... it should round down
+        assert adapter.round_quantity("HIVE", Decimal("99.9999")) == Decimal("99")
+        assert adapter.round_quantity("BNB", Decimal("99.999")) == Decimal("99.99")
+
+    def test_round_quantity_small_amounts_become_zero(self):
+        """Test that very small HIVE amounts become 0."""
+        adapter = BinanceAdapter()
+
+        assert adapter.round_quantity("HIVE", Decimal("0.5")) == Decimal("0")
+        assert adapter.round_quantity("HIVE", Decimal("0.999")) == Decimal("0")
+
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
+    def test_market_sell_rounds_quantity(self, mock_sell):
+        """Test market_sell rounds quantity before calling Binance."""
+        mock_sell.return_value = MarketOrderResult(
+            symbol="HIVEBTC",
+            order_id=12345,
+            client_order_id="test123",
+            transact_time=1234567890,
+            orig_qty=Decimal("199"),  # Rounded from 199.999
+            executed_qty=Decimal("199"),
+            cummulative_quote_qty=Decimal("0.00245"),
+            status="FILLED",
+            type="MARKET",
+            side="SELL",
+            avg_price=Decimal("0.0000123"),
+            fills=[{"commission": "0.0000001", "commissionAsset": "BTC"}],
+            raw_response={"orderId": 12345},
+        )
+
+        adapter = BinanceAdapter()
+        result = adapter.market_sell("HIVE", "BTC", Decimal("199.999"))
+
+        # Verify the call to market_sell used rounded quantity
+        mock_sell.assert_called_once()
+        call_kwargs = mock_sell.call_args.kwargs
+        assert call_kwargs["quantity"] == Decimal("199")  # Not 199.999
+
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
+    def test_market_buy_rounds_quantity(self, mock_buy):
+        """Test market_buy rounds quantity before calling Binance."""
+        mock_buy.return_value = MarketOrderResult(
+            symbol="HIVEBTC",
+            order_id=54321,
+            client_order_id="test456",
+            transact_time=1234567890,
+            orig_qty=Decimal("100"),  # Rounded from 100.5
+            executed_qty=Decimal("100"),
+            cummulative_quote_qty=Decimal("0.00123"),
+            status="FILLED",
+            type="MARKET",
+            side="BUY",
+            avg_price=Decimal("0.0000123"),
+            fills=[{"commission": "0.01", "commissionAsset": "HIVE"}],
+            raw_response={"orderId": 54321},
+        )
+
+        adapter = BinanceAdapter()
+        result = adapter.market_buy("HIVE", "BTC", Decimal("100.5"))
+
+        # Verify the call to market_buy used rounded quantity
+        mock_buy.assert_called_once()
+        call_kwargs = mock_buy.call_args.kwargs
+        assert call_kwargs["quantity"] == Decimal("100")  # Not 100.5
+
+    def test_market_sell_below_minimum_after_rounding(self):
+        """Test market_sell raises error when rounding makes quantity 0."""
+        adapter = BinanceAdapter()
+
+        with pytest.raises(ExchangeBelowMinimumError) as exc_info:
+            adapter.market_sell("HIVE", "BTC", Decimal("0.5"))
+
+        assert "rounds to 0" in str(exc_info.value)
+
+    def test_market_buy_below_minimum_after_rounding(self):
+        """Test market_buy raises error when rounding makes quantity 0."""
+        adapter = BinanceAdapter()
+
+        with pytest.raises(ExchangeBelowMinimumError) as exc_info:
+            adapter.market_buy("HIVE", "BTC", Decimal("0.999"))
+
+        assert "rounds to 0" in str(exc_info.value)
+
+
 class TestBinanceAdapterProtocolCompliance:
     """Tests to verify BinanceAdapter satisfies ExchangeProtocol."""
 
