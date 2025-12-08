@@ -18,12 +18,15 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
     ExchangeOrderResult,
 )
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
+    NetPosition,
     PendingRebalance,
     RebalanceDirection,
     RebalanceResult,
     add_pending_rebalance,
+    execute_net_rebalance,
     execute_rebalance_trade,
     force_execute_pending,
+    get_net_position,
     get_pending_rebalances,
 )
 
@@ -792,3 +795,592 @@ class TestGetPendingRebalances:
         assert len(result) == 1
         assert result[0].base_asset == "HIVE"
         assert result[0].pending_qty == Decimal("150")
+
+
+class TestNetPosition:
+    """Tests for NetPosition model."""
+
+    def test_create_net_position_sell_dominant(self):
+        """Test creating net position when sells > buys."""
+        net = NetPosition(
+            base_asset="HIVE",
+            quote_asset="BTC",
+            sell_pending_qty=Decimal("100"),
+            sell_pending_notional=Decimal("0.001"),
+            buy_pending_qty=Decimal("60"),
+            buy_pending_notional=Decimal("0.0006"),
+            net_qty=Decimal("40"),
+            net_direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+            min_qty_threshold=Decimal("10"),
+            min_notional_threshold=Decimal("0.0001"),
+            can_execute=True,
+            reason="Ready to sell 40 HIVE",
+        )
+
+        assert net.net_qty == Decimal("40")
+        assert net.net_direction == RebalanceDirection.SELL_BASE_FOR_QUOTE
+        assert net.abs_net_qty == Decimal("40")
+        assert net.is_balanced is False
+        assert net.can_execute is True
+
+    def test_create_net_position_buy_dominant(self):
+        """Test creating net position when buys > sells."""
+        net = NetPosition(
+            base_asset="HIVE",
+            quote_asset="BTC",
+            sell_pending_qty=Decimal("50"),
+            buy_pending_qty=Decimal("120"),
+            net_qty=Decimal("-70"),  # Negative means need to buy
+            net_direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
+            can_execute=True,
+        )
+
+        assert net.net_qty == Decimal("-70")
+        assert net.net_direction == RebalanceDirection.BUY_BASE_WITH_QUOTE
+        assert net.abs_net_qty == Decimal("70")
+        assert net.is_balanced is False
+
+    def test_create_net_position_balanced(self):
+        """Test creating balanced net position."""
+        net = NetPosition(
+            base_asset="HIVE",
+            quote_asset="BTC",
+            sell_pending_qty=Decimal("100"),
+            buy_pending_qty=Decimal("100"),
+            net_qty=Decimal("0"),
+            net_direction=None,
+            can_execute=False,
+            reason="Balanced: no net position to execute",
+        )
+
+        assert net.net_qty == Decimal("0")
+        assert net.net_direction is None
+        assert net.is_balanced is True
+        assert net.can_execute is False
+
+
+class TestGetNetPosition:
+    """Tests for get_net_position function."""
+
+    @pytest.fixture
+    def mock_exchange(self):
+        """Create a mock exchange adapter."""
+        mock = MagicMock(spec=BaseExchangeAdapter)
+        mock.exchange_name = "mock_exchange"
+        mock.get_min_order_requirements.return_value = ExchangeMinimums(
+            min_qty=Decimal("10"),
+            min_notional=Decimal("0.0001"),
+            step_size=Decimal("1"),
+        )
+        mock.get_current_price.return_value = Decimal("0.00001")
+        return mock
+
+    @pytest.mark.asyncio
+    async def test_get_net_position_sell_dominant(
+        self, mock_exchange, mock_pending_collection
+    ):
+        """Test get_net_position when sells > buys."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "100",
+            "pending_quote_value": "0.001",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 2,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "30",
+            "pending_quote_value": "0.0003",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        call_count = 0
+
+        async def async_find_one(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        result = await get_net_position(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.sell_pending_qty == Decimal("100")
+        assert result.buy_pending_qty == Decimal("30")
+        assert result.net_qty == Decimal("70")  # 100 - 30
+        assert result.net_direction == RebalanceDirection.SELL_BASE_FOR_QUOTE
+        assert result.can_execute is True
+
+    @pytest.mark.asyncio
+    async def test_get_net_position_buy_dominant(
+        self, mock_exchange, mock_pending_collection
+    ):
+        """Test get_net_position when buys > sells."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "20",
+            "pending_quote_value": "0.0002",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "80",
+            "pending_quote_value": "0.0008",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 2,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        result = await get_net_position(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.sell_pending_qty == Decimal("20")
+        assert result.buy_pending_qty == Decimal("80")
+        assert result.net_qty == Decimal("-60")  # 20 - 80 = -60
+        assert result.net_direction == RebalanceDirection.BUY_BASE_WITH_QUOTE
+        assert result.can_execute is True
+
+    @pytest.mark.asyncio
+    async def test_get_net_position_balanced(
+        self, mock_exchange, mock_pending_collection
+    ):
+        """Test get_net_position when buys == sells (balanced)."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "50",
+            "pending_quote_value": "0.0005",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "50",
+            "pending_quote_value": "0.0005",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        result = await get_net_position(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.sell_pending_qty == Decimal("50")
+        assert result.buy_pending_qty == Decimal("50")
+        assert result.net_qty == Decimal("0")
+        assert result.net_direction is None
+        assert result.is_balanced is True
+        assert result.can_execute is False
+        assert "Balanced" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_get_net_position_below_minimum(
+        self, mock_exchange, mock_pending_collection
+    ):
+        """Test get_net_position when net is below minimum threshold."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "15",
+            "pending_quote_value": "0.00015",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "10",
+            "pending_quote_value": "0.0001",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        result = await get_net_position(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        # Net is 5 (15 - 10), but minimum is 10
+        assert result.net_qty == Decimal("5")
+        assert result.can_execute is False
+        assert "below minimum" in result.reason
+
+
+class TestExecuteNetRebalance:
+    """Tests for execute_net_rebalance function."""
+
+    @pytest.fixture
+    def mock_exchange(self):
+        """Create a mock exchange adapter."""
+        mock = MagicMock(spec=BaseExchangeAdapter)
+        mock.exchange_name = "mock_exchange"
+        mock.get_min_order_requirements.return_value = ExchangeMinimums(
+            min_qty=Decimal("10"),
+            min_notional=Decimal("0.0001"),
+            step_size=Decimal("1"),
+        )
+        mock.get_current_price.return_value = Decimal("0.00001")
+        return mock
+
+    @pytest.mark.asyncio
+    async def test_execute_net_rebalance_sell(
+        self, mock_exchange, mock_pending_collection, mock_rebalance_results_collection
+    ):
+        """Test execute_net_rebalance when net position is to sell."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "100",
+            "pending_quote_value": "0.001",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 2,
+            "transaction_ids": ["tx1", "tx2"],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "30",
+            "pending_quote_value": "0.0003",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": ["tx3"],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        # Mock the market_sell to return success for net amount (70)
+        mock_exchange.market_sell.return_value = ExchangeOrderResult(
+            exchange="mock_exchange",
+            symbol="HIVEBTC",
+            order_id="net-order-1",
+            side="SELL",
+            requested_qty=Decimal("70"),
+            executed_qty=Decimal("70"),
+            avg_price=Decimal("0.00001"),
+            quote_qty=Decimal("0.0007"),
+            fee=Decimal("0.0000007"),
+            fee_asset="BTC",
+            status="FILLED",
+            raw_response={},
+        )
+
+        result = await execute_net_rebalance(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.executed is True
+        assert result.order_result is not None
+        assert result.order_result.executed_qty == Decimal("70")
+        # Verify market_sell was called with net amount
+        mock_exchange.market_sell.assert_called_once_with(
+            base_asset="HIVE",
+            quote_asset="BTC",
+            quantity=Decimal("70"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_net_rebalance_buy(
+        self, mock_exchange, mock_pending_collection, mock_rebalance_results_collection
+    ):
+        """Test execute_net_rebalance when net position is to buy."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "20",
+            "pending_quote_value": "0.0002",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "100",
+            "pending_quote_value": "0.001",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 2,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        # Mock the market_buy to return success for net amount (80)
+        mock_exchange.market_buy.return_value = ExchangeOrderResult(
+            exchange="mock_exchange",
+            symbol="HIVEBTC",
+            order_id="net-order-2",
+            side="BUY",
+            requested_qty=Decimal("80"),
+            executed_qty=Decimal("80"),
+            avg_price=Decimal("0.00001"),
+            quote_qty=Decimal("0.0008"),
+            fee=Decimal("0.08"),
+            fee_asset="HIVE",
+            status="FILLED",
+            raw_response={},
+        )
+
+        result = await execute_net_rebalance(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.executed is True
+        assert result.order_result is not None
+        assert result.order_result.executed_qty == Decimal("80")
+        # Verify market_buy was called with net amount
+        mock_exchange.market_buy.assert_called_once_with(
+            base_asset="HIVE",
+            quote_asset="BTC",
+            quantity=Decimal("80"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_net_rebalance_balanced_no_trade(
+        self, mock_exchange, mock_pending_collection
+    ):
+        """Test execute_net_rebalance when position is balanced (no trade)."""
+        sell_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "sell",
+            "exchange": "mock_exchange",
+            "pending_qty": "50",
+            "pending_quote_value": "0.0005",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+        buy_data = {
+            "base_asset": "HIVE",
+            "quote_asset": "BTC",
+            "direction": "buy",
+            "exchange": "mock_exchange",
+            "pending_qty": "50",
+            "pending_quote_value": "0.0005",
+            "min_qty_threshold": "10",
+            "min_notional_threshold": "0.0001",
+            "total_executed_qty": "0",
+            "transaction_count": 1,
+            "transaction_ids": [],
+            "execution_count": 0,
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "last_executed_at": None,
+        }
+
+        async def async_find_one(*args, **kwargs):
+            filter_query = args[0] if args else kwargs.get("filter", {})
+            if filter_query.get("direction") == "sell":
+                return sell_data
+            elif filter_query.get("direction") == "buy":
+                return buy_data
+            return None
+
+        mock_pending_collection.find_one = MagicMock(
+            side_effect=lambda *a, **kw: async_find_one(*a, **kw)
+        )
+
+        result = await execute_net_rebalance(
+            exchange_adapter=mock_exchange,
+            base_asset="HIVE",
+            quote_asset="BTC",
+        )
+
+        assert result.executed is False
+        assert "Balanced" in result.reason
+        # No trade should be attempted
+        mock_exchange.market_sell.assert_not_called()
+        mock_exchange.market_buy.assert_not_called()

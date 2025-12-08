@@ -263,6 +263,69 @@ class PendingRebalance(BaseModel):
         return f"{self.base_asset}{self.quote_asset}"
 
 
+class NetPosition(BaseModel):
+    """
+    Represents the net position after netting buy and sell sides.
+
+    When customers convert HIVE→Lightning (sells HIVE for BTC on exchange)
+    and Lightning→HIVE (buys HIVE with BTC on exchange), these can partially
+    offset each other. This model captures the net position.
+    """
+
+    base_asset: str = Field(..., description="Base asset (e.g., 'HIVE')")
+    quote_asset: str = Field(..., description="Quote asset (e.g., 'BTC')")
+    exchange: str = Field(default="binance", description="Exchange name")
+
+    # Raw pending amounts from each side
+    sell_pending_qty: Decimal = Field(
+        default=Decimal("0"),
+        description="Pending quantity to sell (from HIVE→Lightning conversions)",
+    )
+    sell_pending_notional: Decimal = Field(
+        default=Decimal("0"),
+        description="Pending notional value for sells",
+    )
+    buy_pending_qty: Decimal = Field(
+        default=Decimal("0"),
+        description="Pending quantity to buy (from Lightning→HIVE conversions)",
+    )
+    buy_pending_notional: Decimal = Field(
+        default=Decimal("0"),
+        description="Pending notional value for buys",
+    )
+
+    # Net position after offsetting
+    net_qty: Decimal = Field(
+        default=Decimal("0"),
+        description="Net quantity (positive = need to sell, negative = need to buy)",
+    )
+    net_direction: RebalanceDirection | None = Field(
+        default=None,
+        description="Direction of net position (None if balanced)",
+    )
+
+    # Threshold info
+    min_qty_threshold: Decimal = Field(default=Decimal("0"))
+    min_notional_threshold: Decimal = Field(default=Decimal("0"))
+
+    # Status
+    can_execute: bool = Field(
+        default=False,
+        description="Whether net position meets thresholds for execution",
+    )
+    reason: str = Field(default="", description="Explanation of status")
+
+    @property
+    def is_balanced(self) -> bool:
+        """Check if buy and sell sides are perfectly balanced."""
+        return self.net_qty == Decimal("0")
+
+    @property
+    def abs_net_qty(self) -> Decimal:
+        """Get absolute value of net quantity."""
+        return abs(self.net_qty)
+
+
 class RebalanceResult(BaseModel):
     """Result of a rebalance attempt."""
 
@@ -537,3 +600,293 @@ async def force_execute_pending(
             pending_qty=pending.pending_qty,
             pending_notional=pending.pending_quote_value,
         )
+
+
+async def get_net_position(
+    exchange_adapter: BaseExchangeAdapter,
+    base_asset: str,
+    quote_asset: str,
+) -> NetPosition:
+    """
+    Calculate the net position by netting buy and sell pending amounts.
+
+    This function looks up both the SELL and BUY pending rebalances for a
+    trading pair and calculates the net position. If we have 100 HIVE pending
+    to sell and 60 HIVE pending to buy, the net is 40 HIVE to sell.
+
+    Args:
+        exchange_adapter: Exchange adapter for getting thresholds
+        base_asset: Base asset (e.g., 'HIVE')
+        quote_asset: Quote asset (e.g., 'BTC')
+
+    Returns:
+        NetPosition with detailed breakdown and net calculation
+    """
+    exchange = exchange_adapter.exchange_name
+
+    # Get both sell and buy pending records
+    sell_pending = await PendingRebalance.get_or_create(
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+        exchange=exchange,
+    )
+
+    buy_pending = await PendingRebalance.get_or_create(
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
+        exchange=exchange,
+    )
+
+    # Get exchange minimums
+    try:
+        minimums = exchange_adapter.get_min_order_requirements(base_asset, quote_asset)
+        min_qty = minimums.min_qty
+        min_notional = minimums.min_notional
+    except ExchangeConnectionError:
+        min_qty = Decimal("0")
+        min_notional = Decimal("0")
+        logger.warning(f"Could not get minimums for {base_asset}/{quote_asset}")
+
+    # Calculate net position
+    # Positive net_qty = need to sell (more sells than buys)
+    # Negative net_qty = need to buy (more buys than sells)
+    net_qty = sell_pending.pending_qty - buy_pending.pending_qty
+
+    # Determine direction and check thresholds
+    if net_qty > Decimal("0"):
+        net_direction = RebalanceDirection.SELL_BASE_FOR_QUOTE
+        # Estimate notional for the net quantity
+        try:
+            price = exchange_adapter.get_current_price(base_asset, quote_asset)
+            net_notional = net_qty * price
+        except ExchangeConnectionError:
+            net_notional = sell_pending.pending_quote_value - buy_pending.pending_quote_value
+    elif net_qty < Decimal("0"):
+        net_direction = RebalanceDirection.BUY_BASE_WITH_QUOTE
+        net_qty_abs = abs(net_qty)
+        try:
+            price = exchange_adapter.get_current_price(base_asset, quote_asset)
+            net_notional = net_qty_abs * price
+        except ExchangeConnectionError:
+            net_notional = buy_pending.pending_quote_value - sell_pending.pending_quote_value
+    else:
+        net_direction = None
+        net_notional = Decimal("0")
+
+    # Check if we can execute the net position
+    abs_net_qty = abs(net_qty)
+    abs_net_notional = abs(net_notional) if net_notional else Decimal("0")
+
+    if abs_net_qty == Decimal("0"):
+        can_execute = False
+        reason = "Balanced: no net position to execute"
+    elif abs_net_qty < min_qty:
+        can_execute = False
+        reason = f"Net qty {abs_net_qty} below minimum {min_qty}"
+    elif abs_net_notional < min_notional:
+        can_execute = False
+        reason = f"Net notional {abs_net_notional:.8f} below minimum {min_notional}"
+    else:
+        can_execute = True
+        reason = f"Ready to {net_direction.value if net_direction else 'N/A'} {abs_net_qty} {base_asset}"
+
+    return NetPosition(
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        exchange=exchange,
+        sell_pending_qty=sell_pending.pending_qty,
+        sell_pending_notional=sell_pending.pending_quote_value,
+        buy_pending_qty=buy_pending.pending_qty,
+        buy_pending_notional=buy_pending.pending_quote_value,
+        net_qty=net_qty,
+        net_direction=net_direction,
+        min_qty_threshold=min_qty,
+        min_notional_threshold=min_notional,
+        can_execute=can_execute,
+        reason=reason,
+    )
+
+
+async def execute_net_rebalance(
+    exchange_adapter: BaseExchangeAdapter,
+    base_asset: str,
+    quote_asset: str,
+) -> RebalanceResult:
+    """
+    Calculate net position and execute a trade if thresholds are met.
+
+    This is the preferred way to execute rebalancing as it nets buy and sell
+    sides before executing, minimizing unnecessary trades.
+
+    Args:
+        exchange_adapter: Exchange adapter
+        base_asset: Base asset (e.g., 'HIVE')
+        quote_asset: Quote asset (e.g., 'BTC')
+
+    Returns:
+        RebalanceResult with execution details
+    """
+    net_position = await get_net_position(
+        exchange_adapter=exchange_adapter,
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+    )
+
+    logger.info(
+        f"Net position: sell={net_position.sell_pending_qty} "
+        f"buy={net_position.buy_pending_qty} "
+        f"net={net_position.net_qty} {base_asset} "
+        f"direction={net_position.net_direction}"
+    )
+
+    if not net_position.can_execute:
+        return RebalanceResult(
+            executed=False,
+            reason=net_position.reason,
+            pending_qty=net_position.abs_net_qty,
+            pending_notional=abs(
+                net_position.sell_pending_notional - net_position.buy_pending_notional
+            ),
+        )
+
+    # At this point net_direction must be set (can_execute=True implies non-zero net)
+    if net_position.net_direction is None:
+        return RebalanceResult(
+            executed=False,
+            reason="No net direction (balanced position)",
+            pending_qty=Decimal("0"),
+            pending_notional=Decimal("0"),
+        )
+
+    net_direction = net_position.net_direction
+
+    # Execute the net trade
+    try:
+        abs_net_qty = net_position.abs_net_qty
+
+        if net_direction == RebalanceDirection.SELL_BASE_FOR_QUOTE:
+            order_result = exchange_adapter.market_sell(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                quantity=abs_net_qty,
+            )
+        else:
+            order_result = exchange_adapter.market_buy(
+                base_asset=base_asset,
+                quote_asset=quote_asset,
+                quantity=abs_net_qty,
+            )
+
+        logger.info(
+            order_result.log_str, extra={"notification": True, **order_result.log_extra}
+        )
+
+        # Update both pending records to reflect the netting
+        await _update_pending_after_net_execution(
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            exchange=exchange_adapter.exchange_name,
+            executed_qty=order_result.executed_qty,
+            net_direction=net_direction,
+        )
+
+        result = RebalanceResult(
+            executed=True,
+            reason=f"Net rebalance executed: {net_direction.value} {order_result.executed_qty} {base_asset}",
+            pending_qty=Decimal("0"),
+            pending_notional=Decimal("0"),
+            order_result=order_result,
+        )
+        await result.save()
+        return result
+
+    except ExchangeBelowMinimumError as e:
+        logger.warning(f"Net rebalance below minimum: {e}")
+        return RebalanceResult(
+            executed=False,
+            reason=str(e),
+            error=str(e),
+            pending_qty=net_position.abs_net_qty,
+        )
+    except ExchangeConnectionError as e:
+        logger.error(f"Exchange connection error during net rebalance: {e}")
+        return RebalanceResult(
+            executed=False,
+            reason="Exchange connection error",
+            error=str(e),
+            pending_qty=net_position.abs_net_qty,
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during net rebalance: {e}", exc_info=True)
+        return RebalanceResult(
+            executed=False,
+            reason="Unexpected error",
+            error=str(e),
+            pending_qty=net_position.abs_net_qty,
+        )
+
+
+async def _update_pending_after_net_execution(
+    base_asset: str,
+    quote_asset: str,
+    exchange: str,
+    executed_qty: Decimal,
+    net_direction: RebalanceDirection,
+) -> None:
+    """
+    Update both pending records after a net execution.
+
+    When we execute a net trade, we need to:
+    1. Clear the side that was completely consumed
+    2. Reduce the other side by the offset amount
+    3. Reset the executed side by the net amount
+
+    Example: sell_pending=100, buy_pending=60, net=40 SELL
+    After executing sell of 40:
+    - buy_pending should be cleared (60 was "used" to offset)
+    - sell_pending should be reduced by 100 (60 offset + 40 executed)
+    """
+    sell_pending = await PendingRebalance.get_or_create(
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+        exchange=exchange,
+    )
+
+    buy_pending = await PendingRebalance.get_or_create(
+        base_asset=base_asset,
+        quote_asset=quote_asset,
+        direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
+        exchange=exchange,
+    )
+
+    if net_direction == RebalanceDirection.SELL_BASE_FOR_QUOTE:
+        # We sold the net amount
+        # The buy side is completely consumed (used for offsetting)
+        offset_qty = buy_pending.pending_qty
+        buy_pending.pending_qty = Decimal("0")
+        buy_pending.pending_quote_value = Decimal("0")
+        buy_pending.transaction_ids = []
+        buy_pending.transaction_count = 0
+
+        # The sell side loses (offset + executed)
+        total_consumed = offset_qty + executed_qty
+        sell_pending.reset_after_execution(total_consumed)
+
+    else:  # BUY_BASE_WITH_QUOTE
+        # We bought the net amount
+        # The sell side is completely consumed (used for offsetting)
+        offset_qty = sell_pending.pending_qty
+        sell_pending.pending_qty = Decimal("0")
+        sell_pending.pending_quote_value = Decimal("0")
+        sell_pending.transaction_ids = []
+        sell_pending.transaction_count = 0
+
+        # The buy side loses (offset + executed)
+        total_consumed = offset_qty + executed_qty
+        buy_pending.reset_after_execution(total_consumed)
+
+    await sell_pending.save()
+    await buy_pending.save()
