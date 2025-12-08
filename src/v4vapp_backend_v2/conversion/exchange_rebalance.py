@@ -358,6 +358,9 @@ async def add_pending_rebalance(
 
         # Add the pending amount
         pending.add_pending(qty=qty, quote_value=quote_value, transaction_id=transaction_id)
+        logger.info(
+            f"Added pending {qty} {base_asset}, extra={{'pending_rebalance': pending.model_dump()}}"
+        )
 
         # Check if we can execute
         can_execute, reason = pending.can_execute()
