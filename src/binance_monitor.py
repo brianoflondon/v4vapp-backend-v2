@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+from decimal import Decimal
 from timeit import default_timer as timer
 from typing import Annotated
 
@@ -179,8 +180,8 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     current_price = get_current_price("HIVEBTC", testnet=testnet)
     saved_balances = balances
 
-    current_price_sats = float(current_price["current_price"]) * 1e8
-    hive_target = BINANCE_HIVE_ALERT_LEVEL_SATS / current_price_sats
+    current_price_sats = Decimal(str(current_price["current_price"])) * Decimal("1e8")
+    hive_target = Decimal(str(BINANCE_HIVE_ALERT_LEVEL_SATS)) / current_price_sats
     percentage = hive_balance / hive_target * 100
     percentage_meter = draw_percentage_meter(percentage=percentage, max_percent=300, width=9)
     notification_str = (
