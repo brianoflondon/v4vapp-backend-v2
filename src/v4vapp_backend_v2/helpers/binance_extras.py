@@ -233,6 +233,7 @@ def market_order(
     side: str,
     quantity: Decimal,
     testnet: bool = False,
+    client_order_id: str | None = None,
 ) -> MarketOrderResult:
     """
     Execute a market order for any trading pair supported by Binance.
@@ -245,6 +246,7 @@ def market_order(
         side: Order side - 'BUY' or 'SELL'
         quantity: The amount of the base asset to buy/sell (as Decimal)
         testnet: Whether to use the Binance testnet
+        client_order_id: Optional custom order ID for tracking (max 36 chars)
 
     Returns:
         MarketOrderResult: Contains order details including the realized price
@@ -284,12 +286,15 @@ def market_order(
 
         # Place market order
         client = get_client(testnet)
-        response = client.new_order(
-            symbol=symbol,
-            side=side,
-            type="MARKET",
-            quantity=str(quantity),
-        )
+        order_params = {
+            "symbol": symbol,
+            "side": side,
+            "type": "MARKET",
+            "quantity": str(quantity),
+        }
+        if client_order_id:
+            order_params["newClientOrderId"] = client_order_id[:36]  # Binance max 36 chars
+        response = client.new_order(**order_params)
 
         logger.info(
             f"Market {side.lower()} order executed: {quantity} {symbol}",
@@ -320,6 +325,7 @@ def market_sell(
     symbol: str,
     quantity: Decimal,
     testnet: bool = False,
+    client_order_id: str | None = None,
 ) -> MarketOrderResult:
     """
     Execute a market sell order for any trading pair.
@@ -330,17 +336,25 @@ def market_sell(
         symbol: The trading pair symbol (e.g., 'HIVEBTC', 'BTCUSDT')
         quantity: The amount of the base asset to sell (as Decimal)
         testnet: Whether to use the Binance testnet
+        client_order_id: Optional custom order ID for tracking (max 36 chars)
 
     Returns:
         MarketOrderResult: Contains order details including the realized price
     """
-    return market_order(symbol=symbol, side="SELL", quantity=quantity, testnet=testnet)
+    return market_order(
+        symbol=symbol,
+        side="SELL",
+        quantity=quantity,
+        testnet=testnet,
+        client_order_id=client_order_id,
+    )
 
 
 def market_buy(
     symbol: str,
     quantity: Decimal,
     testnet: bool = False,
+    client_order_id: str | None = None,
 ) -> MarketOrderResult:
     """
     Execute a market buy order for any trading pair.
@@ -351,11 +365,18 @@ def market_buy(
         symbol: The trading pair symbol (e.g., 'HIVEBTC', 'BTCUSDT')
         quantity: The amount of the base asset to buy (as Decimal)
         testnet: Whether to use the Binance testnet
+        client_order_id: Optional custom order ID for tracking (max 36 chars)
 
     Returns:
         MarketOrderResult: Contains order details including the realized price
     """
-    return market_order(symbol=symbol, side="BUY", quantity=quantity, testnet=testnet)
+    return market_order(
+        symbol=symbol,
+        side="BUY",
+        quantity=quantity,
+        testnet=testnet,
+        client_order_id=client_order_id,
+    )
 
 
 def market_sell_to_btc(
