@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import OrderedDict, override
 
 from colorama import Fore, Style
@@ -92,9 +93,15 @@ class MyJSONFormatter(logging.Formatter):
             str: The formatted log message as a JSON string, or the result of the
                  parent class's format method if an error occurs.
         """
+
+        def json_default(o):
+            if isinstance(o, Decimal):
+                return float(round(o, 11))
+            return str(o)
+
         try:
             message = self._prepare_log_dict(record)
-            ans_str = json.dumps(message, default=str)
+            ans_str = json.dumps(message, default=json_default)
             if hasattr(record, "error_code"):
                 error_code = record.error_code  # type: ignore[attr-defined]
                 error_state = InternalConfig().error_codes.get(error_code, None)
