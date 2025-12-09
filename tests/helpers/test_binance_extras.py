@@ -1044,6 +1044,66 @@ class TestMarketOrder:
         assert result.symbol == "ETHBTC"
         assert result.cummulative_quote_qty == Decimal("0.05")
 
+    def test_market_order_with_client_order_id(self, mocker):
+        """Test market order with custom client_order_id."""
+        mock_client = MagicMock()
+        mock_client.exchange_info.return_value = self._mock_exchange_info()
+        mock_client.book_ticker.return_value = self._mock_book_ticker()
+        mock_client.ticker_price.return_value = self._mock_ticker_price()
+        mock_client.new_order.return_value = self._mock_new_order_response()
+
+        mocker.patch(
+            "v4vapp_backend_v2.helpers.binance_extras.get_client",
+            return_value=mock_client,
+        )
+
+        result = market_order(
+            symbol="BTCUSDT",
+            side="BUY",
+            quantity=Decimal("0.01"),
+            testnet=True,
+            client_order_id="3693_a1b2c3_1",
+        )
+
+        assert result.symbol == "BTCUSDT"
+        # Verify the newClientOrderId was passed to new_order
+        mock_client.new_order.assert_called_once_with(
+            symbol="BTCUSDT",
+            side="BUY",
+            type="MARKET",
+            quantity="0.01",
+            newClientOrderId="3693_a1b2c3_1",
+        )
+
+    def test_market_order_client_order_id_truncated(self, mocker):
+        """Test that client_order_id is truncated to 36 characters."""
+        mock_client = MagicMock()
+        mock_client.exchange_info.return_value = self._mock_exchange_info()
+        mock_client.book_ticker.return_value = self._mock_book_ticker()
+        mock_client.ticker_price.return_value = self._mock_ticker_price()
+        mock_client.new_order.return_value = self._mock_new_order_response()
+
+        mocker.patch(
+            "v4vapp_backend_v2.helpers.binance_extras.get_client",
+            return_value=mock_client,
+        )
+
+        # Create a long client_order_id (more than 36 chars)
+        long_id = "1234567890123456789012345678901234567890"  # 40 chars
+        result = market_order(
+            symbol="BTCUSDT",
+            side="BUY",
+            quantity=Decimal("0.01"),
+            testnet=True,
+            client_order_id=long_id,
+        )
+
+        assert result.symbol == "BTCUSDT"
+        # Verify the newClientOrderId was truncated to 36 chars
+        call_args = mock_client.new_order.call_args
+        assert call_args[1]["newClientOrderId"] == long_id[:36]
+        assert len(call_args[1]["newClientOrderId"]) == 36
+
 
 class TestMarketSell:
     """Tests for the market_sell convenience function."""
@@ -1062,6 +1122,7 @@ class TestMarketSell:
             side="SELL",
             quantity=Decimal("0.01"),
             testnet=True,
+            client_order_id=None,
         )
 
 
@@ -1082,6 +1143,7 @@ class TestMarketBuy:
             side="BUY",
             quantity=Decimal("0.01"),
             testnet=True,
+            client_order_id=None,
         )
 
 

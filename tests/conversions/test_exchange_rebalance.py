@@ -386,11 +386,15 @@ class MockExchangeAdapter(BaseExchangeAdapter):
         return "mock_exchange"
 
     def market_sell(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         if self._should_fail:
             raise self._fail_with or ExchangeConnectionError("Mock failure")
-        self.sell_calls.append((base_asset, quote_asset, quantity))
+        self.sell_calls.append((base_asset, quote_asset, quantity, client_order_id))
         return ExchangeOrderResult(
             exchange=self.exchange_name,
             symbol=f"{base_asset}{quote_asset}",
@@ -407,11 +411,15 @@ class MockExchangeAdapter(BaseExchangeAdapter):
         )
 
     def market_buy(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         if self._should_fail:
             raise self._fail_with or ExchangeConnectionError("Mock failure")
-        self.buy_calls.append((base_asset, quote_asset, quantity))
+        self.buy_calls.append((base_asset, quote_asset, quantity, client_order_id))
         return ExchangeOrderResult(
             exchange=self.exchange_name,
             symbol=f"{base_asset}{quote_asset}",
@@ -504,7 +512,9 @@ class TestExecuteRebalanceTrade:
             quote_asset="BTC",
             direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
         )
-        pending.add_pending(qty=Decimal("100"), quote_value=Decimal("0.001"))
+        pending.add_pending(
+            qty=Decimal("100"), quote_value=Decimal("0.001"), transaction_id="test-trx-001"
+        )
 
         result = await execute_rebalance_trade(
             exchange_adapter=mock_exchange,
@@ -514,7 +524,8 @@ class TestExecuteRebalanceTrade:
         assert result.side == "SELL"
         assert result.executed_qty == Decimal("100")
         assert len(mock_exchange.sell_calls) == 1
-        assert mock_exchange.sell_calls[0] == ("HIVE", "BTC", Decimal("100"))
+        # Verify the client_order_id was passed through
+        assert mock_exchange.sell_calls[0] == ("HIVE", "BTC", Decimal("100"), "test-trx-001")
 
     @pytest.mark.asyncio
     async def test_execute_buy_trade(self, mock_exchange):
@@ -524,7 +535,9 @@ class TestExecuteRebalanceTrade:
             quote_asset="BTC",
             direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
         )
-        pending.add_pending(qty=Decimal("200"), quote_value=Decimal("0.002"))
+        pending.add_pending(
+            qty=Decimal("200"), quote_value=Decimal("0.002"), transaction_id="test-trx-002"
+        )
 
         result = await execute_rebalance_trade(
             exchange_adapter=mock_exchange,
@@ -534,6 +547,8 @@ class TestExecuteRebalanceTrade:
         assert result.side == "BUY"
         assert result.executed_qty == Decimal("200")
         assert len(mock_exchange.buy_calls) == 1
+        # Verify the client_order_id was passed through
+        assert mock_exchange.buy_calls[0] == ("HIVE", "BTC", Decimal("200"), "test-trx-002")
 
 
 class TestAddPendingRebalance:
@@ -605,6 +620,7 @@ class TestAddPendingRebalance:
             quote_asset="BTC",
             direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
             qty=Decimal("100"),
+            transaction_id="trx-error-001",
         )
 
         assert result.executed is False
@@ -634,6 +650,7 @@ class TestAddPendingRebalance:
             quote_asset="BTC",
             direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
             qty=Decimal("100"),
+            transaction_id="trx-below-001",
         )
 
         assert result.executed is False
