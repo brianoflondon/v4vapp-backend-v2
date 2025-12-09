@@ -214,13 +214,13 @@ class ExchangeProviderConfig(BaseConfig):
     mainnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
 
     @property
-    def is_testnet(self) -> bool:
+    def use_testnet(self) -> bool:
         return self.exchange_mode == ExchangeMode.testnet
 
     @property
     def active_network(self) -> ExchangeNetworkConfig:
         """Get the currently active network config based on exchange_mode."""
-        return self.testnet if self.is_testnet else self.mainnet
+        return self.testnet if self.use_testnet else self.mainnet
 
 
 class ExchangeConfig(BaseConfig):
@@ -1159,6 +1159,16 @@ class InternalConfig:
         if self.config.lnd_config.default:
             return self.config.lnd_config.default
         return ""
+
+    @property
+    def binance_config(self) -> ExchangeProviderConfig:
+        """
+        Shortcut to get the binance exchange provider config.
+
+        Returns:
+            ExchangeProviderConfig: The Binance exchange provider configuration.
+        """
+        return self.config.exchange_config.get_provider("binance")
 
 
 """

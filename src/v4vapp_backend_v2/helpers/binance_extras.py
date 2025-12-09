@@ -30,12 +30,10 @@ def get_client(testnet: bool = False) -> Client:
     The testnet parameter determines which network config (testnet/mainnet) to use,
     but if exchange_mode is set to testnet in config, testnet will be used regardless.
     """
-    internal_config = InternalConfig().config
-    exchange_config = internal_config.exchange_config
-    binance_config = exchange_config.get_provider("binance")
+    binance_config = InternalConfig().binance_config
 
     # Use testnet if either the config says testnet or the parameter says testnet
-    use_testnet = binance_config.is_testnet or testnet
+    use_testnet = binance_config.use_testnet or testnet
 
     try:
         if use_testnet:
