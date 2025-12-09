@@ -12,6 +12,48 @@ from typing import Any, Dict, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
+# Conversion constant: 1 BTC = 100,000,000 satoshis
+SATS_PER_BTC = Decimal("100000000")
+
+
+def format_base_asset(value: Decimal, asset: str) -> str:
+    """
+    Format a base asset value for display.
+
+    For HIVE-like assets: 3 decimal places
+    For other assets: 8 decimal places
+
+    Args:
+        value: The decimal value to format
+        asset: The asset symbol (e.g., 'HIVE', 'BTC')
+
+    Returns:
+        Formatted string like "100.123 HIVE"
+    """
+    if asset.upper() in ("HIVE", "HBD"):
+        return f"{value:.3f} {asset}"
+    return f"{value:.8f} {asset}"
+
+
+def format_quote_asset(value: Decimal, asset: str) -> str:
+    """
+    Format a quote asset value for display.
+
+    For BTC: convert to sats and display as integer with comma separators
+    For other assets: 8 decimal places
+
+    Args:
+        value: The decimal value to format (in BTC or other quote asset)
+        asset: The asset symbol (e.g., 'BTC', 'USDT')
+
+    Returns:
+        Formatted string like "12,345 sats" or "100.00000000 USDT"
+    """
+    if asset.upper() == "BTC":
+        sats = int(value * SATS_PER_BTC)
+        return f"{sats:,} sats"
+    return f"{value:.8f} {asset}"
+
 
 class ExchangeOrderResult(BaseModel):
     """
@@ -34,14 +76,33 @@ class ExchangeOrderResult(BaseModel):
     fee_asset: str  # Asset used for fees (e.g., "BTC", "BNB")
     raw_response: dict  # Original exchange response for debugging
 
+    # Optional: base and quote assets for formatting (can be inferred from symbol)
+    base_asset: str = ""  # e.g., "HIVE" - set by adapter if known
+    quote_asset: str = ""  # e.g., "BTC" - set by adapter if known
+
+    def _get_assets(self) -> tuple[str, str]:
+        """Get base and quote assets, inferring from symbol if not set."""
+        if self.base_asset and self.quote_asset:
+            return self.base_asset, self.quote_asset
+        # Try to infer from common quote assets
+        for quote in ("BTC", "USDT", "BUSD", "ETH", "BNB"):
+            if self.symbol.endswith(quote):
+                base = self.symbol[: -len(quote)]
+                return base, quote
+        # Fallback: assume last 3 chars are quote
+        return self.symbol[:-3], self.symbol[-3:]
+
     @property
     def log_str(self) -> str:
         """Formatted string for logging the order result."""
+        base, quote = self._get_assets()
+        qty_str = format_base_asset(self.executed_qty, base)
+        quote_str = format_quote_asset(self.quote_qty, quote)
+        fee_str = format_quote_asset(self.fee, self.fee_asset)
         return (
-            f"Exchange: {self.exchange}, Symbol: {self.symbol}, Order ID: {self.order_id}, "
-            f"Side: {self.side}, Status: {self.status}, Requested Qty: {self.requested_qty}, "
-            f"Executed Qty: {self.executed_qty}, Quote Qty: {self.quote_qty}, "
-            f"Avg Price: {self.avg_price}, Fee: {self.fee} {self.fee_asset}"
+            f"Exchange: {self.exchange}, Symbol: {self.symbol}, "
+            f"Order ID: {self.order_id}, Side: {self.side}, Status: {self.status}, "
+            f"Executed: {qty_str}, Quote: {quote_str}, Fee: {fee_str}"
         )
 
     @property
@@ -52,10 +113,10 @@ class ExchangeOrderResult(BaseModel):
     @property
     def notification_str(self) -> str:
         """Formatted string for user notifications."""
-        return (
-            f"Executed {self.side} order on {self.exchange}: {self.executed_qty} units of "
-            f"{self.symbol} at avg price {self.avg_price}, total {self.quote_qty} spent/received."
-        )
+        base, quote = self._get_assets()
+        qty_str = format_base_asset(self.executed_qty, base)
+        quote_str = format_quote_asset(self.quote_qty, quote)
+        return f"Executed {self.side} on {self.exchange}: {qty_str} for {quote_str}"
 
 
 class ExchangeMinimums(BaseModel):
@@ -145,7 +206,11 @@ class ExchangeProtocol(Protocol):
         ...
 
     def market_sell(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """
         Execute a market sell order.
@@ -154,6 +219,7 @@ class ExchangeProtocol(Protocol):
             base_asset: The asset to sell (e.g., 'HIVE')
             quote_asset: The asset to receive (e.g., 'BTC')
             quantity: Amount of base asset to sell
+            client_order_id: Optional custom order ID for tracking
 
         Returns:
             ExchangeOrderResult with execution details
@@ -165,7 +231,11 @@ class ExchangeProtocol(Protocol):
         ...
 
     def market_buy(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """
         Execute a market buy order.
@@ -174,6 +244,7 @@ class ExchangeProtocol(Protocol):
             base_asset: The asset to buy (e.g., 'HIVE')
             quote_asset: The asset to spend (e.g., 'BTC')
             quantity: Amount of base asset to buy
+            client_order_id: Optional custom order ID for tracking
 
         Returns:
             ExchangeOrderResult with execution details
@@ -219,14 +290,22 @@ class BaseExchangeAdapter(ABC):
 
     @abstractmethod
     def market_sell(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """Execute a market sell order."""
         pass
 
     @abstractmethod
     def market_buy(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """Execute a market buy order."""
         pass
