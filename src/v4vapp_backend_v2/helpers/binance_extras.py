@@ -70,12 +70,17 @@ def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | in
     try:
         client = get_client(testnet)
         account = client.account()
+        symbols_set = set(symbols)  # Convert to set for O(1) lookups
         balances: dict[str, Decimal | int] = {
             symbol: Decimal("0") for symbol in symbols
         }  # Initialize all balances to 0
+        found_count = 0
         for balance in account["balances"]:
-            if balance["asset"] in symbols:
+            if balance["asset"] in symbols_set:
                 balances[balance["asset"]] = Decimal(balance["free"])
+                found_count += 1
+                if found_count == len(symbols_set):
+                    break  # Early exit once all symbols found
         if "BTC" in balances and balances["BTC"] > Decimal("0"):
             balances["SATS"] = Decimal(balances["BTC"] * Decimal("100000000"))
         return balances
