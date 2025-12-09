@@ -295,7 +295,7 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
 
     # Get the provider config
     provider = exchange_config.get_provider(provider_name)
-    testnet = provider.is_testnet
+    testnet = provider.use_testnet
 
     # Return the appropriate adapter
     if provider_name == "binance":
