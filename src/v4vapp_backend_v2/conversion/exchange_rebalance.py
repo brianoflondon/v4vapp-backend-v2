@@ -344,6 +344,58 @@ class RebalanceResult(BaseModel):
     error: str | None = Field(default=None, description="Error message if failed")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
+    @property
+    def log_str(self) -> str:
+        """Formatted string for logging the rebalance result."""
+        if self.executed and self.order_result:
+            return (
+                f"Rebalance executed: {self.order_result.side} "
+                f"{self.order_result.executed_qty} {self.order_result.symbol} "
+                f"@ {self.order_result.avg_price:.8f}, "
+                f"fee: {self.order_result.fee} {self.order_result.fee_asset}"
+            )
+        elif self.error:
+            return f"Rebalance failed: {self.error}"
+        else:
+            return (
+                f"Rebalance pending: {self.pending_qty} qty, "
+                f"{self.pending_notional:.8f} notional - {self.reason}"
+            )
+
+    @property
+    def log_extra(self) -> dict:
+        """Dictionary of rebalance details for structured logging."""
+        extra = {
+            "rebalance_result": {
+                "executed": self.executed,
+                "reason": self.reason,
+                "pending_qty": str(self.pending_qty),
+                "pending_notional": str(self.pending_notional),
+                "error": self.error,
+                "timestamp": self.timestamp.isoformat(),
+            }
+        }
+        if self.order_result:
+            extra["rebalance_result"]["order"] = self.order_result.model_dump()
+        return extra
+
+    @property
+    def notification_str(self) -> str:
+        """Formatted string for user notifications (Telegram, etc.)."""
+        if self.executed and self.order_result:
+            return (
+                f"✅ Rebalance {self.order_result.side}: "
+                f"{self.order_result.executed_qty} {self.order_result.symbol} "
+                f"@ {self.order_result.avg_price:.8f}"
+            )
+        elif self.error:
+            return f"❌ Rebalance error: {self.error}"
+        else:
+            return (
+                f"⏳ Rebalance pending: {self.pending_qty} qty "
+                f"({self.pending_notional:.8f} notional)"
+            )
+
     @classmethod
     def collection(cls) -> AsyncCollection:
         """Get the MongoDB collection for rebalance results."""
