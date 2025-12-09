@@ -180,7 +180,11 @@ class BinanceAdapter(BaseExchangeAdapter):
         )
 
     def market_sell(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """
         Execute a market sell order on Binance.
@@ -192,6 +196,7 @@ class BinanceAdapter(BaseExchangeAdapter):
             base_asset: The asset to sell (e.g., 'HIVE')
             quote_asset: The asset to receive (e.g., 'BTC')
             quantity: Amount of base asset to sell
+            client_order_id: Optional custom order ID for tracking (max 36 chars)
 
         Returns:
             ExchangeOrderResult with execution details
@@ -207,7 +212,12 @@ class BinanceAdapter(BaseExchangeAdapter):
             )
 
         try:
-            result = market_sell(symbol=symbol, quantity=rounded_qty, testnet=self.testnet)
+            result = market_sell(
+                symbol=symbol,
+                quantity=rounded_qty,
+                testnet=self.testnet,
+                client_order_id=client_order_id,
+            )
             return self._convert_result(result, "SELL", rounded_qty)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
@@ -215,7 +225,11 @@ class BinanceAdapter(BaseExchangeAdapter):
             raise ExchangeConnectionError(f"Binance connection error: {e}")
 
     def market_buy(
-        self, base_asset: str, quote_asset: str, quantity: Decimal
+        self,
+        base_asset: str,
+        quote_asset: str,
+        quantity: Decimal,
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """
         Execute a market buy order on Binance.
@@ -227,6 +241,7 @@ class BinanceAdapter(BaseExchangeAdapter):
             base_asset: The asset to buy (e.g., 'HIVE')
             quote_asset: The asset to spend (e.g., 'BTC')
             quantity: Amount of base asset to buy
+            client_order_id: Optional custom order ID for tracking (max 36 chars)
 
         Returns:
             ExchangeOrderResult with execution details
@@ -242,7 +257,12 @@ class BinanceAdapter(BaseExchangeAdapter):
             )
 
         try:
-            result = market_buy(symbol=symbol, quantity=rounded_qty, testnet=self.testnet)
+            result = market_buy(
+                symbol=symbol,
+                quantity=rounded_qty,
+                testnet=self.testnet,
+                client_order_id=client_order_id,
+            )
             return self._convert_result(result, "BUY", rounded_qty)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
