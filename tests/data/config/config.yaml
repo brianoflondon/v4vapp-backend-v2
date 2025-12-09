@@ -207,8 +207,8 @@ redis:
 ########### TEST CONFIG NO SECRETS #################
 
 api_keys:
-  binance_testnet_api_key: test_binance_testnet_api_key
-  binance_testnet_api_secret: test_binance_testnet_api_secret
+  # binance_testnet_api_key: test_binance_testnet_api_key
+  # binance_testnet_api_secret: test_binance_testnet_api_secret
 
 ########### TEST CONFIG NO SECRETS #################
 
@@ -261,3 +261,27 @@ notification_bots:
   second-bot:
     token: 1234567890:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
     chat_id: 122222222
+
+exchange_config:
+  default_exchange: binance
+  binance:
+    exchange_mode: testnet
+    api_url:
+    testnet:
+      base_url: https://testnet.binance.vision
+      api_key_env_var: BINANCE_TESTNET_API_KEY
+      api_secret_env_var: BINANCE_TESTNET_API_SECRET
+    mainnet:
+      # Binance API Key is IP locked, remember to update it when you change your IP
+      api_key: NOT_AVAILABLE_IN_TEST_CONFIG
+      api_secret_env_var: NOT_AVAILABLE_IN_TEST_CONFIG
+  vsc-exchange:
+    exchange_mode: testnet
+    mainnet:
+      api_url: https://vsc-exchange.v4v.app
+      api_key: prod-vsc-api-key
+      api_secret: prod-vsc-api-secret
+    testnet:
+      api_url: http://vsc-exchange:8000
+      api_key: dev-vsc-api-key
+      api_secret: dev-vsc

@@ -133,7 +133,7 @@
             "program": "src/binance_monitor.py",
             "args": [
                 "-c",
-                "binance.config.yaml"
+                "devhive.config.yaml"
             ],
             "console": "integratedTerminal"
         },

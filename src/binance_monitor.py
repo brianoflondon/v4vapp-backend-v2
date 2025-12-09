@@ -20,7 +20,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_mete
 ICON = "🅑"
 app = typer.Typer()
 
-BINANCE_HIVE_ALERT_LEVEL_SATS = 500_000
+BINANCE_HIVE_ALERT_LEVEL_SATS = 300_000
 BINANCE_BTC_ALERT_LEVEL = 0.02
 
 # Define a global flag to track shutdown

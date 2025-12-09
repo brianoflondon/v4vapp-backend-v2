@@ -265,3 +265,47 @@ class BaseExchangeAdapter(ABC):
             return True, "OK"
         except Exception as e:
             return False, f"Error checking order: {e}"
+
+
+def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapter:
+    """
+    Factory function to get the appropriate exchange adapter based on configuration.
+
+    This function reads from the application config to determine which exchange
+    to use and whether to use testnet or mainnet.
+
+    Args:
+        exchange_name: Optional exchange name override. If not provided,
+                      uses default_exchange from config.
+
+    Returns:
+        BaseExchangeAdapter: The configured exchange adapter instance.
+
+    Raises:
+        ValueError: If the specified exchange is not supported.
+    """
+    # Import here to avoid circular imports
+    from v4vapp_backend_v2.config.setup import InternalConfig
+
+    config = InternalConfig()
+    exchange_config = config.config.exchange_config
+
+    # Use provided name or default from config
+    provider_name = exchange_name or exchange_config.default_exchange
+
+    # Get the provider config
+    provider = exchange_config.get_provider(provider_name)
+    testnet = provider.is_testnet
+
+    # Return the appropriate adapter
+    if provider_name == "binance":
+        from v4vapp_backend_v2.conversion.binance_adapter import BinanceAdapter
+
+        return BinanceAdapter(testnet=testnet)
+
+    # Future exchanges can be added here:
+    # elif provider_name == "vsc-exchange":
+    #     from v4vapp_backend_v2.conversion.vsc_adapter import VSCAdapter
+    #     return VSCAdapter(testnet=testnet)
+
+    raise ValueError(f"Unsupported exchange: {provider_name}")

@@ -99,11 +99,15 @@ class NotificationBotConfig(BaseConfig):
 
 
 class ApiKeys(BaseConfig):
-    binance_api_key: str = os.getenv("BINANCE_API_KEY", "")
-    binance_api_secret: str = os.getenv("BINANCE_API_SECRET", "")
-    binance_testnet_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
-    binance_testnet_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
     coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_none(cls, data: Any) -> dict:
+        """Handle case where api_keys exists in YAML but is empty/None."""
+        if data is None:
+            return {}
+        return data
 
 
 class TimeseriesConfig(BaseConfig):
@@ -158,6 +162,87 @@ class RedisConnectionConfig(BaseConfig):
     port: int = 6379
     db: int = 0
     kwargs: Dict[str, Any] = {}
+
+
+class ExchangeMode(StrEnum):
+    mainnet = auto()
+    testnet = auto()
+
+
+class ExchangeNetworkConfig(BaseConfig):
+    """Configuration for a specific exchange network (testnet or mainnet).
+
+    API credentials can be provided either:
+    - Directly via api_key/api_secret fields
+    - Via environment variable names in api_key_env_var/api_secret_env_var fields
+
+    The resolved api_key and api_secret properties will return the actual values,
+    checking env vars first if specified, then falling back to direct values.
+    """
+
+    base_url: str = ""
+    api_url: str = ""  # Alternative to base_url for some exchanges
+
+    # Direct API credentials (from config file)
+    api_key: str = ""
+    api_secret: str = ""
+
+    # Environment variable names for API credentials
+    api_key_env_var: str = ""
+    api_secret_env_var: str = ""
+
+    @property
+    def resolved_api_key(self) -> str:
+        """Get the API key, resolving from env var if specified."""
+        if self.api_key_env_var:
+            return os.getenv(self.api_key_env_var, "")
+        return self.api_key
+
+    @property
+    def resolved_api_secret(self) -> str:
+        """Get the API secret, resolving from env var if specified."""
+        if self.api_secret_env_var:
+            return os.getenv(self.api_secret_env_var, "")
+        return self.api_secret
+
+
+class ExchangeProviderConfig(BaseConfig):
+    """Configuration for a single exchange provider (e.g., binance, vsc-exchange)."""
+
+    exchange_mode: ExchangeMode = ExchangeMode.testnet
+    testnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
+    mainnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
+
+    @property
+    def is_testnet(self) -> bool:
+        return self.exchange_mode == ExchangeMode.testnet
+
+    @property
+    def active_network(self) -> ExchangeNetworkConfig:
+        """Get the currently active network config based on exchange_mode."""
+        return self.testnet if self.is_testnet else self.mainnet
+
+
+class ExchangeConfig(BaseConfig):
+    """
+    Configuration for exchange connections.
+
+    Supports multiple exchanges with testnet/mainnet configurations.
+    The default_exchange determines which exchange adapter to use.
+    """
+
+    default_exchange: str = "binance"
+    binance: ExchangeProviderConfig = ExchangeProviderConfig()
+    # vsc_exchange will be added when needed
+
+    def get_provider(self, name: str | None = None) -> ExchangeProviderConfig:
+        """Get provider config by name, defaults to default_exchange."""
+        provider_name = name or self.default_exchange
+        # Handle hyphenated names by converting to underscore for attribute access
+        attr_name = provider_name.replace("-", "_")
+        if hasattr(self, attr_name):
+            return getattr(self, attr_name)
+        raise ValueError(f"Unknown exchange provider: {provider_name}")
 
 
 class HiveRoles(StrEnum):
@@ -435,11 +520,6 @@ class HiveConfig(BaseConfig):
         return []
 
 
-class ExchangeMode(StrEnum):
-    live = auto()
-    testnet = auto()
-
-
 class DevelopmentConfig(BaseModel):
     """
     DevelopmentConfig is a configuration class for development mode settings.
@@ -450,13 +530,8 @@ class DevelopmentConfig(BaseModel):
     """
 
     enabled: bool = False
-    exchange_mode: ExchangeMode = ExchangeMode.live
     env_var: str = "V4VAPP_DEV_MODE"
     allowed_hive_accounts: List[str] = []
-
-    @property
-    def testnet(self) -> bool:
-        return self.exchange_mode == ExchangeMode.testnet
 
 
 class Config(BaseModel):
@@ -505,6 +580,8 @@ class Config(BaseModel):
     hive: HiveConfig = HiveConfig()
 
     admin_config: AdminConfig = AdminConfig()
+
+    exchange_config: ExchangeConfig = ExchangeConfig()
 
     min_config_version: ClassVar[str] = "0.2.0"
 

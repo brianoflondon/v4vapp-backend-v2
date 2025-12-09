@@ -44,9 +44,9 @@ from nectar.amount import Amount
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
-from v4vapp_backend_v2.conversion.binance_adapter import BinanceAdapter
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
     add_pending_rebalance,
@@ -259,18 +259,15 @@ async def conversion_hive_to_keepsats(
     # MARK: Queue Exchange Rebalance (HIVE -> BTC)
     # When HIVE/HBD is deposited, we accumulate the amount for eventual sale to BTC
     # This runs in background and doesn't affect customer transaction
-    # Note: Binance only trades HIVE, not HBD. Use the HIVE equivalent from conv_result.
+    # Note: Exchange selection is driven by config (default_exchange setting)
     if from_currency.name in ("HIVE", "HBD"):
         try:
-            # Use testnet setting from config
-            config = InternalConfig()
-            testnet = config.config.development.testnet
-
             # Always use HIVE for exchange - Binance doesn't trade HBD
             # The conv_result.to_convert_conv.hive contains the HIVE equivalent
             hive_qty = conv_result.to_convert_conv.hive
 
-            exchange_adapter = BinanceAdapter(testnet=testnet)
+            # Get exchange adapter based on config (uses default_exchange)
+            exchange_adapter = get_exchange_adapter()
             rebalance_result = await add_pending_rebalance(
                 exchange_adapter=exchange_adapter,
                 base_asset="HIVE",  # Always HIVE - Binance doesn't trade HBD

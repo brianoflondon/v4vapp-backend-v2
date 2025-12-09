@@ -1,4 +1,3 @@
-import os
 from decimal import Decimal
 from typing import Dict
 
@@ -25,31 +24,33 @@ class BinanceErrorBelowMinimum(Exception):
 
 def get_client(testnet: bool = False) -> Client:
     """
-    Get a Binance API client
+    Get a Binance API client.
+
+    Uses the exchange_config section from the configuration to get API credentials.
+    The testnet parameter determines which network config (testnet/mainnet) to use,
+    but if exchange_mode is set to testnet in config, testnet will be used regardless.
     """
-    internal_config = InternalConfig()
+    internal_config = InternalConfig().config
+    exchange_config = internal_config.exchange_config
+    binance_config = exchange_config.get_provider("binance")
+
+    # Use testnet if either the config says testnet or the parameter says testnet
+    use_testnet = binance_config.is_testnet or testnet
+
     try:
-        if testnet:
-            if (
-                "test_binance" in internal_config.config.api_keys.binance_testnet_api_key.lower()
-                and os.getenv("BINANCE_TESTNET_API_KEY")
-                and os.getenv("BINANCE_TESTNET_API_SECRET")
-            ):
-                client = Client(
-                    api_key=os.getenv("BINANCE_TESTNET_API_KEY", ""),
-                    api_secret=os.getenv("BINANCE_TESTNET_API_SECRET", ""),
-                    base_url="https://testnet.binance.vision",
-                )
-            else:
-                client = Client(
-                    api_key=internal_config.config.api_keys.binance_testnet_api_key,
-                    api_secret=internal_config.config.api_keys.binance_testnet_api_secret,
-                    base_url="https://testnet.binance.vision",
-                )
-        else:
+        if use_testnet:
+            network_config = binance_config.testnet
+            base_url = network_config.base_url or "https://testnet.binance.vision"
             client = Client(
-                api_key=internal_config.config.api_keys.binance_api_key,
-                api_secret=internal_config.config.api_keys.binance_api_secret,
+                api_key=network_config.resolved_api_key,
+                api_secret=network_config.resolved_api_secret,
+                base_url=base_url,
+            )
+        else:
+            network_config = binance_config.mainnet
+            client = Client(
+                api_key=network_config.resolved_api_key,
+                api_secret=network_config.resolved_api_secret,
             )
         return client
     except Exception as e:
