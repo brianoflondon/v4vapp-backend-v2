@@ -26,6 +26,8 @@ from v4vapp_backend_v2.conversion.exchange_protocol import (
     ExchangeBelowMinimumError,
     ExchangeConnectionError,
     ExchangeOrderResult,
+    format_base_asset,
+    format_quote_asset,
 )
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
@@ -262,6 +264,58 @@ class PendingRebalance(BaseModel):
         """Get the trading pair symbol."""
         return f"{self.base_asset}{self.quote_asset}"
 
+    @property
+    def log_str(self) -> str:
+        """Formatted string for logging the pending rebalance."""
+        can_exec, reason = self.can_execute()
+        status = "ready" if can_exec else "pending"
+        qty_str = format_base_asset(self.pending_qty, self.base_asset)
+        quote_str = format_quote_asset(self.pending_quote_value, self.quote_asset)
+        return (
+            f"PendingRebalance [{status}]: {self.direction.value} "
+            f"{qty_str} (~{quote_str}) "
+            f"on {self.exchange}, {self.transaction_count} txns accumulated"
+        )
+
+    @property
+    def log_extra(self) -> dict:
+        """Dictionary of pending rebalance details for structured logging."""
+        return {
+            "pending_rebalance": {
+                "base_asset": self.base_asset,
+                "quote_asset": self.quote_asset,
+                "direction": self.direction.value,
+                "exchange": self.exchange,
+                "pending_qty": str(self.pending_qty),
+                "pending_quote_value": str(self.pending_quote_value),
+                "min_qty_threshold": str(self.min_qty_threshold),
+                "min_notional_threshold": str(self.min_notional_threshold),
+                "transaction_count": self.transaction_count,
+                "execution_count": self.execution_count,
+                "total_executed_qty": str(self.total_executed_qty),
+            }
+        }
+
+    @property
+    def notification_str(self) -> str:
+        """Formatted string for user notifications (Telegram, etc.)."""
+        can_exec, _ = self.can_execute()
+        qty_str = format_base_asset(self.pending_qty, self.base_asset)
+        quote_str = format_quote_asset(self.pending_quote_value, self.quote_asset)
+        if can_exec:
+            return f"🔄 Ready to {self.direction.value}: {qty_str} (~{quote_str})"
+        else:
+            pct_qty = (
+                (self.pending_qty / self.min_qty_threshold * 100)
+                if self.min_qty_threshold > 0
+                else Decimal("0")
+            )
+            min_str = format_base_asset(self.min_qty_threshold, self.base_asset)
+            return (
+                f"⏳ Accumulating {self.direction.value}: "
+                f"{qty_str} ({pct_qty:.0f}% of min {min_str})"
+            )
+
 
 class NetPosition(BaseModel):
     """
@@ -348,17 +402,18 @@ class RebalanceResult(BaseModel):
     def log_str(self) -> str:
         """Formatted string for logging the rebalance result."""
         if self.executed and self.order_result:
+            base, quote = self.order_result._get_assets()
+            qty_str = format_base_asset(self.order_result.executed_qty, base)
+            fee_str = format_quote_asset(self.order_result.fee, self.order_result.fee_asset)
             return (
                 f"Rebalance executed: {self.order_result.side} "
-                f"{self.order_result.executed_qty} {self.order_result.symbol} "
-                f"@ {self.order_result.avg_price:.8f}, "
-                f"fee: {self.order_result.fee} {self.order_result.fee_asset}"
+                f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
             )
         elif self.error:
             return f"Rebalance failed: {self.error}"
         else:
             return (
-                f"Rebalance pending: {self.pending_qty} qty, "
+                f"Rebalance pending: {self.pending_qty:.3f} qty, "
                 f"{self.pending_notional:.8f} notional - {self.reason}"
             )
 
@@ -383,16 +438,15 @@ class RebalanceResult(BaseModel):
     def notification_str(self) -> str:
         """Formatted string for user notifications (Telegram, etc.)."""
         if self.executed and self.order_result:
-            return (
-                f"✅ Rebalance {self.order_result.side}: "
-                f"{self.order_result.executed_qty} {self.order_result.symbol} "
-                f"@ {self.order_result.avg_price:.8f}"
-            )
+            base, quote = self.order_result._get_assets()
+            qty_str = format_base_asset(self.order_result.executed_qty, base)
+            quote_str = format_quote_asset(self.order_result.quote_qty, quote)
+            return f"✅ Rebalance {self.order_result.side}: {qty_str} for {quote_str}"
         elif self.error:
             return f"❌ Rebalance error: {self.error}"
         else:
             return (
-                f"⏳ Rebalance pending: {self.pending_qty} qty "
+                f"⏳ Rebalance pending: {self.pending_qty:.3f} qty "
                 f"({self.pending_notional:.8f} notional)"
             )
 
@@ -420,7 +474,7 @@ async def add_pending_rebalance(
     quote_asset: str,
     direction: RebalanceDirection,
     qty: Decimal,
-    transaction_id: str | None = None,
+    transaction_id: str,
 ) -> RebalanceResult:
     """
     Add a pending amount and attempt to execute if threshold is met.
@@ -437,7 +491,7 @@ async def add_pending_rebalance(
         quote_asset: Quote asset (e.g., 'BTC')
         direction: Trade direction (SELL_BASE_FOR_QUOTE or BUY_BASE_WITH_QUOTE)
         qty: Quantity of base asset to add
-        transaction_id: Optional transaction ID for audit trail
+        transaction_id: Transaction ID for audit trail
 
     Returns:
         RebalanceResult with execution details
@@ -468,24 +522,19 @@ async def add_pending_rebalance(
             quote_value = Decimal("0")
             logger.warning(
                 f"Could not get price for {base_asset}/{quote_asset}, "
-                "pending quote value may be inaccurate"
+                f"pending quote value may be inaccurate {transaction_id}"
             )
 
         # Add the pending amount
         pending.add_pending(qty=qty, quote_value=quote_value, transaction_id=transaction_id)
-        logger.info(
-            f"Added pending {qty} {base_asset}, extra={{'pending_rebalance': pending.model_dump()}}"
-        )
+        logger.info(pending.log_str, extra={"notification": True, **pending.log_extra})
 
         # Check if we can execute
         can_execute, reason = pending.can_execute()
 
         if not can_execute:
             await pending.save()
-            logger.info(
-                f"Rebalance pending: {pending.pending_qty} {base_asset} "
-                f"(~{pending.pending_quote_value:.8f} {quote_asset}) - {reason}"
-            )
+            logger.info(f"Rebalance pending: {reason} {transaction_id}")
             return RebalanceResult(
                 executed=False,
                 reason=reason,
@@ -494,10 +543,7 @@ async def add_pending_rebalance(
             )
 
         # Execute the trade
-        logger.info(
-            f"Executing rebalance: {direction.value} {pending.pending_qty:.3f} {base_asset} "
-            f"for {pending.pending_quote_value:.8f} {quote_asset}"
-        )
+        logger.info("Executing rebalance:")
 
         order_result = await execute_rebalance_trade(
             exchange_adapter=exchange_adapter,
@@ -508,10 +554,7 @@ async def add_pending_rebalance(
         pending.reset_after_execution(order_result.executed_qty)
         await pending.save()
 
-        logger.info(
-            f"Rebalance executed: {order_result.executed_qty} {base_asset} "
-            f"@ avg price {order_result.avg_price}"
-        )
+        logger.info(order_result.log_str, extra={"notification": True, **order_result.log_extra})
 
         result = RebalanceResult(
             executed=True,
@@ -521,6 +564,8 @@ async def add_pending_rebalance(
             order_result=order_result,
         )
         await result.save()
+
+        logger.info(result.log_str, extra={"notification": True, **result.log_extra})
         return result
 
     except ExchangeBelowMinimumError as e:
@@ -560,19 +605,23 @@ async def execute_rebalance_trade(
     Returns:
         ExchangeOrderResult with trade details
     """
+    # Use the last transaction_id as the client order ID for tracking
+    client_order_id = pending.transaction_ids[-1] if pending.transaction_ids else None
+
     if pending.direction == RebalanceDirection.SELL_BASE_FOR_QUOTE:
         exchange_result = exchange_adapter.market_sell(
             base_asset=pending.base_asset,
             quote_asset=pending.quote_asset,
             quantity=pending.pending_qty,
+            client_order_id=client_order_id,
         )
     else:
         exchange_result = exchange_adapter.market_buy(
             base_asset=pending.base_asset,
             quote_asset=pending.quote_asset,
             quantity=pending.pending_qty,
+            client_order_id=client_order_id,
         )
-    logger.info(exchange_result.log_str, extra={"notification": True, **exchange_result.log_extra})
     return exchange_result
 
 
