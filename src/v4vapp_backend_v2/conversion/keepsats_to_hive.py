@@ -352,7 +352,7 @@ async def conversion_keepsats_to_hive(
                 quote_asset="BTC",
                 direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
                 qty=hive_qty,
-                transaction_id=str(tracked_op.group_id),
+                transaction_id=str(tracked_op.short_id),
             )
             logger.info(
                 f"Rebalance queued: BTC->HIVE ({hive_qty:.3f} HIVE for {to_currency.name}), "
