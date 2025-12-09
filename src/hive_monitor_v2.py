@@ -709,6 +709,10 @@ async def store_rates() -> None:
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
         raise e
+    except Exception as e:
+        logger.exception(f"{ICON} Exception in store_rates: {e}", extra={"notification": False})
+        asyncio.create_task(store_rates(), name="store_rates")
+    return
 
 
 async def main_async_start(
