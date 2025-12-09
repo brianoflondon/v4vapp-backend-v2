@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Any, Dict, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Conversion constant: 1 BTC = 100,000,000 satoshis
 SATS_PER_BTC = Decimal("100000000")
@@ -61,11 +61,12 @@ class ExchangeOrderResult(BaseModel):
     All monetary values use Decimal for precision.
     """
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     exchange: str  # e.g., "binance", "kraken"
     symbol: str  # e.g., "HIVEBTC"
     order_id: str  # Exchange's order ID (as string for compatibility)
+    client_order_id: str = ""  # Custom client order ID for tracking
     side: str  # "BUY" or "SELL"
     status: str  # e.g., "FILLED", "PARTIALLY_FILLED"
     requested_qty: Decimal  # Original quantity requested
@@ -122,7 +123,7 @@ class ExchangeOrderResult(BaseModel):
 class ExchangeMinimums(BaseModel):
     """Minimum order requirements from an exchange."""
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     min_qty: Decimal  # Minimum quantity (LOT_SIZE)
     min_notional: Decimal  # Minimum order value in quote asset

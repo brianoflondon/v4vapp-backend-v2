@@ -168,6 +168,7 @@ class BinanceAdapter(BaseExchangeAdapter):
             exchange=self.exchange_name,
             symbol=result.symbol,
             order_id=str(result.order_id),
+            client_order_id=result.client_order_id,
             side=side,
             status=result.status,
             requested_qty=requested_qty,

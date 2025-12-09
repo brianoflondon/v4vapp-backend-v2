@@ -17,7 +17,7 @@ from enum import StrEnum
 from typing import ClassVar
 
 from bson.decimal128 import Decimal128
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -48,7 +48,7 @@ class PendingRebalance(BaseModel):
     and triggers a trade when the cumulative amount exceeds the threshold.
     """
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     db_client: ClassVar[AsyncCollection | None] = None
 
     # Identity fields
@@ -383,7 +383,7 @@ class NetPosition(BaseModel):
 class RebalanceResult(BaseModel):
     """Result of a rebalance attempt."""
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     db_client: ClassVar[AsyncCollection | None] = None
 
     executed: bool = Field(default=False, description="Whether a trade was executed")

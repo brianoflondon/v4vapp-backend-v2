@@ -3,7 +3,7 @@ from typing import Dict
 
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -125,7 +125,7 @@ class MarketOrderResult(BaseModel):
     All monetary values are stored as Decimal for precision.
     """
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     symbol: str
     order_id: int
