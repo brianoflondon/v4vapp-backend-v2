@@ -68,21 +68,18 @@ class TestGetClient:
             return_value=mock_client,
         )
 
-        # Mock the config to return mainnet mode
+        # Mock the binance_config to return mainnet mode
+        mock_mainnet_config = MagicMock()
+        mock_mainnet_config.resolved_api_key = "mainnet_api_key"
+        mock_mainnet_config.resolved_api_secret = "mainnet_api_secret"
+
         mock_binance_config = MagicMock()
-        mock_binance_config.is_testnet = False
-        mock_binance_config.mainnet.resolved_api_key = "mainnet_api_key"
-        mock_binance_config.mainnet.resolved_api_secret = "mainnet_api_secret"
-
-        mock_exchange_config = MagicMock()
-        mock_exchange_config.get_provider.return_value = mock_binance_config
-
-        mock_config = MagicMock()
-        mock_config.exchange_config = mock_exchange_config
+        mock_binance_config.use_testnet = False  # Explicitly set to False
+        mock_binance_config.mainnet = mock_mainnet_config
 
         # Patch the InternalConfig to return our mock config
         mock_internal_config_instance = MagicMock()
-        mock_internal_config_instance.config = mock_config
+        mock_internal_config_instance.binance_config = mock_binance_config
         mocker.patch(
             "v4vapp_backend_v2.helpers.binance_extras.InternalConfig",
             return_value=mock_internal_config_instance,
