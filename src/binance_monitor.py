@@ -10,6 +10,12 @@ from urllib3.exceptions import NameResolutionError
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.conversion.exchange_rebalance import (
+    RebalanceDirection,
+    add_pending_rebalance,
+)
+from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.binance_extras import (
     BinanceErrorBadConnection,
     get_balances,
@@ -81,13 +87,11 @@ async def check_binance_balances():
     send_message = True
     start = timer()
     while not shutdown_event.is_set():
-        testnet = False
         try:
             if shutdown_event.is_set():
                 raise asyncio.CancelledError("Docker Shutdown")
             new_balances, hive_target, notification_str, log_str = generate_message(
                 saved_balances,
-                testnet,
             )
             silent = True if new_balances.get("HIVE", 0) > hive_target else False
             if new_balances != saved_balances:
@@ -143,7 +147,7 @@ async def check_binance_balances():
                 start = timer()
 
 
-def generate_message(saved_balances: dict, testnet: bool = False):
+def generate_message(saved_balances: dict):
     """
     Generates a message summarizing the current and target balances of HIVE and SATS,
     along with any changes (delta) in balances since the last check.
@@ -152,8 +156,6 @@ def generate_message(saved_balances: dict, testnet: bool = False):
         saved_balances (dict): A dictionary containing the previously saved balances
             for comparison. Keys are asset symbols (e.g., "HIVE", "SATS") and values
             are their respective balances.
-        testnet (bool, optional): A flag indicating whether to use the Binance testnet
-            for fetching balances and prices. Defaults to False.
 
     Returns:
         tuple: A tuple containing:
@@ -165,11 +167,13 @@ def generate_message(saved_balances: dict, testnet: bool = False):
     """
     delta_message = ""
     delta_balances = {}
-    balances = get_balances(["BTC", "HIVE"], testnet=testnet)
-    hive_balance = balances.get("HIVE", 0)
-    sats_balance = balances.get("SATS", 0)
+    balances = get_balances(["BTC", "HIVE"])
+    hive_balance = Decimal(balances.get("HIVE", 0))
+    sats_balance = Decimal(balances.get("SATS", 0))
     if saved_balances and balances != saved_balances:
-        delta_balances = {k: balances.get(k, 0) - saved_balances.get(k, 0) for k in balances}
+        delta_balances = {
+            k: Decimal(balances.get(k, 0)) - Decimal(saved_balances.get(k, 0)) for k in balances
+        }
         if delta_balances:
             hive_direction = "⬆️🟢" if delta_balances.get("HIVE", 0) >= 0 else "📉🟥"
             sats_direction = "⬆️🟢" if delta_balances.get("SATS", 0) >= 0 else "📉🟥"
@@ -177,7 +181,7 @@ def generate_message(saved_balances: dict, testnet: bool = False):
                 f"{hive_direction} {delta_balances.get('HIVE', 0):.3f} HIVE "
                 f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
             )
-    current_price = get_current_price("HIVEBTC", testnet=testnet)
+    current_price = get_current_price("HIVEBTC")
     saved_balances = balances
 
     current_price_sats = Decimal(str(current_price["current_price"])) * Decimal("1e8")
@@ -193,8 +197,51 @@ def generate_message(saved_balances: dict, testnet: bool = False):
         f"Target: {hive_target:.3f}"
     )
     log_str = notification_str.replace("\n", " ")
+    if percentage < 100:
+        asyncio.create_task(testnet_rebalance(hive_balance, hive_target))
 
     return balances, hive_target, notification_str, log_str
+
+
+async def testnet_rebalance(hive_qty: Decimal, hive_target: Decimal):
+    """
+    Only if we are set up to look at testnet, do a rebalance there to bring Hive to
+    target level.
+
+    """
+    try:
+        binance_config = InternalConfig().binance_config
+        # Only do this on testnet
+        if not binance_config.use_testnet:
+            return
+    except Exception as e:
+        logger.warning(
+            f"{ICON} Error accessing Binance config: {e}",
+            extra={"error": e, "notification": False},
+        )
+        return
+
+    try:
+        exchange_adapter = get_exchange_adapter()
+        quantity_to_rebalance = hive_target - hive_qty
+
+        result = await add_pending_rebalance(
+            exchange_adapter=exchange_adapter,
+            base_asset="HIVE",  # Always HIVE - Binance doesn't trade HBD
+            quote_asset="BTC",
+            direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
+            qty=quantity_to_rebalance,
+            transaction_id=str("binance_monitor_rebalance_to_target"),
+        )
+        logger.info(
+            f"{ICON} Testnet rebalance placed: {result}",
+            extra={"notification": True},
+        )
+    except Exception as e:
+        logger.error(
+            f"{ICON} Error during testnet rebalance: {e}",
+            extra={"error": e, "notification": False},
+        )
 
 
 async def main_async_start():
@@ -207,6 +254,8 @@ async def main_async_start():
         None
     """
     try:
+        db_conn = DBConn()
+        await db_conn.setup_database()
         logger.info(f"{ICON} Binance Monitor started.")
         # Get the current event loop
         loop = asyncio.get_event_loop()
