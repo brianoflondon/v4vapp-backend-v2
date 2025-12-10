@@ -1185,10 +1185,3 @@ class TestMarketOrderResult:
         assert result.executed_qty == Decimal("0.01")
         assert result.cummulative_quote_qty == Decimal("500")
         assert result.avg_price == Decimal("50000")  # 500 / 0.01
-
-
-def test_my_test():
-    # result = market_order("HIVEBTC", "SELL", Decimal("1000"), testnet=True)
-    result = market_order("BNBBTC", "BUY", Decimal("1"), testnet=True)
-
-    print(result.model_dump())
