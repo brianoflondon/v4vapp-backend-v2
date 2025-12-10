@@ -12,6 +12,8 @@ from typing import Any, Dict, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+
 # Conversion constant: 1 BTC = 100,000,000 satoshis
 SATS_PER_BTC = Decimal("100000000")
 
@@ -75,6 +77,7 @@ class ExchangeOrderResult(BaseModel):
     avg_price: Decimal  # Average execution price
     fee: Decimal  # Total fees paid
     fee_asset: str  # Asset used for fees (e.g., "BTC", "BNB")
+    fee_conv: CryptoConv | None = None  # Conversion of fee to sats/msats for tracking
     raw_response: dict  # Original exchange response for debugging
 
     # Optional: base and quote assets for formatting (can be inferred from symbol)
