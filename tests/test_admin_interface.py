@@ -6,6 +6,7 @@ Tests all endpoints, templates, navigation, and functionality.
 """
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,13 +17,29 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 
+@pytest.fixture(autouse=True)
+def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
+    """Set up test configuration paths."""
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    # Reset InternalConfig singleton to allow fresh initialization with test config
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    InternalConfig().shutdown()
+
+
 @pytest.fixture(scope="function")
 async def admin_client():
     """Create a test client for the admin app"""
-    InternalConfig(config_filename="devhive.config.yaml")  # Ensure config is loaded
+    InternalConfig(config_filename="config.yaml")  # Use test config
     db_conn = DBConn()
     await db_conn.setup_database()
-    app = create_admin_app(config_filename="devhive.config.yaml")
+    app = create_admin_app(config_filename="config.yaml")
     return TestClient(app)
 
 
