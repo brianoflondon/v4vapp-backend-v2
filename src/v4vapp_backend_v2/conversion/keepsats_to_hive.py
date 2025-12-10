@@ -58,8 +58,8 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
-from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
@@ -334,7 +334,7 @@ async def conversion_keepsats_to_hive(
 
     asyncio.create_task(
         rebalance_queue_task(
-            direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+            direction=RebalanceDirection.BUY_BASE_WITH_QUOTE,
             currency=to_currency,
             hive_qty=conv_result.net_to_receive_conv.hive,
             tracked_op=tracked_op,

@@ -159,7 +159,13 @@ class BinanceAdapter(BaseExchangeAdapter):
         except BinanceErrorBadConnection as e:
             raise ExchangeConnectionError(f"Failed to get Binance price: {e}")
 
-    def _convert_fee_to_msats(self, fee: Decimal, fee_asset: str) -> CryptoConv | None:
+    def _convert_fee_to_msats(
+        self,
+        fee: Decimal,
+        fee_asset: str,
+        requested_qty: Decimal = Decimal(0),
+        base_asset: str = "",
+    ) -> CryptoConv | None:
         """
         Convert exchange fee to a CryptoConv object with msats as the base.
 
@@ -174,7 +180,12 @@ class BinanceAdapter(BaseExchangeAdapter):
             CryptoConv with fee converted to msats, or None if conversion fails
         """
         if fee <= Decimal("0"):
-            return None
+            if self.testnet:
+                # if the fee is zero (this happens always on testnet) return 0.0075% of the transaction value
+                fee = requested_qty * Decimal("0.000075")
+                fee_asset = base_asset
+            else:
+                return None
 
         try:
             fee_btc = Decimal("0")
@@ -238,7 +249,12 @@ class BinanceAdapter(BaseExchangeAdapter):
                 fee_asset = fill.get("commissionAsset", "")
 
         # Convert the fee to a CryptoConv object (msats-based)
-        fee_conv = self._convert_fee_to_msats(total_fee, fee_asset)
+        fee_conv = self._convert_fee_to_msats(
+            fee=total_fee,
+            fee_asset=fee_asset,
+            requested_qty=requested_qty,
+            base_asset=result.symbol[:-3],
+        )
 
         return ExchangeOrderResult(
             exchange=self.exchange_name,

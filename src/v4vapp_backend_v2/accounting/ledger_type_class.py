@@ -26,6 +26,8 @@ class LedgerType(StrEnum):
 
     FUNDING = "funding"  # Funding from Owner to Treasury
 
+    EXCHANGE_CONVERSION = "exc_conv"  # Conversion transaction on an external exchange
+
     CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
     CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
 

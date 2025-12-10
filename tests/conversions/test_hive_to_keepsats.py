@@ -52,7 +52,7 @@ def mock_hive_to_keepsats_deps():
         patch.object(TrackedBaseModel, "save", new_callable=AsyncMock) as mock_tracked_save,
         patch.object(TrackedBaseModel, "update_conv", new_callable=AsyncMock) as mock_update_conv,
         patch(
-            "v4vapp_backend_v2.conversion.hive_to_keepsats.add_pending_rebalance",
+            "v4vapp_backend_v2.conversion.exchange_rebalance.add_pending_rebalance",
             new_callable=AsyncMock,
         ) as mock_rebalance,
     ):
