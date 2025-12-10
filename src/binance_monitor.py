@@ -15,7 +15,7 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
     add_pending_rebalance,
 )
-from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.database.db_pymongo import DBConn, DBConnConnectionException
 from v4vapp_backend_v2.helpers.binance_extras import (
     BinanceErrorBadConnection,
     get_balances,
@@ -269,6 +269,12 @@ async def main_async_start():
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")
         logger.info(f"{ICON} 👋 Goodbye! from Binance Monitor", extra={"notification": True})
+    except DBConnConnectionException as e:
+        logger.error(
+            f"{ICON} Database connection error in Binance Monitor: {e}",
+            extra={"error": e, "notification": False},
+        )
+        return
     except Exception as e:
         logger.exception(e, extra={"error": e, "notification": False})
         logger.error(f"{ICON} Irregular shutdown in Binance Monitor {e}", extra={"error": e})
