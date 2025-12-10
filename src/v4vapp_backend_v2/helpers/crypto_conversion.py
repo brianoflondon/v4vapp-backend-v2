@@ -260,7 +260,7 @@ class CryptoConv(BaseModel):
             V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
-        limit_test_result = limit_test(float(self.msats))
+        limit_test_result = limit_test(Decimal(self.msats))
         return limit_test_result
 
     @computed_field
