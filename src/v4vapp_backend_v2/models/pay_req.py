@@ -187,7 +187,7 @@ class PayReq(BaseModel):
         try:
             super().__init__(**invoice_dict)
             if self.value == 0 and self.value_msat > 0:
-                self.value = BSONInt64(self.value_msat // 1000)
+                self.value = BSONInt64(self.value_msat // Decimal(1000))
             elif self.value_msat == 0 and self.value > 0:
                 self.value_msat = BSONInt64(self.value * 1000)
 
