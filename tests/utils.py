@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, Dict, List
@@ -224,7 +225,7 @@ async def send_hive_customer_to_server(
         conv = send_conv.conversion
         amount_to_send_msats = conv.msats + conv.msats_fee + 200_000
         amount_to_send_msats = conv.msats + conv.msats_fee + 200_000  # Adding a buffer for fees
-        amount_to_send_hive = (amount_to_send_msats // 1000) / conv.sats_hive
+        amount_to_send_hive = (amount_to_send_msats // Decimal(1000)) / conv.sats_hive
         hive_amount = Amount(f"{amount_to_send_hive:.3f} HIVE")
 
     else:
