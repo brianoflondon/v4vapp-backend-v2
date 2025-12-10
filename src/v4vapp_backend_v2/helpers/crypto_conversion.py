@@ -162,40 +162,32 @@ class CryptoConv(BaseModel):
                 base_currency = Currency.HBD
             else:
                 base_currency = Currency.HIVE
-            msats = Decimal(0)
-            if side.upper() == "SELL":
-                msats = quote_qty * Decimal(100_000_000_000)
-                data["hive"] = executed_qty if base_currency == Currency.HIVE else Decimal(0)
-                data["hbd"] = executed_qty if base_currency == Currency.HBD else Decimal(0)
-            elif side.upper() == "BUY":
-                msats = executed_qty * Decimal(100_000_000_000)
-                data["hive"] = quote_qty if base_currency == Currency.HIVE else Decimal(0)
-                data["hbd"] = quote_qty if base_currency == Currency.HBD else Decimal(0)
+            msats = quote_qty * Decimal(100_000_000_000)
+            data["hive"] = (
+                executed_qty if base_currency == Currency.HIVE else executed_qty / quote.hive_hbd
+            )
+            data["hbd"] = (
+                executed_qty if base_currency == Currency.HBD else executed_qty * quote.hive_hbd
+            )
+
             data["conv_from"] = Currency.MSATS
             data["value"] = msats
             data["msats"] = msats
             # Calculate sats, msats, usd
-            data["btc"] = data["msats"] // Decimal(100_000_000_000)
-            data["sats"] = data["msats"] // Decimal(1000)
+            data["btc"] = data["msats"] / Decimal(100_000_000_000)
+            data["sats"] = data["msats"] / Decimal(1000)
             data["usd"] = float(data["sats"] / quote.sats_usd_p)
             data["source"] = "Exchange Trade"
             data["fetch_date"] = datetime.now(tz=timezone.utc)
             # Calculate actual trade rates
             # TODO: This is still not working for sats to hive conversions
-            if side.upper() == "SELL":
-                # executed_qty: HIVE/HBD sold, quote_qty: BTC received
-                sats_per_base = (quote_qty * Decimal(100_000_000)) / executed_qty
-                if base_currency == Currency.HIVE:
-                    data["sats_hive"] = sats_per_base
-                else:
-                    data["sats_hbd"] = sats_per_base
-            elif side.upper() == "BUY":
-                # executed_qty: BTC spent, quote_qty: HIVE/HBD received
-                sats_per_base = (executed_qty * Decimal(100_000_000)) / quote_qty
-                if base_currency == Currency.HIVE:
-                    data["sats_hive"] = sats_per_base
-                else:
-                    data["sats_hbd"] = sats_per_base
+            # executed_qty: HIVE/HBD sold, quote_qty: BTC received
+            sats_per_base = (quote_qty * Decimal(100_000_000)) / executed_qty
+            if base_currency == Currency.HIVE:
+                data["sats_hive"] = sats_per_base
+            else:
+                data["sats_hbd"] = sats_per_base
+
             # Optionally set the other rate from quote if available
             if hasattr(quote, "sats_hive_p") and "sats_hive" not in data:
                 data["sats_hive"] = quote.sats_hive_p

@@ -73,18 +73,25 @@ async def exchange_accounting(
     await all_quotes.get_all_quotes()
     quote = all_quotes.quote
 
-
-    #TODO: This is still not working for sats to hive conversions
+    # TODO: This is still not working for sats to hive conversions
     # Create CryptoConv from order_result
     conv = CryptoConv(order_result=order_result, quote=quote)
     logger.info(f"Exchange conversion details: {conv}")
 
-    credit_unit = conv.conv_from
-    debit_unit = Currency.MSATS if credit_unit in [Currency.HIVE, Currency.HIVE] else Currency.HIVE
-
-    # Use conv to get amounts
-    debit_amount = conv.value_in(debit_unit)
-    credit_amount = conv.value_in(credit_unit)
+    if order_result.side.upper() == "BUY":
+        credit_unit = conv.conv_from
+        debit_unit = (
+            Currency.MSATS if credit_unit in [Currency.HIVE, Currency.HIVE] else Currency.HIVE
+        )
+        debit_amount = conv.value_in(debit_unit)
+        credit_amount = conv.value_in(credit_unit)
+    else:  # SELL
+        debit_unit = conv.conv_from
+        credit_unit = (
+            Currency.MSATS if debit_unit in [Currency.HIVE, Currency.HIVE] else Currency.HIVE
+        )
+        debit_amount = conv.value_in(debit_unit)
+        credit_amount = conv.value_in(credit_unit)
 
     ledger_type = LedgerType.EXCHANGE_CONVERSION
     exchange_entry = LedgerEntry(
@@ -107,4 +114,4 @@ async def exchange_accounting(
     await exchange_entry.save()
 
     # TODO: Handle the exchange fees
-    pass
+    return
