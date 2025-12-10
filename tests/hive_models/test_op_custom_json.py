@@ -1,3 +1,4 @@
+from decimal import Decimal
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,7 +68,7 @@ def test_custom_json_validate():
         json_data = json.loads(post["json"])
         assert custom_json.json_data.from_account == json_data["hive_accname_from"]
         assert custom_json.json_data.to_account == json_data["hive_accname_to"]
-        assert custom_json.json_data.sats == custom_json.json_data.msats // 1000
+        assert custom_json.json_data.sats == custom_json.json_data.msats // Decimal(1000)
 
         assert custom_json.cj_id == "v4vapp_transfer"
 

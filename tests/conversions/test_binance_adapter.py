@@ -166,7 +166,7 @@ class TestBinanceAdapterMarketSell:
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
     def test_market_sell_success(self, mock_sell):
-        """Test successful market sell."""
+        """Test successful market sell with BNB commission (mainnet behavior)."""
         mock_sell.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=12345,
@@ -179,7 +179,15 @@ class TestBinanceAdapterMarketSell:
             type="MARKET",
             side="SELL",
             avg_price=Decimal("0.0000123"),
-            fills=[{"commission": "0.0000001", "commissionAsset": "BTC"}],
+            fills=[
+                {
+                    "price": "0.0000123",
+                    "qty": "100",
+                    "commission": "0.00008532",
+                    "commissionAsset": "BNB",
+                    "tradeId": 12345,
+                }
+            ],
             raw_response={"orderId": 12345},
         )
 
@@ -191,8 +199,8 @@ class TestBinanceAdapterMarketSell:
         assert result.symbol == "HIVEBTC"
         assert result.side == "SELL"
         assert result.executed_qty == Decimal("100")
-        assert result.fee == Decimal("0.0000001")
-        assert result.fee_asset == "BTC"
+        assert result.fee == Decimal("0.00008532")
+        assert result.fee_asset == "BNB"
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
     def test_market_sell_below_minimum(self, mock_sell):
@@ -220,7 +228,7 @@ class TestBinanceAdapterMarketBuy:
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
     def test_market_buy_success(self, mock_buy):
-        """Test successful market buy."""
+        """Test successful market buy with BNB commission (mainnet behavior)."""
         mock_buy.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=54321,
@@ -233,7 +241,15 @@ class TestBinanceAdapterMarketBuy:
             type="MARKET",
             side="BUY",
             avg_price=Decimal("0.0000123"),
-            fills=[{"commission": "0.01", "commissionAsset": "HIVE"}],
+            fills=[
+                {
+                    "price": "0.0000123",
+                    "qty": "100",
+                    "commission": "0.00006730",
+                    "commissionAsset": "BNB",
+                    "tradeId": 54321,
+                }
+            ],
             raw_response={"orderId": 54321},
         )
 
@@ -245,8 +261,8 @@ class TestBinanceAdapterMarketBuy:
         assert result.symbol == "HIVEBTC"
         assert result.side == "BUY"
         assert result.executed_qty == Decimal("100")
-        assert result.fee == Decimal("0.01")
-        assert result.fee_asset == "HIVE"
+        assert result.fee == Decimal("0.00006730")
+        assert result.fee_asset == "BNB"
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
     def test_market_buy_below_minimum(self, mock_buy):
@@ -273,7 +289,7 @@ class TestBinanceAdapterConvertResult:
     """Tests for _convert_result method."""
 
     def test_convert_result_extracts_fees(self):
-        """Test that fees are correctly extracted from fills."""
+        """Test that fees are correctly extracted from fills with BNB commission."""
         adapter = BinanceAdapter()
 
         binance_result = MarketOrderResult(
@@ -289,16 +305,98 @@ class TestBinanceAdapterConvertResult:
             side="SELL",
             avg_price=Decimal("0.0000123"),
             fills=[
-                {"commission": "0.0000001", "commissionAsset": "BTC"},
-                {"commission": "0.0000002", "commissionAsset": "BTC"},
+                {
+                    "price": "0.0000123",
+                    "qty": "60",
+                    "commission": "0.00006730",
+                    "commissionAsset": "BNB",
+                    "tradeId": 1,
+                },
+                {
+                    "price": "0.0000123",
+                    "qty": "40",
+                    "commission": "0.00000756",
+                    "commissionAsset": "BNB",
+                    "tradeId": 2,
+                },
             ],
             raw_response={},
         )
 
         result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
 
-        assert result.fee == Decimal("0.0000003")  # Sum of all fees
-        assert result.fee_asset == "BTC"
+        assert result.fee == Decimal("0.00007486")  # Sum of all fees
+        assert result.fee_asset == "BNB"
+
+    def test_convert_result_multi_fill_mainnet_style(self):
+        """Test conversion with multiple fills matching real mainnet response.
+
+        This tests a scenario based on actual mainnet data where an order
+        was filled across 4 separate trades, each with its own BNB commission.
+        """
+        adapter = BinanceAdapter()
+
+        # This matches the structure from mainnet: 1084 HIVE sold across 4 fills
+        binance_result = MarketOrderResult(
+            symbol="HIVEBTC",
+            order_id=165516618,
+            client_order_id="7LAlRFbQ7fwrBVkwsP5Wpc",
+            transact_time=1765147140145,
+            orig_qty=Decimal("1084"),
+            executed_qty=Decimal("1084"),
+            cummulative_quote_qty=Decimal("0.00120324"),
+            status="FILLED",
+            type="LIMIT",
+            side="SELL",
+            avg_price=Decimal("0.00000111"),  # 0.00120324 / 1084
+            fills=[
+                {
+                    "price": "0.00000111",
+                    "qty": "800.00000000",
+                    "commission": "0.00006730",
+                    "commissionAsset": "BNB",
+                    "tradeId": 8229963,
+                },
+                {
+                    "price": "0.00000111",
+                    "qty": "92.00000000",
+                    "commission": "0.00000756",
+                    "commissionAsset": "BNB",
+                    "tradeId": 8229964,
+                },
+                {
+                    "price": "0.00000111",
+                    "qty": "179.00000000",
+                    "commission": "0.00001512",
+                    "commissionAsset": "BNB",
+                    "tradeId": 8229965,
+                },
+                {
+                    "price": "0.00000111",
+                    "qty": "13.00000000",
+                    "commission": "0.00000075",
+                    "commissionAsset": "BNB",
+                    "tradeId": 8229966,
+                },
+            ],
+            raw_response={"orderId": 165516618},
+        )
+
+        result = adapter._convert_result(binance_result, "SELL", Decimal("1084"))
+
+        # Total fee should be sum of all fill commissions
+        expected_fee = (
+            Decimal("0.00006730")
+            + Decimal("0.00000756")
+            + Decimal("0.00001512")
+            + Decimal("0.00000075")
+        )
+        assert result.fee == expected_fee
+        assert result.fee == Decimal("0.00009073")
+        assert result.fee_asset == "BNB"
+        assert result.executed_qty == Decimal("1084")
+        assert result.quote_qty == Decimal("0.00120324")
+        assert result.status == "FILLED"
 
     def test_convert_result_empty_fills(self):
         """Test conversion with no fills."""
@@ -324,6 +422,124 @@ class TestBinanceAdapterConvertResult:
 
         assert result.fee == Decimal("0")
         assert result.fee_asset == ""
+
+
+class TestBinanceAdapterFeeConversion:
+    """Tests for fee conversion to CryptoConv (msats tracking)."""
+
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    def test_fee_conversion_bnb_to_msats(self, mock_get_price):
+        """Test that BNB fees are correctly converted to msats via BTC."""
+        # Mock BNBBTC price: 1 BNB = 0.01 BTC (for easy calculation)
+        mock_get_price.return_value = {
+            "bid_price": "0.01",
+            "ask_price": "0.0101",
+            "current_price": "0.01005",
+        }
+
+        adapter = BinanceAdapter()
+        fee_bnb = Decimal("0.00009073")  # Real mainnet fee example
+
+        fee_conv = adapter._convert_fee_to_msats(fee_bnb, "BNB")
+
+        assert fee_conv is not None
+        # 0.00009073 BNB * 0.01 BTC/BNB = 0.0000009073 BTC
+        expected_btc = Decimal("0.0000009073")
+        assert fee_conv.btc == expected_btc
+        # 0.0000009073 BTC * 100,000,000 sats/BTC = 90.73 sats
+        expected_sats = Decimal("90.73")
+        assert fee_conv.sats == expected_sats
+        # 90.73 sats * 1000 msats/sat = 90730 msats
+        expected_msats = Decimal("90730")
+        assert fee_conv.msats == expected_msats
+        assert fee_conv.source == "Binance"
+
+    def test_fee_conversion_btc_direct(self):
+        """Test that BTC fees don't need price lookup."""
+        adapter = BinanceAdapter()
+        fee_btc = Decimal("0.00000050")  # 50 sats
+
+        fee_conv = adapter._convert_fee_to_msats(fee_btc, "BTC")
+
+        assert fee_conv is not None
+        assert fee_conv.btc == Decimal("0.00000050")
+        assert fee_conv.sats == Decimal("50")
+        assert fee_conv.msats == Decimal("50000")
+
+    def test_fee_conversion_zero_fee(self):
+        """Test that zero fee returns None."""
+        adapter = BinanceAdapter()
+
+        fee_conv = adapter._convert_fee_to_msats(Decimal("0"), "BNB")
+
+        assert fee_conv is None
+
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    def test_convert_result_includes_fee_conv(self, mock_get_price):
+        """Test that _convert_result includes fee_conv in result."""
+        # Mock BNBBTC price
+        mock_get_price.return_value = {
+            "bid_price": "0.01",
+            "ask_price": "0.0101",
+            "current_price": "0.01005",
+        }
+
+        adapter = BinanceAdapter()
+        binance_result = MarketOrderResult(
+            symbol="HIVEBTC",
+            order_id=12345,
+            client_order_id="test",
+            transact_time=1234567890,
+            orig_qty=Decimal("100"),
+            executed_qty=Decimal("100"),
+            cummulative_quote_qty=Decimal("0.00123"),
+            status="FILLED",
+            type="MARKET",
+            side="SELL",
+            avg_price=Decimal("0.0000123"),
+            fills=[
+                {
+                    "price": "0.0000123",
+                    "qty": "100",
+                    "commission": "0.00008532",
+                    "commissionAsset": "BNB",
+                    "tradeId": 12345,
+                }
+            ],
+            raw_response={},
+        )
+
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+
+        assert result.fee_conv is not None
+        assert result.fee_conv.msats > 0
+        assert result.fee_conv.sats > 0
+        assert result.fee_conv.btc > 0
+        # Fee should be 0.00008532 BNB * 0.01 = 0.0000008532 BTC = 85.32 sats
+        assert result.fee_conv.sats == Decimal("85.32")
+
+    def test_convert_result_empty_fills_no_fee_conv(self):
+        """Test that empty fills result in None fee_conv."""
+        adapter = BinanceAdapter()
+        binance_result = MarketOrderResult(
+            symbol="HIVEBTC",
+            order_id=12345,
+            client_order_id="test",
+            transact_time=1234567890,
+            orig_qty=Decimal("100"),
+            executed_qty=Decimal("100"),
+            cummulative_quote_qty=Decimal("0.00123"),
+            status="FILLED",
+            type="MARKET",
+            side="SELL",
+            avg_price=Decimal("0.0000123"),
+            fills=[],
+            raw_response={},
+        )
+
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+
+        assert result.fee_conv is None
 
 
 class TestBinanceAdapterAssetDecimals:
@@ -406,7 +622,15 @@ class TestBinanceAdapterAssetDecimals:
             type="MARKET",
             side="SELL",
             avg_price=Decimal("0.0000123"),
-            fills=[{"commission": "0.0000001", "commissionAsset": "BTC"}],
+            fills=[
+                {
+                    "price": "0.0000123",
+                    "qty": "199",
+                    "commission": "0.00008532",
+                    "commissionAsset": "BNB",
+                    "tradeId": 12345,
+                }
+            ],
             raw_response={"orderId": 12345},
         )
 
@@ -433,7 +657,15 @@ class TestBinanceAdapterAssetDecimals:
             type="MARKET",
             side="BUY",
             avg_price=Decimal("0.0000123"),
-            fills=[{"commission": "0.01", "commissionAsset": "HIVE"}],
+            fills=[
+                {
+                    "price": "0.0000123",
+                    "qty": "100",
+                    "commission": "0.00006730",
+                    "commissionAsset": "BNB",
+                    "tradeId": 54321,
+                }
+            ],
             raw_response={"orderId": 54321},
         )
 
