@@ -1,4 +1,5 @@
 import argparse
+from decimal import Decimal
 import socket
 from typing import Any, Dict
 
@@ -200,7 +201,7 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
     if transfer.sats <= 0:
         message = "Minimum is 0 sats"
 
-    if transfer.sats and net_msats // 1000 < transfer.sats:
+    if transfer.sats and net_msats // Decimal(1000) < transfer.sats:
         message = "Insufficient funds"
 
     if message:
@@ -208,9 +209,9 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": message,
-                "balance": net_msats // 1000,
+                "balance": net_msats // Decimal(1000),
                 "requested": transfer.sats,
-                "deficit": transfer.sats - (net_msats // 1000),
+                "deficit": transfer.sats - (net_msats // Decimal(1000)),
             },
         )
 
@@ -271,9 +272,9 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": "Insufficient funds",
-                "balance": net_msats // 1000,
+                "balance": net_msats // Decimal(1000),
                 "requested": convert.sats,
-                "deficit": convert.sats - (net_msats // 1000),
+                "deficit": convert.sats - (net_msats // Decimal(1000)),
             },
         )
     if convert.memo:
