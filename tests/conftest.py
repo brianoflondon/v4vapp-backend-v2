@@ -25,7 +25,7 @@ def setup_test_config(request, monkeypatch: pytest.MonkeyPatch):
     """
     Autouse fixture to set up test configuration paths for most tests.
     This ensures InternalConfig uses the test config directory.
-    
+
     Skips tests in tests/process/ which need devhive.config.yaml.
     """
     # Skip this fixture for tests in the process directory
@@ -33,7 +33,7 @@ def setup_test_config(request, monkeypatch: pytest.MonkeyPatch):
     if "tests/process" in str(request.fspath):
         yield
         return
-    
+
     test_config_path = Path("tests/data/config")
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
