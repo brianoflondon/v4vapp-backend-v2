@@ -6,6 +6,7 @@ import subprocess
 import threading
 import time  # Optional, for adding a startup delay if needed
 from datetime import datetime, timedelta
+from pathlib import Path
 from queue import Queue
 
 import pytest
@@ -17,6 +18,30 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 Create a conftest.py in your tests directory to override the
 fixture with session scope:
 """
+
+
+@pytest.fixture(autouse=True)
+def setup_test_config(monkeypatch: pytest.MonkeyPatch):
+    """
+    Autouse fixture to set up test configuration paths for all tests.
+    This ensures InternalConfig uses the test config directory.
+    """
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
+    # Reset InternalConfig singleton to allow fresh initialization with test config
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    yield
+    # Cleanup: shutdown InternalConfig if it was initialized
+    if InternalConfig._instance is not None:
+        try:
+            InternalConfig().shutdown()
+        except Exception:
+            pass  # Ignore shutdown errors in cleanup
 
 
 @pytest.fixture(scope="session")
