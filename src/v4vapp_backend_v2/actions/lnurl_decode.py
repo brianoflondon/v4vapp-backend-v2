@@ -1,3 +1,4 @@
+from decimal import Decimal
 import re
 from typing import Dict, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -106,7 +107,7 @@ def check_bech32_or_lightning_address(anything: str) -> Tuple[str, str]:
 
 async def decode_any_lightning_string(
     input: str,
-    zero_amount_invoice_send_msats: int = 0,
+    zero_amount_invoice_send_msats: Decimal = Decimal(0),
     comment: str = "",
     lnd_client: LNDClient | None = None,
 ) -> PayReq:
