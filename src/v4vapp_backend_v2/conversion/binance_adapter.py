@@ -5,10 +5,13 @@ This adapter wraps the binance_extras functions to provide a standardized
 interface for the rebalancing system.
 """
 
+from datetime import datetime, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import ClassVar
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.exchange_protocol import (
+    SATS_PER_BTC,
     BaseExchangeAdapter,
     ExchangeBelowMinimumError,
     ExchangeConnectionError,
@@ -26,6 +29,8 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     market_buy,
     market_sell,
 )
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.currency_class import Currency
 
 
 class BinanceAdapter(BaseExchangeAdapter):
@@ -152,6 +157,72 @@ class BinanceAdapter(BaseExchangeAdapter):
         except BinanceErrorBadConnection as e:
             raise ExchangeConnectionError(f"Failed to get Binance price: {e}")
 
+    def _convert_fee_to_msats(self, fee: Decimal, fee_asset: str) -> CryptoConv | None:
+        """
+        Convert exchange fee to a CryptoConv object with msats as the base.
+
+        For BNB fees, looks up the current BNBBTC price to convert:
+        BNB -> BTC -> sats -> msats
+
+        Args:
+            fee: The fee amount in fee_asset units
+            fee_asset: The asset the fee is denominated in (e.g., 'BNB', 'BTC')
+
+        Returns:
+            CryptoConv with fee converted to msats, or None if conversion fails
+        """
+        if fee <= Decimal("0"):
+            return None
+
+        try:
+            fee_btc = Decimal("0")
+
+            if fee_asset == "BTC":
+                # Fee is already in BTC
+                fee_btc = fee
+            elif fee_asset == "BNB":
+                # Get BNB/BTC price and convert
+                bnb_price_info = get_current_price("BNBBTC", testnet=self.testnet)
+                bnb_btc_price = Decimal(bnb_price_info["bid_price"])
+                fee_btc = fee * bnb_btc_price
+            else:
+                # For other assets, try to get price against BTC
+                try:
+                    symbol = f"{fee_asset}BTC"
+                    price_info = get_current_price(symbol, testnet=self.testnet)
+                    asset_btc_price = Decimal(price_info["bid_price"])
+                    fee_btc = fee * asset_btc_price
+                except Exception:
+                    logger.warning(
+                        f"Could not convert fee asset {fee_asset} to BTC, fee_conv will be None"
+                    )
+                    return None
+
+            # Convert BTC to sats (1 BTC = 100,000,000 sats)
+            fee_sats = fee_btc * SATS_PER_BTC
+            # Convert to msats (1 sat = 1000 msats)
+            fee_msats = fee_sats * Decimal("1000")
+
+            # Create CryptoConv with msats as the starting point
+            # Note: We're creating a minimal conv since we don't have full quote data
+            # The key values are msats, sats, and btc which we can calculate directly
+            return CryptoConv(
+                msats=fee_msats,
+                sats=fee_sats,
+                btc=fee_btc,
+                conv_from=Currency.MSATS,
+                value=fee_msats,
+                source="Binance",
+                fetch_date=datetime.now(tz=timezone.utc),
+            )
+
+        except BinanceErrorBadConnection as e:
+            logger.warning(f"Failed to get price for fee conversion: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Unexpected error converting fee: {e}")
+            return None
+
     def _convert_result(
         self, result: MarketOrderResult, side: str, requested_qty: Decimal
     ) -> ExchangeOrderResult:
@@ -163,6 +234,9 @@ class BinanceAdapter(BaseExchangeAdapter):
             total_fee += Decimal(str(fill.get("commission", "0")))
             if not fee_asset:
                 fee_asset = fill.get("commissionAsset", "")
+
+        # Convert the fee to a CryptoConv object (msats-based)
+        fee_conv = self._convert_fee_to_msats(total_fee, fee_asset)
 
         return ExchangeOrderResult(
             exchange=self.exchange_name,
@@ -177,6 +251,7 @@ class BinanceAdapter(BaseExchangeAdapter):
             avg_price=result.avg_price,
             fee=total_fee,
             fee_asset=fee_asset,
+            fee_conv=fee_conv,
             raw_response=result.raw_response,
         )
 
