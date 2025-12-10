@@ -259,12 +259,13 @@ class DBConn:
         InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
-            # Use a short timeout for the admin client setup if the database is not reachable
+            # Use a reasonable timeout for the admin client setup
+            # CI environments may need more time for MongoDB to be ready
             admin_client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
                 self.admin_uri,
                 tz_aware=True,
                 connectTimeoutMS=600_000,
-                serverSelectionTimeoutMS=5_000,
+                serverSelectionTimeoutMS=30_000,
             )
             async with admin_client:
                 await self.setup_user(admin_client=admin_client)
