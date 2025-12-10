@@ -56,6 +56,8 @@ class BinanceAdapter(BaseExchangeAdapter):
 
     @property
     def exchange_name(self) -> str:
+        if self.testnet:
+            return "binance_testnet"
         return "binance"
 
     def get_asset_decimals(self, asset: str) -> int:

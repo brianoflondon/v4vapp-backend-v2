@@ -379,7 +379,7 @@ class Invoice(TrackedBaseModel):
             unique_id = match.group(1)  # Extract the captured group (the 6-char UUID)
             try:
                 quote = FixedHiveQuote.check_quote(
-                    unique_id, self.value_msat // 1000
+                    unique_id, int(self.value_msat // 1000)
                 )  # Pass just the UUID string
                 if quote:
                     return quote
