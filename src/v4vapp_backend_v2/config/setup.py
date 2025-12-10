@@ -184,6 +184,7 @@ class ExchangeNetworkConfig(BaseConfig):
     api_url: str = ""  # Alternative to base_url for some exchanges
 
     # Direct API credentials (from config file)
+    api_key_name: str = ""
     api_key: str = ""
     api_secret: str = ""
 
