@@ -48,7 +48,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerT
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
-from v4vapp_backend_v2.conversion.exchange_queue import rebalance_queue_task
+from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo

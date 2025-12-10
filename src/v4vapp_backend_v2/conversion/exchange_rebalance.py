@@ -219,15 +219,19 @@ class PendingRebalance(BaseModel):
             return False, "No pending quantity"
 
         if self.pending_qty < self.min_qty_threshold:
+            pending_qty_str = format_base_asset(self.pending_qty, self.base_asset)
+            min_qty_str = format_base_asset(self.min_qty_threshold, self.base_asset)
             return (
                 False,
-                f"Pending qty {self.pending_qty} below minimum {self.min_qty_threshold}",
+                f"Pending qty {pending_qty_str} below minimum {min_qty_str}",
             )
 
         if self.pending_quote_value < self.min_notional_threshold:
+            quote_value_str = format_quote_asset(self.pending_quote_value, self.quote_asset)
+            min_notional_str = format_quote_asset(self.min_notional_threshold, self.quote_asset)
             return (
                 False,
-                f"Pending notional {self.pending_quote_value} below minimum {self.min_notional_threshold}",
+                f"Pending notional {quote_value_str} below minimum {min_notional_str}",
             )
 
         return True, "OK"
@@ -281,19 +285,9 @@ class PendingRebalance(BaseModel):
     def log_extra(self) -> dict:
         """Dictionary of pending rebalance details for structured logging."""
         return {
-            "pending_rebalance": {
-                "base_asset": self.base_asset,
-                "quote_asset": self.quote_asset,
-                "direction": self.direction.value,
-                "exchange": self.exchange,
-                "pending_qty": str(self.pending_qty),
-                "pending_quote_value": str(self.pending_quote_value),
-                "min_qty_threshold": str(self.min_qty_threshold),
-                "min_notional_threshold": str(self.min_notional_threshold),
-                "transaction_count": self.transaction_count,
-                "execution_count": self.execution_count,
-                "total_executed_qty": str(self.total_executed_qty),
-            }
+            "pending_rebalance": self.model_dump(
+                by_alias=True, exclude_none=True, exclude_unset=True
+            )
         }
 
     @property
@@ -424,19 +418,26 @@ class RebalanceResult(BaseModel):
     @property
     def log_extra(self) -> dict:
         """Dictionary of rebalance details for structured logging."""
-        extra = {
-            "rebalance_result": {
-                "executed": self.executed,
-                "reason": self.reason,
-                "pending_qty": str(self.pending_qty),
-                "pending_notional": str(self.pending_notional),
-                "error": self.error,
-                "timestamp": self.timestamp.isoformat(),
-            }
+
+        return {
+            "rebalance_result": self.model_dump(
+                by_alias=True, exclude_none=True, exclude_unset=True
+            )
         }
-        if self.order_result:
-            extra["rebalance_result"]["order"] = self.order_result.model_dump()
-        return extra
+
+        # extra = {
+        #     "rebalance_result": {
+        #         "executed": self.executed,
+        #         "reason": self.reason,
+        #         "pending_qty": str(self.pending_qty),
+        #         "pending_notional": str(self.pending_notional),
+        #         "error": self.error,
+        #         "timestamp": self.timestamp.isoformat(),
+        #     }
+        # }
+        # if self.order_result:
+        #     extra["rebalance_result"]["order"] = self.order_result.model_dump()
+        # return extra
 
     @property
     def notification_str(self) -> str:
@@ -544,9 +545,6 @@ async def add_pending_rebalance(
                 pending_qty=pending.pending_qty,
                 pending_notional=pending.pending_quote_value,
             )
-
-        # Execute the trade
-        logger.info("Executing rebalance:")
 
         order_result = await execute_rebalance_trade(
             exchange_adapter=exchange_adapter,

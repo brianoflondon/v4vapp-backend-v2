@@ -59,7 +59,7 @@ from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import ConversionResult, calc_keepsats_to_hive
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
-from v4vapp_backend_v2.conversion.exchange_queue import rebalance_queue_task
+from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo

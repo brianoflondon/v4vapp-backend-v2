@@ -1,5 +1,3 @@
-# MARK: Queue Exchange Rebalance (HIVE -> BTC)
-
 from decimal import Decimal
 
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
@@ -7,6 +5,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
+    RebalanceResult,
     add_pending_rebalance,
 )
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -39,22 +38,26 @@ async def rebalance_queue_task(
                 f"{rebalance_result.log_str}",
                 extra={**rebalance_result.log_extra, "group_id": tracked_op.group_id},
             )
-            # logger.info(
-            #     f"Rebalance queued: HIVE->BTC ({hive_qty:.3f} HIVE from {currency.name}), "
-            #     f"executed={rebalance_result.executed}, "
-            #     f"pending_qty={rebalance_result.pending_qty}",
-            #     extra={
-            #         "rebalance_executed": rebalance_result.executed,
-            #         "rebalance_reason": rebalance_result.reason,
-            #         "pending_qty": str(rebalance_result.pending_qty),
-            #         "original_currency": currency.name,
-            #         "hive_equivalent": str(hive_qty),
-            #         "group_id": tracked_op.group_id,
-            #     },
-            # )
+
+            if rebalance_result.error:
+                logger.warning(
+                    f"Rebalance queuing encountered an error (non-critical): {rebalance_result.error}",
+                    extra={**rebalance_result.log_extra, "group_id": tracked_op.group_id},
+                )
+            if rebalance_result.executed:
+                await exchange_accounting(rebalance_result)
+
         except Exception as e:
             # Rebalance errors should not fail the customer transaction
             logger.warning(
                 f"Rebalance queuing failed (non-critical): {e}",
                 extra={"error": str(e), "group_id": tracked_op.group_id},
             )
+
+
+async def exchange_accounting(rebalance_result: RebalanceResult) -> None:
+    """Perform any accounting updates after a rebalance trade has executed."""
+    
+
+
+    pass
