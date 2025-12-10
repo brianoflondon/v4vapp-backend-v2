@@ -207,6 +207,7 @@ redis:
 ########### TEST CONFIG NO SECRETS #################
 
 api_keys:
+  coinmarketcap: test_coinmarketcap_api_key
   # binance_testnet_api_key: test_binance_testnet_api_key
   # binance_testnet_api_secret: test_binance_testnet_api_secret
 
