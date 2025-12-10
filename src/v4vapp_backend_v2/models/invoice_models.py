@@ -322,7 +322,7 @@ class Invoice(TrackedBaseModel):
         """
         return self.r_hash
 
-    @property
+    @computed_field
     def short_id(self) -> str:
         """
         Returns a short identifier for the payment, which is the first 10 characters of the payment hash.

@@ -412,9 +412,13 @@ class RebalanceResult(BaseModel):
         elif self.error:
             return f"Rebalance failed: {self.error}"
         else:
+            pending_notional_str = format_quote_asset(
+                self.pending_notional,
+                self.order_result.quote_asset if self.order_result else "BTC",
+            )
             return (
                 f"Rebalance pending: {self.pending_qty:.3f} qty, "
-                f"{self.pending_notional:.8f} notional - {self.reason}"
+                f"{pending_notional_str} notional - {self.reason}"
             )
 
     @property
@@ -534,7 +538,6 @@ async def add_pending_rebalance(
 
         if not can_execute:
             await pending.save()
-            logger.info(f"Rebalance pending: {reason} {transaction_id}")
             return RebalanceResult(
                 executed=False,
                 reason=reason,

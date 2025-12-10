@@ -36,6 +36,7 @@ Notes:
 - The function updates the tracked operation with conversion details and change amounts.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
@@ -46,11 +47,8 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
-from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
-from v4vapp_backend_v2.conversion.exchange_rebalance import (
-    RebalanceDirection,
-    add_pending_rebalance,
-)
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
+from v4vapp_backend_v2.conversion.exchange_queue import rebalance_queue_task
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
@@ -256,45 +254,14 @@ async def conversion_hive_to_keepsats(
         f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
     )
 
-    # MARK: Queue Exchange Rebalance (HIVE -> BTC)
-    # When HIVE/HBD is deposited, we accumulate the amount for eventual sale to BTC
-    # This runs in background and doesn't affect customer transaction
-    # Note: Exchange selection is driven by config (default_exchange setting)
-    if from_currency.name in ("HIVE", "HBD"):
-        try:
-            # Always use HIVE for exchange - Binance doesn't trade HBD
-            # The conv_result.to_convert_conv.hive contains the HIVE equivalent
-            hive_qty = conv_result.to_convert_conv.hive
-
-            # Get exchange adapter based on config (uses default_exchange)
-            exchange_adapter = get_exchange_adapter()
-            rebalance_result = await add_pending_rebalance(
-                exchange_adapter=exchange_adapter,
-                base_asset="HIVE",  # Always HIVE - Binance doesn't trade HBD
-                quote_asset="BTC",
-                direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
-                qty=hive_qty,
-                transaction_id=str(tracked_op.short_id),
-            )
-            logger.info(
-                f"Rebalance queued: HIVE->BTC ({hive_qty:.3f} HIVE from {from_currency.name}), "
-                f"executed={rebalance_result.executed}, "
-                f"pending_qty={rebalance_result.pending_qty}",
-                extra={
-                    "rebalance_executed": rebalance_result.executed,
-                    "rebalance_reason": rebalance_result.reason,
-                    "pending_qty": str(rebalance_result.pending_qty),
-                    "original_currency": from_currency.name,
-                    "hive_equivalent": str(hive_qty),
-                    "group_id": tracked_op.group_id,
-                },
-            )
-        except Exception as e:
-            # Rebalance errors should not fail the customer transaction
-            logger.warning(
-                f"Rebalance queuing failed (non-critical): {e}",
-                extra={"error": str(e), "group_id": tracked_op.group_id},
-            )
+    asyncio.create_task(
+        rebalance_queue_task(
+            direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+            currency=from_currency,
+            hive_qty=conv_result.to_convert_conv.hive,
+            tracked_op=tracked_op,
+        )
+    )
 
 
 # Last line

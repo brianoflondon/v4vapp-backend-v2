@@ -223,7 +223,7 @@ class OpBase(TrackedBaseModel):
         group_id = f"{self.block_num}_{self.trx_id}_{self.op_in_trx}_{self.realm}"
         return group_id
 
-    @property
+    @computed_field
     def short_id(self) -> str:
         """
         Returns a short ID for this record. This is a string used to uniquely identify
