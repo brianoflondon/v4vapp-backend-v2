@@ -99,7 +99,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             logger.info(f"Notification CustomJson: {tracked_op.log_str}")
             return []
 
-        unknown_cust_id = uuid4()
+        unknown_cust_id = f"unknown_cust_id_{uuid4()}"
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
         cust_id = str(unknown_cust_id) if not cust_id else cust_id
         logger.info(f"{'=*=' * 20}")
