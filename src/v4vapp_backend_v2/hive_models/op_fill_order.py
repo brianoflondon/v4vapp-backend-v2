@@ -105,7 +105,7 @@ class FillOrder(OpBase):
 
     @property
     def log_str(self) -> str:
-        return f"{self._log_internal()} {self.link}"
+        return f"{self._log_internal()} {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:

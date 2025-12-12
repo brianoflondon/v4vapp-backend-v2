@@ -337,7 +337,7 @@ class Invoice(TrackedBaseModel):
         Returns:
             str: A string representation of the invoice.
         """
-        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo}"
+        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo} {self.short_id}"
 
     @property
     def log_extra(self) -> dict:

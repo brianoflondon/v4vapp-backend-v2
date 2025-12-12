@@ -1,5 +1,4 @@
 from dataclasses import asdict
-from datetime import datetime
 
 from pydantic import Field
 
@@ -79,7 +78,7 @@ class AccountWitnessVote(OpBase):
 
     @property
     def log_str(self) -> str:
-        return f"{self.log_common} {self.link}"
+        return f"{self.log_common} {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:

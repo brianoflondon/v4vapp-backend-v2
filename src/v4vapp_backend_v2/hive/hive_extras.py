@@ -889,14 +889,7 @@ async def send_transfer(
                 f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
                 f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
                 f"Memo: {memo} {trx.get('trx_id', '')}",
-                extra={
-                    "notification": True,
-                    "to_account": to_account,
-                    "from_account": from_account,
-                    "amount": amount.amount_decimal,
-                    "symbol": amount.symbol,
-                    "memo": memo,
-                },
+                extra={**store_pending.log_extra},
             )
             return trx
 

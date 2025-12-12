@@ -384,7 +384,7 @@ class Payment(TrackedBaseModel):
         """
         Returns a string representation of the payment log.
         """
-        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date}"
+        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date} {self.short_id}"
 
     @property
     def log_extra(self) -> dict[str, Any]:

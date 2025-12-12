@@ -123,6 +123,21 @@ class MyJSONFormatter(logging.Formatter):
             return super().format(record)
 
     def _prepare_log_dict(self, record: logging.LogRecord):
+        """
+        Prepares a dictionary representation of the given log record for structured logging.
+
+        This method constructs a dictionary containing key log information, including a human-readable
+        timestamp, ISO-formatted timestamp, message, and optional exception or stack information.
+        It incorporates custom format keys from self.fmt_keys, adds any extra attributes from the
+        record not in the built-in attributes, and ensures 'human_time' is positioned after 'level'
+        in the resulting OrderedDict.
+
+        Args:
+            record (logging.LogRecord): The log record to process.
+
+        Returns:
+            OrderedDict: A dictionary with the prepared log data, ordered with 'human_time' after 'level'.
+        """
         human_readable_str = human_readable_datetime_str(
             dt.datetime.fromtimestamp(record.created, tz=dt.timezone.utc)
         )

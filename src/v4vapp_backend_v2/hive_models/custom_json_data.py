@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
@@ -131,25 +131,21 @@ class KeepsatsTransfer(BaseModel):
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
 
+    @classmethod
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+        """
+        return snake_case(cls.__name__)
+
     @property
     def log_extra(self) -> Dict[str, Any]:
         """
         Returns a dictionary of extra log information for the Keepsats transfer.
         This is used for logging purposes to provide additional context about the transfer.
+        Follows the OpBase pattern of using model_dump() keyed by class name.
         """
-        return {
-            "from_account": self.from_account,
-            "to_account": self.to_account,
-            "sats": self.sats,
-            "memo": self.memo,
-            "invoice_message": self.invoice_message,
-            "HIVE": self.hive,
-            "HBD": self.hbd,
-            "parent_id": self.parent_id,
-            "pay_result": self.pay_result.model_dump(exclude_none=True, exclude_unset=True)
-            if self.pay_result
-            else None,
-        }
+        return {self.name(): self.model_dump(exclude_none=True, exclude_unset=True)}
 
     @property
     def description(self) -> str:

@@ -141,6 +141,13 @@ class PendingTransaction(PendingBase):
         raise TypeError("amount must be Amount or str")
 
     @classmethod
+    def name(cls) -> str:
+        """
+        Returns the name of the class in snake_case format.
+        """
+        return "pending_transaction"
+
+    @classmethod
     async def list_all_hbd(cls) -> list["PendingTransaction"]:
         all_pending = (
             await InternalConfig.db["pending"]
@@ -201,6 +208,10 @@ class PendingTransaction(PendingBase):
         its id, source and destination accounts, amount, and memo.
         """
         return f"PendingTransaction({self.id}, {self.from_account} -> {self.to_account}, {self.amount}, {self.memo})"
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        return {self.name(): self.model_dump()}
 
 
 # Last line

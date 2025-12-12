@@ -54,7 +54,7 @@ class AccountUpdate2(OpBase):
         Returns:
             str: A formatted string representing the account update operation.
         """
-        return f"Account Update: {self.account} updated metadata {self.link}"
+        return f"Account Update: {self.account} updated metadata {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:

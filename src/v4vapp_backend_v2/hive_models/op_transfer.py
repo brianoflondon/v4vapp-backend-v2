@@ -152,7 +152,7 @@ class TransferBase(OpBase):
             f"to {self.to_account:<17}{self.recurrence_str} "
             f" - {self.lightning_memo[:30]:>30} "
             f"{time_diff} ago {self.age_str} "
-            f"{self.link} {self.op_in_trx:>3}"
+            f"{self.link} {self.op_in_trx:>3} {self.short_id}"
         )
         return log_str
 
