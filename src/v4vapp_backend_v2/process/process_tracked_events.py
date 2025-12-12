@@ -183,9 +183,9 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
-                logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
+                logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
                 logger.info(tracked_op.log_str)
-                logger.info(f"{process_time:>7,.2f} s {cust_id} processing tracked operation")
+                logger.info(f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}")
                 logger.info(f"{'+++' * 10} {cust_id} {'+++' * 10}")
 
 
