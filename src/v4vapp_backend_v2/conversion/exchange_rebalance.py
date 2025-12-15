@@ -398,7 +398,9 @@ class RebalanceResult(BaseModel):
         if self.executed and self.order_result:
             base, quote = self.order_result._get_assets()
             qty_str = format_base_asset(self.order_result.executed_qty, base)
-            fee_str = format_quote_asset(self.order_result.fee, self.order_result.fee_asset)
+            fee_str = format_quote_asset(
+                self.order_result.fee_original, self.order_result.fee_asset
+            )
             return (
                 f"Rebalance executed: {self.order_result.side} "
                 f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"

@@ -8,11 +8,11 @@ without coupling to a specific implementation.
 
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any, Dict, Protocol, runtime_checkable
+from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 # Conversion constant: 1 BTC = 100,000,000 satoshis
 SATS_PER_BTC = Decimal("100000000")
@@ -54,6 +54,8 @@ def format_quote_asset(value: Decimal, asset: str) -> str:
     if asset.upper() == "BTC":
         sats = int(value * SATS_PER_BTC)
         return f"{sats:,} sats"
+    if asset.upper() in ("HIVE", "HBD"):
+        return f"{value:.3f} {asset}"
     return f"{value:.8f} {asset}"
 
 
@@ -75,14 +77,17 @@ class ExchangeOrderResult(BaseModel):
     executed_qty: Decimal  # Actual quantity executed
     quote_qty: Decimal  # Total quote asset received/spent
     avg_price: Decimal  # Average execution price
-    fee: Decimal  # Total fees paid
+    fee_msats: Decimal  # Total fees paid (converted to msats)
+    fee_original: Decimal  # Original fee amount in fee_asset
     fee_asset: str  # Asset used for fees (e.g., "BTC", "BNB")
-    fee_conv: CryptoConv | None  # CryptoConv for fee conversion details
     raw_response: dict  # Original exchange response for debugging
 
     # Optional: base and quote assets for formatting (can be inferred from symbol)
     base_asset: str = ""  # e.g., "HIVE" - set by adapter if known
     quote_asset: str = ""  # e.g., "BTC" - set by adapter if known
+
+    # Quote response capturing the effective exchange rate from this trade
+    trade_quote: Optional[QuoteResponse] = None
 
     def _get_assets(self) -> tuple[str, str]:
         """Get base and quote assets, inferring from symbol if not set."""
@@ -102,7 +107,7 @@ class ExchangeOrderResult(BaseModel):
         base, quote = self._get_assets()
         qty_str = format_base_asset(self.executed_qty, base)
         quote_str = format_quote_asset(self.quote_qty, quote)
-        fee_str = format_quote_asset(self.fee, self.fee_asset)
+        fee_str = format_quote_asset(self.fee_original, self.fee_asset)
         return (
             f"Exchange: {self.exchange}, Symbol: {self.symbol}, "
             f"Order ID: {self.order_id}, Side: {self.side}, Status: {self.status}, "

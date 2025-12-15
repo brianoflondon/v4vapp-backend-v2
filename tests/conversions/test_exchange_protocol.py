@@ -35,7 +35,8 @@ class TestExchangeOrderResult:
             executed_qty=Decimal("100.5"),
             quote_qty=Decimal("0.00123456"),
             avg_price=Decimal("0.0000123"),
-            fee=Decimal("0.0000001"),
+            fee_msats=Decimal("0.0000001"),
+            fee_original=Decimal("0.00001"),
             fee_asset="BTC",
             raw_response={"orderId": 12345},
         )
@@ -49,8 +50,9 @@ class TestExchangeOrderResult:
         assert result.quote_qty == Decimal("0.00123456")
         assert result.status == "FILLED"
         assert result.avg_price == Decimal("0.0000123")
-        assert result.fee == Decimal("0.0000001")
+        assert result.fee_msats == Decimal("0.0000001")
         assert result.fee_asset == "BTC"
+        assert result.trade_quote is None  # Optional, defaults to None
 
     def test_create_order_result_buy_side(self):
         """Test creating a buy order result."""
@@ -64,7 +66,8 @@ class TestExchangeOrderResult:
             executed_qty=Decimal("0.001"),
             quote_qty=Decimal("50.25"),
             avg_price=Decimal("50250"),
-            fee=Decimal("0.05"),
+            fee_msats=Decimal("0.05"),
+            fee_original=Decimal("0.00005"),
             fee_asset="USDT",
             raw_response={},
         )
@@ -84,7 +87,8 @@ class TestExchangeOrderResult:
             executed_qty=Decimal("500"),  # Only half filled
             quote_qty=Decimal("0.005"),
             avg_price=Decimal("0.00001"),
-            fee=Decimal("0"),
+            fee_msats=Decimal("0"),
+            fee_original=Decimal("0"),
             fee_asset="BTC",
             raw_response={},
         )
@@ -105,7 +109,8 @@ class TestExchangeOrderResult:
             executed_qty=Decimal("0"),
             quote_qty=Decimal("0"),
             avg_price=Decimal("0"),
-            fee=Decimal("0"),
+            fee_msats=Decimal("0"),
+            fee_original=Decimal("0"),
             fee_asset="BTC",
             raw_response={},
         )
@@ -213,7 +218,8 @@ class TestExchangeProtocol:
                     executed_qty=quantity,
                     quote_qty=Decimal("0.001"),
                     avg_price=Decimal("0.00001"),
-                    fee=Decimal("0"),
+                    fee_msats=Decimal("0"),
+                    fee_original=Decimal("0"),
                     fee_asset=quote_asset,
                     raw_response={},
                 )
@@ -231,7 +237,8 @@ class TestExchangeProtocol:
                     executed_qty=quantity,
                     quote_qty=Decimal("50.0"),
                     avg_price=Decimal("0.00001"),
-                    fee=Decimal("0"),
+                    fee_msats=Decimal("0"),
+                    fee_original=Decimal("0"),
                     fee_asset=quote_asset,
                     raw_response={},
                 )
@@ -326,7 +333,8 @@ class TestBaseExchangeAdapter:
                     executed_qty=quantity,
                     quote_qty=quantity * Decimal("0.00001"),
                     avg_price=Decimal("0.00001"),
-                    fee=Decimal("0"),
+                    fee_msats=Decimal("0"),
+                    fee_original=Decimal("0"),
                     fee_asset=quote_asset,
                     raw_response={},
                 )
@@ -344,7 +352,8 @@ class TestBaseExchangeAdapter:
                     executed_qty=quantity,
                     quote_qty=quantity * Decimal("0.00001"),
                     avg_price=Decimal("0.00001"),
-                    fee=Decimal("0"),
+                    fee_msats=Decimal("0"),
+                    fee_original=Decimal("0"),
                     fee_asset=quote_asset,
                     raw_response={},
                 )

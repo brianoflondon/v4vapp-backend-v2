@@ -150,10 +150,10 @@ class QuoteResponse(BaseModel):
     QuoteResponse is a model that represents the response of cryptocurrency quotes.
 
     Attributes:
-        hive_usd (float): The price of HIVE in USD. Default is 0.
-        hbd_usd (float): The price of HBD in USD. Default is 0.
-        btc_usd (float): The price of BTC in USD. Default is 0.
-        hive_hbd (float): The price of HIVE in HBD. Default is 0.
+        hive_usd (Decimal): The price of HIVE in USD. Default is 0.
+        hbd_usd (Decimal): The price of HBD in USD. Default is 0.
+        btc_usd (Decimal): The price of BTC in USD. Default is 0.
+        hive_hbd (Decimal): The price of HIVE in HBD. Default is 0.
         raw_response (Dict[str, Any]): The raw response data. Default is an
             empty dictionary.
         fetch_date (datetime): The date and time when the data was fetched. Default is

@@ -12,7 +12,7 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceResult,
     add_pending_rebalance,
 )
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -68,30 +68,54 @@ async def exchange_accounting(
         return
 
     order_result = rebalance_result.order_result
-    # Get current quote for conversion
-    all_quotes = AllQuotes()
-    await all_quotes.get_all_quotes()
-    quote = all_quotes.quote
 
-    # TODO: This is still not working for sats to hive conversions
-    # Create CryptoConv from order_result
-    conv = CryptoConv(order_result=order_result, quote=quote)
-    logger.info(f"Exchange conversion details: {conv}")
+    # Use trade_quote from order_result - it now contains complete market rates
+    # with the actual trade execution rate for sats_hive
+    # Fall back to fetching current quote if trade_quote is not available
+    if order_result.trade_quote and order_result.trade_quote.btc_usd > 0:
+        trade_quote = order_result.trade_quote
+    else:
+        all_quotes = AllQuotes()
+        await all_quotes.get_all_quotes()
+        trade_quote = all_quotes.quote
+        logger.warning(
+            f"trade_quote not available or incomplete, using market quote. "
+            f"Order: {order_result.client_order_id}"
+        )
 
+    # Create CryptoConversion using the trade_quote
+    # SELL: We sold HIVE (executed_qty) and received BTC (quote_qty)
+    # BUY: We spent BTC (quote_qty) and received HIVE (executed_qty)
     if order_result.side.upper() == "BUY":
-        credit_unit = conv.conv_from
-        debit_unit = (
-            Currency.MSATS if credit_unit in [Currency.HIVE, Currency.HIVE] else Currency.HIVE
+        # BUY HIVE: Start from msats spent, derive HIVE received
+        msats_value = order_result.quote_qty * Decimal("100_000_000_000")
+        crypto_conversion = CryptoConversion(
+            conv_from=Currency.MSATS, value=msats_value, quote=trade_quote
         )
-        debit_amount = conv.value_in(debit_unit)
-        credit_amount = conv.value_in(credit_unit)
+        conv = crypto_conversion.conversion
+        debit_unit = Currency.MSATS
+        credit_unit = Currency.HIVE
+        debit_amount = conv.msats
+        credit_amount = conv.hive
     else:  # SELL
-        debit_unit = conv.conv_from
-        credit_unit = (
-            Currency.MSATS if debit_unit in [Currency.HIVE, Currency.HIVE] else Currency.HIVE
+        # SELL HIVE: Start from HIVE sold, derive msats received
+        crypto_conversion = CryptoConversion(
+            conv_from=Currency.HIVE, value=order_result.executed_qty, quote=trade_quote
         )
-        debit_amount = conv.value_in(debit_unit)
-        credit_amount = conv.value_in(credit_unit)
+        conv = crypto_conversion.conversion
+        debit_unit = Currency.HIVE
+        credit_unit = Currency.MSATS
+        debit_amount = conv.hive
+        credit_amount = conv.msats
+
+    # Create fee conversion from fee_msats using trade_quote for consistent rates
+    fee_conv = CryptoConv(
+        conv_from=Currency.MSATS,
+        value=order_result.fee_msats,
+        msats=order_result.fee_msats,
+        sats=order_result.fee_msats / Decimal("1000"),
+        quote=trade_quote,
+    )
 
     ledger_type = LedgerType.EXCHANGE_CONVERSION
     group_id_base = (
@@ -116,9 +140,9 @@ async def exchange_accounting(
     )
     await exchange_entry.save()
 
-    if order_result.fee_conv is not None:
-        fee_conv = order_result.fee_conv
-
+    # Record fee if there is one (fee_msats > 0)
+    if order_result.fee_msats > 0:
+        logger.info(f"Exchange fee conversion details: {fee_conv}")
         ledger_type = LedgerType.EXCHANGE_FEES
         fee_entry = LedgerEntry(
             ledger_type=ledger_type,
