@@ -79,7 +79,9 @@ def binance_testnet_adapter(mock_all_quotes):
     return adapter
 
 
-@pytest.mark.skip(reason="Interactive test - remove skip or run with: pytest -k test_market_buy_hive -v -s")
+@pytest.mark.skip(
+    reason="Interactive test - remove skip or run with: pytest -k test_market_buy_hive -v -s"
+)
 def test_market_buy_hive(binance_testnet_adapter):
     """
     Execute a REAL market BUY order for HIVE on Binance testnet.
