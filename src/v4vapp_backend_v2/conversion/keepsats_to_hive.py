@@ -68,6 +68,7 @@ from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 
+#TODO: #197 Fix the problem with negative balance from fees after conversion, need to pre-calc fee and deduct from sats before allowing conversion
 
 async def conversion_keepsats_to_hive(
     server_id: str,

@@ -142,7 +142,7 @@ async def exchange_accounting(
     if order_result.fee_msats > 0:
         logger.info(f"Exchange fee conversion details: {fee_conv}")
         ledger_type = LedgerType.EXCHANGE_FEES
-        fee_entry = LedgerEntry(
+        fee_entry = LedgerEntry(    
             ledger_type=ledger_type,
             short_id=rebalance_result.order_result.client_order_id,
             op_type="exchange_fee",
