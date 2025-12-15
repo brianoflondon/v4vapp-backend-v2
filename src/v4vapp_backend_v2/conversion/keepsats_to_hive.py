@@ -68,7 +68,8 @@ from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 
-#TODO: #197 Fix the problem with negative balance from fees after conversion, need to pre-calc fee and deduct from sats before allowing conversion
+# TODO: #197 Fix the problem with negative balance from fees after conversion, need to pre-calc fee and deduct from sats before allowing conversion
+
 
 async def conversion_keepsats_to_hive(
     server_id: str,
@@ -176,7 +177,10 @@ async def conversion_keepsats_to_hive(
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
-            sub=cust_id,  # Changed from server_id to cust_id for direct conversions
+            # sub=cust_id,  # Changed from server_id to cust_id for direct conversions
+            sub=server_id,
+            # I think this might need to be the server_id, because the fee is included in the amount of sats
+            # Taken and factored into the conversion already. 2025-12-15
         ),
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.fee_conv.msats,
