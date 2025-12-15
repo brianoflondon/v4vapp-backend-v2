@@ -108,7 +108,7 @@ class FixedHiveQuote(BaseModel):
         )
 
         # Create conversion
-        sats_send = (conv.msats + conv.msats_fee) // 1000
+        sats_send = int((conv.msats + conv.msats_fee) // 1000)
         # Create quote instance
         fixed_quote = cls(
             unique_id=str(uuid4())[:6],

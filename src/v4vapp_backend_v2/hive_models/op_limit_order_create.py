@@ -117,7 +117,7 @@ class LimitOrderCreate(OpBase):
     @property
     def log_str(self) -> str:
         ans = self._log_internal()
-        return f"{ans} {self.link}"
+        return f"{ans} {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:

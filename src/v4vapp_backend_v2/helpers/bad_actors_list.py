@@ -6,10 +6,10 @@ from typing import List, Set
 import httpx
 from aiocache import cached
 
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator
+from v4vapp_backend_v2.config.setup import InternalConfig
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def check_bad_hive_accounts(check_for: List[str]) -> bool:
     """
     Checks if any of the provided Hive account names are present in the bad accounts list.
@@ -27,7 +27,7 @@ async def check_bad_hive_accounts(check_for: List[str]) -> bool:
     return any(account in bad_accounts_set for account in check_for)
 
 
-@async_time_stats_decorator()
+# @async_time_stats_decorator()
 async def check_not_development_accounts(accounts: List[str]) -> bool:
     """
     Checks if any accounts are not allowed in development mode.

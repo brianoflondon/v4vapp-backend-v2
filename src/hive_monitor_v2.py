@@ -63,9 +63,9 @@ ICON = "🐝"
 
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
 
-# Define a global flag to track shutdown
+# Define a global flag to track shutdown and startup completion
+startup_complete_event = asyncio.Event()
 shutdown_event = asyncio.Event()
-
 
 BLOCK_LIST = [
     "95793083",
@@ -117,14 +117,23 @@ async def health_check() -> Dict[str, Any]:
 
     exceptions = []
     check_for_tasks = ["all_ops_loop", "store_rates"]
+    if not startup_complete_event.is_set():
+        logger.warning(f"{ICON} Startup not complete", extra={"notification": False})
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
-            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+            logger.warning(
+                f"{ICON} {task} task is not running",
+                extra={"notification": True, "error_code": "hive_monitor_task_failure"},
+            )
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    logger.debug(
+        f"{ICON} Health check passed",
+        extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
+    )
     return STATUS_OBJ.__dict__
 
 
@@ -564,8 +573,8 @@ async def all_ops_loop(
                         await op.get_witness_details(ignore_cache=False, time_delay=time_delay)
                         if op.producer in watch_witnesses:
                             notification = True
+                            db_store = True
                         log_it = True
-                        db_store = True
 
                 elif OpBase.proposals_tracked and isinstance(op, UpdateProposalVotes):
                     op.get_voter_details()
@@ -700,6 +709,10 @@ async def store_rates() -> None:
     except (asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.info(f"{ICON} store_rates cancelled or interrupted, exiting.")
         raise e
+    except Exception as e:
+        logger.exception(f"{ICON} Exception in store_rates: {e}", extra={"notification": False})
+        asyncio.create_task(store_rates(), name="store_rates")
+    return
 
 
 async def main_async_start(
@@ -737,7 +750,7 @@ async def main_async_start(
     logger.info(f"{ICON} Main Loop running in thread: {threading.get_ident()}")
 
     try:
-        await balance_server_hbd_level()
+        asyncio.create_task(balance_server_hbd_level(), name="initial_balance_hbd_level")
         # Create tasks so we can cancel them on shutdown_event
         await witness_check_startup()
         tasks = [
@@ -752,6 +765,11 @@ async def main_async_start(
             asyncio.create_task(store_rates(), name="store_rates"),
             asyncio.create_task(status_api.start(), name="status_api"),
         ]
+        startup_complete_event.set()
+        logger.info(
+            f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+            extra={"notification": True},
+        )
         # Wait until shutdown is requested
         await shutdown_event.wait()
         # Cancel tasks and wait for them to finish
@@ -879,8 +897,8 @@ def main(
     # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
-        f"{ICON}{Fore.WHITE}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL} pause: {time_delay:.2f}s",
-        extra={"notification": True},
+        f"{ICON}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name} pause: {time_delay:.2f}s",
+        extra={"notification": False},
     )
     # sleep for a random amount of time 0.1 to 0.8 seconds
     sleep(time_delay)

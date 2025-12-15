@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 from pprint import pprint
 from timeit import default_timer as timeit
 from typing import Any, Dict, List
@@ -154,7 +155,6 @@ async def send_test_custom_json(transfer: KeepsatsTransfer) -> Dict[str, Any]:
 async def clear_and_reset():
     db_conn = DBConn()
     await db_conn.setup_database()
-    await db_conn.db()["pending"].delete_many({})
     ledger_count = await get_ledger_count()
     trx = await send_server_balance_to_test()
     if trx:
@@ -171,6 +171,8 @@ async def clear_database():
     try:
         await db_conn.setup_database()
         db = db_conn.db()
+        await db["pending_rebalances"].delete_many({})
+        await db["rebalance_results"].delete_many({})
         await db["hive_ops"].delete_many({})
         await db["ledger"].delete_many({})
         await db["pending"].delete_many({})
@@ -223,7 +225,7 @@ async def send_hive_customer_to_server(
         conv = send_conv.conversion
         amount_to_send_msats = conv.msats + conv.msats_fee + 200_000
         amount_to_send_msats = conv.msats + conv.msats_fee + 200_000  # Adding a buffer for fees
-        amount_to_send_hive = (amount_to_send_msats // 1000) / conv.sats_hive
+        amount_to_send_hive = (amount_to_send_msats // Decimal(1000)) / conv.sats_hive
         hive_amount = Amount(f"{amount_to_send_hive:.3f} HIVE")
 
     else:

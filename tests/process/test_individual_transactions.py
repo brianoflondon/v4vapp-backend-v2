@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 import math
 import os
 from datetime import datetime
@@ -53,6 +54,8 @@ This must be run after the three watchers are running, as it relies on the watch
 
 
 """
+
+# pytest.skip("Skipping process tests", allow_module_level=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -272,8 +275,8 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     ledger_count_after_transfer = await get_ledger_count()
     print(f"Ledger count after transfer: {ledger_count_after_transfer}")
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
-    assert (net_msats_after - net_msats) // 1000 == 4500, (
-        f"Expected 4500, got {net_msats_after // 1000}"
+    assert (net_msats_after - net_msats) // Decimal(1000) == 4500, (
+        f"Expected 4500, got {net_msats_after // Decimal(1000)}"
     )
     assert net_msats_after is not None, "Failed to retrieve net msats"
 

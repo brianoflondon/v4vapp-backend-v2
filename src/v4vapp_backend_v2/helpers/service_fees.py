@@ -51,7 +51,7 @@ def limit_test(msats: Decimal = Decimal(0.0)) -> bool:
         V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
     """
     config_data = V4VConfig().data
-    sats = msats // 1000
+    sats = msats // Decimal(1000)
     if sats < config_data.minimum_invoice_payment_sats:
         raise V4VMinimumInvoice(
             f"{sats:,.0f} sats is below minimum invoice of {config_data.minimum_invoice_payment_sats} sats"

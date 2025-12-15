@@ -82,7 +82,7 @@ async def test_coin_gecko_quote_service_error(mocker):
 
 def mock_binance(mocker):
     """
-    Mocks the Binance Spot client to return predefined data for testing purposes.
+    Mocks the Binance get_client to return predefined data for testing purposes.
 
     Args:
         mocker: The pytest-mock fixture used to patch objects during testing.
@@ -91,14 +91,14 @@ def mock_binance(mocker):
         dict: The mocked Binance API response loaded from a JSON file.
 
     Notes:
-        - The function patches the `Spot` class in the `v4vapp_backend_v2.helpers.crypto_prices` module.
+        - The function patches the `get_client` function in the `v4vapp_backend_v2.helpers.crypto_prices` module.
         - The mocked response is loaded from the file `tests/data/crypto_prices/Binance.json`.
         - The JSON file should contain a key "raw_response" with the expected API response.
     """
-    mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
+    mock_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.get_client")
     with open("tests/data/crypto_prices/Binance.json") as f_in:
         binance_resp = json.load(f_in).get("raw_response")
-    mock_spot_client.return_value.book_ticker.return_value = binance_resp
+    mock_client.return_value.book_ticker.return_value = binance_resp
     return binance_resp
 
 
@@ -115,8 +115,8 @@ async def test_binance_quote_service(mocker):
 
 
 def mock_binance_error(mocker):
-    mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
-    mock_spot_client.return_value.book_ticker.side_effect = Exception("Test error")
+    mock_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.get_client")
+    mock_client.return_value.book_ticker.side_effect = Exception("Test error")
 
 
 @pytest.mark.asyncio
@@ -323,11 +323,11 @@ def load_and_mock_responses(mocker, failing_service):
     mocker.patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=mock_http_get))
 
     # Mock Binance
-    mock_spot_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.Spot")
+    mock_client = mocker.patch("v4vapp_backend_v2.helpers.crypto_prices.get_client")
     if failing_service == "Binance":
-        mock_spot_client.return_value.book_ticker.side_effect = Exception("Binance API error")
+        mock_client.return_value.book_ticker.side_effect = Exception("Binance API error")
     else:
-        mock_spot_client.return_value.book_ticker.return_value = binance_resp
+        mock_client.return_value.book_ticker.return_value = binance_resp
 
     # Mock Hive Internal Market
     _ = mocker.patch("v4vapp_backend_v2.hive.hive_extras.get_hive_client")

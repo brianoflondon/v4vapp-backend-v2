@@ -7,13 +7,10 @@ import logging.handlers
 import os
 import sys
 import time
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from enum import StrEnum
+from enum import StrEnum, auto
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Protocol
 
-from colorama import Fore, Style
 from dotenv import load_dotenv
 from packaging import version
 from pydantic import BaseModel, model_validator
@@ -24,6 +21,8 @@ from pymongo.operations import _IndexKeyHint
 from redis import Redis, RedisError
 from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
+
+from v4vapp_backend_v2.config.error_code_class import ErrorCode
 
 load_dotenv()
 logger = logging.getLogger("backend")  # __name__ is a common choice
@@ -100,11 +99,15 @@ class NotificationBotConfig(BaseConfig):
 
 
 class ApiKeys(BaseConfig):
-    binance_api_key: str = os.getenv("BINANCE_API_KEY", "")
-    binance_api_secret: str = os.getenv("BINANCE_API_SECRET", "")
-    binance_testnet_api_key: str = os.getenv("BINANCE_TESTNET_API_KEY", "")
-    binance_testnet_api_secret: str = os.getenv("BINANCE_TESTNET_API_SECRET", "")
     coinmarketcap: str = os.getenv("COINMARKETCAP_API_KEY", "")
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_none(cls, data: Any) -> dict:
+        """Handle case where api_keys exists in YAML but is empty/None."""
+        if data is None:
+            return {}
+        return data
 
 
 class TimeseriesConfig(BaseConfig):
@@ -159,6 +162,88 @@ class RedisConnectionConfig(BaseConfig):
     port: int = 6379
     db: int = 0
     kwargs: Dict[str, Any] = {}
+
+
+class ExchangeMode(StrEnum):
+    mainnet = auto()
+    testnet = auto()
+
+
+class ExchangeNetworkConfig(BaseConfig):
+    """Configuration for a specific exchange network (testnet or mainnet).
+
+    API credentials can be provided either:
+    - Directly via api_key/api_secret fields
+    - Via environment variable names in api_key_env_var/api_secret_env_var fields
+
+    The resolved api_key and api_secret properties will return the actual values,
+    checking env vars first if specified, then falling back to direct values.
+    """
+
+    base_url: str = ""
+    api_url: str = ""  # Alternative to base_url for some exchanges
+
+    # Direct API credentials (from config file)
+    api_key_name: str = ""
+    api_key: str = ""
+    api_secret: str = ""
+
+    # Environment variable names for API credentials
+    api_key_env_var: str = ""
+    api_secret_env_var: str = ""
+
+    @property
+    def resolved_api_key(self) -> str:
+        """Get the API key, resolving from env var if specified."""
+        if self.api_key_env_var:
+            return os.getenv(self.api_key_env_var, "")
+        return self.api_key
+
+    @property
+    def resolved_api_secret(self) -> str:
+        """Get the API secret, resolving from env var if specified."""
+        if self.api_secret_env_var:
+            return os.getenv(self.api_secret_env_var, "")
+        return self.api_secret
+
+
+class ExchangeProviderConfig(BaseConfig):
+    """Configuration for a single exchange provider (e.g., binance, vsc-exchange)."""
+
+    exchange_mode: ExchangeMode = ExchangeMode.testnet
+    testnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
+    mainnet: ExchangeNetworkConfig = ExchangeNetworkConfig()
+
+    @property
+    def use_testnet(self) -> bool:
+        return self.exchange_mode == ExchangeMode.testnet
+
+    @property
+    def active_network(self) -> ExchangeNetworkConfig:
+        """Get the currently active network config based on exchange_mode."""
+        return self.testnet if self.use_testnet else self.mainnet
+
+
+class ExchangeConfig(BaseConfig):
+    """
+    Configuration for exchange connections.
+
+    Supports multiple exchanges with testnet/mainnet configurations.
+    The default_exchange determines which exchange adapter to use.
+    """
+
+    default_exchange: str = "binance"
+    binance: ExchangeProviderConfig = ExchangeProviderConfig()
+    # vsc_exchange will be added when needed
+
+    def get_provider(self, name: str | None = None) -> ExchangeProviderConfig:
+        """Get provider config by name, defaults to default_exchange."""
+        provider_name = name or self.default_exchange
+        # Handle hyphenated names by converting to underscore for attribute access
+        attr_name = provider_name.replace("-", "_")
+        if hasattr(self, attr_name):
+            return getattr(self, attr_name)
+        raise ValueError(f"Unknown exchange provider: {provider_name}")
 
 
 class HiveRoles(StrEnum):
@@ -497,6 +582,8 @@ class Config(BaseModel):
 
     admin_config: AdminConfig = AdminConfig()
 
+    exchange_config: ExchangeConfig = ExchangeConfig()
+
     min_config_version: ClassVar[str] = "0.2.0"
 
     @model_validator(mode="after")
@@ -605,65 +692,6 @@ class Config(BaseModel):
 
 class LoggerFunction(Protocol):
     def __call__(self, msg: object, *args: Any, **kwargs: Any) -> None: ...
-
-
-@dataclass
-class ErrorCode:
-    code: Any
-    start_time: datetime
-    last_log_time: datetime
-
-    def __init__(self, code: Any):
-        self.code = code
-        self.start_time = datetime.now(tz=timezone.utc)
-        self.last_log_time = datetime.now(tz=timezone.utc)
-        logger.info(f"❌ {Fore.RED}Error code set: {self.code}{Style.RESET_ALL}")
-        super().__init__()
-
-    def __str__(self) -> str:
-        return f"{self.code} (elapsed: {self.elapsed_time}, since last log: {self.time_since_last_log})"
-
-    @property
-    def code_str(self) -> str:
-        return str(self.code)
-
-    @property
-    def elapsed_time(self) -> timedelta:
-        return datetime.now(tz=timezone.utc) - self.start_time
-
-    @property
-    def time_since_last_log(self) -> timedelta:
-        return datetime.now(tz=timezone.utc) - self.last_log_time
-
-    def reset_last_log_time(self) -> None:
-        self.last_log_time = datetime.now(tz=timezone.utc)
-
-    def check_time_since_last_log(self, interval: timedelta | int) -> bool:
-        """
-        Checks if the time elapsed since the last log entry is greater than or equal to the specified interval.
-        Args:
-            interval (timedelta | int): The time interval to check against. If an integer, it is treated as seconds. If a timedelta, its total seconds are used.
-        Returns:
-            bool: True if the time since the last log is at least the interval, False otherwise.
-        """
-
-        if isinstance(interval, timedelta):
-            interval_seconds = interval.total_seconds()
-        else:
-            interval_seconds = interval
-        return self.time_since_last_log >= timedelta(seconds=interval_seconds)
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Convert the ErrorCode to a dictionary with elapsed_time and time_since_last_log as strings.
-        """
-        return {
-            "code": self.code,
-            "start_time": self.start_time.isoformat(),
-            "last_log_time": self.last_log_time.isoformat(),
-            "elapsed_time": str(self.elapsed_time),
-            "time_since_last_log": str(self.time_since_last_log),
-        }
 
 
 # MARK: InternalConfig class
@@ -1132,6 +1160,16 @@ class InternalConfig:
         if self.config.lnd_config.default:
             return self.config.lnd_config.default
         return ""
+
+    @property
+    def binance_config(self) -> ExchangeProviderConfig:
+        """
+        Shortcut to get the binance exchange provider config.
+
+        Returns:
+            ExchangeProviderConfig: The Binance exchange provider configuration.
+        """
+        return self.config.exchange_config.get_provider("binance")
 
 
 """

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from decimal import Decimal
 
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import AioRpcError
@@ -240,7 +241,7 @@ async def send_lightning_to_pay_req(
     cust_id: str = "",
     paywithsats: bool = False,
     chat_message: str = "",
-    amount_msat: int = 0,
+    amount_msat: Decimal = Decimal(0),
     fee_limit_ppm: int = 0,
 ) -> Payment:
     """
@@ -434,7 +435,7 @@ async def log_payment_in_process(payment_id: str, response_queue: asyncio.Queue)
             break
 
 
-def test_zero_value_pay_req(pay_req: PayReq, amount_msat: int) -> tuple[bool, int]:
+def test_zero_value_pay_req(pay_req: PayReq, amount_msat: Decimal) -> tuple[bool, Decimal]:
     """
     Checks if the given payment request (`pay_req`) is a zero-value invoice and determines
     the effective payment amount in millisatoshis.
@@ -458,5 +459,5 @@ def test_zero_value_pay_req(pay_req: PayReq, amount_msat: int) -> tuple[bool, in
 
     if zero_value_pay_req and amount_msat > 0:
         logger.info(f"Payment amount is zero in pay_req, using amount_msat: {amount_msat} msat")
-    payment_amount_msat = max(pay_req.value_msat, (pay_req.value * 1000), amount_msat)
-    return zero_value_pay_req, payment_amount_msat
+    payment_amount_msat = max(pay_req.value_msat, (pay_req.value * Decimal(1000)), amount_msat)
+    return zero_value_pay_req, Decimal(payment_amount_msat)

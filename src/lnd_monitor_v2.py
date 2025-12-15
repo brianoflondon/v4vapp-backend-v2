@@ -43,7 +43,8 @@ ICON = "⚡"
 
 app = typer.Typer()
 
-# Define a global flag to track shutdown
+# Define a global flag to track shutdown and startup completion
+startup_complete_event = asyncio.Event()
 shutdown_event = asyncio.Event()
 
 
@@ -78,13 +79,23 @@ async def health_check() -> Dict[str, Any]:
 
     exceptions = []
     check_for_tasks = ["invoices_loop", "payments_loop", "htlc_events_loop", "channel_events_loop"]
+    if not startup_complete_event.is_set():
+        logger.info(f"{ICON} LND Monitor Startup not complete", extra={"notification": False})
+        return STATUS_OBJ.__dict__
     for task in check_for_tasks:
         if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
             exceptions.append(f"{task} task is not running")
-            logger.warning(f"{ICON} {task} task is not running", extra={"notification": True})
+            logger.warning(
+                f"{ICON} {task} task is not running",
+                extra={"notification": True, "error_code": "hive_monitor_task_failure"},
+            )
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
+    logger.debug(
+        f"{ICON} Health check passed",
+        extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
+    )
     return STATUS_OBJ.__dict__
 
 
@@ -1189,7 +1200,6 @@ async def main_async_start(connection_name: str) -> None:
                         name="synchronize_db",
                     )
                 )
-
             running_tasks += [
                 asyncio.create_task(
                     htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
@@ -1200,7 +1210,14 @@ async def main_async_start(connection_name: str) -> None:
                     name="channel_events_loop",
                 ),
             ]
-
+            startup_complete_event.set()
+            lnd_node = InternalConfig().config.lnd_config.default
+            icon = InternalConfig().config.lnd_config.connections[lnd_node].icon
+            logger.info(
+                f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
+                f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
+                extra={"notification": True},
+            )
             # Wait for shutdown signal, then cancel streams immediately
             await shutdown_event.wait()
             for t in running_tasks:
@@ -1321,7 +1338,7 @@ def main(
     logger.info(
         f"{icon}{Fore.WHITE}✅ LND gRPC client started. "
         f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
-        extra={"notification": True},
+        extra={"notification": False},
     )
     asyncio.run(main_async_start(lnd_node))
     logger.info("👋 Goodbye!")

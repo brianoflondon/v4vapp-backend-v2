@@ -110,6 +110,8 @@ def market_trade(
 
         hive = get_hive_client(keys=hive_acc.keys, nobroadcast=nobroadcast)
         quote = check_order_book(amount, hive, use_cache=use_cache)
+        if not quote:
+            raise ValueError("No quote available for the trade")
         price_float = float(quote.price["price"])
 
         if amount.symbol == "HIVE":
@@ -141,6 +143,7 @@ def market_trade(
     except Exception as e:
         logger.warning(
             f"{icon} Market Trade error: {e}",
+            exc_info=True,
             extra={"notification": False, "quote": quote, "error": e},
         )
         raise e
@@ -248,7 +251,7 @@ if __name__ == "__main__":
     #     account_trade(HiveAccountConfig(name="v4vapp-test"), Amount("14 HIVE"))
     # except Exception as e:
     #     logger.info(f"{icon} {e}")
-
+    InternalConfig(config_filename="devhive.config.yaml")
     try:
         trade = Amount("0.2 HBD")
         trx = market_trade(HiveAccountConfig(name="v4vapp-test"), trade)

@@ -36,6 +36,7 @@ Notes:
 - The function updates the tracked operation with conversion details and change amounts.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
@@ -46,6 +47,8 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
+from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
@@ -249,6 +252,15 @@ async def conversion_hive_to_keepsats(
     trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)
     logger.info(
         f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
+    )
+
+    asyncio.create_task(
+        rebalance_queue_task(
+            direction=RebalanceDirection.SELL_BASE_FOR_QUOTE,
+            currency=from_currency,
+            hive_qty=conv_result.to_convert_conv.hive,
+            tracked_op=tracked_op,
+        )
     )
 
 

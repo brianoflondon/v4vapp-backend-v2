@@ -7,13 +7,19 @@ from urllib.parse import quote_plus
 from pymongo import AsyncMongoClient, MongoClient, timeout
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
-from pymongo.errors import CollectionInvalid, OperationFailure
+from pymongo.errors import CollectionInvalid, OperationFailure, ServerSelectionTimeoutError
 
 from v4vapp_backend_v2.config.setup import CollectionConfig, InternalConfig, logger
 
 app_name = os.path.basename(sys.argv[0])
 
 DATABASE_ICON = "📁"
+
+
+class DBConnConnectionException(Exception):
+    """Custom exception for database connection errors."""
+
+    pass
 
 
 class DBConn:
@@ -246,12 +252,20 @@ class DBConn:
 
         This method establishes a connection to the database, sets up the user,
         and prepares the collections and indexes as defined in the configuration.
+
+        Raises:
+            DBConnConnectionException: If there is an error connecting to the database.
         """
         InternalConfig.db_uri = self.uri
         if not self._setup:
             self._setup = True
+            # Use a reasonable timeout for the admin client setup
+            # CI environments may need more time for MongoDB to be ready
             admin_client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
-                self.admin_uri, tz_aware=True
+                self.admin_uri,
+                tz_aware=True,
+                connectTimeoutMS=600_000,
+                serverSelectionTimeoutMS=30_000,
             )
             async with admin_client:
                 await self.setup_user(admin_client=admin_client)
@@ -312,8 +326,14 @@ class DBConn:
                     f"{DATABASE_ICON} {logger.name} Failed to create user {self.db_user}: {e}",
                     extra={"error": str(e), "create_user": create_user},
                 )
-                raise e
+                raise DBConnConnectionException("Failed to create database user.") from e
             pass
+        except ServerSelectionTimeoutError as e:
+            logger.error(
+                "Database server selection timed out. Can't proceed", extra={"error": str(e)}
+            )
+            raise DBConnConnectionException("Database server selection timed out.") from e
+
         except Exception as e:
             create_user = {} if not create_user else create_user
             logger.error(

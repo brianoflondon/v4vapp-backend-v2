@@ -322,7 +322,7 @@ class Invoice(TrackedBaseModel):
         """
         return self.r_hash
 
-    @property
+    @computed_field
     def short_id(self) -> str:
         """
         Returns a short identifier for the payment, which is the first 10 characters of the payment hash.
@@ -337,7 +337,7 @@ class Invoice(TrackedBaseModel):
         Returns:
             str: A string representation of the invoice.
         """
-        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo}"
+        return f"Invoice {self.r_hash[:6]} ({self.value} sats) - {self.memo} {self.short_id}"
 
     @property
     def log_extra(self) -> dict:
@@ -379,7 +379,7 @@ class Invoice(TrackedBaseModel):
             unique_id = match.group(1)  # Extract the captured group (the 6-char UUID)
             try:
                 quote = FixedHiveQuote.check_quote(
-                    unique_id, self.value_msat // 1000
+                    unique_id, int(self.value_msat // 1000)
                 )  # Pass just the UUID string
                 if quote:
                     return quote

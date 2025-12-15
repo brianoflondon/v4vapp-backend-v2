@@ -113,6 +113,7 @@ class CryptoConv(BaseModel):
         converted_value: float | Decimal | None = None,
         timestamp: datetime | None = None,
         quote: QuoteResponse | None = None,
+        order_result: Any | None = None,
         **data: Any,
     ):
         if recalc_conv_from and value and quote:
@@ -151,6 +152,47 @@ class CryptoConv(BaseModel):
                 data["msats"] = data["sats"] * 1000
                 data["btc"] = data["msats"] / 100_000_000_000
                 data["usd"] = round(float(data["sats"] / quote.sats_usd_p), 6)
+
+        if order_result and quote:
+            side = order_result.side
+            executed_qty = Decimal(str(order_result.executed_qty))
+            quote_qty = Decimal(str(order_result.quote_qty))
+            symbol = order_result.symbol
+            if "HBD" in symbol.upper():
+                base_currency = Currency.HBD
+            else:
+                base_currency = Currency.HIVE
+            msats = quote_qty * Decimal(100_000_000_000)
+            data["hive"] = (
+                executed_qty if base_currency == Currency.HIVE else executed_qty / quote.hive_hbd
+            )
+            data["hbd"] = (
+                executed_qty if base_currency == Currency.HBD else executed_qty * quote.hive_hbd
+            )
+
+            data["conv_from"] = Currency.MSATS
+            data["value"] = msats
+            data["msats"] = msats
+            # Calculate sats, msats, usd
+            data["btc"] = data["msats"] / Decimal(100_000_000_000)
+            data["sats"] = data["msats"] / Decimal(1000)
+            data["usd"] = float(data["sats"] / quote.sats_usd_p)
+            data["source"] = "Exchange Trade"
+            data["fetch_date"] = datetime.now(tz=timezone.utc)
+            # Calculate actual trade rates
+            # TODO: This is still not working for sats to hive conversions
+            # executed_qty: HIVE/HBD sold, quote_qty: BTC received
+            sats_per_base = (quote_qty * Decimal(100_000_000)) / executed_qty
+            if base_currency == Currency.HIVE:
+                data["sats_hive"] = sats_per_base
+            else:
+                data["sats_hbd"] = sats_per_base
+
+            # Optionally set the other rate from quote if available
+            if hasattr(quote, "sats_hive_p") and "sats_hive" not in data:
+                data["sats_hive"] = quote.sats_hive_p
+            if hasattr(quote, "sats_hbd_p") and "sats_hbd" not in data:
+                data["sats_hbd"] = quote.sats_hbd_p
 
         super().__init__(**data)
         # If msats is not set, calculate it from the other values
@@ -260,7 +302,7 @@ class CryptoConv(BaseModel):
             V4VMaximumInvoice: If the amount is greater than the configured maximum invoice payment in satoshis.
 
         """
-        limit_test_result = limit_test(float(self.msats))
+        limit_test_result = limit_test(Decimal(self.msats))
         return limit_test_result
 
     @computed_field

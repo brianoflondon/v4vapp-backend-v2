@@ -21,7 +21,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
 )
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -62,8 +62,8 @@ def get_limit_entries():
     ]
 
 
+# @async_time_stats_decorator()
 @router.get("/data")
-@async_time_stats_decorator()
 async def users_data_api():
     """API endpoint to fetch user data asynchronously"""
     start = timer()

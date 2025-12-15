@@ -1,4 +1,5 @@
 import argparse
+from decimal import Decimal
 import socket
 from typing import Any, Dict
 
@@ -130,17 +131,21 @@ async def fixed_quote(
 
 
 @crypto_v1_router.get("/binance/")
-async def binance() -> Dict[str, Any]:
+async def binance() -> Dict[str, str | int | float]:
+    if InternalConfig().config.development.enabled:
+        testnet = True
+    else:
+        testnet = False
     try:
-        balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=False)
+        balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=testnet)
         logger.info(f"{ICON} Binance balances: {balances}")
     except BinanceErrorBadConnection:
         return {"error": "Bad connection"}
     return {
-        "BTC": balances.get("BTC", 0.0),
-        "HIVE": balances.get("HIVE", 0.0),
-        "USDT": balances.get("USDT", 0.0),
-        "SATS": balances.get("SATS", 0),
+        "BTC": float(balances.get("BTC", 0.0)),
+        "HIVE": float(balances.get("HIVE", 0.0)),
+        "USDT": float(balances.get("USDT", 0.0)),
+        "SATS": int(balances.get("SATS", 0)),
     }
 
 
@@ -196,7 +201,7 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
     if transfer.sats <= 0:
         message = "Minimum is 0 sats"
 
-    if transfer.sats and net_msats // 1000 < transfer.sats:
+    if transfer.sats and net_msats // Decimal(1000) < transfer.sats:
         message = "Insufficient funds"
 
     if message:
@@ -204,9 +209,9 @@ async def transfer_keepsats(transfer: KeepsatsTransferExternal) -> KeepsatsTrans
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": message,
-                "balance": net_msats // 1000,
+                "balance": net_msats // Decimal(1000),
                 "requested": transfer.sats,
-                "deficit": transfer.sats - (net_msats // 1000),
+                "deficit": transfer.sats - (net_msats // Decimal(1000)),
             },
         )
 
@@ -267,9 +272,9 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "message": "Insufficient funds",
-                "balance": net_msats // 1000,
+                "balance": net_msats // Decimal(1000),
                 "requested": convert.sats,
-                "deficit": convert.sats - (net_msats // 1000),
+                "deficit": convert.sats - (net_msats // Decimal(1000)),
             },
         )
     if convert.memo:

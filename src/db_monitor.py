@@ -244,7 +244,10 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 ledger_entries = await process_tracked_event(op)
                 logger.info(
                     f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
-                    extra={"op": op},
+                    extra={
+                        **op.log_extra,
+                        "ledger_entries": [le.model_dump() for le in ledger_entries],
+                    },
                 )
                 return
             except ValueError as e:

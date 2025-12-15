@@ -8,7 +8,6 @@ from timeit import default_timer as timer
 from typing import Annotated, Any, ClassVar, Dict, List
 
 import httpx
-from binance.spot import Spot  # type: ignore
 from bson import Decimal128
 from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
@@ -18,6 +17,7 @@ from v4vapp_backend_v2.database.db_retry import (
     mongo_call,
     summarize_write_result,  # optional pretty log
 )
+from v4vapp_backend_v2.helpers.binance_extras import get_client
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     convert_decimals_for_mongodb,
@@ -957,14 +957,10 @@ class Binance(QuoteService):
             Exception: If an error occurs during the API call or data processing,
             it is caught and logged, and an error response is returned.
         """
-        internal_config = InternalConfig()
-        api_keys_config = internal_config.config.api_keys
+
         try:
             # raise Exception("debug")
-            client = Spot(
-                api_key=api_keys_config.binance_api_key,
-                api_secret=api_keys_config.binance_api_secret,
-            )
+            client = get_client()
             ticker_info = client.book_ticker(symbols=["HIVEUSDT", "HIVEBTC", "BTCUSDT"])
             medians = {}
             for ticker in ticker_info:

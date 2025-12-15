@@ -474,9 +474,9 @@ async def account_balance_printout_grouped_by_customer(
                         ledger_type = row.ledger_type
 
                         # Raw numeric values
-                        debit_val = row.amount if row.side == "debit" and row.unit == unit else 0.0
+                        debit_val = row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
                         credit_val = (
-                            row.amount if row.side == "credit" and row.unit == unit else 0.0
+                            row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
                         )
 
                         # Update running total
@@ -644,7 +644,7 @@ async def check_hive_conversion_limits(
         - If Lightning rate limits are not configured, a warning is logged and an empty list is returned.
         - The function checks conversions for each configured limit window and determines if the account is within limits.
     """
-    extra_spend_sats = extra_spend_msats // 1000  # Convert msats to sats
+    extra_spend_sats = extra_spend_msats // Decimal(1000)  # Convert msats to sats
 
     pipeline = limit_check_pipeline(
         cust_id=cust_id, details=False, extra_spend_sats=extra_spend_sats
@@ -705,7 +705,7 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, int] | N
     # Find the oldest transaction
     oldest_entry = min(details, key=lambda x: x["timestamp"])
     oldest_ts = oldest_entry["timestamp"]
-    sats_freed = oldest_entry["credit_conv"]["msats"] // 1000  # Convert msats to sats
+    sats_freed = oldest_entry["credit_conv"]["msats"] // Decimal(1000)  # Convert msats to sats
 
     expiry = oldest_ts + timedelta(hours=first_limit.hours)
     return expiry, sats_freed

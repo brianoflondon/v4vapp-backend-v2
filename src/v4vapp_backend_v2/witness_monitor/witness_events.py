@@ -36,11 +36,6 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
     Raises:
         None: Exceptions are caught internally and logged.
     """
-
-    logger.info(
-        f"Witness Event: {tracked_op.op_type:<16} for {tracked_op.producer}",
-        extra={"notification": False},
-    )
     if tracked_op.producer not in InternalConfig().config.hive.watch_witnesses:
         return
     witness_config = InternalConfig().config.hive.witness_configs.get(tracked_op.producer, None)

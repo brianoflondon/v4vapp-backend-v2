@@ -46,10 +46,10 @@ class ProducerReward(ProducerRewardRaw):
                 f"Missed: {self.witness.missed_blocks} | "
                 f"Rank: {self.witness.rank} | {self.producer} | "
                 f"Key: {self.witness.signing_key[-5:]} | {self.witness.witness_machine} "
-                f"{self.age_str}"
+                f"{self.age_str} {self.short_id}"
             )
             return log_str
-        return f"{self.block_num:,} {self.producer} {self.link} {self.age_str}"
+        return f"{self.block_num:,} {self.producer} {self.link} {self.age_str} {self.short_id}"
 
     @property
     def notification_str(self):

@@ -11,6 +11,7 @@ from tests.get_last_quote import last_quote
 from tests.utils import fake_trx_id, latest_block_num
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceResult
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -35,6 +36,14 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def mock_hive_to_keepsats_deps():
+    # Create a mock RebalanceResult
+    mock_rebalance_result = RebalanceResult(
+        executed=False,
+        reason="Below minimum threshold (mocked)",
+        pending_qty=Decimal("10.0"),
+        pending_notional=Decimal("0.0001"),
+    )
+
     with (
         patch(
             "v4vapp_backend_v2.conversion.hive_to_keepsats.send_transfer_custom_json"
@@ -42,6 +51,10 @@ def mock_hive_to_keepsats_deps():
         patch.object(LedgerEntry, "save", new_callable=AsyncMock) as mock_save,
         patch.object(TrackedBaseModel, "save", new_callable=AsyncMock) as mock_tracked_save,
         patch.object(TrackedBaseModel, "update_conv", new_callable=AsyncMock) as mock_update_conv,
+        patch(
+            "v4vapp_backend_v2.conversion.exchange_rebalance.add_pending_rebalance",
+            new_callable=AsyncMock,
+        ) as mock_rebalance,
     ):
         mock_transfer.return_value = {
             "trx_id": fake_trx_id(),
@@ -52,7 +65,12 @@ def mock_hive_to_keepsats_deps():
         mock_save.return_value = None
         mock_tracked_save.return_value = None
         mock_update_conv.return_value = None
-        yield {"send_transfer": mock_transfer, "ledger_save": mock_save}
+        mock_rebalance.return_value = mock_rebalance_result
+        yield {
+            "send_transfer": mock_transfer,
+            "ledger_save": mock_save,
+            "rebalance": mock_rebalance,
+        }
 
 
 async def test_conversion_hive_to_keepsats_with_change(mock_hive_to_keepsats_deps):

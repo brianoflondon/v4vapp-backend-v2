@@ -109,7 +109,7 @@ class UpdateProposalVotes(OpBase):
 
     @property
     def log_str(self) -> str:
-        return f"{self._log_common()} {self.link}"
+        return f"{self._log_common()} {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:

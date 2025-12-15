@@ -316,22 +316,21 @@ async def get_verified_hive_client(
         HiveToLightningError: If the server account configuration or required keys are missing.
     """
     hive_config = InternalConfig().config.hive
-
     hive_account = hive_config.get_hive_role_account(hive_role)
-
     if not hive_account:
         raise HiveToLightningError("Missing Hive server account configuration for repayment")
 
     memo_key = hive_account.memo_key or ""
     active_key = hive_account.active_key or ""
-    if not memo_key or not active_key:
+    posting_key = hive_account.posting_key or ""
+
+    keys = [key for key in [memo_key, active_key, posting_key] if key]
+
+    if not keys:
         raise HiveToLightningError("Missing Hive server account keys for repayment")
 
     hive_client = get_hive_client(
-        keys=[
-            hive_account.memo_key,
-            hive_account.active_key,
-        ],
+        keys=keys,
         nobroadcast=nobroadcast,
     )
     return hive_client, hive_account.name
@@ -890,14 +889,7 @@ async def send_transfer(
                 f"Transfer sent{check_nobroadcast}: {from_account} -> {to_account} | "
                 f"Amount: {amount.amount_decimal:.3f} {amount.symbol} | "
                 f"Memo: {memo} {trx.get('trx_id', '')}",
-                extra={
-                    "notification": True,
-                    "to_account": to_account,
-                    "from_account": from_account,
-                    "amount": amount.amount_decimal,
-                    "symbol": amount.symbol,
-                    "memo": memo,
-                },
+                extra={**store_pending.log_extra},
             )
             return trx
 

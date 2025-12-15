@@ -3,15 +3,14 @@ import datetime as dt
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import OrderedDict, override
 
+from colorama import Fore, Style
+
+from v4vapp_backend_v2.config.error_code_class import ErrorCode
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
-from v4vapp_backend_v2.config.setup import (
-    BASE_DISPLAY_LOG_LEVEL,
-    ErrorCode,
-    InternalConfig,
-    logger,
-)
+from v4vapp_backend_v2.config.setup import BASE_DISPLAY_LOG_LEVEL, InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -94,9 +93,15 @@ class MyJSONFormatter(logging.Formatter):
             str: The formatted log message as a JSON string, or the result of the
                  parent class's format method if an error occurs.
         """
+
+        def json_default(o):
+            if isinstance(o, Decimal):
+                return float(round(o, 11))
+            return str(o)
+
         try:
             message = self._prepare_log_dict(record)
-            ans_str = json.dumps(message, default=str)
+            ans_str = json.dumps(message, default=json_default)
             if hasattr(record, "error_code"):
                 error_code = record.error_code  # type: ignore[attr-defined]
                 error_state = InternalConfig().error_codes.get(error_code, None)
@@ -118,6 +123,21 @@ class MyJSONFormatter(logging.Formatter):
             return super().format(record)
 
     def _prepare_log_dict(self, record: logging.LogRecord):
+        """
+        Prepares a dictionary representation of the given log record for structured logging.
+
+        This method constructs a dictionary containing key log information, including a human-readable
+        timestamp, ISO-formatted timestamp, message, and optional exception or stack information.
+        It incorporates custom format keys from self.fmt_keys, adds any extra attributes from the
+        record not in the built-in attributes, and ensures 'human_time' is positioned after 'level'
+        in the resulting OrderedDict.
+
+        Args:
+            record (logging.LogRecord): The log record to process.
+
+        Returns:
+            OrderedDict: A dictionary with the prepared log data, ordered with 'human_time' after 'level'.
+        """
         human_readable_str = human_readable_datetime_str(
             dt.datetime.fromtimestamp(record.created, tz=dt.timezone.utc)
         )
@@ -261,11 +281,12 @@ class ErrorTrackingFilter(logging.Filter):
                     error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=0)
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
-                InternalConfig().error_codes.pop(error_code_clear)
-                logger.debug(
-                    f"✅ Error code {error_code_clear} cleared after {elapsed_time_str}",
-                    extra={"notification": False},
+                logger.info(
+                    f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
+                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}",
+                    extra={"notification": True, "error_code_obj": error_code_obj},
                 )
+                InternalConfig().error_codes.pop(error_code_clear)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
             record._error_tracking_result = True  # type: ignore[attr-defined]
             return True  # Allow the clear message through
@@ -282,7 +303,15 @@ class ErrorTrackingFilter(logging.Filter):
 
             if error_code not in InternalConfig().error_codes:
                 # New error code - add it and allow the log through
-                InternalConfig().error_codes[error_code] = ErrorCode(code=error_code)
+                error_code_obj = ErrorCode(code=error_code, message=record.getMessage())
+                InternalConfig().error_codes[error_code_obj.code] = error_code_obj
+                logger.error(
+                    f"❌ New error: {error_code}",
+                    extra={
+                        "notification": True,
+                        "error_code_obj": error_code_obj,
+                    },
+                )
                 record._error_tracking_processed = True  # type: ignore[attr-defined]
                 record._error_tracking_result = True  # type: ignore[attr-defined]
                 return True
@@ -406,6 +435,7 @@ class AddNotificationBellFilter(logging.Filter):
 
 IGNORE_REPORT_FIELDS = LOG_RECORD_BUILTIN_ATTRS | {
     "notification",
+    "notification_str",
     "_error_tracking_processed",
     "_error_tracking_result",
 }

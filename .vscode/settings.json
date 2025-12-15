@@ -8,11 +8,14 @@
         "colorama",
         "convertbits",
         "convertkeepsats",
+        "cummulative",
         "dedupe",
         "devhive",
         "devser",
         "devtre",
         "errmsg",
+        "ETHBTC",
+        "ETHUSDT",
         "filterwarnings",
         "grpcio",
         "healthcheck",
@@ -20,6 +23,7 @@
         "htlc",
         "imac",
         "INITDB",
+        "INVALIDBTC",
         "invoicesrpc",
         "invoicesstub",
         "jsonmetadata",
@@ -69,5 +73,5 @@
         "titleBar.activeBackground": "#6F1B69",
         "titleBar.activeForeground": "#FDF8FD"
     },
-    "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter",
+    "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter"
 }

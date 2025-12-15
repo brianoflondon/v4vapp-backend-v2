@@ -2,7 +2,6 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from pprint import pprint
 from typing import List
 
 import httpx
@@ -309,8 +308,7 @@ class V4VConfig:
         self.timestamp = datetime.now(tz=timezone.utc)
         # Overwrite hive params into the Config.
         try:
-            logger.info(f"{ICON} Updating Hive settings")
-            pprint(new_meta)
+            logger.info(f"{ICON} Updating Hive settings", extra={"hive_config": new_meta})
             trx = acc.update_account_jsonmetadata(new_meta)
             logger.info(
                 f"{ICON} Settings in Hive changed: {trx.get('trx_id')}",

@@ -356,8 +356,8 @@ class CustomJson(OpBase):
     def log_str(self) -> str:
         # check if self.json_data has method log_str
         if hasattr(self.json_data, "log_str"):
-            return f"{self.json_data.log_str} {self.link}"
-        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.link}"
+            return f"{self.json_data.log_str} {self.link} {self.short_id}"
+        return f"{self.block_num:,} | {self.age:.2f} | {self.timestamp:%Y-%m-%d %H:%M:%S} {self.realm:<8} | {self.cj_id[:19]:>20} | {self.op_in_trx:<3} | {self.link} {self.short_id}"
 
     @property
     def notification_str(self) -> str:
