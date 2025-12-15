@@ -239,7 +239,23 @@ class BinanceAdapter(BaseExchangeAdapter):
     def _convert_result(
         self, result: MarketOrderResult, side: str, requested_qty: Decimal
     ) -> ExchangeOrderResult:
-        """Convert Binance result to standardized ExchangeOrderResult."""
+        """
+        Convert Binance result to standardized ExchangeOrderResult.
+
+        This method processes the raw market order result from Binance, extracts fee information
+        from the fills, converts the fee to a CryptoConv object in msats, and constructs a
+        standardized ExchangeOrderResult object.
+
+        Args:
+            result (MarketOrderResult): The market order result returned by Binance, containing
+                details like order ID, status, executed quantity, average price, and fills.
+            side (str): The side of the order, typically 'buy' or 'sell'.
+            requested_qty (Decimal): The originally requested quantity for the order.
+
+        Returns:
+            ExchangeOrderResult: A standardized object representing the exchange order result,
+                including exchange name, symbol, order details, fees, and raw response.
+        """
         # Extract fee info from fills
         total_fee = Decimal("0")
         fee_asset = ""

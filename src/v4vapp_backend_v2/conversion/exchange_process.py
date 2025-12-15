@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, ExpenseAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.actions.tracked_any import TrackedTransferKeepsatsToHive
@@ -94,12 +94,15 @@ async def exchange_accounting(
         credit_amount = conv.value_in(credit_unit)
 
     ledger_type = LedgerType.EXCHANGE_CONVERSION
+    group_id_base = (
+        f"{rebalance_result.order_result.exchange}_{rebalance_result.order_result.client_order_id}"
+    )
     exchange_entry = LedgerEntry(
         ledger_type=ledger_type,
         short_id=rebalance_result.order_result.client_order_id,
         op_type="exchange_trade",
         cust_id=tracked_op.cust_id,
-        group_id=f"{rebalance_result.order_result.exchange}_{rebalance_result.order_result.client_order_id}",
+        group_id=f"{group_id_base}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=rebalance_result.log_str,
         debit=AssetAccount(name="Exchange Holdings", sub=rebalance_result.order_result.exchange),
@@ -113,5 +116,31 @@ async def exchange_accounting(
     )
     await exchange_entry.save()
 
-    # TODO: Handle the exchange fees
+    if order_result.fee_conv is not None:
+        fee_conv = order_result.fee_conv
+
+        ledger_type = LedgerType.EXCHANGE_FEES
+        fee_entry = LedgerEntry(
+            ledger_type=ledger_type,
+            short_id=rebalance_result.order_result.client_order_id,
+            op_type="exchange_fee",
+            cust_id=tracked_op.cust_id,
+            group_id=f"{group_id_base}_{ledger_type.value}",
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Exchange fee for {rebalance_result.log_str}",
+            debit=ExpenseAccount(
+                name="Exchange Fees Paid", sub=rebalance_result.order_result.exchange
+            ),
+            debit_unit=Currency.MSATS,
+            debit_amount=fee_conv.msats,
+            debit_conv=fee_conv,
+            credit=AssetAccount(
+                name="Exchange Holdings", sub=rebalance_result.order_result.exchange
+            ),
+            credit_unit=Currency.MSATS,
+            credit_amount=fee_conv.msats,
+            credit_conv=fee_conv,
+        )
+        await fee_entry.save()
+
     return

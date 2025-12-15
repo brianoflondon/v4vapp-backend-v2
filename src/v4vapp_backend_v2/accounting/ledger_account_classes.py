@@ -233,6 +233,7 @@ class ExpenseAccount(LedgerAccount):
         "Hosting Expenses Voltage",
         "Fee Expenses Lightning",
         "Fee Expenses Hive",
+        "Exchange Fees Paid",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"

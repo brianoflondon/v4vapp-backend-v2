@@ -77,7 +77,7 @@ class ExchangeOrderResult(BaseModel):
     avg_price: Decimal  # Average execution price
     fee: Decimal  # Total fees paid
     fee_asset: str  # Asset used for fees (e.g., "BTC", "BNB")
-    fee_conv: CryptoConv | None = None  # Conversion of fee to sats/msats for tracking
+    fee_conv: CryptoConv | None  # CryptoConv for fee conversion details
     raw_response: dict  # Original exchange response for debugging
 
     # Optional: base and quote assets for formatting (can be inferred from symbol)

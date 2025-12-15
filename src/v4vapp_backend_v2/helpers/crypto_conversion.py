@@ -9,6 +9,7 @@ from bson.decimal128 import Decimal128
 from nectar.amount import Amount
 from pydantic import BaseModel, Field, computed_field, field_validator
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
@@ -116,6 +117,37 @@ class CryptoConv(BaseModel):
         order_result: Any | None = None,
         **data: Any,
     ):
+        """
+        Initialize a CryptoConversion instance with various parameters for handling cryptocurrency conversions.
+        This method processes the provided parameters to set up conversion data, including values in different currencies
+        (e.g., HIVE, HBD, SATS, MSATS, BTC, USD), sources, timestamps, and rates. It handles different scenarios such as
+        recalculating conversions, setting values from quotes, or processing exchange order results.
+        Args:
+            recalc_conv_from (Currency | None, optional): The currency to recalculate the conversion from. If provided
+            along with value and quote, creates a new CryptoConversion instance and uses its data. Defaults to None.
+            conv_from (Currency | None, optional): The source currency for the conversion. Used to determine how to set
+            hive and hbd values. Defaults to None.
+            value (float | Decimal | None, optional): The original value to convert. If provided, sets the 'value' in data.
+            Defaults to None.
+            converted_value (float | Decimal | None, optional): The converted value. Used in conjunction with conv_from
+            to set hive and hbd fields. Defaults to None.
+            timestamp (datetime | None, optional): The timestamp for the conversion. Used as fetch_date if not provided
+            in data. Defaults to None.
+            quote (QuoteResponse | None, optional): The quote response containing market rates (e.g., sats_usd, sats_hive_p).
+            Used to calculate additional fields like sats, msats, btc, usd, and rates. Defaults to None.
+            order_result (ExchangeOrderResult | None, optional): The result of an exchange order. If provided with quote,
+            processes trade data to set values like hive, hbd, msats, and trade rates. Defaults to None.
+            **data (Any): Additional keyword arguments to be passed to the parent class initializer and used to populate
+            the instance attributes.
+        Notes:
+            - If recalc_conv_from, value, and quote are all provided, a new CryptoConversion is created and its data is used.
+            - For conversions involving conv_from and converted_value, sets hive/hbd based on the source currency and marks
+              the source as "Hive Internal Trade".
+            - If a quote is available, updates source, fetch_date, and calculates sats, msats, btc, usd using the quote rates.
+            - For order_result and quote, calculates trade-specific values, including actual trade rates for sats per base currency.
+            - After initialization, ensures msats and sats are set by calculating from each other if missing.
+        """
+
         if recalc_conv_from and value and quote:
             # If recalc_conv_from and value are provided, we assume it's a conversion from one currency to another
             conversion = CryptoConversion(
@@ -154,7 +186,10 @@ class CryptoConv(BaseModel):
                 data["usd"] = round(float(data["sats"] / quote.sats_usd_p), 6)
 
         if order_result and quote:
-            side = order_result.side
+            from v4vapp_backend_v2.conversion.exchange_protocol import ExchangeOrderResult
+            if not isinstance(order_result, ExchangeOrderResult):
+                logger.exception("order_result is not an ExchangeOrderResult instance")
+
             executed_qty = Decimal(str(order_result.executed_qty))
             quote_qty = Decimal(str(order_result.quote_qty))
             symbol = order_result.symbol
