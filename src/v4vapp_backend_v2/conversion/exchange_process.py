@@ -12,7 +12,7 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceResult,
     add_pending_rebalance,
 )
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv, CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -109,13 +109,11 @@ async def exchange_accounting(
         credit_amount = conv.msats
 
     # Create fee conversion from fee_msats using trade_quote for consistent rates
-    fee_conv = CryptoConv(
+    fee_conv = CryptoConversion(
         conv_from=Currency.MSATS,
         value=order_result.fee_msats,
-        msats=order_result.fee_msats,
-        sats=order_result.fee_msats / Decimal("1000"),
         quote=trade_quote,
-    )
+    ).conversion
 
     ledger_type = LedgerType.EXCHANGE_CONVERSION
     group_id_base = (

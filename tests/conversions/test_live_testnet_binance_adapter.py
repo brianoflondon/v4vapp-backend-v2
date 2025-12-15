@@ -94,7 +94,7 @@ def test_market_buy_hive(binance_testnet_adapter):
     adapter = binance_testnet_adapter
 
     # Amount of HIVE to buy (adjust as needed)
-    hive_amount = Decimal("100")
+    hive_amount = Decimal("5000")
 
     print(f"\n{'=' * 60}")
     print("EXECUTING LIVE TESTNET MARKET BUY")
