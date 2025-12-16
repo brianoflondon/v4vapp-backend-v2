@@ -5,7 +5,6 @@ This adapter wraps the binance_extras functions to provide a standardized
 interface for the rebalancing system.
 """
 
-from datetime import datetime, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import ClassVar
 
@@ -29,8 +28,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     market_buy,
     market_sell,
 )
-from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
-from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 
 class BinanceAdapter(BaseExchangeAdapter):
@@ -165,9 +163,9 @@ class BinanceAdapter(BaseExchangeAdapter):
         fee_asset: str,
         requested_qty: Decimal = Decimal(0),
         base_asset: str = "",
-    ) -> CryptoConv | None:
+    ) -> Decimal:
         """
-        Convert exchange fee to a CryptoConv object with msats as the base.
+        Convert exchange fee to a Decimal representing msats.
 
         For BNB fees, looks up the current BNBBTC price to convert:
         BNB -> BTC -> sats -> msats
@@ -177,7 +175,7 @@ class BinanceAdapter(BaseExchangeAdapter):
             fee_asset: The asset the fee is denominated in (e.g., 'BNB', 'BTC')
 
         Returns:
-            CryptoConv with fee converted to msats, or None if conversion fails
+            Decimal representing fee in msats, or Decimal(0) if conversion fails
         """
         if fee <= Decimal("0"):
             if self.testnet:
@@ -185,7 +183,7 @@ class BinanceAdapter(BaseExchangeAdapter):
                 fee = requested_qty * Decimal("0.000075")
                 fee_asset = base_asset
             else:
-                return None
+                return Decimal(0)
 
         try:
             fee_btc = Decimal("0")
@@ -209,37 +207,152 @@ class BinanceAdapter(BaseExchangeAdapter):
                     logger.warning(
                         f"Could not convert fee asset {fee_asset} to BTC, fee_conv will be None"
                     )
-                    return None
+                    return Decimal(0)
 
             # Convert BTC to sats (1 BTC = 100,000,000 sats)
             fee_sats = fee_btc * SATS_PER_BTC
             # Convert to msats (1 sat = 1000 msats)
             fee_msats = fee_sats * Decimal("1000")
 
-            # Create CryptoConv with msats as the starting point
-            # Note: We're creating a minimal conv since we don't have full quote data
-            # The key values are msats, sats, and btc which we can calculate directly
-            return CryptoConv(
-                msats=fee_msats,
-                sats=fee_sats,
-                btc=fee_btc,
-                conv_from=Currency.MSATS,
-                value=fee_msats,
-                source="Binance",
-                fetch_date=datetime.now(tz=timezone.utc),
-            )
+            return fee_msats
 
         except BinanceErrorBadConnection as e:
             logger.warning(f"Failed to get price for fee conversion: {e}")
-            return None
+            return Decimal(0)
         except Exception as e:
-            logger.warning(f"Unexpected error converting fee: {e}")
-            return None
+            logger.exception(f"Unexpected error converting fee: {e}")
+            return Decimal(0)
+
+    def _build_trade_quote(
+        self,
+        base_asset: str,
+        quote_asset: str,
+        avg_price: Decimal,
+        raw_response: dict,
+    ) -> QuoteResponse:
+        """
+        Build a QuoteResponse that reflects the actual executed trade rate,
+        while preserving accurate market prices for HBD, USD, and BTC conversions.
+
+        This fetches the current market quote and overrides only the specific
+        rate that was executed in the trade (e.g., HIVE/BTC price), ensuring
+        that all other conversion calculations remain accurate.
+
+        For HIVE/BTC trades:
+            - Uses actual trade avg_price for sats_hive calculation
+            - Preserves real BTC/USD, HBD/USD rates from market
+
+        Args:
+            base_asset: The base asset (e.g., 'HIVE')
+            quote_asset: The quote asset (e.g., 'BTC')
+            avg_price: The average execution price (base asset in terms of quote asset)
+            raw_response: The raw exchange response for reference
+
+        Returns:
+            QuoteResponse with sats_hive reflecting the actual trade rate,
+            and other rates from current market data
+        """
+        from datetime import datetime, timezone
+
+        from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
+
+        # Fetch current market quote for accurate HBD/USD/BTC rates
+        all_quotes = AllQuotes()
+        # Use synchronous call to get Binance quote - we're already in sync context
+        import asyncio
+
+        try:
+            # Try to get a running event loop (Python 3.10+)
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, use thread pool to avoid blocking
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, all_quotes.get_all_quotes())
+                    future.result(timeout=5)
+            except RuntimeError:
+                # No running event loop, we can use asyncio.run directly
+                asyncio.run(all_quotes.get_all_quotes())
+        except Exception as e:
+            logger.warning(f"Failed to fetch market quote for trade_quote: {e}")
+            # Fall back to basic quote
+            all_quotes.quote = QuoteResponse()
+
+        market_quote = all_quotes.quote
+
+        # Calculate the actual sats_hive from the trade
+        # avg_price is HIVE in BTC, so sats_hive = avg_price * SATS_PER_BTC
+        trade_sats_hive = avg_price * SATS_PER_BTC
+
+        # For HIVE/BTC trades: override hive_usd to produce correct sats_hive
+        # sats_hive = (SATS_PER_BTC / btc_usd) * hive_usd
+        # We want: trade_sats_hive = (SATS_PER_BTC / btc_usd) * hive_usd
+        # So: hive_usd = trade_sats_hive * btc_usd / SATS_PER_BTC = avg_price * btc_usd
+        if base_asset.upper() == "HIVE" and quote_asset.upper() == "BTC":
+            # Calculate hive_usd that will produce the correct sats_hive
+            # given the market's btc_usd rate
+            btc_usd = market_quote.btc_usd if market_quote.btc_usd > 0 else Decimal("1")
+            trade_hive_usd = avg_price * btc_usd
+
+            return QuoteResponse(
+                hive_usd=trade_hive_usd,
+                hbd_usd=market_quote.hbd_usd,
+                btc_usd=btc_usd,
+                hive_hbd=market_quote.hive_hbd,
+                source=f"{self.exchange_name}_trade",
+                fetch_date=datetime.now(tz=timezone.utc),
+            )
+        elif base_asset.upper() == "HBD" and quote_asset.upper() == "BTC":
+            btc_usd = market_quote.btc_usd if market_quote.btc_usd > 0 else Decimal("1")
+            trade_hbd_usd = avg_price * btc_usd
+
+            return QuoteResponse(
+                hive_usd=market_quote.hive_usd,
+                hbd_usd=trade_hbd_usd,
+                btc_usd=btc_usd,
+                hive_hbd=market_quote.hive_hbd,
+                source=f"{self.exchange_name}_trade",
+                fetch_date=datetime.now(tz=timezone.utc),
+            )
+        else:
+            # For other pairs, return market quote with trade source
+            return QuoteResponse(
+                hive_usd=market_quote.hive_usd,
+                hbd_usd=market_quote.hbd_usd,
+                btc_usd=market_quote.btc_usd,
+                hive_hbd=market_quote.hive_hbd,
+                source=f"{self.exchange_name}_trade",
+                fetch_date=datetime.now(tz=timezone.utc),
+            )
 
     def _convert_result(
-        self, result: MarketOrderResult, side: str, requested_qty: Decimal
+        self,
+        result: MarketOrderResult,
+        side: str,
+        requested_qty: Decimal,
+        base_asset: str,
+        quote_asset: str = "BTC",
     ) -> ExchangeOrderResult:
-        """Convert Binance result to standardized ExchangeOrderResult."""
+        """
+        Convert Binance result to standardized ExchangeOrderResult.
+
+        This method processes the raw market order result from Binance, extracts fee information
+        from the fills, converts the fee to msats, and constructs a
+        standardized ExchangeOrderResult object.
+
+        Args:
+            result (MarketOrderResult): The market order result returned by Binance, containing
+                details like order ID, status, executed quantity, average price, and fills.
+            side (str): The side of the order, typically 'buy' or 'sell'.
+            requested_qty (Decimal): The originally requested quantity for the order.
+            base_asset (str): The base asset of the trade (e.g., 'HIVE').
+            quote_asset (str): The quote asset of the trade (e.g., 'BTC').
+
+        Returns:
+            ExchangeOrderResult: A standardized object representing the exchange order result,
+                including exchange name, symbol, order details, fees, and raw response.
+        """
         # Extract fee info from fills
         total_fee = Decimal("0")
         fee_asset = ""
@@ -248,12 +361,12 @@ class BinanceAdapter(BaseExchangeAdapter):
             if not fee_asset:
                 fee_asset = fill.get("commissionAsset", "")
 
-        # Convert the fee to a CryptoConv object (msats-based)
-        fee_conv = self._convert_fee_to_msats(
-            fee=total_fee,
-            fee_asset=fee_asset,
-            requested_qty=requested_qty,
-            base_asset=result.symbol[:-3],
+        # Build trade quote from the executed price
+        trade_quote = self._build_trade_quote(
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            avg_price=result.avg_price,
+            raw_response=result.raw_response,
         )
 
         return ExchangeOrderResult(
@@ -267,10 +380,13 @@ class BinanceAdapter(BaseExchangeAdapter):
             executed_qty=result.executed_qty,
             quote_qty=result.cummulative_quote_qty,
             avg_price=result.avg_price,
-            fee=total_fee,
+            fee_msats=self._convert_fee_to_msats(total_fee, fee_asset, requested_qty, base_asset),
+            fee_original=total_fee,
             fee_asset=fee_asset,
-            fee_conv=fee_conv,
             raw_response=result.raw_response,
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            trade_quote=trade_quote,
         )
 
     def market_sell(
@@ -312,7 +428,7 @@ class BinanceAdapter(BaseExchangeAdapter):
                 testnet=self.testnet,
                 client_order_id=client_order_id,
             )
-            return self._convert_result(result, "SELL", rounded_qty)
+            return self._convert_result(result, "SELL", rounded_qty, base_asset, quote_asset)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
         except BinanceErrorBadConnection as e:
@@ -357,7 +473,7 @@ class BinanceAdapter(BaseExchangeAdapter):
                 testnet=self.testnet,
                 client_order_id=client_order_id,
             )
-            return self._convert_result(result, "BUY", rounded_qty)
+            return self._convert_result(result, "BUY", rounded_qty, base_asset, quote_asset)
         except BinanceErrorBelowMinimum as e:
             raise ExchangeBelowMinimumError(f"Binance order below minimum: {e}")
         except BinanceErrorBadConnection as e:

@@ -6,7 +6,7 @@ from typing import List, Set
 import httpx
 from aiocache import cached
 
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 
 # @async_time_stats_decorator()
@@ -93,9 +93,11 @@ async def fetch_bad_actor_list() -> Set[str]:
 
         return bad_actor_list
 
+    # TODO: #193 Store a local cached copy of the list to use in case of failure
+
     except httpx.HTTPError as e:
-        print(f"Error fetching the list: {e}")
+        logger.warning(f"Error fetching the list: {e}")
         return set()
     except ValueError as e:
-        print(f"Error parsing the list: {e}")
+        logger.warning(f"Error parsing the list: {e}")
         return set()

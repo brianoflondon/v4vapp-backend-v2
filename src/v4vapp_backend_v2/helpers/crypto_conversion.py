@@ -9,6 +9,7 @@ from bson.decimal128 import Decimal128
 from nectar.amount import Amount
 from pydantic import BaseModel, Field, computed_field, field_validator
 
+from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import limit_test, msats_fee
@@ -113,9 +114,39 @@ class CryptoConv(BaseModel):
         converted_value: float | Decimal | None = None,
         timestamp: datetime | None = None,
         quote: QuoteResponse | None = None,
-        order_result: Any | None = None,
         **data: Any,
     ):
+        """
+        Initialize a CryptoConversion instance with various parameters for handling cryptocurrency conversions.
+        This method processes the provided parameters to set up conversion data, including values in different currencies
+        (e.g., HIVE, HBD, SATS, MSATS, BTC, USD), sources, timestamps, and rates. It handles different scenarios such as
+        recalculating conversions, setting values from quotes, or processing exchange order results.
+        Args:
+            recalc_conv_from (Currency | None, optional): The currency to recalculate the conversion from. If provided
+            along with value and quote, creates a new CryptoConversion instance and uses its data. Defaults to None.
+            conv_from (Currency | None, optional): The source currency for the conversion. Used to determine how to set
+            hive and hbd values. Defaults to None.
+            value (float | Decimal | None, optional): The original value to convert. If provided, sets the 'value' in data.
+            Defaults to None.
+            converted_value (float | Decimal | None, optional): The converted value. Used in conjunction with conv_from
+            to set hive and hbd fields. Defaults to None.
+            timestamp (datetime | None, optional): The timestamp for the conversion. Used as fetch_date if not provided
+            in data. Defaults to None.
+            quote (QuoteResponse | None, optional): The quote response containing market rates (e.g., sats_usd, sats_hive_p).
+            Used to calculate additional fields like sats, msats, btc, usd, and rates. Defaults to None.
+            order_result (ExchangeOrderResult | None, optional): The result of an exchange order. If provided with quote,
+            processes trade data to set values like hive, hbd, msats, and trade rates. Defaults to None.
+            **data (Any): Additional keyword arguments to be passed to the parent class initializer and used to populate
+            the instance attributes.
+        Notes:
+            - If recalc_conv_from, value, and quote are all provided, a new CryptoConversion is created and its data is used.
+            - For conversions involving conv_from and converted_value, sets hive/hbd based on the source currency and marks
+              the source as "Hive Internal Trade".
+            - If a quote is available, updates source, fetch_date, and calculates sats, msats, btc, usd using the quote rates.
+            - For order_result and quote, calculates trade-specific values, including actual trade rates for sats per base currency.
+            - After initialization, ensures msats and sats are set by calculating from each other if missing.
+        """
+
         if recalc_conv_from and value and quote:
             # If recalc_conv_from and value are provided, we assume it's a conversion from one currency to another
             conversion = CryptoConversion(
@@ -152,47 +183,6 @@ class CryptoConv(BaseModel):
                 data["msats"] = data["sats"] * 1000
                 data["btc"] = data["msats"] / 100_000_000_000
                 data["usd"] = round(float(data["sats"] / quote.sats_usd_p), 6)
-
-        if order_result and quote:
-            side = order_result.side
-            executed_qty = Decimal(str(order_result.executed_qty))
-            quote_qty = Decimal(str(order_result.quote_qty))
-            symbol = order_result.symbol
-            if "HBD" in symbol.upper():
-                base_currency = Currency.HBD
-            else:
-                base_currency = Currency.HIVE
-            msats = quote_qty * Decimal(100_000_000_000)
-            data["hive"] = (
-                executed_qty if base_currency == Currency.HIVE else executed_qty / quote.hive_hbd
-            )
-            data["hbd"] = (
-                executed_qty if base_currency == Currency.HBD else executed_qty * quote.hive_hbd
-            )
-
-            data["conv_from"] = Currency.MSATS
-            data["value"] = msats
-            data["msats"] = msats
-            # Calculate sats, msats, usd
-            data["btc"] = data["msats"] / Decimal(100_000_000_000)
-            data["sats"] = data["msats"] / Decimal(1000)
-            data["usd"] = float(data["sats"] / quote.sats_usd_p)
-            data["source"] = "Exchange Trade"
-            data["fetch_date"] = datetime.now(tz=timezone.utc)
-            # Calculate actual trade rates
-            # TODO: This is still not working for sats to hive conversions
-            # executed_qty: HIVE/HBD sold, quote_qty: BTC received
-            sats_per_base = (quote_qty * Decimal(100_000_000)) / executed_qty
-            if base_currency == Currency.HIVE:
-                data["sats_hive"] = sats_per_base
-            else:
-                data["sats_hbd"] = sats_per_base
-
-            # Optionally set the other rate from quote if available
-            if hasattr(quote, "sats_hive_p") and "sats_hive" not in data:
-                data["sats_hive"] = quote.sats_hive_p
-            if hasattr(quote, "sats_hbd_p") and "sats_hbd" not in data:
-                data["sats_hbd"] = quote.sats_hbd_p
 
         super().__init__(**data)
         # If msats is not set, calculate it from the other values
@@ -426,6 +416,48 @@ class CryptoConv(BaseModel):
 
 
 class CryptoConversion(BaseModel):
+    """
+    A Pydantic model for handling cryptocurrency conversions between various currencies,
+    including HIVE, HBD, USD, SATS, MSATS, and BTC. It uses exchange rates from a QuoteResponse
+    to compute and cache conversions starting from a base value in a specified currency.
+
+    Attributes:
+        conv_from (Currency): The source currency for conversion (default: Currency.HIVE).
+        value (Decimal): The amount in the source currency to convert (default: Decimal(0)).
+        original (Any): The original amount object (e.g., Amount or AmountPyd) if provided.
+        quote (QuoteResponse): The quote data containing exchange rates.
+        fetch_date (datetime | None): The timestamp when the quote was fetched.
+        hive (Decimal): Cached converted value in HIVE.
+        hbd (Decimal): Cached converted value in HBD.
+        usd (Decimal): Cached converted value in USD.
+        sats (Decimal): Cached converted value in SATs.
+        msats (Decimal): Cached converted value in milliSATs (base unit for conversions).
+        btc (Decimal): Cached converted value in BTC.
+        msats_fee (Decimal): Cached fee in milliSATs.
+
+    Methods:
+        __init__(amount=None, value=Decimal(), conv_from=None, quote=None, **kwargs):
+            Initializes the CryptoConversion instance. If an Amount or AmountPyd is provided,
+            sets conv_from and value from it. Otherwise, uses the provided conv_from and value.
+            If a quote is provided, computes conversions immediately.
+
+        async get_quote(use_cache=True, store_db=True):
+            Asynchronously fetches the latest quotes and updates the instance's quote and conversions.
+                use_cache (bool): Whether to use cached quotes. Defaults to True.
+                store_db (bool): Whether to store quotes in the database. Defaults to True.
+
+        _compute_conversions():
+            Computes all currency conversions starting from msats using the current quote.
+            Raises ValueError if quote is None or unsupported currency. Handles zero rates with warnings.
+
+    Properties:
+        conversion -> CryptoConv:
+            Returns a CryptoConv model with all conversion values and metadata.
+
+        c_dict -> dict[str, Any]:
+            Returns a dictionary of conversion values keyed by currency and additional metadata.
+    """
+
     conv_from: Currency = Currency.HIVE
     value: Decimal = Decimal(0)
     original: Any = None
@@ -503,37 +535,89 @@ class CryptoConversion(BaseModel):
         """Compute all currency conversions starting from msats."""
         # Step 1: Convert the input value to msats
         if self.quote is None:
-            if self.quote.hive_hbd == 0:
-                raise ValueError("Quote is set but hive_hbd is zero")
+            logger.warning("CryptoConversion: quote is None, cannot compute conversions")
             raise ValueError("Quote is not available or invalid")
+
+        # Validate quote has required rates for conversion
+        if self.conv_from == Currency.HIVE and self.quote.sats_hive_p == Decimal(0):
+            logger.warning(
+                f"CryptoConversion: sats_hive_p is 0, cannot convert from HIVE. "
+                f"Quote source: {self.quote.source}"
+            )
+        if self.conv_from == Currency.HBD and self.quote.sats_hbd_p == Decimal(0):
+            logger.warning(
+                f"CryptoConversion: sats_hbd_p is 0, cannot convert from HBD. "
+                f"Quote source: {self.quote.source}"
+            )
+        if self.conv_from == Currency.USD and self.quote.sats_usd_p == Decimal(0):
+            logger.warning(
+                f"CryptoConversion: sats_usd_p is 0, cannot convert from USD. "
+                f"Quote source: {self.quote.source}"
+            )
 
         try:
             if self.conv_from == Currency.MSATS:
                 self.msats = self.value
             elif self.conv_from == Currency.SATS:
-                self.msats = self.value * 1000
+                self.msats = self.value * Decimal(1000)
             elif self.conv_from == Currency.HIVE:
-                self.msats = Decimal(self.value) * self.quote.sats_hive_p * 1000
+                self.msats = Decimal(self.value) * self.quote.sats_hive_p * Decimal(1000)
             elif self.conv_from == Currency.HBD:
-                self.msats = Decimal(self.value) * self.quote.sats_hbd_p * 1000
+                self.msats = Decimal(self.value) * self.quote.sats_hbd_p * Decimal(1000)
             elif self.conv_from == Currency.USD:
-                self.msats = Decimal(self.value) * self.quote.sats_usd_p * 1000
+                self.msats = Decimal(self.value) * self.quote.sats_usd_p * Decimal(1000)
             else:
                 raise ValueError("Unsupported conversion currency")
 
             # Step 2: Derive sats from msats
-            self.sats = self.msats / 1000
+            self.sats = self.msats / Decimal(1000)
 
             # Step 3: Derive all other values from msats
             self.btc = self.msats / Decimal(100_000_000_000)  # msats to BTC (1 BTC = 10^11 msats)
-            self.usd = Decimal(str(round(self.msats / (self.quote.sats_usd_p * Decimal(1000)), 6)))
-            self.hbd = Decimal(str(round(self.msats / (self.quote.sats_hbd_p * Decimal(1000)), 6)))
-            self.hive = Decimal(
-                str(round(self.msats / (self.quote.sats_hive_p * Decimal(1000)), 5))
-            )
+
+            # Check for zero divisors and warn before attempting division
+            if self.quote.sats_usd_p == 0:
+                logger.warning(
+                    f"CryptoConversion: sats_usd_p is 0, USD will be 0. "
+                    f"Quote source: {self.quote.source}"
+                )
+                self.usd = Decimal(0)
+            else:
+                self.usd = Decimal(
+                    str(round(self.msats / (self.quote.sats_usd_p * Decimal(1000)), 6))
+                )
+
+            if self.quote.sats_hbd_p == 0:
+                logger.warning(
+                    f"CryptoConversion: sats_hbd_p is 0, HBD will be 0. "
+                    f"Quote source: {self.quote.source}"
+                )
+                self.hbd = Decimal(0)
+            else:
+                self.hbd = Decimal(
+                    str(round(self.msats / (self.quote.sats_hbd_p * Decimal(1000)), 6))
+                )
+
+            if self.quote.sats_hive_p == 0:
+                logger.warning(
+                    f"CryptoConversion: sats_hive_p is 0, HIVE will be 0. "
+                    f"Quote source: {self.quote.source}"
+                )
+                self.hive = Decimal(0)
+            else:
+                # Use Decimal.quantize with ROUND_HALF_UP to ensure .5 always rounds up
+                hive_val = self.msats / (self.quote.sats_hive_p * Decimal(1000))
+                # 10 decimal places -> quantizer is 0.0000000001
+                quantizer = Decimal("0.0000000001")
+                self.hive = hive_val.quantize(quantizer, rounding=ROUND_HALF_UP)
+
             self.msats_fee = msats_fee(self.msats)
-        except ZeroDivisionError:
+        except ZeroDivisionError as e:
             # Handle division by zero if the quote is not available
+            logger.warning(
+                f"CryptoConversion: ZeroDivisionError during conversion. "
+                f"Quote source: {self.quote.source}, Error: {e}"
+            )
             self.msats = Decimal(0)
             self.sats = Decimal(0)
             self.btc = Decimal(0)
@@ -553,7 +637,6 @@ class CryptoConversion(BaseModel):
             msats=self.msats,
             msats_fee=self.msats_fee,
             btc=self.btc,
-            # These two values are floats, they are property functions of quote
             sats_hive=self.quote.sats_hive_p,
             sats_hbd=self.quote.sats_hbd_p,
             conv_from=self.conv_from,

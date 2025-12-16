@@ -164,9 +164,11 @@ class TestBinanceAdapterGetCurrentPrice:
 class TestBinanceAdapterMarketSell:
     """Tests for market_sell method."""
 
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
-    def test_market_sell_success(self, mock_sell):
+    def test_market_sell_success(self, mock_sell, mock_get_price):
         """Test successful market sell with BNB commission (mainnet behavior)."""
+        mock_get_price.return_value = {"bid_price": "0.002"}
         mock_sell.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=12345,
@@ -199,8 +201,13 @@ class TestBinanceAdapterMarketSell:
         assert result.symbol == "HIVEBTC"
         assert result.side == "SELL"
         assert result.executed_qty == Decimal("100")
-        assert result.fee == Decimal("0.00008532")
+        assert result.fee_msats == Decimal("17064")
         assert result.fee_asset == "BNB"
+        # Verify trade_quote is included
+        assert result.trade_quote is not None
+        assert result.trade_quote.source == "binance_trade"
+        assert result.base_asset == "HIVE"
+        assert result.quote_asset == "BTC"
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
     def test_market_sell_below_minimum(self, mock_sell):
@@ -226,9 +233,11 @@ class TestBinanceAdapterMarketSell:
 class TestBinanceAdapterMarketBuy:
     """Tests for market_buy method."""
 
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
-    def test_market_buy_success(self, mock_buy):
+    def test_market_buy_success(self, mock_buy, mock_get_price):
         """Test successful market buy with BNB commission (mainnet behavior)."""
+        mock_get_price.return_value = {"bid_price": "0.002"}
         mock_buy.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=54321,
@@ -261,8 +270,13 @@ class TestBinanceAdapterMarketBuy:
         assert result.symbol == "HIVEBTC"
         assert result.side == "BUY"
         assert result.executed_qty == Decimal("100")
-        assert result.fee == Decimal("0.00006730")
+        assert result.fee_msats == Decimal("13460")
         assert result.fee_asset == "BNB"
+        # Verify trade_quote is included
+        assert result.trade_quote is not None
+        assert result.trade_quote.source == "binance_trade"
+        assert result.base_asset == "HIVE"
+        assert result.quote_asset == "BTC"
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
     def test_market_buy_below_minimum(self, mock_buy):
@@ -288,8 +302,10 @@ class TestBinanceAdapterMarketBuy:
 class TestBinanceAdapterConvertResult:
     """Tests for _convert_result method."""
 
-    def test_convert_result_extracts_fees(self):
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    def test_convert_result_extracts_fees(self, mock_get_price):
         """Test that fees are correctly extracted from fills with BNB commission."""
+        mock_get_price.return_value = {"bid_price": "0.002"}
         adapter = BinanceAdapter()
 
         binance_result = MarketOrderResult(
@@ -323,17 +339,21 @@ class TestBinanceAdapterConvertResult:
             raw_response={},
         )
 
-        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"), "HIVE", "BTC")
 
-        assert result.fee == Decimal("0.00007486")  # Sum of all fees
+        assert result.fee_msats == Decimal("14972")  # Converted to msats
         assert result.fee_asset == "BNB"
+        assert result.trade_quote is not None
+        assert result.trade_quote.source == "binance_trade"
 
-    def test_convert_result_multi_fill_mainnet_style(self):
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    def test_convert_result_multi_fill_mainnet_style(self, mock_get_price):
         """Test conversion with multiple fills matching real mainnet response.
 
         This tests a scenario based on actual mainnet data where an order
         was filled across 4 separate trades, each with its own BNB commission.
         """
+        mock_get_price.return_value = {"bid_price": "0.002"}
         adapter = BinanceAdapter()
 
         # This matches the structure from mainnet: 1084 HIVE sold across 4 fills
@@ -382,7 +402,7 @@ class TestBinanceAdapterConvertResult:
             raw_response={"orderId": 165516618},
         )
 
-        result = adapter._convert_result(binance_result, "SELL", Decimal("1084"))
+        result = adapter._convert_result(binance_result, "SELL", Decimal("1084"), "HIVE", "BTC")
 
         # Total fee should be sum of all fill commissions
         expected_fee = (
@@ -391,12 +411,14 @@ class TestBinanceAdapterConvertResult:
             + Decimal("0.00001512")
             + Decimal("0.00000075")
         )
-        assert result.fee == expected_fee
-        assert result.fee == Decimal("0.00009073")
+        assert result.fee_msats == Decimal("18146")  # Converted to msats
         assert result.fee_asset == "BNB"
         assert result.executed_qty == Decimal("1084")
         assert result.quote_qty == Decimal("0.00120324")
         assert result.status == "FILLED"
+        assert result.trade_quote is not None
+        assert result.base_asset == "HIVE"
+        assert result.quote_asset == "BTC"
 
     def test_convert_result_empty_fills(self):
         """Test conversion with no fills."""
@@ -418,10 +440,11 @@ class TestBinanceAdapterConvertResult:
             raw_response={},
         )
 
-        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"), "HIVE", "BTC")
 
-        assert result.fee == Decimal("0")
+        assert result.fee_msats == Decimal("0")
         assert result.fee_asset == ""
+        assert result.trade_quote is not None
 
 
 class TestBinanceAdapterFeeConversion:
@@ -442,17 +465,10 @@ class TestBinanceAdapterFeeConversion:
 
         fee_conv = adapter._convert_fee_to_msats(fee_bnb, "BNB")
 
-        assert fee_conv is not None
         # 0.00009073 BNB * 0.01 BTC/BNB = 0.0000009073 BTC
-        expected_btc = Decimal("0.0000009073")
-        assert fee_conv.btc == expected_btc
         # 0.0000009073 BTC * 100,000,000 sats/BTC = 90.73 sats
-        expected_sats = Decimal("90.73")
-        assert fee_conv.sats == expected_sats
         # 90.73 sats * 1000 msats/sat = 90730 msats
-        expected_msats = Decimal("90730")
-        assert fee_conv.msats == expected_msats
-        assert fee_conv.source == "Binance"
+        assert fee_conv == Decimal("90730")
 
     def test_fee_conversion_btc_direct(self):
         """Test that BTC fees don't need price lookup."""
@@ -461,18 +477,15 @@ class TestBinanceAdapterFeeConversion:
 
         fee_conv = adapter._convert_fee_to_msats(fee_btc, "BTC")
 
-        assert fee_conv is not None
-        assert fee_conv.btc == Decimal("0.00000050")
-        assert fee_conv.sats == Decimal("50")
-        assert fee_conv.msats == Decimal("50000")
+        assert fee_conv == Decimal("50000")
 
     def test_fee_conversion_zero_fee(self):
-        """Test that zero fee returns None."""
+        """Test that zero fee returns Decimal(0)."""
         adapter = BinanceAdapter()
 
-        fee_conv = adapter._convert_fee_to_msats(Decimal("0"), "BNB")
+        fee_msats = adapter._convert_fee_to_msats(Decimal("0"), "BNB")
 
-        assert fee_conv is None
+        assert fee_msats == Decimal("0")
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
     def test_convert_result_includes_fee_conv(self, mock_get_price):
@@ -509,17 +522,14 @@ class TestBinanceAdapterFeeConversion:
             raw_response={},
         )
 
-        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"), "HIVE", "BTC")
 
-        assert result.fee_conv is not None
-        assert result.fee_conv.msats > 0
-        assert result.fee_conv.sats > 0
-        assert result.fee_conv.btc > 0
-        # Fee should be 0.00008532 BNB * 0.01 = 0.0000008532 BTC = 85.32 sats
-        assert result.fee_conv.sats == Decimal("85.32")
+        assert result.fee_msats > 0
+        assert result.trade_quote is not None
+        assert result.trade_quote.sats_hive > 0
 
     def test_convert_result_empty_fills_no_fee_conv(self):
-        """Test that empty fills result in None fee_conv."""
+        """Test that empty fills result in zero fee_msats but still has trade_quote."""
         adapter = BinanceAdapter()
         binance_result = MarketOrderResult(
             symbol="HIVEBTC",
@@ -537,9 +547,85 @@ class TestBinanceAdapterFeeConversion:
             raw_response={},
         )
 
-        result = adapter._convert_result(binance_result, "SELL", Decimal("100"))
+        result = adapter._convert_result(binance_result, "SELL", Decimal("100"), "HIVE", "BTC")
 
-        assert result.fee_conv is None
+        assert result.fee_msats == Decimal("0")
+        assert result.trade_quote is not None
+
+
+class TestBinanceAdapterBuildTradeQuote:
+    """Tests for _build_trade_quote method."""
+
+    def test_build_trade_quote_hive_btc(self):
+        """Test building trade quote for HIVE/BTC pair.
+
+        The trade_quote now fetches market prices and calculates hive_usd based on
+        the trade's avg_price and market btc_usd rate, so that sats_hive reflects
+        the actual trade execution rate.
+        """
+        adapter = BinanceAdapter()
+        avg_price = Decimal("0.0000123")  # 1 HIVE = 0.0000123 BTC
+
+        quote = adapter._build_trade_quote("HIVE", "BTC", avg_price, {"test": "data"})
+
+        assert quote.source == "binance_trade"
+        # btc_usd comes from market quote, not fixed to 1
+        assert quote.btc_usd > 0
+        # hive_usd is calculated as avg_price * btc_usd to produce correct sats_hive
+        # sats_hive = (SATS_PER_BTC / btc_usd) * hive_usd = avg_price * SATS_PER_BTC
+        expected_sats_hive = avg_price * Decimal("100_000_000")
+        assert quote.sats_hive == expected_sats_hive.quantize(Decimal("0.000001"))
+        assert quote.fetch_date is not None
+        # hbd_usd and hive_hbd should come from market quote
+        assert quote.hbd_usd > 0
+        assert quote.hive_hbd > 0
+
+    def test_build_trade_quote_hive_btc_realistic_price(self):
+        """Test trade quote with realistic HIVE/BTC price."""
+        adapter = BinanceAdapter()
+        # Realistic price: 1 HIVE ≈ 111 sats = 0.00000111 BTC
+        avg_price = Decimal("0.00000111")
+
+        quote = adapter._build_trade_quote("HIVE", "BTC", avg_price, {})
+
+        # sats_hive should be 0.00000111 * 100_000_000 = 111
+        assert quote.sats_hive == Decimal("111.000000")
+
+    def test_build_trade_quote_hbd_btc(self):
+        """Test building trade quote for HBD/BTC pair."""
+        adapter = BinanceAdapter()
+        avg_price = Decimal("0.000010")  # 1 HBD = 0.00001 BTC
+
+        quote = adapter._build_trade_quote("HBD", "BTC", avg_price, {})
+
+        assert quote.source == "binance_trade"
+        # btc_usd comes from market quote
+        assert quote.btc_usd > 0
+        # sats_hbd should be 0.00001 * 100_000_000 = 1000
+        assert quote.sats_hbd == Decimal("1000.000000")
+        # hive_usd should come from market quote
+        assert quote.hive_usd > 0
+
+    def test_build_trade_quote_other_pair(self):
+        """Test building trade quote for non-HIVE/HBD pairs returns market quote."""
+        adapter = BinanceAdapter()
+        avg_price = Decimal("0.05")  # Some other pair
+
+        quote = adapter._build_trade_quote("ETH", "BTC", avg_price, {})
+
+        assert quote.source == "binance_trade"
+        # For other pairs, uses market quote values
+        assert quote.btc_usd > 0
+        assert quote.hive_usd > 0
+
+    def test_build_trade_quote_testnet(self):
+        """Test trade quote includes testnet in source when using testnet."""
+        adapter = BinanceAdapter(testnet=True)
+        avg_price = Decimal("0.0000123")
+
+        quote = adapter._build_trade_quote("HIVE", "BTC", avg_price, {})
+
+        assert quote.source == "binance_testnet_trade"
 
 
 class TestBinanceAdapterAssetDecimals:

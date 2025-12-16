@@ -242,6 +242,11 @@ def balance_sheet_all_currencies_printout(balance_sheet: Dict, vsc_details: bool
     max_width = 115
     output = ["Balance Sheet in All Currencies"]
     output.append("-" * max_width)
+    # Clarify presentation semantics to avoid misinterpretation of per-unit rows
+    output.append(
+        "Note: Unit lines represent values converted into each unit; they are NOT additive across columns. "
+        "Intra-account exchange trades may show gross (both sides) and will net to zero in totals — only fees and net flows remain."
+    )
     output.append(f"{'Account':<40} {'Sub':<17} {'SATS':>10} {'HIVE':>12} {'HBD':>12} {'USD':>12}")
     output.append("-" * max_width)
 

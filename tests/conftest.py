@@ -8,10 +8,43 @@ import time  # Optional, for adding a startup delay if needed
 from datetime import datetime, timedelta
 from pathlib import Path
 from queue import Queue
+from typing import Generator
 
 import pytest
 
 from v4vapp_backend_v2.config.setup import InternalConfig
+
+
+@pytest.fixture(autouse=True)
+def ensure_event_loop() -> Generator:
+    """Ensure an event loop exists for tests that call asyncio.get_event_loop().
+
+    Some test environments (and certain PyTest runs) don't set a current event loop
+    in the main thread, which causes RuntimeError('There is no current event loop').
+    Create and set one if missing.
+    """
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def close_async_db_client() -> Generator:
+    """Close the AsyncMongoClient at the end of the test session to avoid background tasks
+    trying to access a closed event loop during pytest shutdown.
+    """
+    yield
+    client = getattr(InternalConfig(), "db_client", None)
+    if client:
+        try:
+            asyncio.run(client.close())
+        except Exception:
+            # swallow errors during shutdown to avoid test-time noise
+            pass
+
 
 """
     1. Add a Session-Scoped Event Loop

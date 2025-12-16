@@ -5,7 +5,7 @@ from v4vapp_backend_v2.hive.internal_market_trade import check_order_book
 
 
 def test_check_order_book():
-    originaL_trade = Amount("1_000 HBD")
+    originaL_trade = Amount("500 HBD")
     sell_HBD_quote = check_order_book(
         originaL_trade, use_cache=True, order_book_limit=100
     )

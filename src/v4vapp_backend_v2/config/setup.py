@@ -564,8 +564,8 @@ class Config(BaseModel):
         Raises ValueError if the token is not found.
     """
 
-    version: str = ""
-    logging: LoggingConfig
+    version: str = "0.2.0"
+    logging: LoggingConfig = LoggingConfig()
     development: DevelopmentConfig = DevelopmentConfig()
 
     lnd_config: LndConfig = LndConfig()
@@ -810,7 +810,9 @@ class InternalConfig:
             logger.info(f"{ICON} Config file found: {config_file}")
         except FileNotFoundError as ex:
             logger.error(f"{ICON} Config file not found: {ex}")
-            raise ex
+            self.config = Config()
+            return
+            # raise ex
 
         try:
             self.config = Config.model_validate(config)
@@ -864,8 +866,9 @@ class InternalConfig:
                 except KeyError as ex:
                     print(f"KeyError in logging config no logfile set: {ex}")
                     raise ex
-        except FileNotFoundError as ex:
+        except (FileNotFoundError, IsADirectoryError) as ex:
             print(f"Logging config file not found: {ex}")
+            return
             raise ex
 
         # Ensure log folder exists
