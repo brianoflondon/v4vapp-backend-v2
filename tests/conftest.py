@@ -1,4 +1,13 @@
 import asyncio
+import os
+import re
+import select
+import subprocess
+import threading
+import time  # Optional, for adding a startup delay if needed
+from datetime import datetime, timedelta
+from pathlib import Path
+from queue import Queue
 from typing import Generator
 
 import pytest
@@ -35,20 +44,7 @@ def close_async_db_client() -> Generator:
         except Exception:
             # swallow errors during shutdown to avoid test-time noise
             pass
-import asyncio
-import os
-import re
-import select
-import subprocess
-import threading
-import time  # Optional, for adding a startup delay if needed
-from datetime import datetime, timedelta
-from pathlib import Path
-from queue import Queue
 
-import pytest
-
-from v4vapp_backend_v2.config.setup import InternalConfig
 
 """
     1. Add a Session-Scoped Event Loop
