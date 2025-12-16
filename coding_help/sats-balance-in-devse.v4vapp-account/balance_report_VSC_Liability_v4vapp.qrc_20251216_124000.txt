@@ -1,0 +1,108 @@
+_______________________________________________________________________________________________________________________________________
+VSC Liability (Liability) - Sub: v4vapp.qrc balance as of 2025-12-16 12:40:00 UTC
+Units: MSATS, HBD, HIVE
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-15 ===
+17:26:33.1   Convert 10.544 HIVE to 1,161 sats for v4vapp.qrc                     0      10.545      10.545      c13Ys4wcFT   deposit_h
+17:26:40.0   Withdrawal: 10.544 HIVE from devser.v4vapp to v...              10.544           0       0.001   1296_aa50d5_1  cust_h_out
+              💬Converted 1,234 sats to 10.544 HIVE with fee: 73 sats fo...
+
+=== 2025-12-16 ===
+11:25:30.3   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...               0.001           0      -0.000   2828_8e1e90_1  cust_h_out
+              💬v4v-yHAtL | #sats | v4v-yHAtL | § D2wWQ4YNXi | Thank you...
+11:31:14.8   Convert 378.920 HIVE to 41,152 sats for v4vapp.qrc                   0     378.920     378.920   2943_63b96c_1   deposit_h
+11:31:24.0   Withdrawal: 378.920 HIVE from devser.v4vapp to ...             378.920           0       0.000   2946_ccbaf4_1  cust_h_out
+              💬Converted 42,000 sats to 378.920 HIVE with fee: 848 sats...
+11:32:53.8   Deposit: 570.000 HIVE from v4vapp.qrc to devser...                   0     570.000     570.000   2976_5805a9_1   cust_h_in
+              💬💬v4vapp.qrc Deposit to #SATS
+11:32:53.9   Withdraw 569.999 HIVE from 60,678 sats for v4va...             569.999           0       0.001   2976_5805a9_1  withdraw_h
+11:33:04.8   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...               0.001           0       0.000   2980_a91c15_1  cust_h_out
+              💬Deposit 569.999 HIVE to 60,678 sats with fee: 1,226 for ...
+11:33:17.4   Convert 8.572 HIVE to 931 sats for v4vapp.qrc                        0       8.572       8.573   2984_cf4019_1   deposit_h
+11:33:22.7   Withdrawal: 8.572 HIVE from devser.v4vapp to v4...               8.572           0       0.001   2986_b2b242_1  cust_h_out
+              💬Converted 1,000 sats to 8.572 HIVE with fee: 69 sats for...
+11:34:58.3   Convert 22.151 HIVE to 2,403 sats for v4vapp.qrc                     0      22.151      22.152   3017_4b94fe_1   deposit_h
+11:35:00.7   Withdrawal: 22.151 HIVE from devser.v4vapp to v...              22.151           0       0.001   3019_da040d_1  cust_h_out
+              💬Converted 2,500 sats to 22.151 HIVE with fee: 98 sats fo...
+11:46:28.6   Deposit: 20.000 HIVE from v4vapp.qrc to devser....                   0      20.000      20.001   3248_ecc566_1   cust_h_in
+              💬💬v4vapp.qrc Deposit to #SATS
+11:46:35.6   Withdrawal: 20.000 HIVE from devser.v4vapp to v...              20.000           0       0.001   3250_c50ee4_1  cust_h_out
+              💬Lightning error: Lightning conversions for v4vapp.qrc in...
+11:47:26.4   Convert 89.918 HIVE to 9,760 sats for v4vapp.qrc                     0      89.919      89.920   3266_bd4b1d_1   deposit_h
+11:47:33.3   Withdrawal: 89.918 HIVE from devser.v4vapp to v...              89.918           0       0.002   3269_dc9485_1  cust_h_out
+              💬Converted 10,000 sats to 89.918 HIVE with fee: 240 sats ...
+12:26:48.8   Deposit: 20.000 HIVE from v4vapp.qrc to devser....                   0      20.000      20.002   4053_8f774f_1   cust_h_in
+              💬💬v4vapp.qrc Deposit to #SATS v4v-WA9dN
+12:26:59.2   Withdrawal: 20.000 HIVE from devser.v4vapp to v...              20.000           0       0.002   4056_c1088e_1  cust_h_out
+              💬Lightning error: Lightning conversions for v4vapp.qrc in...
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.002 HIVE        0.000 HBD        0.000 USD            0 SATS              181 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE      0.002 HIVE 
+
+Unit: HBD
+----------
+
+=== 2025-12-16 ===
+10:21:05.4   Convert 8.543 HBD to 9,879 sats for v4vapp.qrc                       0       8.544       8.544   1542_471dfb_1   deposit_h
+10:21:13.6   Withdrawal: 8.543 HBD from devser.v4vapp to v4v...               8.543           0       0.001   1545_76db32_1  cust_h_out
+              💬Converted 10,121 sats to 8.543 HBD with fee: 242 sats fo...
+11:32:36.0   Deposit: 8.000 HBD from v4vapp.qrc to devser.v4...                   0       8.000       8.001   2970_d8fe9d_1   cust_h_in
+              💬💬v4vapp.qrc Deposit to #SATS
+11:32:36.2   Withdraw 7.999 HBD from 8,963 sats for v4vapp.qrc                7.999           0       0.002   2970_d8fe9d_1  withdraw_h
+11:32:46.8   Withdrawal: 0.001 HBD from devser.v4vapp to v4v...               0.001           0       0.001   2974_228649_1  cust_h_out
+              💬Deposit 7.999 HBD to 8,963 sats with fee: 225 for v4vapp...
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.010 HIVE        0.001 HBD        0.001 USD            1 SATS            1,135 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HBD       0.001 HBD  
+
+Unit: SATS
+----------
+
+=== 2025-12-15 ===
+17:26:30.0   Transfer devser.v4vapp -> v4vapp.qrc 1,234 sats                    0.0     1,234.0     1,234.0   1294_8e3f9c_1      recv_l
+              💬💬v4vapp.qrc | Your message goes here | #v4vapp | receive...
+17:26:33.1   Consume customer SATS for Keepsats-to-hive conv...             1,160.6         0.0        73.4      c13Ys4wcFT   consume_k
+17:26:51.0   Transfer v4vapp-test -> v4vapp.qrc 4,500 sats                      0.0     4,500.0     4,573.4   1301_969af0_1   c_j_trans
+              💬Thank you for putting in this message | 4,500 sats from ...
+
+=== 2025-12-16 ===
+10:16:15.0   Transfer v4vapp-test -> v4vapp.qrc 15,000 sats                     0.0    15,000.0    19,573.4   1446_68a6d5_1   c_j_trans
+              💬Test send of 15,000 sats to v4vapp.qrc hive account | 15...
+10:21:03.0   Transfer v4vapp.qrc -> devser.v4vapp 10,121 sats              10,121.0         0.0     9,452.4   1542_471dfb_1   c_j_trans
+              💬Converting 10,121 sats to #HBD | 10,121 sats from v4vapp...
+11:25:18.0   Transfer devser.v4vapp -> v4vapp.qrc 50,234 sats                   0.0    50,234.0    59,686.4   2825_40b785_1      recv_l
+              💬💬v4vapp.qrc | v4v-yHAtL | #SATS 50234 | #SATS #CLEAN #v4...
+11:31:12.0   Transfer v4vapp.qrc -> devser.v4vapp 42,000 sats              42,000.0         0.0    17,686.4   2943_63b96c_1   c_j_trans
+              💬Converting 42,000 sats to #HIVE | 42,000 sats from v4vap...
+11:32:36.1   Hold Keepsats 225 sats for v4vapp.qrc                            224.6         0.0    17,461.9   2970_d8fe9d_1      hold_k
+11:32:39.0   Transfer devser.v4vapp -> v4vapp.qrc 9,187 sats                    0.0     9,187.9    26,649.8   2972_4d8708_1      recv_l
+              💬💬v4vapp.qrc Deposit to #SATS | received 9,187 sats from ...
+11:32:42.0   Fee 225 sats v4vapp.qrc -> devser.v4vapp 224 sats                224.6         0.0    26,425.2   2973_58b802_1     c_j_fee
+11:32:43.3   Release Keepsats for v4vapp.qrc after 00:07                        0.0       224.6    26,649.8   2970_d8fe9d_1   release_k
+11:32:53.9   Hold Keepsats 1,226 sats for v4vapp.qrc                        1,226.2         0.0    25,423.6   2976_5805a9_1      hold_k
+11:32:57.0   Fee 1,226 sats v4vapp.qrc -> devser.v4vapp 1,22...             1,226.2         0.0    24,197.5   2978_b415b8_1     c_j_fee
+11:32:57.0   Transfer devser.v4vapp -> v4vapp.qrc 61,903 sats                   0.0    61,903.8    86,101.2   2978_9af930_1      recv_l
+              💬💬v4vapp.qrc Deposit to #SATS | received 61,903 sats from...
+11:32:59.6   Release Keepsats for v4vapp.qrc after 00:05                        0.0     1,226.2    87,327.4   2976_5805a9_1   release_k
+11:33:15.0   Transfer v4vapp.qrc -> devser.v4vapp 1,000 sats                1,000.0         0.0    86,327.4   2984_cf4019_1   c_j_trans
+              💬Converting 1,000 sats to #HIVE | 1,000 sats from v4vapp....
+11:34:54.0   Transfer v4vapp.qrc -> devser.v4vapp 2,500 sats                2,500.0         0.0    83,827.4   3017_4b94fe_1   c_j_trans
+              💬Converting 2,500 sats to #HIVE | 2,500 sats from v4vapp....
+11:47:21.0   Transfer v4vapp.qrc -> devser.v4vapp 10,000 sats              10,000.0         0.0    73,827.4   3266_bd4b1d_1   c_j_trans
+              💬Converting 10,000 sats to #HIVE | 10,000 sats from v4vap...
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted          680.819 HIVE       64.337 HBD       64.337 USD       73,827 SATS       73,827,383 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS     73,827 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:             64.339 USD
+Total SATS:        73,828.699 SATS
+VSC Liability (Liability) - Sub: v4vapp.qrc balance as of 2025-12-16 12:40:00 UTC
+=======================================================================================================================================
