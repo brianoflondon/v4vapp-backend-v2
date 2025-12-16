@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 from pprint import pprint
 
@@ -12,10 +13,12 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
     generate_balance_sheet_mongodb,
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.profit_and_loss import (
+    generate_profit_and_loss_report,
+    profit_and_loss_printout,
+)
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-
-from v4vapp_backend_v2.accounting.profit_and_loss import generate_profit_and_loss_report, profit_and_loss_printout
 
 
 @pytest.fixture(scope="module")
@@ -79,7 +82,6 @@ async def test_check_balance_sheet_mongodb():
     assert is_balanced, "Balance sheet isn't balanced"
 
 
-
 async def test_generate_profit_and_loss_report():
     pl_report = await generate_profit_and_loss_report()
     print(pl_report)
@@ -90,3 +92,59 @@ async def test_generate_profit_and_loss_report():
 
     pl_printout = await profit_and_loss_printout(pl_report=pl_report)
     print(pl_printout)
+
+
+async def test_exc_conv_nets_to_zero():
+    """Each exc_conv entry should have debit and credit sides that net to zero (per unit)."""
+    cursor = LedgerEntry.collection().find({"ledger_type": "exc_conv"})
+    entries = await cursor.to_list(length=None)
+
+    def D(v):
+        if isinstance(v, dict):
+            if "$numberDecimal" in v:
+                return Decimal(v["$numberDecimal"])
+            return Decimal(0)
+        if v is None:
+            return Decimal(0)
+        return Decimal(str(v))
+
+    for e in entries:
+        conv = e.get("conv_signed")
+        if not conv:
+            continue
+        d = conv.get("debit", {})
+        c = conv.get("credit", {})
+        # msats check (preferred canonical integer unit)
+        assert D(d.get("msats")) + D(c.get("msats")) == 0
+        # hive check
+        assert D(d.get("hive")) + D(c.get("hive")) == 0
+
+
+async def test_exc_fee_balances():
+    """exc_fee entries should balance between Expense (debit) and Exchange Holdings (credit)."""
+    cursor = LedgerEntry.collection().find({"ledger_type": "exc_fee"})
+    entries = await cursor.to_list(length=None)
+
+    def D(v):
+        if isinstance(v, dict):
+            if "$numberDecimal" in v:
+                return Decimal(v["$numberDecimal"])
+            return Decimal(0)
+        if v is None:
+            return Decimal(0)
+        return Decimal(str(v))
+
+    for e in entries:
+        conv = e.get("conv_signed")
+        if not conv:
+            continue
+        d = conv.get("debit", {})
+        c = conv.get("credit", {})
+        # msats must sum to zero across debit/credit for the fee entry
+        assert D(d.get("msats")) + D(c.get("msats")) == 0
+
+
+async def test_report_contains_explanatory_note():
+    balance_sheet_dict = await generate_balance_sheet_mongodb()
+    s = balance_sheet_all_currencies_printout(balance_sheet_dict)
+    assert "Unit lines represent values converted into each unit" in s
