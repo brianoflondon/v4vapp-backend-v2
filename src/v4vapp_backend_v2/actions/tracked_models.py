@@ -386,9 +386,14 @@ class TrackedBaseModel(BaseModel):
             else:
                 loop.run_until_complete(cls.update_quote(use_cache=use_cache, store_db=store_db))
         except RuntimeError as e:
-            # Handle cases where the event loop is already running
-            # logger.error(f"Error in update_quote_sync: {e}")
-            raise e
+            # If there's no current event loop (common in some pytest runs), fall back to asyncio.run
+            msg = str(e)
+            if "There is no current event loop" in msg or "no current event loop" in msg:
+                # Use asyncio.run which creates a fresh event loop for the duration of the call
+                asyncio.run(cls.update_quote(use_cache=use_cache, store_db=store_db))
+            else:
+                # Re-raise other runtime errors (e.g., already running loop)
+                raise e
 
     @classmethod
     async def update_quote(
