@@ -494,10 +494,10 @@ class LedgerEntry(BaseModel):
                 return 0.0
 
         # If this is an exchange conversion, ensure the conversion sides net to zero
-        if LedgerType and self.ledger_type == LedgerType.EXCHANGE_CONVERSION:
+        if LedgerType is not None and self.ledger_type == LedgerType.EXCHANGE_CONVERSION:
             conv = self.conv_signed
-            debit_conv = conv.get("debit", None)
-            credit_conv = conv.get("credit", None)
+            debit_conv = conv.get("debit", None)  # type: ignore
+            credit_conv = conv.get("credit", None)  # type: ignore
             if not debit_conv or not credit_conv:
                 raise LedgerEntryCreationException(
                     "Missing conversion details for exc_conv entry."
@@ -531,10 +531,10 @@ class LedgerEntry(BaseModel):
                 )
 
         # If this is an exchange fee, ensure msats/netting holds
-        if LedgerType and self.ledger_type == LedgerType.EXCHANGE_FEES:
+        if LedgerType is not None and self.ledger_type == LedgerType.EXCHANGE_FEES:
             conv = self.conv_signed
-            debit_conv = conv.get("debit", None)
-            credit_conv = conv.get("credit", None)
+            debit_conv = conv.get("debit", None)  # pyright: ignore[reportAttributeAccessIssue]
+            credit_conv = conv.get("credit", None)  # pyright: ignore[reportAttributeAccessIssue]
             if debit_conv and credit_conv:
                 msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(
                     getattr(credit_conv, "msats", 0)
