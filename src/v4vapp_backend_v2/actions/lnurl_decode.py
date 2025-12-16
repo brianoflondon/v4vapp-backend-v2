@@ -1,5 +1,5 @@
-from decimal import Decimal
 import re
+from decimal import Decimal
 from typing import Dict, Tuple
 from urllib.parse import parse_qs, urlparse
 
@@ -32,9 +32,6 @@ class LnurlException(Exception):
     def __init__(self, message: str | None = None, failure: Dict[str, str] | None = None):
         if message is None and failure:
             message = failure.get("error", "Unknown error")
-        logger.error(
-            f"LnurlException: {message}", extra={"notification": False, "lnurl_failure": failure}
-        )
         super().__init__(message)
 
 
@@ -162,8 +159,10 @@ async def decode_any_lightning_string(
         if response.tag != "payRequest":
             raise LnurlException("Not a valid LNURLp or Lightning Address")
         if not (response.min_sendable <= zero_amount_invoice_send_msats <= response.max_sendable):
+            message = f"Amount {zero_amount_invoice_send_msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}"
+            logger.warning(message, extra={"notification": False})
             raise LnurlException(
-                f"Amount {zero_amount_invoice_send_msats // 1_000:,} out of range: {response.min_sendable // 1_000:,} -> {response.max_sendable // 1_000:,}",
+                message=message,
                 failure={"error": "amount out of range"},
             )
         if not response.comment_allowed:
@@ -174,7 +173,7 @@ async def decode_any_lightning_string(
             params = {"amount": zero_amount_invoice_send_msats, "comment": comment}
 
     except LnurlException as ex:
-        logger.error(
+        logger.debug(
             f"LnurlException: {ex}", extra={"notification": False, "lnurl_failure": str(ex)}
         )
         # Bare raise to avoid chaining exceptions
