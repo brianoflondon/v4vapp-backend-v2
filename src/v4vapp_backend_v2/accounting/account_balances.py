@@ -185,6 +185,10 @@ async def account_balance_printout(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
+    # Clarify that unit sections are separate views and are not additive
+    output.append(
+        "Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals."
+    )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
