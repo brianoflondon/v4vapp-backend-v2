@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -90,11 +91,14 @@ async def test_lnurlp_proxy_lightning_addresses(
     os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
 )
 @pytest.mark.asyncio
-async def test_decode_any_lightning_string():
+async def test_decode_any_lightning_string(monkeypatch: pytest.MonkeyPatch):
     """
     Test the decode_any_lightning_string function with various inputs.
     """
     # Test with a valid Lightning Address
+    # Need to override the BASE_CONFIG_PATH to point to test config which is set in conftest.py
+    base_path_original = Path("config/")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", base_path_original)
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     lnd_client = LNDClient(connection_name="voltage")
     input = "lightning:lnbc20720n1p5pwchppp5cc7umgmnekpym25sss7tpld8dgn3f8ymcj5wt7hk8xevdsa8myzsdzawc68vctswqhxgetkyp7zqa35wckhsjjstfzjqlpqydf5z4znyqerqdejyp7zqg6ng929xgprgdxy2s2wyq3hvdrkv9c8qcqzzsxqzxgsp57gv9xfay4lmgqgkrtydews0kr88qajj84gf4x4lraz38966rs2yq9qxpqysgqwjqhkuj0g5anqxe0tqun2hckw504q5q9cej6j4vsvav0alkrp3er06qgtxkq8v0d0s0d8jx0ucme5dlu4m77qxlllq5fy0qn3k0ameqp69a6cs"
