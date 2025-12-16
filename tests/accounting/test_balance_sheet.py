@@ -148,3 +148,29 @@ async def test_report_contains_explanatory_note():
     balance_sheet_dict = await generate_balance_sheet_mongodb()
     s = balance_sheet_all_currencies_printout(balance_sheet_dict)
     assert "Unit lines represent values converted into each unit" in s
+
+
+async def test_db_checks_reject_exc_conv_msats_mismatch():
+    """db_checks should reject exc_conv entries whose conv sides don't net to zero (msats)."""
+    doc = await LedgerEntry.collection().find_one({"ledger_type": "exc_conv"})
+    assert doc, "No exc_conv entry found in test data"
+    entry = LedgerEntry.model_validate(doc)
+    # Corrupt the msats so they don't net to zero
+    entry.debit_conv.msats = entry.debit_conv.msats + 10000
+    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryCreationException
+
+    with pytest.raises(LedgerEntryCreationException):
+        entry.db_checks()
+
+
+async def test_db_checks_reject_exc_fee_msats_mismatch():
+    """db_checks should reject exc_fee entries whose conv sides don't net to zero (msats)."""
+    doc = await LedgerEntry.collection().find_one({"ledger_type": "exc_fee"})
+    assert doc, "No exc_fee entry found in test data"
+    entry = LedgerEntry.model_validate(doc)
+    # Corrupt the msats so they don't net to zero
+    entry.debit_conv.msats = entry.debit_conv.msats + 5000
+    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryCreationException
+
+    with pytest.raises(LedgerEntryCreationException):
+        entry.db_checks()

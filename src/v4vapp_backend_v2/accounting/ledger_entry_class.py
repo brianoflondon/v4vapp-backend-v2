@@ -482,6 +482,60 @@ class LedgerEntry(BaseModel):
         """
         if not self.is_completed:
             raise LedgerEntryCreationException("LedgerEntry is not completed.")
+        # Additional integrity checks for specific ledger types
+        try:
+            from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+        except Exception:
+            LedgerType = None
+
+        # Helper to convert values to float safely
+        def _to_num(v):
+            try:
+                return float(v)
+            except Exception:
+                return 0.0
+
+        # If this is an exchange conversion, ensure the conversion sides net to zero
+        if LedgerType and self.ledger_type == LedgerType.EXCHANGE_CONVERSION:
+            conv = self.conv_signed
+            debit_conv = conv.get("debit", None)
+            credit_conv = conv.get("credit", None)
+            if not debit_conv or not credit_conv:
+                raise LedgerEntryCreationException("Missing conversion details for exc_conv entry.")
+
+            # msats should sum to zero (canonical integer unit)
+            msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(getattr(credit_conv, "msats", 0))
+            if abs(msats_sum) > 10:  # tolerate up to 10 msats rounding noise
+                raise LedgerEntryCreationException(
+                    f"exc_conv msats do not net to zero: {msats_sum} msats for {self.group_id}"
+                )
+
+            # hive should sum to zero within unit tolerance
+            hive_sum = _to_num(getattr(debit_conv, "hive", 0)) + _to_num(getattr(credit_conv, "hive", 0))
+            if abs(hive_sum) > CryptoConv.UNIT_TOLERANCE[Currency.HIVE.value]:
+                raise LedgerEntryCreationException(
+                    f"exc_conv hive values do not net to zero: {hive_sum} HIVE for {self.group_id}"
+                )
+
+            # Warn if conversion fetch_dates are missing since conversions rely on external quotes
+            if not getattr(debit_conv, "fetch_date", None) or not getattr(credit_conv, "fetch_date", None):
+                logger.warning(
+                    "Missing conversion fetch_date on exc_conv entry; fetched prices may be incomplete",
+                    extra={"notification": False, **self.log_extra},
+                )
+
+        # If this is an exchange fee, ensure msats/netting holds
+        if LedgerType and self.ledger_type == LedgerType.EXCHANGE_FEES:
+            conv = self.conv_signed
+            debit_conv = conv.get("debit", None)
+            credit_conv = conv.get("credit", None)
+            if debit_conv and credit_conv:
+                msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(getattr(credit_conv, "msats", 0))
+                # Fees should net to zero across debit/credit sides (one side is expense, other asset)
+                if abs(msats_sum) > 10:
+                    raise LedgerEntryCreationException(
+                        f"exc_fee msats do not net to zero: {msats_sum} msats for {self.group_id}"
+                    )
 
     async def save(
         self, ignore_duplicates: bool = False, upsert: bool = False
