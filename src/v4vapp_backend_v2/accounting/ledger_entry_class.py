@@ -181,9 +181,7 @@ class LedgerEntry(BaseModel):
         default="ledger_entry",
         description="Type of the operation, defaults to 'ledger_entry'",
     )
-    link: str = Field(
-        "", description="Link to the Hive block explorer transaction if appropriate"
-    )
+    link: str = Field("", description="Link to the Hive block explorer transaction if appropriate")
 
     @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
     @classmethod
@@ -501,24 +499,32 @@ class LedgerEntry(BaseModel):
             debit_conv = conv.get("debit", None)
             credit_conv = conv.get("credit", None)
             if not debit_conv or not credit_conv:
-                raise LedgerEntryCreationException("Missing conversion details for exc_conv entry.")
+                raise LedgerEntryCreationException(
+                    "Missing conversion details for exc_conv entry."
+                )
 
             # msats should sum to zero (canonical integer unit)
-            msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(getattr(credit_conv, "msats", 0))
+            msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(
+                getattr(credit_conv, "msats", 0)
+            )
             if abs(msats_sum) > 10:  # tolerate up to 10 msats rounding noise
                 raise LedgerEntryCreationException(
                     f"exc_conv msats do not net to zero: {msats_sum} msats for {self.group_id}"
                 )
 
             # hive should sum to zero within unit tolerance
-            hive_sum = _to_num(getattr(debit_conv, "hive", 0)) + _to_num(getattr(credit_conv, "hive", 0))
+            hive_sum = _to_num(getattr(debit_conv, "hive", 0)) + _to_num(
+                getattr(credit_conv, "hive", 0)
+            )
             if abs(hive_sum) > CryptoConv.UNIT_TOLERANCE[Currency.HIVE.value]:
                 raise LedgerEntryCreationException(
                     f"exc_conv hive values do not net to zero: {hive_sum} HIVE for {self.group_id}"
                 )
 
             # Warn if conversion fetch_dates are missing since conversions rely on external quotes
-            if not getattr(debit_conv, "fetch_date", None) or not getattr(credit_conv, "fetch_date", None):
+            if not getattr(debit_conv, "fetch_date", None) or not getattr(
+                credit_conv, "fetch_date", None
+            ):
                 logger.warning(
                     "Missing conversion fetch_date on exc_conv entry; fetched prices may be incomplete",
                     extra={"notification": False, **self.log_extra},
@@ -530,7 +536,9 @@ class LedgerEntry(BaseModel):
             debit_conv = conv.get("debit", None)
             credit_conv = conv.get("credit", None)
             if debit_conv and credit_conv:
-                msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(getattr(credit_conv, "msats", 0))
+                msats_sum = _to_num(getattr(debit_conv, "msats", 0)) + _to_num(
+                    getattr(credit_conv, "msats", 0)
+                )
                 # Fees should net to zero across debit/credit sides (one side is expense, other asset)
                 if abs(msats_sum) > 10:
                     raise LedgerEntryCreationException(
