@@ -90,7 +90,7 @@ async def ledger_entries_data(
     cursor = (
         LedgerEntry.collection()
         .find(filter=query)
-        .sort([("timestamp", 1)])
+        .sort([("timestamp", -1)])
         .skip(offset)
         .limit(limit)
     )

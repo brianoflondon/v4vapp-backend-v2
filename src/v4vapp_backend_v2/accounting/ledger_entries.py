@@ -33,7 +33,7 @@ async def get_ledger_entries(
             (considering both name and sub-account) are returned. Defaults to None.
 
     Returns:
-        list[LedgerEntry]: A list of LedgerEntry objects sorted by timestamp (ascending).
+        list[LedgerEntry]: A list of LedgerEntry objects sorted by timestamp (newest first, descending).
 
     Notes:
         - Queries the database for entries with a timestamp less than or equal to `as_of_date`.
@@ -63,7 +63,7 @@ async def get_ledger_entries(
 
     cursor = LedgerEntry.collection().find(
         filter=query,
-        sort=[("timestamp", 1)],
+        sort=[("timestamp", -1)],
     )
     async for entry in cursor:
         try:
