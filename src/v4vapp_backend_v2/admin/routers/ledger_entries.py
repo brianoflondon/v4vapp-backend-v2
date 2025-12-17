@@ -63,17 +63,88 @@ async def ledger_entries_data(
         sub_account=(None if account else sub_filter),
     )
 
-    # Minimal JSON-serializable representation
+    # Return a structured JSON representation (including nested debit/credit and conv)
+    def conv_to_dict(conv):
+        if conv is None:
+            return None
+        # Try model_dump when available (Pydantic models)
+        try:
+            return conv.model_dump(mode="json")
+        except Exception:
+            # Fallback to attribute extraction
+            keys = [
+                "hive",
+                "hbd",
+                "usd",
+                "sats",
+                "sats_rounded",
+                "btc",
+                "sats_hive",
+                "sats_hbd",
+                "fetch_date",
+                "source",
+            ]
+            d = {}
+            for k in keys:
+                if hasattr(conv, k):
+                    v = getattr(conv, k)
+                    if hasattr(v, "isoformat"):
+                        try:
+                            d[k] = v.isoformat()
+                        except Exception:
+                            d[k] = str(v)
+                    else:
+                        d[k] = v
+            return d
+
+    def acct_to_dict(acc):
+        if acc is None:
+            return None
+        return {
+            "name": getattr(acc, "name", ""),
+            "sub": getattr(acc, "sub", ""),
+            "account_type": getattr(acc, "account_type", ""),
+            "contra": getattr(acc, "contra", False),
+        }
+
     entries = []
     for e in ledger_entries:
+        debit = acct_to_dict(getattr(e, "debit", None))
+        credit = acct_to_dict(getattr(e, "credit", None))
         entries.append(
             {
                 "group_id": e.group_id,
                 "short_id": e.short_id,
-                "timestamp": e.timestamp.isoformat(),
-                "ledger_type": e.ledger_type.name,
+                "timestamp": e.timestamp.isoformat() if getattr(e, "timestamp", None) else None,
+                "ledger_type": e.ledger_type.name if getattr(e, "ledger_type", None) else None,
+                "ledger_type_str": getattr(e, "ledger_type", None).printout
+                if getattr(e, "ledger_type", None)
+                else None,
                 "description": e.description,
                 "link": getattr(e, "link", ""),
+                "cust_id": getattr(e, "cust_id", ""),
+                "debit": {
+                    **debit,
+                    "amount": str(getattr(e, "debit_amount", None)),
+                    "unit": getattr(e, "debit_unit", "").value
+                    if getattr(e, "debit_unit", None)
+                    else "",
+                    "conv": conv_to_dict(getattr(e, "debit_conv", None)),
+                },
+                "credit": {
+                    **credit,
+                    "amount": str(getattr(e, "credit_amount", None)),
+                    "unit": getattr(e, "credit_unit", "").value
+                    if getattr(e, "credit_unit", None)
+                    else "",
+                    "conv": conv_to_dict(getattr(e, "credit_conv", None)),
+                },
+                "conversion": {
+                    "debit": conv_to_dict(getattr(e, "debit_conv", None)),
+                    "credit": conv_to_dict(getattr(e, "credit_conv", None)),
+                },
+                # Provide the textual journal for reference (not used for primary rendering)
+                "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
             }
         )
 
