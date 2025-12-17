@@ -147,7 +147,9 @@ async def users_data_api():
                 }
             )
         except Exception as e:
-            logger.warning(f"Exception processing account {account.sub}: {e}")
+            logger.exception(
+                f"Exception processing account {account.sub}: {e}", extra={"notification": False}
+            )
             # If balance lookup fails, still show the user but with error
             users_data.append(
                 {
