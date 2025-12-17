@@ -13,6 +13,10 @@ from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_entries
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
+    filter_by_account_as_of_date_query,
+)
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -38,8 +42,10 @@ async def ledger_entries_data(
     group_id: Optional[str] = None,
     as_of_date_str: Optional[str] = None,
     age_hours: Optional[int] = 0,
+    limit: Optional[int] = 50,
+    offset: Optional[int] = 0,
 ):
-    """Return ledger entries in JSON form for AJAX or API use."""
+    """Return ledger entries in JSON form for AJAX or API use. Supports pagination via limit/offset."""
     as_of_date = datetime.now(tz=timezone.utc)
     if as_of_date_str:
         try:
@@ -54,14 +60,47 @@ async def ledger_entries_data(
         except Exception:
             account = None
 
-    # If an account is specified use it; otherwise allow sub_filter to select by sub-account alone
-    ledger_entries = await get_ledger_entries(
+    # Build the base query so we can count and paginate
+    # Convert age_hours to timedelta if provided, pass through to the query builder
+    age = None
+    try:
+        age_val = int(age_hours or 0)
+    except Exception:
+        age_val = 0
+    if age_val and age_val > 0:
+        from datetime import timedelta
+
+        age = timedelta(hours=age_val)
+
+    query = filter_by_account_as_of_date_query(
+        account=account,
+        cust_id=None,
         as_of_date=as_of_date,
-        filter_by_account=account,
+        ledger_types=None,
         group_id=group_id,
         short_id=short_id,
         sub_account=(None if account else sub_filter),
+        age=age,
     )
+
+    # Count total matching documents
+    total = await LedgerEntry.collection().count_documents(query)
+
+    # Fetch paginated documents
+    cursor = (
+        LedgerEntry.collection()
+        .find(filter=query)
+        .sort([("timestamp", 1)])
+        .skip(offset)
+        .limit(limit)
+    )
+
+    ledger_entries = []
+    async for e in cursor:
+        try:
+            ledger_entries.append(LedgerEntry.model_validate(e))
+        except Exception:
+            continue
 
     # Return a structured JSON representation (including nested debit/credit and conv)
     def conv_to_dict(conv):
@@ -144,11 +183,12 @@ async def ledger_entries_data(
                     "credit": conv_to_dict(getattr(e, "credit_conv", None)),
                 },
                 # Provide the textual journal for reference (not used for primary rendering)
+                "user_memo": getattr(e, "user_memo", ""),
                 "journal": e.print_journal_entry() if hasattr(e, "print_journal_entry") else None,
             }
         )
 
-    return JSONResponse({"count": len(entries), "entries": entries})
+    return JSONResponse({"count": total, "entries": entries})
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -207,6 +247,7 @@ async def ledger_entries_page(
             group_id=group_id,
             short_id=short_id,
             sub_account=(None if account else sub_filter),
+            age_hours=age_hours,
         )
     except Exception:
         # swallow DB errors and render page
