@@ -12,8 +12,10 @@ def filter_by_account_as_of_date_query(
     cust_id: str | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     ledger_types: list[LedgerType] | None = None,
+    group_id: str | None = None,
+    short_id: str | None = None,
     age: timedelta | None = None,
-) -> Dict[str, Any]:
+) -> Mapping[str, Any]:
     """
     Generates a MongoDB query to filter documents by a specific account and date.
 
@@ -23,6 +25,12 @@ def filter_by_account_as_of_date_query(
 
     If `account` is not given, returns all accounts.
     If `age` is provided, it filters documents within the specified age range
+    ending at `as_of_date`.
+    if `cust_id` is provided, it adds a condition to filter by the given customer ID.
+    if `ledger_types` is provided, it adds a condition to filter by the given ledger
+    types.
+    if `group_id` is provided, it adds a condition to filter by a regex matching the given group ID.
+    if `short_id` is provided, it adds a condition to filter by a regex matching the given short ID.
 
     Args:
         account (Account): The account object containing `name` and optionally `sub`
@@ -65,6 +73,12 @@ def filter_by_account_as_of_date_query(
         # If multiple types, use $in operator
         else:
             query["ledger_type"] = {"$in": ledger_types}
+
+    if group_id:
+        query["group_id"] = {"$regex": group_id}
+
+    if short_id:
+        query["short_id"] = {"$regex": short_id}
 
     return query
 
@@ -188,8 +202,7 @@ IGNORED_UPDATE_FIELDS = [
 ]
 
 
-def db_monitor_pipelines(
-) -> Dict[str, Sequence[Mapping[str, Any]]]:
+def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
     """
     Generates MongoDB aggregation pipelines for monitoring database changes in payments, invoices, and hive operations collections.
 
@@ -201,7 +214,6 @@ def db_monitor_pipelines(
                 - "hive_ops": Pipeline to monitor hive operation documents, excluding deletes and block marker types.
             Each pipeline also ignores certain update operations that only affect specified fields ("replies", "change_conv", "process_time").
     """
-
 
     ignore_updates_match: Mapping[str, Any] = {
         "$match": {

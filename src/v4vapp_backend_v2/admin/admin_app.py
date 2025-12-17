@@ -126,6 +126,14 @@ class AdminApp:
             financial_reports.router, prefix="/admin/financial-reports", tags=["Financial Reports"]
         )
 
+        # Ledger Entries router
+        from v4vapp_backend_v2.admin.routers import ledger_entries
+
+        ledger_entries.set_templates_and_nav(self.templates, self.nav_manager)
+        self.app.include_router(
+            ledger_entries.router, prefix="/admin/ledger-entries", tags=["Ledger Entries"]
+        )
+
         # Add more routers here as needed
         # self.app.include_router(other_router, prefix="/admin/other", tags=["Other"])
 

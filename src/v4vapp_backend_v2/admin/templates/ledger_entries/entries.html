@@ -1,0 +1,233 @@
+{% extends "base.html" %} {% block extra_css %}
+<style>
+    .account-form {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-select {
+        font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+        font-size: 0.9rem;
+    }
+
+    .form-check-label {
+        font-weight: 500;
+        color: var(--bs-body-color);
+    }
+</style>
+{% endblock %} {% block content %}
+<div class="card account-form">
+    <h3 class="mb-4">
+        <i class="bi bi-bank me-2"></i>
+        Select Account for Balance Report
+    </h3>
+
+    <form method="get" class="needs-validation" novalidate>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="sub_filter" class="form-label">
+                        <i class="bi bi-funnel me-1"></i>
+                        Filter by Sub Account
+                    </label>
+                    <select class="form-select" id="sub_filter" onchange="filterBySubAccount()">
+                        <option value="">All Sub Accounts</option>
+                        {% set all_subs = [] %} {% for account_type, accounts in
+                        accounts_by_type.items() %} {% for account in accounts %} {% if
+                        account.sub and account.sub not in all_subs %} {% set _ =
+                        all_subs.append(account.sub) %} {% endif %} {% endfor %} {% endfor
+                        %} {% for sub in all_subs|sort %}
+                        <option value="{{ sub }}">{{ sub }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="mb-3">
+                    <label for="account_string" class="form-label">
+                        <i class="bi bi-folder2-open me-1"></i>
+                        Select Account
+                    </label>
+                    <select class="form-select" id="account_string" name="account_string" required>
+                        <option value="">Choose an account...</option>
+                        {% for account_type, accounts in accounts_by_type.items() %}
+                        <optgroup label="{{ account_type }} Accounts ({{ accounts|length }})">
+                            {% for account in accounts %}
+                            <option value="{{ account }}" data-sub="{{ account.sub if account.sub else '' }}"
+                                data-type="{{ account_type }}" {% if account_string and account_string=""="account"
+                                %}selected{% endif %}>
+                                {{ account.name }}{% if account.sub %} - {{ account.sub }}{%
+                                endif %}{% if account.contra %} [Contra]{% endif %}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback">Please select an account.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="as_of_date_str" class="form-label">
+                        <i class="bi bi-calendar me-1"></i>
+                        As of Date (UTC)
+                    </label>
+                    <input type="datetime-local" class="form-control" id="as_of_date_str" name="as_of_date_str"
+                        value="{{ as_of_date.isoformat()[:16] }}" />
+                    <div class="form-text">Leave blank for current time</div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="age_hours" class="form-label">
+                        <i class="bi bi-clock me-1"></i>
+                        Age Filter (Hours)
+                    </label>
+                    <input type="number" class="form-control" id="age_hours" name="age_hours" value="{{ age_hours }}"
+                        min="0" step="1" />
+                    <div class="form-text">0 = no age filter</div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="bi bi-list-ul me-1"></i>
+                        Display Options
+                    </label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="line_items" name="line_items" checked />
+                        <label class="form-check-label" for="line_items">Show Line Items</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="user_memos" name="user_memos" checked />
+                        <label class="form-check-label" for="user_memos">Show User Memos</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extra filters: short_id and group_id -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="short_id" class="form-label"><i class="bi bi-tag me-1"></i> Short ID (regex
+                        allowed)</label>
+                    <input type="text" class="form-control" id="short_id" name="short_id" value="{{ short_id }}"
+                        placeholder="e.g. ^abc" />
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="group_id" class="form-label"><i class="bi bi-grid-3x3-gap me-1"></i> Group ID (regex
+                        allowed)</label>
+                    <input type="text" class="form-control" id="group_id" name="group_id" value="{{ group_id }}"
+                        placeholder="e.g. order_.*" />
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="mb-3 w-100">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-2"></i> Search Entries
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="list-group">
+    {% if entries %} {% for entry in entries %}
+    <div class="list-group-item">
+        <div class="d-flex w-100 justify-content-between">
+            <h5 class="mb-1">
+                {{ entry.short_id }}
+                <small class="text-muted">{{ entry.timestamp.isoformat() }}</small>
+            </h5>
+            <small>
+                {% if entry.link %}
+                <a href="{{ entry.link }}" target="_blank" class="link-primary">🔗 Link</a>
+                {% endif %}
+                <span class="badge bg-secondary ms-2">{{ entry.ledger_type_str }}</span>
+            </small>
+        </div>
+        <p class="mb-1">{{ entry.description }}</p>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                data-bs-target="#details-{{ loop.index }}">
+                Details
+            </button>
+        </div>
+        <div class="collapse mt-2" id="details-{{ loop.index }}">
+            <pre class="small">{{ entry.draw_t_diagram() }}</pre>
+        </div>
+    </div>
+    {% endfor %} {% else %}
+    <div class="list-group-item text-muted">No entries found.</div>
+    {% endif %}
+</div>
+
+{% endblock %} {% block extra_js %}
+<script>
+    // Form validation
+    ; (function () {
+        "use strict"
+        var forms = document.querySelectorAll(".needs-validation")
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener(
+                "submit",
+                function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                    }
+                    form.classList.add("was-validated")
+                },
+                false,
+            )
+        })
+    })()
+
+    // Auto-update datetime field to current UTC time if empty
+    function updateCurrentTime() {
+        const el = document.getElementById("as_of_date_str")
+        if (!el) return
+        if (el.value) return // leave if user provided value
+        const now = new Date()
+        const utcDate = new Date(now.getTime() + now.getTimezoneOffset() * 60000)
+        el.value = utcDate.toISOString().slice(0, 16)
+    }
+
+    // Filter accounts by sub account
+    function filterBySubAccount() {
+        const subFilter = document.getElementById("sub_filter").value
+        const accountSelect = document.getElementById("account_string")
+        const options = accountSelect.querySelectorAll("option")
+
+        options.forEach((opt) => {
+            const sub = opt.getAttribute("data-sub")
+            if (!subFilter || sub === subFilter) {
+                opt.style.display = ""
+            } else {
+                opt.style.display = "none"
+            }
+        })
+    }
+
+    // Initialize
+    document.addEventListener("DOMContentLoaded", function () {
+        updateCurrentTime()
+    })
+</script>
+{% endblock %}

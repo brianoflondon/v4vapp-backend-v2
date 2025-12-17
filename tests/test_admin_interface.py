@@ -441,6 +441,7 @@ class TestAdminNavigation:
             "V4V Config",
             "Account Balances",
             "Financial Reports",
+            "Ledger Entries",
         ]
 
         for item in expected_nav_items:
@@ -475,6 +476,67 @@ class TestAdminNavigation:
 
         for link in expected_links:
             assert link in content, f"Navigation link '{link}' not found"
+
+    def test_ledger_entries_page(self, admin_client, mocker):
+        """Test ledger entries page loads and shows entries"""
+        # Mock get_ledger_entries to return a small sample
+        from decimal import Decimal
+
+        from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+        from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+
+        debit = AssetAccount(name="Customer Deposits Hive", sub="devser.v4vapp")
+        credit = AssetAccount(name="Treasury Lightning", sub="from_keepsats")
+
+        sample_entry = LedgerEntry(
+            group_id="grp1",
+            short_id="short1",
+            description="Sample entry",
+            debit=debit,
+            credit=credit,
+            debit_amount=Decimal(1000),
+            credit_amount=Decimal(1000),
+        )
+
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.ledger_entries.get_ledger_entries",
+            return_value=[sample_entry],
+        )
+
+        response = admin_client.get("/admin/ledger-entries")
+        assert response.status_code == 200
+        content = response.text
+        assert "Ledger Entries" in content
+        assert "short1" in content
+
+    def test_ledger_entries_search_by_short_id(self, admin_client, mocker):
+        """Test that searching by short_id filters results"""
+        from decimal import Decimal
+
+        from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+        from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+
+        debit = AssetAccount(name="Customer Deposits Hive", sub="devser.v4vapp")
+        credit = AssetAccount(name="Treasury Lightning", sub="from_keepsats")
+
+        sample_entry = LedgerEntry(
+            group_id="grp1",
+            short_id="findme",
+            description="Search entry",
+            debit=debit,
+            credit=credit,
+            debit_amount=Decimal(1),
+            credit_amount=Decimal(1),
+        )
+
+        mocker.patch(
+            "v4vapp_backend_v2.admin.routers.ledger_entries.get_ledger_entries",
+            return_value=[sample_entry],
+        )
+
+        response = admin_client.get("/admin/ledger-entries?short_id=findme")
+        assert response.status_code == 200
+        assert "findme" in response.text
 
 
 class TestAdminContent:

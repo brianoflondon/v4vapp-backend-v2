@@ -61,6 +61,14 @@ class NavigationManager:
                 badge="Reports",
                 badge_color="info",
             ),
+            NavigationItem(
+                name="Ledger Entries",
+                url="/admin/ledger-entries",
+                icon="📚",
+                description="Browse and search ledger entries",
+                badge="Ledger",
+                badge_color="secondary",
+            ),
             # Add more items here as you expand the admin interface
             # NavigationItem(
             #     name="User Management",
