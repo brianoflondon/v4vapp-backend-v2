@@ -17,6 +17,7 @@ async def get_ledger_entries(
     filter_by_ledger_types: list[LedgerType] | None = None,
     group_id: str | None = None,
     short_id: str | None = None,
+    sub_account: str | None = None,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date, optionally filtered by account.
@@ -49,6 +50,7 @@ async def get_ledger_entries(
         ledger_types=filter_by_ledger_types,
         group_id=group_id,
         short_id=short_id,
+        sub_account=sub_account,
     )
     ledger_entries = []
 

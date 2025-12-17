@@ -4,7 +4,7 @@ Ledger Entries Router
 Provides a simple page and data endpoint to browse ledger entries.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -33,6 +33,7 @@ def set_templates_and_nav(tmpl: Jinja2Templates, nav: NavigationManager):
 @router.get("/data")
 async def ledger_entries_data(
     account_string: Optional[str] = None,
+    sub_filter: Optional[str] = None,
     short_id: Optional[str] = None,
     group_id: Optional[str] = None,
     as_of_date_str: Optional[str] = None,
@@ -53,10 +54,13 @@ async def ledger_entries_data(
         except Exception:
             account = None
 
-    age = timedelta(hours=age_hours) if age_hours and age_hours > 0 else None
-
+    # If an account is specified use it; otherwise allow sub_filter to select by sub-account alone
     ledger_entries = await get_ledger_entries(
-        as_of_date=as_of_date, filter_by_account=account, group_id=group_id, short_id=short_id
+        as_of_date=as_of_date,
+        filter_by_account=account,
+        group_id=group_id,
+        short_id=short_id,
+        sub_account=(None if account else sub_filter),
     )
 
     # Minimal JSON-serializable representation
@@ -80,6 +84,7 @@ async def ledger_entries_data(
 async def ledger_entries_page(
     request: Request,
     account_string: Optional[str] = None,
+    sub_filter: Optional[str] = None,
     short_id: Optional[str] = None,
     group_id: Optional[str] = None,
     as_of_date_str: Optional[str] = None,
@@ -126,7 +131,11 @@ async def ledger_entries_page(
     ledger_entries = []
     try:
         ledger_entries = await get_ledger_entries(
-            as_of_date=as_of_date, filter_by_account=account, group_id=group_id, short_id=short_id
+            as_of_date=as_of_date,
+            filter_by_account=account,
+            group_id=group_id,
+            short_id=short_id,
+            sub_account=(None if account else sub_filter),
         )
     except Exception:
         # swallow DB errors and render page
@@ -141,6 +150,7 @@ async def ledger_entries_page(
             "title": "Ledger Entries",
             "nav_items": nav_items,
             "accounts_by_type": accounts_by_type,
+            "sub_filter": sub_filter or "",
             "entries": ledger_entries,
             "short_id": short_id or "",
             "group_id": group_id or "",

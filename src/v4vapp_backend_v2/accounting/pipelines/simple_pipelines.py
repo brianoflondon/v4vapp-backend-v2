@@ -14,6 +14,7 @@ def filter_by_account_as_of_date_query(
     ledger_types: list[LedgerType] | None = None,
     group_id: str | None = None,
     short_id: str | None = None,
+    sub_account: str | None = None,
     age: timedelta | None = None,
 ) -> Mapping[str, Any]:
     """
@@ -59,6 +60,12 @@ def filter_by_account_as_of_date_query(
                 "credit.name": account.name,
                 "credit.sub": account.sub if account.sub else "",
             },
+        ]
+    elif sub_account:
+        # Allow filtering by sub-account alone (do not require full account selection)
+        query["$or"] = [
+            {"debit.sub": sub_account},
+            {"credit.sub": sub_account},
         ]
 
     # Add cust_id condition if provided
