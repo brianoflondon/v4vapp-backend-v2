@@ -8,3 +8,10 @@ repos:
     rev: 0.8.1
     hooks:
       - id: nbstripout
+  - repo: local
+    hooks:
+      - id: validate-jinja-templates
+        name: Validate Jinja templates
+        entry: python scripts/validate_jinja_templates.py
+        language: python
+        files: ^src/v4vapp_backend_v2/admin/templates/.*\.html$

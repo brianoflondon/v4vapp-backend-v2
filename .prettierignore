@@ -1,0 +1,2 @@
+# Ignore admin Jinja templates to avoid formatters corrupting Jinja syntax
+src/v4vapp_backend_v2/admin/templates/
