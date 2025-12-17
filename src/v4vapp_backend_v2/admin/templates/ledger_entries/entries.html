@@ -52,16 +52,12 @@
                         <option value="" {% if not sub_filter %}selected{% endif %}>
                             All Sub Accounts
                         </option>
-                        {% set all_subs = [] %}
-                        {% for account_type, accounts in accounts_by_type.items() %}
-                            {% for account in accounts %}
-                                {% if account.sub and account.sub not in all_subs %}
-                                    {% set _ = all_subs.append(account.sub) %}
-                                {% endif %}
-                            {% endfor %}
-                        {% endfor %}
-                        {% for sub in all_subs|sort %}
-                            <option value="{{ sub }}" {% if sub_filter and sub_filter == sub %}selected{% endif %}>{{ sub }}</option>
+                        {% set all_subs = [] %} {% for account_type, accounts in
+                        accounts_by_type.items() %} {% for account in accounts %} {% if
+                        account.sub and account.sub not in all_subs %} {% set _ =
+                        all_subs.append(account.sub) %} {% endif %} {% endfor %} {% endfor
+                        %} {% for sub in all_subs|sort %}
+                        <option value="{{ sub }}" {% if sub_filter and sub_filter == sub %}selected{% endif %}>{{ sub }}</option>
                         {% endfor %}
                     </select>
                     <div class="form-text text-muted mt-1">
