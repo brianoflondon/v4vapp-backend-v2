@@ -25,7 +25,7 @@ async def hold_keepsats(
     Raises:
         Any exceptions raised by CryptoConversion.get_quote() or LedgerEntry.save().
     """
-    fee_str = "-fee" if fee else ""
+    fee_str = "_fee" if fee else ""
     amount_sats = (amount_msats / Decimal(1000)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     debit_conversion = CryptoConversion(conv_from=Currency.MSATS, value=amount_msats)
     await debit_conversion.get_quote()
@@ -35,7 +35,7 @@ async def hold_keepsats(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}{fee_str}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}{fee_str}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Hold Keepsats {amount_sats:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(

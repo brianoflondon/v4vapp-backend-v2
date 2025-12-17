@@ -115,7 +115,7 @@ async def conversion_keepsats_to_hive(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=(
             f"Convert {conv_result.to_convert_conv.sats_rounded:,.0f} "
@@ -144,7 +144,7 @@ async def conversion_keepsats_to_hive(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Contra Conversion: {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id} Keepsats",
         debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
@@ -172,7 +172,7 @@ async def conversion_keepsats_to_hive(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
@@ -207,7 +207,7 @@ async def conversion_keepsats_to_hive(
             op_type=tracked_op.op_type,
             cust_id=cust_id,
             ledger_type=ledger_type,
-            group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+            group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
             description=f"Consume customer SATS for Keepsats-to-{to_currency} conversion {conv_result.net_to_receive_conv.sats_rounded:,.0f} msats for {cust_id}",  # Updated description
             debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
@@ -230,7 +230,7 @@ async def conversion_keepsats_to_hive(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Convert {conv_result.net_to_receive_amount} to {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
@@ -261,7 +261,7 @@ async def conversion_keepsats_to_hive(
             op_type=tracked_op.op_type,
             cust_id=cust_id,
             ledger_type=ledger_type,
-            group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+            group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
             description=f"Reclassify positive SATS from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
@@ -321,7 +321,7 @@ async def conversion_keepsats_to_hive(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Reclassify negative {to_currency} from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive outflow",
         debit=AssetAccount(name="Converted Keepsats Offset", sub="from_keepsats", contra=True),
