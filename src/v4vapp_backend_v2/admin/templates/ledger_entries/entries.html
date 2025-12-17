@@ -166,6 +166,14 @@
                     </button>
                 </div>
             </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="mb-3 w-100">
+                    <button type="button" id="clear-search" class="btn btn-outline-secondary w-100"
+                        onclick="clearFilters()">
+                        <i class="bi bi-x-circle me-2"></i> Clear Filters
+                    </button>
+                </div>
+            </div>
         </div>
     </form>
 </div>
@@ -279,8 +287,48 @@
         updateCurrentTime()
         window.__ledger_entries_offset = 0
         window.__ledger_entries_limit = 50
+
+        // Intercept form submit to use AJAX search instead of full page reload
+        const form = document.querySelector('.needs-validation')
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault()
+                // Reset paging and fetch using JS
+                window.__ledger_entries_offset = 0
+                document.getElementById('entries-container').innerHTML = ''
+                fetchEntries()
+            })
+        }
+
         fetchEntries()
     })
+
+    function clearFilters() {
+        const form = document.querySelector('.needs-validation')
+        if (!form) return
+        const fields = ['account_string', 'sub_filter', 'short_id', 'group_id', 'as_of_date_str', 'age_hours']
+        fields.forEach((name) => {
+            const el = form.querySelector('[name="' + name + '"]')
+            if (el) {
+                if (el.type === 'checkbox') {
+                    el.checked = false
+                } else {
+                    el.value = ''
+                }
+            }
+        })
+        // Reset checkboxes to defaults
+        const li = form.querySelector('[name="line_items"]')
+        if (li) li.checked = true
+        const um = form.querySelector('[name="user_memos"]')
+        if (um) um.checked = true
+
+        // Reset pagination and container, then fetch
+        window.__ledger_entries_offset = 0
+        document.getElementById('entries-container').innerHTML = ''
+        document.getElementById('server-entries').classList.remove('d-none')
+        fetchEntries()
+    }
 
     // Escape HTML to avoid XSS
     function escapeHtml(unsafe) {

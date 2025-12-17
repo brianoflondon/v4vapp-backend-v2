@@ -34,3 +34,5 @@ def test_ledger_entries_template_compiles_and_renders():
     rendered = template.render(**ctx)
 
     assert "Select Account" in rendered
+    # New: ensure clear filters button is present
+    assert 'id="clear-search"' in rendered
