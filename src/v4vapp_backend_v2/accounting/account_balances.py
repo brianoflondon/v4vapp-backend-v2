@@ -478,7 +478,9 @@ async def account_balance_printout_grouped_by_customer(
                         ledger_type = row.ledger_type
 
                         # Raw numeric values
-                        debit_val = row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
+                        debit_val = (
+                            row.amount if row.side == "debit" and row.unit == unit else Decimal(0)
+                        )
                         credit_val = (
                             row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
                         )
@@ -667,7 +669,7 @@ async def check_hive_conversion_limits(
     return limit_check
 
 
-async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, int] | None:
+async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal] | None:
     """
     Determines when the next rate limit will expire for a given customer and the amount that will be freed.
     This looks at the first (shortest) rate limit period and finds the oldest transaction
@@ -708,10 +710,13 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, int] | N
 
     # Find the oldest transaction
     oldest_entry = min(details, key=lambda x: x["timestamp"])
-    oldest_ts = oldest_entry["timestamp"]
-    sats_freed = oldest_entry["credit_conv"]["msats"] // Decimal(1000)  # Convert msats to sats
+    oldest_ts: datetime = oldest_entry["timestamp"]
+    # Converts on entry to Decimal from Decimal128 out of MongoDB
+    sats_freed: Decimal = Decimal(str(oldest_entry["credit_conv"]["msats"])) // Decimal(
+        1000
+    )  # Convert msats to sats
 
-    expiry = oldest_ts + timedelta(hours=first_limit.hours)
+    expiry: datetime = oldest_ts + timedelta(hours=first_limit.hours)
     return expiry, sats_freed
 
 
