@@ -1,6 +1,6 @@
 [project]
 name = "v4vapp-backend-v2"
-version = "0.9.0"
+version = "0.10.0"
 description = "Back End for the V4V.app bridge from Hive to Lightning"
 authors = [{name = "Brian of London (home imac)", email = "brian@v4v.app"}]
 license = {text = "MIT"}
