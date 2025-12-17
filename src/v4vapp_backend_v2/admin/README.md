@@ -235,6 +235,14 @@ This enables:
    - Check network connectivity
    - Review server account settings
 
+#### Jinja / HTML formatter issues
+
+If you edit Jinja templates under `templates/` with an editor that formats HTML on save (e.g. Prettier or generic HTML formatters), it can collapse multi-line Jinja logic into a single line and corrupt Jinja syntax (for example turning `==` into a broken `=""="` sequence). To avoid this:
+
+- Disable automatic HTML formatting for template files, or map template files to a Jinja language ID and disable formatting for that language.
+- The repository includes a workspace `.vscode/settings.json` that maps `src/v4vapp_backend_v2/admin/templates/**/*.html` to the `jinja` language and disables `formatOnSave` for the `jinja` language.
+- For extra safety, we have a unit test `tests/test_templates.py` which compiles the key templates and fails if they do not render; this runs in CI.
+
 ### Logs
 
 The admin interface uses the same logging configuration as the main V4VApp backend. Check logs for detailed error information.
