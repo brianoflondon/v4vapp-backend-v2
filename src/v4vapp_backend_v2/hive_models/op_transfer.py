@@ -18,7 +18,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     paywithsats_amount,
     seconds_only_time_diff,
 )
-from v4vapp_backend_v2.hive.hive_extras import decode_memo, process_user_memo
+from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_transfer_cust_id, process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.op_base import OpBase
@@ -336,72 +336,10 @@ class TransferBase(OpBase):
         return Decimal(0)
 
     def get_cust_id(self):
-        """
-        Returns the customer ID (`cust_id`) for a transfer based on
-        involved accounts and predefined logic.
-
-        Uses account names from internal config to identify roles
-        (server, treasury, funding, exchange, expense).
-        Depending on transfer direction/type, returns either
-        `from_account` or `to_account` as `cust_id`.
-
-        Returns:
-            str: The account name to use as `cust_id`, always either
-            `self.from_account` or `self.to_account` in handled cases.
-            If no known pattern matches, returns
-            "{to_account}:{from_account}".
-        """
-        hive_config = InternalConfig().config.hive
-        account_names = hive_config.all_account_names
-
-        # Defensive check - ensure we have exactly 4 account names
-        if not account_names or len(account_names) != 4:
-            return f"{self.to_account}->{self.from_account}"
-
-        server_account, treasury_account, funding_account, exchange_account = account_names
-        expense_accounts = ["privex"]  # Hardcoded as in the original code
-
-        from_acc = self.from_account
-        to_acc = self.to_account
-
-        # Server to Treasury: cust_id = to_account (treasury)
-        if from_acc == server_account and to_acc == treasury_account:
-            return to_acc
-
-        # Treasury to Server: cust_id = from_account (treasury)
-        elif from_acc == treasury_account and to_acc == server_account:
-            return from_acc
-
-        # Funding to Treasury: cust_id = from_account (funding)
-        elif from_acc == funding_account and to_acc == treasury_account:
-            return from_acc
-
-        # Treasury to Funding: cust_id = to_account (funding)
-        elif from_acc == treasury_account and to_acc == funding_account:
-            return to_acc
-
-        # Treasury to Exchange: cust_id = to_account (exchange)
-        elif from_acc == treasury_account and to_acc == exchange_account:
-            return to_acc
-
-        # Exchange to Treasury: cust_id = from_account (exchange)
-        elif from_acc == exchange_account and to_acc == treasury_account:
-            return from_acc
-
-        # Server to expense: cust_id = to_account (expense)
-        elif from_acc == server_account and to_acc in expense_accounts:
-            return to_acc
-
-        # Server to customer (withdrawal): cust_id = to_account (customer)
-        elif from_acc == server_account:
-            return to_acc
-
-        # Customer to server (deposit): cust_id = from_account (customer)
-        elif to_acc == server_account:
-            return from_acc
-
-        else:
-            return f"{to_acc}:{from_acc}"
+        """Return the cust id for this transfer by delegating to the
+        module-level helper `get_transfer_cust_id` so the same logic
+        can be reused elsewhere."""
+        return get_transfer_cust_id(self.from_account, self.to_account)
 
 
 class Transfer(TransferBase):

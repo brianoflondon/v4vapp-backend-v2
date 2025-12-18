@@ -36,7 +36,7 @@ def test_get_producer_rewards():
     hive_blockchain = Blockchain(hive=hive_client)
     end_block = hive_client.get_dynamic_global_properties().get("head_block_number")
     stream = hive_blockchain.stream(
-        start=end_block - 400,
+        start=end_block - 30,
         stop=end_block,
         raw_ops=False,
         only_virtual_ops=True,
