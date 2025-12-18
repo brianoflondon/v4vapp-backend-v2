@@ -83,3 +83,18 @@ async def test_ledger_entries_data_includes_op_type(monkeypatch):
     body = resp.body.decode()
     # FastAPI JSON has no extra whitespace; check without spaces
     assert '"op_type":"MY_OP"' in body
+
+
+@pytest.mark.asyncio
+async def test_from_date_parsing_accepts_local_and_offset(monkeypatch):
+    """Ensure ledger_entries_data accepts naive local ISO datetimes and offset datetimes"""
+    fake_collection = DummyCollection([])
+    monkeypatch.setattr(LedgerEntry, "collection", lambda: fake_collection)
+
+    # naive local datetime (from datetime-local input)
+    resp = await ledger_entries_data(from_date_str="2025-12-18T10:00")
+    assert resp.status_code == 200
+
+    # explicit offset included
+    resp = await ledger_entries_data(from_date_str="2025-12-18T10:00-05:00")
+    assert resp.status_code == 200

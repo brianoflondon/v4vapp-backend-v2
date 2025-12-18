@@ -245,6 +245,29 @@ def get_in_flight_time(creation_date: datetime) -> str:
     return in_flight_time
 
 
+def parse_dt_with_tz(s: str):
+    """
+    Parses a datetime string that may include timezone information.
+    Args:
+        s (str): The datetime string to parse.
+    Returns:
+        datetime | None: The parsed datetime object with timezone info,
+        or None if parsing fails.
+    """
+    if not s:
+        return None
+    try:
+        # Normalize Z -> +00:00 and use fromisoformat for offset-aware strings
+        if s.endswith("Z") or re.search(r"[+-]\d{2}:\d{2}$", s):
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        # No explicit TZ: treat as local and attach local tzinfo
+        dt = datetime.fromisoformat(s)
+        local_tz = datetime.now(tz=timezone.utc).astimezone().tzinfo
+        return dt.replace(tzinfo=local_tz)
+    except Exception:
+        return None
+
+
 # MARK: Memo processing
 def detect_keepsats(memo: str) -> bool:
     """

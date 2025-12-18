@@ -4,7 +4,7 @@ Ledger Entries Router
 Provides a simple page and data endpoint to browse ledger entries.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -21,6 +21,7 @@ from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
 )
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import async_time_stats_decorator
+from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
@@ -55,18 +56,23 @@ async def ledger_entries_data(
     """Return ledger entries in JSON form for AJAX or API use. Supports pagination via limit/offset."""
     # Determine date range using from/to inputs. We use the existing helper which
     # accepts an as_of_date (end) and an age (timedelta) to represent the range.
+    # Default end date to current UTC time
     to_date = datetime.now(tz=timezone.utc)
     from_date = None
+
+    # Helper: parse incoming ISO strings. If they include an explicit timezone (Z or +HH:MM),
+    # use fromisoformat directly (after normalizing Z to +00:00). If they are naive (no TZ),
+    # interpret them as local datetimes and attach the local timezone info so all datetimes
+    # are timezone-aware.
+
     if to_date_str:
-        try:
-            to_date = datetime.fromisoformat(to_date_str.replace("Z", "+00:00"))
-        except Exception:
-            pass
+        parsed = parse_dt_with_tz(to_date_str)
+        if parsed:
+            to_date = parsed
     if from_date_str:
-        try:
-            from_date = datetime.fromisoformat(from_date_str.replace("Z", "+00:00"))
-        except Exception:
-            pass
+        parsed = parse_dt_with_tz(from_date_str)
+        if parsed:
+            from_date = parsed
 
     account = None
     if account_string:
@@ -82,12 +88,8 @@ async def ledger_entries_data(
     except Exception:
         age_val = 0
     if age_val and age_val > 0:
-        from datetime import timedelta
-
         age = timedelta(hours=age_val)
     elif from_date:
-        from datetime import timedelta
-
         # If from_date is provided, compute age as difference
         age = to_date - from_date if to_date and from_date else None
 

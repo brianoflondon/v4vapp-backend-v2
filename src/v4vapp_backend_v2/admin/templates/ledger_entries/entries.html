@@ -314,14 +314,15 @@
         })
     })()
 
-    // Auto-update datetime field to current UTC time if empty
+    // Auto-update datetime-local inputs to current LOCAL time if empty
     function updateCurrentTime() {
-        const el = document.getElementById("as_of_date_str")
-        if (!el) return
-        if (el.value) return // leave if user provided value
+        const pad = (n) => String(n).padStart(2, '0')
         const now = new Date()
-        const utcDate = new Date(now.getTime() + now.getTimezoneOffset() * 60000)
-        el.value = utcDate.toISOString().slice(0, 16)
+        const local = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+        const elFrom = document.getElementById("from_date_str")
+        const elTo = document.getElementById("to_date_str")
+        if (elFrom && !elFrom.value) elFrom.value = local
+        if (elTo && !elTo.value) elTo.value = local
     }
 
     // Filter accounts by sub account and clear account selection when sub selected
@@ -489,12 +490,30 @@
         const general_search = getFieldValue('general_search')
         const age_hours = getFieldValue('age_hours')
 
+        // Helper: convert local datetime-local value to an ISO-like string with local TZ offset
+        function localWithTz(inputVal) {
+            if (!inputVal) return ''
+            const d = new Date(inputVal)
+            const pad = (n) => String(n).padStart(2, '0')
+            const year = d.getFullYear()
+            const month = pad(d.getMonth() + 1)
+            const day = pad(d.getDate())
+            const hours = pad(d.getHours())
+            const minutes = pad(d.getMinutes())
+            const seconds = pad(d.getSeconds())
+            const tzOffset = -d.getTimezoneOffset()
+            const sign = tzOffset >= 0 ? '+' : '-'
+            const tzHours = pad(Math.floor(Math.abs(tzOffset) / 60))
+            const tzMinutes = pad(Math.abs(tzOffset) % 60)
+            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${tzHours}:${tzMinutes}`
+        }
+
         if (account) params.append("account_string", account)
         if (sub) params.append("sub_filter", sub)
         if (short_id) params.append("short_id", short_id)
         if (group_id) params.append("group_id", group_id)
-        if (from_date) params.append("from_date_str", from_date)
-        if (to_date) params.append("to_date_str", to_date)
+        if (from_date) params.append("from_date_str", localWithTz(from_date))
+        if (to_date) params.append("to_date_str", localWithTz(to_date))
         if (ledger_type) params.append("ledger_type", ledger_type)
         if (general_search) params.append("general_search", general_search)
         if (age_hours) params.append("age_hours", age_hours)
