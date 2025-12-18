@@ -97,25 +97,51 @@
         <div class="row">
             <div class="col-md-4">
                 <div class="mb-3">
-                    <label for="as_of_date_str" class="form-label">
+                    <label for="from_date_str" class="form-label">
                         <i class="bi bi-calendar me-1"></i>
-                        As of Date (UTC)
+                        From Date (UTC)
                     </label>
-                    <input type="datetime-local" class="form-control" id="as_of_date_str" name="as_of_date_str"
-                        value="{{ as_of_date.isoformat()[:16] }}" />
-                    <div class="form-text">Leave blank for current time</div>
+                    <input type="datetime-local" class="form-control" id="from_date_str" name="from_date_str"
+                        value="{{ from_date_str }}" />
+                    <div class="form-text">Optional start date for range</div>
                 </div>
             </div>
 
             <div class="col-md-4">
                 <div class="mb-3">
-                    <label for="age_hours" class="form-label">
-                        <i class="bi bi-clock me-1"></i>
-                        Age Filter (Hours)
+                    <label for="to_date_str" class="form-label">
+                        <i class="bi bi-calendar2 me-1"></i>
+                        To Date (UTC)
                     </label>
-                    <input type="number" class="form-control" id="age_hours" name="age_hours" value="{{ age_hours }}"
-                        min="0" step="1" />
-                    <div class="form-text">0 = no age filter</div>
+                    <input type="datetime-local" class="form-control" id="to_date_str" name="to_date_str"
+                        value="{{ to_date_str }}" />
+                    <div class="form-text">Optional end date for range (defaults to now)</div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="bi bi-list-ul me-1"></i>
+                        Ledger Type
+                    </label>
+                    <select class="form-select" id="ledger_type" name="ledger_type">
+                        <option value="">Any</option>
+                        {% for lt in ledger_type_options %}
+                        <option value="{{ lt.value }}" {% if ledger_type and ledger_type==lt.value %}selected{% endif
+                            %}>{{ lt.capitalized }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="mb-3">
+                    <label for="general_search" class="form-label"><i class="bi bi-search me-1"></i> General Search
+                        (regex)</label>
+                    <input type="text" class="form-control" id="general_search" name="general_search"
+                        value="{{ general_search }}" placeholder="Search short_id, user_memo, description" />
+                    <div class="form-text">Provide a regex to search short_id, user_memo or description</div>
                 </div>
             </div>
 
@@ -180,8 +206,11 @@
 
 <!-- Search metadata and controls -->
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>Found <strong id="entries-count">0</strong> entries</div>
+    <div>Found <strong id="entries-count">0</strong> entries <span id="ledger-last-query"
+            class="text-muted small ms-2"></span></div>
     <div>
+        <div id="ledger-alert" class="alert alert-danger d-none py-1 px-2 mb-0" role="alert"
+            style="display:inline-block"></div>
         <button id="load-more-entries" class="btn btn-sm btn-outline-primary" type="button" onclick="loadMoreEntries()">
             Load more
         </button>
@@ -191,33 +220,68 @@
 <!-- Dynamic entries container (JS will populate). Server-rendered entries remain for non-JS fallback. -->
 <div id="server-entries" class="list-group">
     {% if entries %} {% for entry in entries %}
-    <div class="list-group-item">
-        <div class="d-flex w-100 justify-content-between">
-            <h5 class="mb-1">
-                {{ entry.group_id }}
-                <div class="small text-muted mt-1">Short ID: {{ entry.short_id }}</div>
-            </h5>
-            <small>
-                {% if entry.link %}<a href="{{ entry.link }}" target="_blank" class="link-primary">🔗 Link</a>{% endif
-                %}
-                <span class="badge bg-secondary ms-2">{{ entry.ledger_type_str }}</span>
-                <small class="text-muted ms-2">{{ entry.timestamp.isoformat() }}</small>
-            </small>
-        </div>
-        <p class="mb-1">{{ entry.description }}</p>
-        {% if entry.user_memo %}
-        <p class="mb-1 text-muted">
-            <small>User memo: {{ entry.user_memo }}</small>
-        </p>
-        {% endif %}
-        <div>
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
-                data-bs-target="#details-{{ loop.index }}">
-                Details
-            </button>
-        </div>
-        <div class="collapse mt-2" id="details-{{ loop.index }}">
-            <pre class="small">{{ entry.draw_t_diagram() }}</pre>
+    <div class="card mb-3 entry-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <div><strong>J/E:</strong> {{ entry.group_id }}</div>
+                    <div class="small mt-1"><strong>Short ID:</strong> {{ entry.short_id }}</div>
+                    <div class="mt-1"><span class="badge bg-secondary">{{ entry.ledger_type_str }}</span></div>
+                </div>
+                <div class="text-muted small">{{ entry.timestamp.isoformat() if entry.timestamp else '' }}</div>
+            </div>
+
+            <div class="d-flex justify-content-between mt-2">
+                <div><strong>Customer ID :</strong> {{ entry.cust_id or '' }}</div>
+                <div class="text-muted">{{ entry.timestamp.isoformat() if entry.timestamp else '' }}</div>
+            </div>
+
+            <div class="row mt-3 fw-bold">
+                <div class="col-6">ACCOUNT</div>
+                <div class="col-3 text-end">DEBIT</div>
+                <div class="col-3 text-end">CREDIT</div>
+            </div>
+
+            <div class="row mt-2">
+                <div class="col-6">
+                    {% if entry.debit %}
+                    <div>{{ entry.debit.name }} <small class="text-muted">({{ entry.debit.account_type }})</small></div>
+                    <div class="small text-muted">{{ entry.debit.sub }}</div>
+                    {% endif %}
+                    {% if entry.credit %}
+                    <div class="mt-2">{{ entry.credit.name }} <small class="text-muted">({{ entry.credit.account_type
+                            }})</small></div>
+                    <div class="small text-muted">{{ entry.credit.sub }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-3 text-end">{{ entry.debit.amount }} {{ entry.debit.unit }}</div>
+                <div class="col-3 text-end">{{ entry.credit.amount }} {{ entry.credit.unit }}</div>
+            </div>
+
+            <div class="mt-3">
+                <div class="fw-bold">Description</div>
+                <div>{{ entry.description }}</div>
+            </div>
+
+            {% if entry.user_memo %}
+            <div class="mt-2 text-muted"><strong>User Memo:</strong> {{ entry.user_memo }}</div>
+            {% endif %}
+
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#raw-{{ loop.index }}">Raw JSON</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#journal-{{ loop.index }}">Journal Text</button>
+                {% if entry.link %}<a class="btn btn-sm btn-outline-primary" href="{{ entry.link }}"
+                    target="_blank">Link</a>{% endif %}
+            </div>
+
+            <div class="collapse mt-2" id="raw-{{ loop.index }}">
+                <pre class="small">{{ entry.model_dump(mode='json') | tojson(indent=2) }}</pre>
+            </div>
+            <div class="collapse mt-2" id="journal-{{ loop.index }}">
+                <pre class="small">{{ entry.print_journal_entry() }}</pre>
+            </div>
         </div>
     </div>
     {% endfor %} {% else %}
@@ -295,7 +359,8 @@
                 e.preventDefault()
                 // Reset paging and fetch using JS
                 window.__ledger_entries_offset = 0
-                document.getElementById('entries-container').innerHTML = ''
+                const entriesContainer = document.getElementById('entries-container')
+                if (entriesContainer) entriesContainer.innerHTML = ''
                 fetchEntries()
             })
         }
@@ -306,7 +371,7 @@
     function clearFilters() {
         const form = document.querySelector('.needs-validation')
         if (!form) return
-        const fields = ['account_string', 'sub_filter', 'short_id', 'group_id', 'as_of_date_str', 'age_hours']
+        const fields = ['account_string', 'sub_filter', 'short_id', 'group_id', 'from_date_str', 'to_date_str', 'ledger_type', 'general_search', 'age_hours']
         fields.forEach((name) => {
             const el = form.querySelector('[name="' + name + '"]')
             if (el) {
@@ -404,18 +469,32 @@
         const params = new URLSearchParams()
         const form = document.querySelector(".needs-validation")
         if (!form) return
-        const account = form.querySelector('[name="account_string"]').value
-        const sub = form.querySelector('[name="sub_filter"]').value
-        const short_id = form.querySelector('[name="short_id"]').value
-        const group_id = form.querySelector('[name="group_id"]').value
-        const as_of_date = form.querySelector('[name="as_of_date_str"]').value
-        const age_hours = form.querySelector('[name="age_hours"]').value
+
+        function getFieldValue(name) {
+            const el = form.querySelector('[name="' + name + '"]')
+            if (!el) return ''
+            if (el.type === 'checkbox') return el.checked ? 'on' : ''
+            return el.value || ''
+        }
+
+        const account = getFieldValue('account_string')
+        const sub = getFieldValue('sub_filter')
+        const short_id = getFieldValue('short_id')
+        const group_id = getFieldValue('group_id')
+        const from_date = getFieldValue('from_date_str')
+        const to_date = getFieldValue('to_date_str')
+        const ledger_type = getFieldValue('ledger_type')
+        const general_search = getFieldValue('general_search')
+        const age_hours = getFieldValue('age_hours')
 
         if (account) params.append("account_string", account)
         if (sub) params.append("sub_filter", sub)
         if (short_id) params.append("short_id", short_id)
         if (group_id) params.append("group_id", group_id)
-        if (as_of_date) params.append("as_of_date_str", as_of_date)
+        if (from_date) params.append("from_date_str", from_date)
+        if (to_date) params.append("to_date_str", to_date)
+        if (ledger_type) params.append("ledger_type", ledger_type)
+        if (general_search) params.append("general_search", general_search)
         if (age_hours) params.append("age_hours", age_hours)
 
         // include pagination params
@@ -426,7 +505,18 @@
         const url = "/admin/ledger-entries/data?" + params.toString()
         try {
             const res = await fetch(url)
-            if (!res.ok) throw new Error("Network response not ok")
+            document.getElementById('ledger-last-query').innerText = url
+            const ledgerAlert = document.getElementById('ledger-alert')
+            ledgerAlert.classList.add('d-none')
+            ledgerAlert.style.display = 'none'
+            if (!res.ok) {
+                ledgerAlert.innerText = 'Error fetching entries: ' + res.status + ' ' + res.statusText
+                ledgerAlert.classList.remove('d-none')
+                ledgerAlert.style.display = 'inline-block'
+                document.getElementById("entries-count").innerText = 0
+                document.getElementById('entries-container').innerHTML = '<div class="list-group-item text-muted">Error fetching entries.</div>'
+                return
+            }
             const data = await res.json()
             // update total count and entries
             window.__ledger_entries_total = data.count
@@ -445,6 +535,10 @@
             }
         } catch (e) {
             console.error("Error fetching entries", e)
+            const ledgerAlert = document.getElementById('ledger-alert')
+            ledgerAlert.innerText = 'Error fetching entries: ' + e.message
+            ledgerAlert.classList.remove('d-none')
+            ledgerAlert.style.display = 'inline-block'
         }
     }
 

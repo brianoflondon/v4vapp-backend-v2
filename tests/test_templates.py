@@ -36,3 +36,8 @@ def test_ledger_entries_template_compiles_and_renders():
     assert "Select Account" in rendered
     # New: ensure clear filters button is present
     assert 'id="clear-search"' in rendered
+    # ensure new date range inputs and ledger type and general search fields are present
+    assert 'name="from_date_str"' in rendered
+    assert 'name="to_date_str"' in rendered
+    assert 'name="ledger_type"' in rendered
+    assert 'name="general_search"' in rendered
