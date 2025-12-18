@@ -14,7 +14,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     detect_keepsats,
     paywithsats_amount,
 )
-from v4vapp_backend_v2.hive.hive_extras import process_user_memo
+from v4vapp_backend_v2.hive.hive_extras import get_transfer_cust_id, process_user_memo
 from v4vapp_backend_v2.hive_models.custom_json_data import (
     CustomJsonData,
     custom_json_test_data,
@@ -82,14 +82,18 @@ class CustomJson(OpBase):
             if self.json_data and (
                 hasattr(self.json_data, "from_account") or hasattr(self.json_data, "to_account")
             ):
-                #TODO: #201 Setting the cust_id in custom_json needs to follow the same logic as in transfer operation
+                # TODO: #201 Setting the cust_id in custom_json needs to follow the same logic as in transfer operation
                 if self.required_auths and self.required_auths[0]:
                     if (
                         self.json_data.from_account in self.required_auths
                         or self.required_auths[0]
                         in InternalConfig().config.hive.server_account_names
                     ):
-                        self.cust_id = self.json_data.from_account
+                        # Use the shared transfer logic so custom_json follows the same cust_id rules
+                        from_acc = getattr(self.json_data, "from_account", "")
+                        to_acc = getattr(self.json_data, "to_account", "")
+
+                        self.cust_id = get_transfer_cust_id(from_acc, to_acc)
                         self.authorized = True
                     else:
                         self.cust_id = InternalConfig().server_id

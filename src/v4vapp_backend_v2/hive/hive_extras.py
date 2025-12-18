@@ -26,10 +26,12 @@ from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_not_development_accounts,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
+from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.pending_transaction_class import (
     PendingCustomJson,
     PendingTransaction,
 )
+from v4vapp_backend_v2.process.lock_str_class import CustIDType
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
 
 DEFAULT_GOOD_NODES = [
@@ -378,6 +380,76 @@ async def get_verified_hive_client_for_accounts(
             nobroadcast=nobroadcast,
         )
     return hive_client
+
+
+def get_transfer_cust_id(
+    from_acc: AccNameType,
+    to_acc: AccNameType,
+    hive_config=None,
+    expense_accounts: list[str] | None = None,
+) -> CustIDType:
+    """
+    Compute the customer id (cust_id) for a transfer a module-level helper.
+
+    Parameters:
+        from_acc: sender account name
+        to_acc: recipient account name
+        hive_config: optional object with attribute `all_account_names` (server, treasury, funding, exchange)
+        expense_accounts: optional list of expense account names (defaults to ["privex"]).
+
+    Returns:
+        CustIDType: computed customer id following the same rules as the original method.
+    """
+    if hive_config is None:
+        hive_config = InternalConfig().config.hive
+    account_names = hive_config.all_account_names
+
+    # Defensive check - ensure we have exactly 4 account names
+    if not account_names or len(account_names) != 4:
+        return f"{to_acc}->{from_acc}"
+
+    server_account, treasury_account, funding_account, exchange_account = account_names
+    if expense_accounts is None:
+        expense_accounts = ["privex"]
+
+    # Server to Treasury: cust_id = to_account (treasury)
+    if from_acc == server_account and to_acc == treasury_account:
+        return to_acc
+
+    # Treasury to Server: cust_id = from_account (treasury)
+    elif from_acc == treasury_account and to_acc == server_account:
+        return from_acc
+
+    # Funding to Treasury: cust_id = from_account (funding)
+    elif from_acc == funding_account and to_acc == treasury_account:
+        return from_acc
+
+    # Treasury to Funding: cust_id = to_account (funding)
+    elif from_acc == treasury_account and to_acc == funding_account:
+        return to_acc
+
+    # Treasury to Exchange: cust_id = to_account (exchange)
+    elif from_acc == treasury_account and to_acc == exchange_account:
+        return to_acc
+
+    # Exchange to Treasury: cust_id = from_account (exchange)
+    elif from_acc == exchange_account and to_acc == treasury_account:
+        return from_acc
+
+    # Server to expense: cust_id = to_account (expense)
+    elif from_acc == server_account and to_acc in expense_accounts:
+        return to_acc
+
+    # Server to customer (withdrawal): cust_id = to_account (customer)
+    elif from_acc == server_account:
+        return to_acc
+
+    # Customer to server (deposit): cust_id = from_account (customer)
+    elif to_acc == server_account:
+        return from_acc
+
+    else:
+        return f"{to_acc}:{from_acc}"
 
 
 class HiveInternalQuote(BaseModel):
