@@ -27,7 +27,8 @@ def admin_client(admin_app):
 @pytest.fixture
 def template_env():
     """Create Jinja2 environment for template testing"""
-    admin_dir = Path(__file__).parent.parent / "src" / "v4vapp_backend_v2" / "admin"
+    # Resolve repository root relative to this test file and find admin templates
+    admin_dir = Path(__file__).parent.parent.parent / "src" / "v4vapp_backend_v2" / "admin"
     templates_dir = admin_dir / "templates"
 
     from jinja2 import Environment, FileSystemLoader

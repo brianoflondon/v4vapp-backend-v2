@@ -16,7 +16,8 @@ class TestTemplateCompilation:
     @pytest.fixture
     def template_env(self):
         """Create Jinja2 environment for template testing"""
-        admin_dir = Path(__file__).parent.parent / "src" / "v4vapp_backend_v2" / "admin"
+        # Resolve repository root relative to this test file and find admin templates
+        admin_dir = Path(__file__).parent.parent.parent / "src" / "v4vapp_backend_v2" / "admin"
         templates_dir = admin_dir / "templates"
         env = Environment(loader=FileSystemLoader(str(templates_dir)))
 
@@ -107,7 +108,8 @@ class TestTemplateRendering:
     @pytest.fixture
     def template_env(self):
         """Create Jinja2 environment for template testing"""
-        admin_dir = Path(__file__).parent.parent / "src" / "v4vapp_backend_v2" / "admin"
+        # Resolve repository root relative to this test file and find admin templates
+        admin_dir = Path(__file__).parent.parent.parent / "src" / "v4vapp_backend_v2" / "admin"
         templates_dir = admin_dir / "templates"
         env = Environment(loader=FileSystemLoader(str(templates_dir)))
 
@@ -177,7 +179,8 @@ class TestTemplateFilters:
     @pytest.fixture
     def template_env(self):
         """Create Jinja2 environment with any custom filters"""
-        admin_dir = Path(__file__).parent.parent / "src" / "v4vapp_backend_v2" / "admin"
+        # Resolve repository root relative to this test file and find admin templates
+        admin_dir = Path(__file__).parent.parent.parent / "src" / "v4vapp_backend_v2" / "admin"
         templates_dir = admin_dir / "templates"
         env = Environment(loader=FileSystemLoader(str(templates_dir)))
 
