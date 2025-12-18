@@ -73,5 +73,14 @@
         "titleBar.activeBackground": "#6F1B69",
         "titleBar.activeForeground": "#FDF8FD"
     },
-    "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter"
+    "jupyter.notebookFileRoot": "${workspaceFolder}/src/jupyter",
+    "[html]": {
+        "editor.formatOnSave": true
+    },
+    "files.associations": {
+        "src/v4vapp_backend_v2/admin/templates/**/*.html": "jinja"
+    },
+    "[jinja]": {
+        "editor.formatOnSave": false
+    }
 }

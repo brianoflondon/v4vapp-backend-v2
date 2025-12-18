@@ -82,6 +82,7 @@ class CustomJson(OpBase):
             if self.json_data and (
                 hasattr(self.json_data, "from_account") or hasattr(self.json_data, "to_account")
             ):
+                #TODO: #201 Setting the cust_id in custom_json needs to follow the same logic as in transfer operation
                 if self.required_auths and self.required_auths[0]:
                     if (
                         self.json_data.from_account in self.required_auths

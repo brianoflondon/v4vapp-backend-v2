@@ -57,7 +57,7 @@ async def process_lightning_receipt(
         cust_id=server_id,
         short_id=invoice.short_id,
         ledger_type=ledger_type,
-        group_id=f"{invoice.group_id}-{ledger_type.value}",
+        group_id=f"{invoice.group_id}_{ledger_type.value}",
         op_type=invoice.op_type,
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Receive incoming Lightning {invoice.value_msat / 1000:,.0f} sats {invoice.memo}",

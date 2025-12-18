@@ -16,6 +16,22 @@
         font-weight: 500;
         color: var(--bs-body-color);
     }
+
+    /* Entry card width control - change max-width here to adjust width (e.g., 900px). Uses width:100% so it fills small screens and caps at 900px on wide screens. Left-justified. */
+    .entry-card {
+        width: 100%;
+        max-width: 900px;
+        margin-left: 0;
+        margin-right: auto;
+    }
+
+    .entry-card .card-body {
+        padding: 1rem;
+    }
+
+    .entry-card .row {
+        margin-bottom: 0.25rem;
+    }
 </style>
 {% endblock %} {% block content %}
 <div class="card account-form">
@@ -32,16 +48,23 @@
                         <i class="bi bi-funnel me-1"></i>
                         Filter by Sub Account
                     </label>
-                    <select class="form-select" id="sub_filter" onchange="filterBySubAccount()">
-                        <option value="">All Sub Accounts</option>
+                    <select class="form-select" id="sub_filter" name="sub_filter" onchange="filterBySubAccount()">
+                        <option value="" {% if not sub_filter %}selected{% endif %}>
+                            All Sub Accounts
+                        </option>
                         {% set all_subs = [] %} {% for account_type, accounts in
                         accounts_by_type.items() %} {% for account in accounts %} {% if
                         account.sub and account.sub not in all_subs %} {% set _ =
                         all_subs.append(account.sub) %} {% endif %} {% endfor %} {% endfor
                         %} {% for sub in all_subs|sort %}
-                        <option value="{{ sub }}">{{ sub }}</option>
+                        <option value="{{ sub }}" {% if sub_filter and sub_filter==sub %}selected{% endif %}>{{ sub }}
+                        </option>
                         {% endfor %}
                     </select>
+                    <div class="form-text text-muted mt-1">
+                        Selecting a sub-account will clear the account selector so a search
+                        will return all entries for that sub-account.
+                    </div>
                 </div>
             </div>
 
@@ -51,16 +74,16 @@
                         <i class="bi bi-folder2-open me-1"></i>
                         Select Account
                     </label>
-                    <select class="form-select" id="account_string" name="account_string" required>
+                    <select class="form-select" id="account_string" name="account_string">
                         <option value="">Choose an account...</option>
                         {% for account_type, accounts in accounts_by_type.items() %}
                         <optgroup label="{{ account_type }} Accounts ({{ accounts|length }})">
                             {% for account in accounts %}
                             <option value="{{ account }}" data-sub="{{ account.sub if account.sub else '' }}"
-                                data-type="{{ account_type }}" {% if account_string and account_string=""="account"
+                                data-type="{{ account_type }}" {% if account_string and account_string==account
                                 %}selected{% endif %}>
-                                {{ account.name }}{% if account.sub %} - {{ account.sub }}{%
-                                endif %}{% if account.contra %} [Contra]{% endif %}
+                                {{ account.name }}{% if account.sub %} - {{ account.sub }}{% endif %}{% if
+                                account.contra %} [Contra]{% endif %}
                             </option>
                             {% endfor %}
                         </optgroup>
@@ -143,26 +166,50 @@
                     </button>
                 </div>
             </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="mb-3 w-100">
+                    <button type="button" id="clear-search" class="btn btn-outline-secondary w-100"
+                        onclick="clearFilters()">
+                        <i class="bi bi-x-circle me-2"></i> Clear Filters
+                    </button>
+                </div>
+            </div>
         </div>
     </form>
 </div>
 
-<div class="list-group">
+<!-- Search metadata and controls -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>Found <strong id="entries-count">0</strong> entries</div>
+    <div>
+        <button id="load-more-entries" class="btn btn-sm btn-outline-primary" type="button" onclick="loadMoreEntries()">
+            Load more
+        </button>
+    </div>
+</div>
+
+<!-- Dynamic entries container (JS will populate). Server-rendered entries remain for non-JS fallback. -->
+<div id="server-entries" class="list-group">
     {% if entries %} {% for entry in entries %}
     <div class="list-group-item">
         <div class="d-flex w-100 justify-content-between">
             <h5 class="mb-1">
-                {{ entry.short_id }}
-                <small class="text-muted">{{ entry.timestamp.isoformat() }}</small>
+                {{ entry.group_id }}
+                <div class="small text-muted mt-1">Short ID: {{ entry.short_id }}</div>
             </h5>
             <small>
-                {% if entry.link %}
-                <a href="{{ entry.link }}" target="_blank" class="link-primary">🔗 Link</a>
-                {% endif %}
+                {% if entry.link %}<a href="{{ entry.link }}" target="_blank" class="link-primary">🔗 Link</a>{% endif
+                %}
                 <span class="badge bg-secondary ms-2">{{ entry.ledger_type_str }}</span>
+                <small class="text-muted ms-2">{{ entry.timestamp.isoformat() }}</small>
             </small>
         </div>
         <p class="mb-1">{{ entry.description }}</p>
+        {% if entry.user_memo %}
+        <p class="mb-1 text-muted">
+            <small>User memo: {{ entry.user_memo }}</small>
+        </p>
+        {% endif %}
         <div>
             <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
                 data-bs-target="#details-{{ loop.index }}">
@@ -177,6 +224,8 @@
     <div class="list-group-item text-muted">No entries found.</div>
     {% endif %}
 </div>
+
+<div id="entries-container"></div>
 
 {% endblock %} {% block extra_js %}
 <script>
@@ -209,7 +258,7 @@
         el.value = utcDate.toISOString().slice(0, 16)
     }
 
-    // Filter accounts by sub account
+    // Filter accounts by sub account and clear account selection when sub selected
     function filterBySubAccount() {
         const subFilter = document.getElementById("sub_filter").value
         const accountSelect = document.getElementById("account_string")
@@ -223,11 +272,295 @@
                 opt.style.display = "none"
             }
         })
+        // If a subFilter is chosen, clear the account select so search will use the sub filter
+        if (subFilter) {
+            try {
+                accountSelect.value = ""
+            } catch (e) {
+                // ignore
+            }
+        }
     }
 
     // Initialize
     document.addEventListener("DOMContentLoaded", function () {
         updateCurrentTime()
+        window.__ledger_entries_offset = 0
+        window.__ledger_entries_limit = 50
+
+        // Intercept form submit to use AJAX search instead of full page reload
+        const form = document.querySelector('.needs-validation')
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault()
+                // Reset paging and fetch using JS
+                window.__ledger_entries_offset = 0
+                document.getElementById('entries-container').innerHTML = ''
+                fetchEntries()
+            })
+        }
+
+        fetchEntries()
     })
+
+    function clearFilters() {
+        const form = document.querySelector('.needs-validation')
+        if (!form) return
+        const fields = ['account_string', 'sub_filter', 'short_id', 'group_id', 'as_of_date_str', 'age_hours']
+        fields.forEach((name) => {
+            const el = form.querySelector('[name="' + name + '"]')
+            if (el) {
+                if (el.type === 'checkbox') {
+                    el.checked = false
+                } else {
+                    el.value = ''
+                }
+            }
+        })
+        // Reset checkboxes to defaults
+        const li = form.querySelector('[name="line_items"]')
+        if (li) li.checked = true
+        const um = form.querySelector('[name="user_memos"]')
+        if (um) um.checked = true
+
+        // Reset pagination and container, then fetch
+        window.__ledger_entries_offset = 0
+        document.getElementById('entries-container').innerHTML = ''
+        document.getElementById('server-entries').classList.remove('d-none')
+        fetchEntries()
+    }
+
+    // Escape HTML to avoid XSS
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return ""
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;")
+    }
+
+    function formatAmount(amountStr, unit) {
+        if (!amountStr) return ""
+        let n = Number(amountStr)
+        if (isNaN(n)) return escapeHtml(amountStr + " " + (unit || ""))
+        const unitStr = unit ? String(unit).toUpperCase() : ""
+        if (unitStr === "MSATS") {
+            n = n / 1000 // convert to sats
+            // show up to 3 decimal places for sats (msats precision)
+            return n.toLocaleString(undefined, { maximumFractionDigits: 3 }) + " SATS"
+        }
+        const opts = Number.isInteger(n)
+            ? { maximumFractionDigits: 0 }
+            : { maximumFractionDigits: 3 }
+        return n.toLocaleString(undefined, opts) + (unitStr ? " " + unitStr : "")
+    }
+
+    function formatConversion(conv) {
+        if (!conv) return "Converted N/A"
+        const hive =
+            conv.hive !== undefined
+                ? Number(conv.hive).toLocaleString(undefined, {
+                    maximumFractionDigits: 3,
+                }) + " HIVE"
+                : ""
+        const hbd =
+            conv.hbd !== undefined
+                ? Number(conv.hbd).toLocaleString(undefined, {
+                    maximumFractionDigits: 3,
+                }) + " HBD"
+                : ""
+        const usd =
+            conv.usd !== undefined
+                ? Number(conv.usd).toLocaleString(undefined, {
+                    maximumFractionDigits: 3,
+                }) + " USD"
+                : ""
+        const sats = (() => {
+            if (conv.sats_rounded !== undefined) {
+                return (
+                    Number(conv.sats_rounded).toLocaleString(undefined, {
+                        maximumFractionDigits: 3,
+                    }) + " SATS"
+                )
+            }
+            if (conv.sats !== undefined) {
+                const n = Number(conv.sats)
+                if (!isNaN(n))
+                    return (
+                        n.toLocaleString(undefined, { maximumFractionDigits: 3 }) + " SATS"
+                    )
+                return String(conv.sats) + " SATS"
+            }
+            return ""
+        })()
+        return ["Converted", hive, hbd, usd, sats]
+            .filter(Boolean)
+            .join(" &nbsp;&nbsp; ")
+    }
+
+    async function fetchEntries() {
+        const params = new URLSearchParams()
+        const form = document.querySelector(".needs-validation")
+        if (!form) return
+        const account = form.querySelector('[name="account_string"]').value
+        const sub = form.querySelector('[name="sub_filter"]').value
+        const short_id = form.querySelector('[name="short_id"]').value
+        const group_id = form.querySelector('[name="group_id"]').value
+        const as_of_date = form.querySelector('[name="as_of_date_str"]').value
+        const age_hours = form.querySelector('[name="age_hours"]').value
+
+        if (account) params.append("account_string", account)
+        if (sub) params.append("sub_filter", sub)
+        if (short_id) params.append("short_id", short_id)
+        if (group_id) params.append("group_id", group_id)
+        if (as_of_date) params.append("as_of_date_str", as_of_date)
+        if (age_hours) params.append("age_hours", age_hours)
+
+        // include pagination params
+        const limit = 50
+        const offset = window.__ledger_entries_offset || 0
+        params.append("limit", String(limit))
+        params.append("offset", String(offset))
+        const url = "/admin/ledger-entries/data?" + params.toString()
+        try {
+            const res = await fetch(url)
+            if (!res.ok) throw new Error("Network response not ok")
+            const data = await res.json()
+            // update total count and entries
+            window.__ledger_entries_total = data.count
+            document.getElementById("entries-count").innerText = data.count
+            renderEntries(data.entries || [], data.count)
+            // Manage Load more button state
+            const loadMoreBtn = document.getElementById("load-more-entries")
+            const offset = window.__ledger_entries_offset || 0
+            const limit = window.__ledger_entries_limit || 50
+            if (offset + (data.entries || []).length >= (data.count || 0)) {
+                loadMoreBtn.disabled = true
+                loadMoreBtn.innerText = "No more"
+            } else {
+                loadMoreBtn.disabled = false
+                loadMoreBtn.innerText = "Load more"
+            }
+        } catch (e) {
+            console.error("Error fetching entries", e)
+        }
+    }
+
+    function renderEntries(entries) {
+        const container = document.getElementById("entries-container")
+        const serverContainer = document.getElementById("server-entries")
+        if (!container) return
+        if (serverContainer) serverContainer.classList.add("d-none")
+
+        if (!entries || entries.length === 0) {
+            container.innerHTML =
+                '<div class="list-group-item text-muted">No entries found.</div>'
+            return
+        }
+
+        // Append entries (supports incremental load)
+        const startingIdx = window.__ledger_entries_offset || 0
+        // Append generated HTML to the container
+        // Append generated HTML to the container
+        const html = entries
+            .map((entry, idx) => {
+                const debit = entry.debit || {}
+                const credit = entry.credit || {}
+                const conv = entry.conversion || {}
+                const date = entry.timestamp ? new Date(entry.timestamp) : null
+                const formattedDate = date
+                    ? date.toLocaleString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false,
+                    })
+                    : ""
+
+                const debitAmt = formatAmount(debit.amount, debit.unit)
+                const creditAmt = formatAmount(credit.amount, credit.unit)
+
+                const conversionLine = formatConversion(conv.debit || conv)
+
+                return `
+                <div class="card mb-3 entry-card">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                      <div>
+                        <div><strong>J/E:</strong> ${escapeHtml(entry.group_id || "")}</div>
+                        <div class="small mt-1"><strong>Short ID:</strong> ${escapeHtml(entry.short_id || "")}</div>
+                        <div class="mt-1"><span class="badge bg-secondary">${escapeHtml(entry.ledger_type_str || entry.ledger_type || "")}</span></div>
+                      </div>
+                      <div class="text-muted small">${escapeHtml(formattedDate)}</div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2">
+                      <div><strong>Customer ID :</strong> ${escapeHtml(entry.cust_id || "")}</div>
+                      <div class="text-muted">${escapeHtml(formattedDate)}</div>
+                    </div>
+
+                    <div class="row mt-3 fw-bold">
+                      <div class="col-6">ACCOUNT</div>
+                      <div class="col-3 text-end">DEBIT</div>
+                      <div class="col-3 text-end">CREDIT</div>
+                    </div>
+                    <hr />
+
+                    <div class="row">
+                      <div class="col-6">
+                        ${escapeHtml(debit.name || "")} (${escapeHtml(debit.account_type || "")})<div class="text-muted small">${escapeHtml(debit.sub || "")}</div>
+                      </div>
+                      <div class="col-3 text-end">${escapeHtml(debitAmt)}</div>
+                      <div class="col-3 text-end">&nbsp;</div>
+                    </div>
+
+                    <div class="row mt-2">
+                      <div class="col-6">${escapeHtml(credit.name || "")} (${escapeHtml(credit.account_type || "")})<div class="text-muted small">${escapeHtml(credit.sub || "")}</div></div>
+                      <div class="col-3 text-end">&nbsp;</div>
+                      <div class="col-3 text-end">${escapeHtml(creditAmt)}</div>
+                    </div>
+
+                    <div class="row mt-3">
+                      <div class="col-12">${conversionLine}</div>
+                    </div>
+
+                    <div class="row mt-2">
+                      <div class="col-12"><strong>DESCRIPTION</strong><p>${escapeHtml(entry.description || "")}</p>
+                      ${entry.user_memo ? `<div class="mt-1"><strong>User Memo:</strong> <span class="text-muted small">${escapeHtml(entry.user_memo)}</span></div>` : ""}
+                      </div>
+                    </div>
+
+                    <div class="mt-2">
+                      <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse" data-bs-target="#raw-${startingIdx + idx}">Raw JSON</button>
+                      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#journal-${startingIdx + idx}">Journal Text</button>
+                      ${entry.link ? `<a class="btn btn-sm btn-outline-primary ms-2" href="${escapeHtml(entry.link)}" target="_blank">🔗 Link</a>` : ""}
+                    </div>
+
+                    <div class="collapse mt-2" id="raw-${startingIdx + idx}"><pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre></div>
+                    <div class="collapse mt-2" id="journal-${startingIdx + idx}"><pre class="small">${escapeHtml(entry.journal || "")}</pre></div>
+                  </div>
+                </div>`
+            })
+            .join("")
+
+        // If offset is zero, replace; otherwise append
+        const offset = window.__ledger_entries_offset || 0
+        if (offset === 0) {
+            container.innerHTML = html
+        } else {
+            container.insertAdjacentHTML("beforeend", html)
+        }
+    }
+
+    function loadMoreEntries() {
+        const limit = window.__ledger_entries_limit || 50
+        window.__ledger_entries_offset =
+            (window.__ledger_entries_offset || 0) + limit
+        fetchEntries()
+    }
 </script>
 {% endblock %}

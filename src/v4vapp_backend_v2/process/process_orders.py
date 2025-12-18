@@ -78,7 +78,7 @@ async def process_create_fill_order_op(
             # Both tracked: Create two entries as before
             ledger_type = LedgerType.FILL_ORDER_BUY
             buyer_entry = LedgerEntry(
-                group_id=f"{limit_fill_order.group_id}-{ledger_type}",
+                group_id=f"{limit_fill_order.group_id}_{ledger_type}",
                 short_id=limit_fill_order.short_id,
                 timestamp=limit_fill_order.timestamp,
                 op_type=limit_fill_order.op_type,
@@ -103,7 +103,7 @@ async def process_create_fill_order_op(
 
             ledger_type = LedgerType.FILL_ORDER_SELL
             seller_entry = LedgerEntry(
-                group_id=f"{limit_fill_order.group_id}-{ledger_type}",
+                group_id=f"{limit_fill_order.group_id}_{ledger_type}",
                 short_id=limit_fill_order.short_id,
                 timestamp=limit_fill_order.timestamp,
                 op_type=limit_fill_order.op_type,
@@ -129,7 +129,7 @@ async def process_create_fill_order_op(
             # Buyer tracked, seller external: Single net entry for buyer, use suspense for external
             ledger_type = LedgerType.FILL_ORDER_NET
             net_entry = LedgerEntry(
-                group_id=f"{limit_fill_order.group_id}-{ledger_type}",
+                group_id=f"{limit_fill_order.group_id}_{ledger_type}",
                 short_id=limit_fill_order.short_id,
                 timestamp=limit_fill_order.timestamp,
                 op_type=limit_fill_order.op_type,

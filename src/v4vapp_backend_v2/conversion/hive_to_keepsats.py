@@ -47,8 +47,8 @@ from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, Li
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.calculate import calc_hive_to_keepsats
-from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
+from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
@@ -111,7 +111,7 @@ async def conversion_hive_to_keepsats(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=(
             f"Convert {conv_result.to_convert_conv.value_in(from_currency)} "
@@ -143,7 +143,7 @@ async def conversion_hive_to_keepsats(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Contra Conversion: {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id} Keepsats",
         debit=AssetAccount(name="Customer Deposits Hive", sub=server_id, contra=False),
@@ -171,7 +171,7 @@ async def conversion_hive_to_keepsats(
         op_type=tracked_op.op_type,
         cust_id=cust_id,
         ledger_type=ledger_type,
-        group_id=f"{tracked_op.group_id}-{ledger_type.value}",
+        group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Withdraw {conv_result.to_convert_amount} from {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(

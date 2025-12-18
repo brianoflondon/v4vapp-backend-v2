@@ -66,26 +66,31 @@ python run_admin.py --reload --log-level debug
 The admin interface allows you to manage all V4VApp configuration settings:
 
 #### Fee Settings
+
 - **Hive Return Fee**: Fee for returning Hive transactions
 - **Conversion Fee (%)**: Percentage fee for conversions
 - **Conversion Fee (Sats)**: Fixed sat fee for conversions
 - **Streaming Fee (%)**: Fee for streaming sats to Hive
 
 #### Payment Limits
+
 - **Minimum Invoice**: Smallest invoice amount in sats
 - **Maximum Invoice**: Largest invoice amount in sats
 - **Max LND Fee**: Maximum routing fee in millisats
 
 #### Gateway Control
+
 - **Hive → Lightning**: Enable/disable payments from Hive to Lightning
 - **Lightning → Hive**: Enable/disable payments from Lightning to Hive
 
 #### Service URLs
+
 - **Frontend IRI**: Frontend application URL
 - **API IRI**: API endpoint URL
 - **Dynamic Fees**: Hive account and permlink for dynamic fees
 
 #### Rate Limits
+
 - Dynamic rate limiting configuration
 - Set limits by time period (hours) and amount (sats)
 - Add/remove limits as needed
@@ -142,6 +147,7 @@ src/v4vapp_backend_v2/admin/
 ### Adding New Admin Sections
 
 1. **Create a new router** in `routers/`:
+
 ```python
 # routers/new_section.py
 from fastapi import APIRouter
@@ -153,6 +159,7 @@ async def new_section_dashboard():
 ```
 
 2. **Add navigation item** in `navigation.py`:
+
 ```python
 NavigationItem(
     name="New Section",
@@ -163,6 +170,7 @@ NavigationItem(
 ```
 
 3. **Include router** in `app.py`:
+
 ```python
 from v4vapp_backend_v2.admin.routers import new_section
 self.app.include_router(
@@ -183,6 +191,7 @@ self.app.include_router(
 - **VPN-protected environments**
 
 For production use, consider adding:
+
 - Basic HTTP authentication
 - OAuth integration
 - IP whitelisting
@@ -210,6 +219,7 @@ python run_admin.py --reload --log-level debug
 ```
 
 This enables:
+
 - Auto-reload on file changes
 - Detailed logging
 - Better error messages
@@ -234,6 +244,25 @@ This enables:
    - Verify Hive node configuration
    - Check network connectivity
    - Review server account settings
+
+#### Jinja / HTML formatter issues
+
+If you edit Jinja templates under `templates/` with an editor that formats HTML on save (e.g. Prettier or generic HTML formatters), it can collapse multi-line Jinja logic into a single line and corrupt Jinja syntax (for example turning `==` into a broken `=""="` sequence). To avoid this:
+
+- Disable automatic HTML formatting for template files, or map template files to a Jinja language ID and disable formatting for that language.
+- The repository includes a workspace `.vscode/settings.json` that maps `src/v4vapp_backend_v2/admin/templates/**/*.html` to the `jinja` language and disables `formatOnSave` for the `jinja` language.
+- For extra safety, we have a unit test `tests/test_templates.py` which compiles the key templates and fails if they do not render; this runs in CI.
+
+Developer notes:
+
+- Install local pre-commit hooks to validate templates on commit:
+
+```bash
+pip install pre-commit  # if you don't have it already
+pre-commit install
+```
+
+- If you use Prettier or other HTML formatters in VS Code, disable format-on-save for the Jinja language or add `src/v4vapp_backend_v2/admin/templates/` to your `.prettierignore`.
 
 ### Logs
 

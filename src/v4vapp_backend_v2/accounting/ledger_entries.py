@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -17,6 +17,8 @@ async def get_ledger_entries(
     filter_by_ledger_types: list[LedgerType] | None = None,
     group_id: str | None = None,
     short_id: str | None = None,
+    sub_account: str | None = None,
+    age_hours: int | None = 0,
 ) -> list[LedgerEntry]:
     """
     Retrieves ledger entries from the database up to a specified date, optionally filtered by account.
@@ -31,7 +33,7 @@ async def get_ledger_entries(
             (considering both name and sub-account) are returned. Defaults to None.
 
     Returns:
-        list[LedgerEntry]: A list of LedgerEntry objects sorted by timestamp (ascending).
+        list[LedgerEntry]: A list of LedgerEntry objects sorted by timestamp (newest first, descending).
 
     Notes:
         - Queries the database for entries with a timestamp less than or equal to `as_of_date`.
@@ -42,6 +44,11 @@ async def get_ledger_entries(
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
 
+    # Convert hours to timedelta if provided
+    age = None
+    if age_hours and age_hours > 0:
+        age = timedelta(hours=age_hours)
+
     query = filter_by_account_as_of_date_query(
         account=filter_by_account,
         cust_id=cust_id,
@@ -49,12 +56,14 @@ async def get_ledger_entries(
         ledger_types=filter_by_ledger_types,
         group_id=group_id,
         short_id=short_id,
+        sub_account=sub_account,
+        age=age,
     )
     ledger_entries = []
 
     cursor = LedgerEntry.collection().find(
         filter=query,
-        sort=[("timestamp", 1)],
+        sort=[("timestamp", -1)],
     )
     async for entry in cursor:
         try:

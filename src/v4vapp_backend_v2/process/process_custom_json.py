@@ -257,7 +257,7 @@ async def custom_json_internal_transfer(
         cust_id=custom_json.cust_id,
         short_id=custom_json.short_id,
         ledger_type=ledger_type,
-        group_id=f"{custom_json.group_id}-{ledger_type.value}",
+        group_id=f"{custom_json.group_id}_{ledger_type.value}",
         user_memo=user_memo,
         timestamp=custom_json.timestamp,
         description=description,
@@ -324,7 +324,7 @@ async def custom_json_internal_transfer(
             op_type=custom_json.op_type,
             cust_id=cust_id,
             ledger_type=ledger_type,
-            group_id=f"{custom_json.group_id}-{ledger_type.value}",
+            group_id=f"{custom_json.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
             description=f"Fee for Keepsats {(keepsats_transfer.msats or 0) / 1000:,.0f} sats for {cust_id}",
             debit=LiabilityAccount(
