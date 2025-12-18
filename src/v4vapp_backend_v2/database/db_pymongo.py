@@ -29,7 +29,13 @@ class DBConn:
     _setup: bool = False
 
     def __init__(self, db_conn: str = "", db_name: str = "", db_user: str = ""):
-        config = InternalConfig().config
+        # Be defensive in case InternalConfig hasn't fully initialized during tests
+        try:
+            config = InternalConfig().config
+        except AttributeError:
+            from v4vapp_backend_v2.config.setup import Config
+
+            config = Config()
         dbs_config = config.dbs_config
 
         self.db_conn = db_conn if db_conn else dbs_config.default_connection
