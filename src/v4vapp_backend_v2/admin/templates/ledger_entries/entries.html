@@ -226,7 +226,9 @@
                 <div>
                     <div><strong>J/E:</strong> {{ entry.group_id }}</div>
                     <div class="small mt-1"><strong>Short ID:</strong> {{ entry.short_id }}</div>
-                    <div class="mt-1"><span class="badge bg-secondary">{{ entry.ledger_type_str }}</span></div>
+                    <div class="small mt-1"><strong>Op Type:</strong> {{ entry.op_type }}</div>
+                    <div class="mt-1"><span class="badge bg-secondary">
+                            {{ entry.ledger_type_str }}</span></div>
                 </div>
                 <div class="text-muted small">{{ entry.timestamp.isoformat() if entry.timestamp else '' }}</div>
             </div>
@@ -588,6 +590,7 @@
                       <div>
                         <div><strong>J/E:</strong> ${escapeHtml(entry.group_id || "")}</div>
                         <div class="small mt-1"><strong>Short ID:</strong> ${escapeHtml(entry.short_id || "")}</div>
+                        <div class="small mt-1"><strong>Op Type:</strong> ${escapeHtml(entry.op_type || "")}</div>
                         <div class="mt-1"><span class="badge bg-secondary">${escapeHtml(entry.ledger_type_str || entry.ledger_type || "")}</span></div>
                       </div>
                       <div class="text-muted small">${escapeHtml(formattedDate)}</div>
