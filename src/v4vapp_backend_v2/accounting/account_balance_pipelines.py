@@ -54,6 +54,31 @@ def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
     return pipeline
 
 
+def list_all_ledger_types_pipeline() -> Sequence[Mapping[str, Any]]:
+    """
+    Returns a MongoDB aggregation pipeline to list all unique ledger types in the ledger.
+    The pipeline performs the following operations:
+    1. Groups the documents by `ledger_type` to find unique types.
+    2. Projects the final output to include only the `ledger_type` field.
+    3. Sorts the results by `ledger_type`.
+    """
+    pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$group": {
+                "_id": "$ledger_type",
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "ledger_type": "$_id",
+            }
+        },
+        {"$sort": {"ledger_type": 1}},
+    ]
+    return pipeline
+
+
 def all_account_balances_pipeline(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),

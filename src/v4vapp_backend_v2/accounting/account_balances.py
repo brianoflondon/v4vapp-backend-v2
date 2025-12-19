@@ -5,6 +5,7 @@ from typing import Any, List, Mapping, Tuple
 from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
+    list_all_ledger_types_pipeline,
     net_held_msats_balance_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
@@ -15,10 +16,11 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import async_time_stats_decorator, logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
@@ -576,6 +578,29 @@ async def list_all_accounts() -> List[LedgerAccount]:
         account = LedgerAccount.model_validate(doc)
         accounts.append(account)
     return accounts
+
+
+@async_time_stats_decorator()
+async def list_all_ledger_types() -> List[LedgerType]:
+    """
+    Lists all unique ledger types in the ledger.
+
+    Returns:
+        List[LedgerType]: A list of unique LedgerType objects sorted by name.
+    """
+    pipeline = list_all_ledger_types_pipeline()
+    cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
+    ledger_types: List[LedgerType] = []
+    async for doc in cursor:
+        try:
+            ledger_type = LedgerType(doc.get("ledger_type"))
+            ledger_types.append(ledger_type)
+        except ValueError:
+            logger.warning(
+                f"Unknown ledger type found in ledger entries: {doc.get('ledger_type')}",
+                extra={"notification": False},
+            )
+    return ledger_types
 
 
 async def ledger_pipeline_result(

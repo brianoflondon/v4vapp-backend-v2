@@ -166,11 +166,11 @@ async def decode_any_lightning_string(
                 failure={"error": "amount out of range"},
             )
         if not response.comment_allowed:
-            params = {"amount": zero_amount_invoice_send_msats}
+            params = {"amount": int(zero_amount_invoice_send_msats)}
         else:
             if len(comment) > response.comment_allowed:
                 comment = comment[: response.comment_allowed]
-            params = {"amount": zero_amount_invoice_send_msats, "comment": comment}
+            params = {"amount": int(zero_amount_invoice_send_msats), "comment": comment}
 
     except LnurlException as ex:
         logger.debug(
@@ -210,6 +210,11 @@ async def decode_any_lightning_string(
             raise LnurlException("No payment request found in response")
         except (httpx.RequestError, httpx.HTTPStatusError) as ex:
             logger.error(f"HTTP error: {str(ex)}", extra={"notification": False})
+            raise LnurlException(failure={"error": str(ex)})
+        except Exception as ex:
+            logger.exception(
+                f"Unexpected error validating response: {str(ex)}", extra={"notification": False}
+            )
             raise LnurlException(failure={"error": str(ex)})
 
 
