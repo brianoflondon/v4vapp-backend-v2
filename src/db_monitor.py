@@ -225,7 +225,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         return
     o_id = full_document.get("_id")
     mongo_id = str(o_id) if o_id is not None else "unknown_id"
-    lock_str = f"mongo_id_{mongo_id}"
+    lock_str = f"db_monitor_{mongo_id}"
     async with LockStr(lock_str).locked(
         timeout=None, blocking_timeout=None, request_details="db_monitor"
     ):
@@ -238,7 +238,9 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         try:
             op = tracked_any_filter(full_document)
         except ValueError as e:
-            logger.info(f"{ICON} {lock_str} Error in tracked_any: {e}", extra={"notification": False})
+            logger.info(
+                f"{ICON} {lock_str} Error in tracked_any: {e}", extra={"notification": False}
+            )
             return
         logger.info(f"{ICON} {lock_str} Processing {op.group_id_query}")
         while True:

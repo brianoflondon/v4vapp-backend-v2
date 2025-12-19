@@ -58,7 +58,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
     """
     finalize = True
     retry_task = None
-    async with LockStr(tracked_op.group_id_p).locked(
+    async with LockStr(f"pte_{tracked_op.group_id_p}").locked(
         timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
     ):
         existing_entry = await LedgerEntry.load(group_id=tracked_op.group_id_p)
@@ -112,7 +112,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
         logger.debug(f"{'=*=' * 10} {cust_id} {'=*=' * 10}")
         start = timer()
         try:
-            async with LockStr(cust_id).locked(
+            async with LockStr(f"pte_{cust_id}").locked(
                 timeout=None, blocking_timeout=None, request_details=tracked_op.log_str
             ):
                 if isinstance(tracked_op, (TransferBase, LimitOrderCreate, FillOrder, CustomJson)):
