@@ -113,7 +113,8 @@ TrackedAny = Annotated[
 ]
 
 TrackedProducer = Annotated[
-    Annotated[ProducerMissed, Tag("producer_missed")]
+    Annotated[AccountWitnessVote, Tag("account_witness_vote")]
+    | Annotated[ProducerMissed, Tag("producer_missed")]
     | Annotated[ProducerReward, Tag("producer_reward")],
     Discriminator(get_tracked_any_type),
 ]

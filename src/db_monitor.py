@@ -225,25 +225,27 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         return
     o_id = full_document.get("_id")
     mongo_id = str(o_id) if o_id is not None else "unknown_id"
-    async with LockStr(mongo_id).locked(
+    lock_str = f"mongo_id_{mongo_id}"
+    async with LockStr(lock_str).locked(
         timeout=None, blocking_timeout=None, request_details="db_monitor"
     ):
         if not full_document:
             logger.warning(
-                f"{ICON} No fullDocument found in change: {change}", extra={"notification": False}
+                f"{ICON} {lock_str} No fullDocument found in change: {change}",
+                extra={"notification": False},
             )
             return
         try:
             op = tracked_any_filter(full_document)
         except ValueError as e:
-            logger.info(f"{ICON} Error in tracked_any: {e}", extra={"notification": False})
+            logger.info(f"{ICON} {lock_str} Error in tracked_any: {e}", extra={"notification": False})
             return
-        logger.info(f"{ICON} Processing {op.group_id_query}")
+        logger.info(f"{ICON} {lock_str} Processing {op.group_id_query}")
         while True:
             try:
                 ledger_entries = await process_tracked_event(op)
                 logger.info(
-                    f"{ICON} Lock release: {mongo_id} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
+                    f"{ICON} {lock_str} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
                     extra={
                         **op.log_extra,
                         "ledger_entries": [le.model_dump() for le in ledger_entries],
@@ -267,7 +269,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
                 await asyncio.sleep(5)
             finally:
-                logger.info(f"{ICON} Lock release: {mongo_id}")
+                logger.info(f"{ICON} Lock release: {lock_str}")
 
 
 async def subscribe_stream(

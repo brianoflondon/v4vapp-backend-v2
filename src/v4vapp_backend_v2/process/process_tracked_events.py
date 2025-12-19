@@ -20,6 +20,7 @@ from v4vapp_backend_v2.hive.hive_extras import HiveNotEnoughHiveInAccount
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.block_marker import BlockMarker
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -79,6 +80,10 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             v4vconfig = V4VConfig()
             if v4vconfig.server_accname == tracked_op.account:
                 v4vconfig.fetch()
+            return []
+
+        if isinstance(tracked_op, AccountWitnessVote):
+            # Do nothing with Account witness votes for now
             return []
 
         if isinstance(tracked_op, ProducerReward) or isinstance(tracked_op, ProducerMissed):
