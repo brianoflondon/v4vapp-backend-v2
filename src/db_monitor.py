@@ -243,10 +243,11 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             try:
                 ledger_entries = await process_tracked_event(op)
                 logger.info(
-                    f"{ICON} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
+                    f"{ICON} Lock release: {mongo_id} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
                     extra={
                         **op.log_extra,
                         "ledger_entries": [le.model_dump() for le in ledger_entries],
+                        "mongo_id": mongo_id,
                     },
                 )
                 return
@@ -265,6 +266,8 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
             except CustIDLockException as e:
                 logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
                 await asyncio.sleep(5)
+            finally:
+                logger.info(f"{ICON} Lock release: {mongo_id}")
 
 
 async def subscribe_stream(

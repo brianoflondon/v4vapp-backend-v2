@@ -5,6 +5,7 @@ from pydantic import BaseModel, Discriminator, Tag, ValidationError
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -52,6 +53,7 @@ def get_tracked_any_type(value: Any) -> str:
             "account_update2",
             "producer_missed",
             "producer_reward",
+            "account_witness_vote",
         ]:
             return op_type
         add_index = value.get("add_index", None)
@@ -105,7 +107,8 @@ TrackedAny = Annotated[
     | Annotated[AccountUpdate2, Tag("account_update2")]
     | Annotated[TransferBase, Tag("transfer_base")]
     | Annotated[ProducerMissed, Tag("producer_missed")]
-    | Annotated[ProducerReward, Tag("producer_reward")],
+    | Annotated[ProducerReward, Tag("producer_reward")]
+    | Annotated[AccountWitnessVote, Tag("account_witness_vote")],
     Discriminator(get_tracked_any_type),
 ]
 
