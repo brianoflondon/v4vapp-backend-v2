@@ -10,7 +10,7 @@ from v4vapp_backend_v2.actions.lnurl_decode import (
     decode_any_lightning_string,
     decode_any_lnurp_or_lightning_address,
 )
-from v4vapp_backend_v2.actions.lnurl_models import strip_lightning
+from v4vapp_backend_v2.actions.lnurl_models import LnurlPayResponseComment, strip_lightning
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.models.pay_req import PayReq
@@ -70,6 +70,23 @@ def test_strip_lightning():
 async def test_lnurlp_proxy_lightning_addresses(
     mocker: MockerFixture, request, data: str, result: str
 ):
+    # Patch the network call to avoid external HTTP in tests
+    async def fake_proxy(url: str, failure: dict):
+        # Simulate an upstream failure for addresses with 'failure' in them
+        if "failure" in str(url):
+            raise LnurlException(failure={"error": "simulated failure"})
+        return LnurlPayResponseComment(
+            callback="https://example.com/callback",
+            minSendable=1000,
+            maxSendable=2_000_000,
+            metadata="[]",
+        )
+
+    mocker.patch(
+        "v4vapp_backend_v2.actions.lnurl_decode.perform_lnaddress_proxy",
+        side_effect=fake_proxy,
+    )
+
     for param in ["LightningAddress", "bech32Lnurl", "decodedUrl", "anything"]:
         json_data = {param: data}
 
@@ -101,6 +118,37 @@ async def test_decode_any_lightning_string(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", base_path_original)
     ic = InternalConfig(config_filename="config/devhive.config.yaml")
     lnd_client = LNDClient(connection_name="voltage")
+
+    # Prevent external HTTP calls during this test by patching the proxy
+    async def fake_proxy(url: str, failure: dict):
+        if "failure" in str(url):
+            raise LnurlException(failure={"error": "simulated failure"})
+        return LnurlPayResponseComment(
+            callback="https://example.com/callback",
+            minSendable=1000,
+            maxSendable=2_000_000,
+            metadata="[]",
+            commentAllowed=140,
+        )
+
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.actions.lnurl_decode.perform_lnaddress_proxy",
+        fake_proxy,
+    )
+
+    # Patch the HTTP client so we don't make a real network call to the LNURL callback
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            # Return the known valid invoice used earlier in the test so LND can decode it
+            return {
+                "pr": "lnbc20720n1p5pwchppp5cc7umgmnekpym25sss7tpld8dgn3f8ymcj5wt7hk8xevdsa8myzsdzawc68vctswqhxgetkyp7zqa35wckhsjjstfzjqlpqydf5z4znyqerqdejyp7zqg6ng929xgprgdxy2s2wyq3hvdrkv9c8qcqzzsxqzxgsp57gv9xfay4lmgqgkrtydews0kr88qajj84gf4x4lraz38966rs2yq9qxpqysgqwjqhkuj0g5anqxe0tqun2hckw504q5q9cej6j4vsvav0alkrp3er06qgtxkq8v0d0s0d8jx0ucme5dlu4m77qxlllq5fy0qn3k0ameqp69a6cs"
+            }
+
+    monkeypatch.setattr("httpx.Client.get", lambda *args, **kwargs: FakeResponse())
+
     input = "lightning:lnbc20720n1p5pwchppp5cc7umgmnekpym25sss7tpld8dgn3f8ymcj5wt7hk8xevdsa8myzsdzawc68vctswqhxgetkyp7zqa35wckhsjjstfzjqlpqydf5z4znyqerqdejyp7zqg6ng929xgprgdxy2s2wyq3hvdrkv9c8qcqzzsxqzxgsp57gv9xfay4lmgqgkrtydews0kr88qajj84gf4x4lraz38966rs2yq9qxpqysgqwjqhkuj0g5anqxe0tqun2hckw504q5q9cej6j4vsvav0alkrp3er06qgtxkq8v0d0s0d8jx0ucme5dlu4m77qxlllq5fy0qn3k0ameqp69a6cs"
     result = await decode_any_lightning_string(input, lnd_client=lnd_client)
     assert isinstance(result, PayReq)

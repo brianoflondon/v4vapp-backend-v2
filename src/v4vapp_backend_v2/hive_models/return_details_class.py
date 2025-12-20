@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -46,7 +47,7 @@ class HiveReturnDetails(BaseModel):
     action: ReturnAction
     reason_str: str = ""
     amount: AmountPyd | None = None
-    msats: int | None = None
+    msats: Decimal | None = None
     pay_to_cust_id: CustIDType
     nobroadcast: bool = False
     clean: bool = False

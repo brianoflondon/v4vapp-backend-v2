@@ -334,8 +334,8 @@ async def calc_keepsats_to_hive(
     if amount is not None:
         to_currency = Currency(amount.symbol.lower())
 
-    # Threshold (msats) for applying notification fee
-    notification_threshold_msats = V4VConfig().data.minimum_invoice_payment_sats * 1_000
+    # Threshold (msats) for applying notification fee is either minimum sats value configured or 250 sats
+    notification_threshold_msats = min(V4VConfig().data.minimum_invoice_payment_sats * 1_000, 250_000)
 
     # ------------------------------------------------------------------
     # Mode 2: Target Amount (Hive/HBD) provided -> solve for msats needed

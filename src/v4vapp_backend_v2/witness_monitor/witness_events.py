@@ -13,6 +13,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
     get_verified_hive_client_for_accounts,
     witness_signing_key,
 )
+from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 
@@ -55,6 +56,13 @@ async def process_witness_event(tracked_op: TrackedProducer) -> None:
                 extra={"notification": False},
             )
             # Add your processing logic for ProducerMissed here
+
+        elif isinstance(tracked_op, AccountWitnessVote):
+            logger.info(
+                f"{ICON} Processing AccountWitnessVote event: {tracked_op.log_str}",
+                extra={"notification": False},
+            )
+            # Add your processing logic for AccountWitnessVote here
 
         else:
             logger.warning(

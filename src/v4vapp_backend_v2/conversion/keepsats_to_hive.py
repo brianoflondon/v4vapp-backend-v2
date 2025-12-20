@@ -63,6 +63,7 @@ from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
+from v4vapp_backend_v2.hive.hive_extras import HiveToKeepsatsConversionError
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
@@ -81,7 +82,37 @@ async def conversion_keepsats_to_hive(
     nobroadcast: bool = False,
     quote: QuoteResponse | None = None,
 ) -> None:
-    """ """
+    """
+    Convert keepsats to Hive currency for a given customer operation.
+
+    This asynchronous function handles the conversion process from keepsats (Lightning sats) to Hive (or specified currency),
+    including calculating conversion results, creating multiple ledger entries for accounting purposes (such as conversion,
+    contra, fee income, customer consumption, deposits, and reclassifications), updating the tracked operation with new
+    memos and amounts, and initiating a Hive reply. It also queues a rebalance task to maintain currency balance.
+
+    Parameters:
+    - server_id (str): The server identifier.
+    - cust_id (str): The customer identifier.
+    - tracked_op (TrackedTransferKeepsatsToHive): The tracked operation object containing details of the transfer.
+    - msats (Decimal | None): The amount in millisats, if provided.
+    - amount (Amount | None): The amount object, if provided.
+    - to_currency (Currency): The target currency for conversion (default: Currency.HIVE).
+    - nobroadcast (bool): Flag to indicate if the operation should not be broadcasted (default: False).
+    - quote (QuoteResponse | None): The quote response for the conversion, if available.
+
+    The function performs the following key steps:
+    1. Determines the msats amount from the tracked operation if not provided.
+    2. Calculates or retrieves the conversion result.
+    3. Logs the conversion details.
+    4. Creates and saves ledger entries for conversion, contra, fee income, customer sats consumption (for direct conversions),
+        deposit, and reclassifications.
+    5. Updates the tracked operation's memo and amount.
+    6. Replies with Hive details.
+    7. Queues a rebalance task for currency adjustment.
+
+    Note: For direct sats-to-Hive conversions (via Invoice with is_lndtohive), additional steps like consuming customer sats
+    are included, and some reclassifications are skipped to avoid imbalances.
+    """
 
     # Inbound Invoices contain the msats amount
     if not msats and not amount and isinstance(tracked_op, Invoice):
@@ -95,14 +126,21 @@ async def conversion_keepsats_to_hive(
             quote = fixed_hive_quote.quote_response
             conv_result = fixed_hive_quote.conversion_result
 
-    if not conv_result:
-        conv_result = await calc_keepsats_to_hive(
-            timestamp=tracked_op.timestamp,
-            msats=msats,
-            amount=amount,
-            quote=quote,
-            to_currency=to_currency,
+    try:
+        if not conv_result:
+            conv_result = await calc_keepsats_to_hive(
+                timestamp=tracked_op.timestamp,
+                msats=msats,
+                amount=amount,
+                quote=quote,
+                to_currency=to_currency,
+            )
+    except HiveToKeepsatsConversionError as e:
+        logger.error(
+            f"Conversion error for {tracked_op.group_id}: {e}",
+            extra={"error": str(e), "group_id": tracked_op.group_id},
         )
+        raise
     to_currency = conv_result.to_currency
     logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
     logger.info(f"Conversion result: \n{conv_result}")
