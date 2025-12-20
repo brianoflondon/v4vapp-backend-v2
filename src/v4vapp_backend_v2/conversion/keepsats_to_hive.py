@@ -205,6 +205,9 @@ async def conversion_keepsats_to_hive(
     # MARK: 4 Fee Income From Customer
     # The Fee is ALREADY to the server as part of the start of the conversion
     ledger_type = LedgerType.FEE_INCOME
+    # Recognise fee income funded from the server's captured sats. Debit the server's VSC Liability
+    # so the fee is taken from the sats retained by the server after reclassification; keep cust_id
+    # on the entry for traceability to the original customer.
     fee_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
@@ -215,10 +218,7 @@ async def conversion_keepsats_to_hive(
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
-            # sub=cust_id,  # Changed from server_id to cust_id for direct conversions
             sub=server_id,
-            # I think this might need to be the server_id, because the fee is included in the amount of sats
-            # Taken and factored into the conversion already. 2025-12-15
         ),
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.fee_conv.msats,
@@ -301,17 +301,17 @@ async def conversion_keepsats_to_hive(
             ledger_type=ledger_type,
             group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Reclassify positive SATS from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
+            description=f"Reclassify positive SATS (net) from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
             debit_unit=Currency.MSATS,
-            debit_amount=conv_result.to_convert_conv.msats,
-            debit_conv=conv_result.to_convert_conv,
+            debit_amount=conv_result.net_to_receive_conv.msats,
+            debit_conv=conv_result.net_to_receive_conv,
             credit=AssetAccount(
                 name="Converted Keepsats Offset", sub="from_keepsats", contra=True
             ),
             credit_unit=Currency.MSATS,
-            credit_amount=conv_result.to_convert_conv.msats,
-            credit_conv=conv_result.to_convert_conv,
+            credit_amount=conv_result.net_to_receive_conv.msats,
+            credit_conv=conv_result.net_to_receive_conv,
             link=tracked_op.link,
         )
         ledger_entries.append(reclassify_sats_entry)
