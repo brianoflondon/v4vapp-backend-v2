@@ -1,0 +1,3654 @@
+[{
+  "_id": {
+    "$oid": "69469f60a2663a938d4f2fd1"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "cust_h_in",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:40.156Z"
+  },
+  "description": "Deposit: 10.000 HBD from v4vapp-test to devser.v4vapp 💬v4vapp-test Deposit to #SATS",
+  "user_memo": "💬v4vapp-test Deposit to #SATS",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 10,
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2966052559"
+    },
+    "hbd": 10,
+    "usd": 10,
+    "sats": {
+      "$numberDecimal": "11322.973380"
+    },
+    "msats": {
+      "$numberDecimal": "11322973.380000"
+    },
+    "msats_fee": 265136,
+    "btc": {
+      "$numberDecimal": "0.0001132297338"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 10,
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2966052559"
+    },
+    "hbd": 10,
+    "usd": 10,
+    "sats": {
+      "$numberDecimal": "11322.973380"
+    },
+    "msats": {
+      "$numberDecimal": "11322973.380000"
+    },
+    "msats_fee": 265136,
+    "btc": {
+      "$numberDecimal": "0.0001132297338"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": 10,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/b2a0d385b46bcd08b0c683ea2d6be46aab50000a",
+  "debit_amount_signed": 10,
+  "credit_amount_signed": 10,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "111.2966052559"
+      },
+      "hbd": 10,
+      "usd": 10,
+      "sats": {
+        "$numberDecimal": "11322.973380"
+      },
+      "msats": {
+        "$numberDecimal": "11322973.380000"
+      },
+      "msats_fee": 265136,
+      "btc": {
+        "$numberDecimal": "0.0001132297338"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "111.2966052559"
+      },
+      "hbd": 10,
+      "usd": 10,
+      "sats": {
+        "$numberDecimal": "11322.973380"
+      },
+      "msats": {
+        "$numberDecimal": "11322973.380000"
+      },
+      "msats_fee": 265136,
+      "btc": {
+        "$numberDecimal": "0.0001132297338"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": 10,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f60a2663a938d4f2fd2"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real_hold_k_fee",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "hold_k",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:40.195Z"
+  },
+  "description": "Hold Keepsats 265 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 265114,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 265114,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "keepsats",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "debit_amount_signed": -265114,
+  "credit_amount_signed": 265114,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "-265.114"
+      },
+      "msats": -265114,
+      "msats_fee": -55037,
+      "btc": {
+        "$numberDecimal": "-0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "265.114"
+      },
+      "msats": 265114,
+      "msats_fee": 55037,
+      "btc": {
+        "$numberDecimal": "0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f60a2663a938d4f2fd3"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real_h_conv_k",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "h_conv_k",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:40.203Z"
+  },
+  "description": "Convert 9.999000 into 11,322 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "11321841.082662000"
+  },
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.999000"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Treasury Lightning",
+    "account_type": "Asset",
+    "sub": "to_keepsats",
+    "contra": false
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/b2a0d385b46bcd08b0c683ea2d6be46aab50000a",
+  "debit_amount_signed": {
+    "$numberDecimal": "11321841.082662000"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-9.999000"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "11321841.082662000"
+      },
+      "msats_fee": 265114,
+      "btc": {
+        "$numberDecimal": "0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "-11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "-11321841.082662000"
+      },
+      "msats_fee": -265114,
+      "btc": {
+        "$numberDecimal": "-0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f60a2663a938d4f2fd4"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real_h_contra_k",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "h_contra_k",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:40.208Z"
+  },
+  "description": "Contra Conversion: 11,322 sats for v4vapp-test Keepsats",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.999000"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.999000"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "Converted Keepsats Offset",
+    "account_type": "Asset",
+    "sub": "to_keepsats",
+    "contra": true
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/b2a0d385b46bcd08b0c683ea2d6be46aab50000a",
+  "debit_amount_signed": {
+    "$numberDecimal": "9.999000"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-9.999000"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "11321841.082662000"
+      },
+      "msats_fee": 265114,
+      "btc": {
+        "$numberDecimal": "0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "-11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "-11321841.082662000"
+      },
+      "msats_fee": -265114,
+      "btc": {
+        "$numberDecimal": "-0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f60a2663a938d4f2fd5"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real_withdraw_h",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "withdraw_h",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:40.213Z"
+  },
+  "description": "Withdraw 9.999 HBD from 11,057 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.999000"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "11321841.082662000"
+  },
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854755953"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841082662"
+    },
+    "msats": {
+      "$numberDecimal": "11321841.082662000"
+    },
+    "msats_fee": 265114,
+    "btc": {
+      "$numberDecimal": "0.00011321841082662"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.999"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/b2a0d385b46bcd08b0c683ea2d6be46aab50000a",
+  "debit_amount_signed": {
+    "$numberDecimal": "-9.999000"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "11321841.082662000"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "-11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "-11321841.082662000"
+      },
+      "msats_fee": -265114,
+      "btc": {
+        "$numberDecimal": "-0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "111.2854755953"
+      },
+      "hbd": {
+        "$numberDecimal": "9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "11321.841082662"
+      },
+      "msats": {
+        "$numberDecimal": "11321841.082662000"
+      },
+      "msats_fee": 265114,
+      "btc": {
+        "$numberDecimal": "0.00011321841082662"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "9.999"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f66a2663a938d4f2fd9"
+  },
+  "group_id": "binance_testnet_9802_b2a0d3_1_exc_conv",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "exc_conv",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:46.572Z"
+  },
+  "description": "Rebalance executed: SELL 111.000 HIVE @ 0.00000101, fee: 0 sats",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 111,
+  "debit_unit": "hive",
+  "debit_conv": {
+    "hive": 111,
+    "hbd": {
+      "$numberDecimal": "9.901109"
+    },
+    "usd": {
+      "$numberDecimal": "9.901109"
+    },
+    "sats": 11211,
+    "msats": 11211000,
+    "msats_fee": 263009,
+    "btc": {
+      "$numberDecimal": "0.00011211000000"
+    },
+    "sats_hive": 101,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hive",
+    "value": 111,
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:45.881Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 11211000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": 111,
+    "hbd": {
+      "$numberDecimal": "9.901109"
+    },
+    "usd": {
+      "$numberDecimal": "9.901109"
+    },
+    "sats": 11211,
+    "msats": 11211000,
+    "msats_fee": 263009,
+    "btc": {
+      "$numberDecimal": "0.00011211000000"
+    },
+    "sats_hive": 101,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hive",
+    "value": 111,
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:45.881Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "credit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "op_type": "exchange_trade",
+  "debit_amount_signed": 111,
+  "credit_amount_signed": -11211000,
+  "conv_signed": {
+    "debit": {
+      "hive": 111,
+      "hbd": {
+        "$numberDecimal": "9.901109"
+      },
+      "usd": {
+        "$numberDecimal": "9.901109"
+      },
+      "sats": 11211,
+      "msats": 11211000,
+      "msats_fee": 263009,
+      "btc": {
+        "$numberDecimal": "0.00011211000000"
+      },
+      "sats_hive": 101,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hive",
+      "value": 111,
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:45.881Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": -111,
+      "hbd": {
+        "$numberDecimal": "-9.901109"
+      },
+      "usd": {
+        "$numberDecimal": "-9.901109"
+      },
+      "sats": -11211,
+      "msats": -11211000,
+      "msats_fee": -263009,
+      "btc": {
+        "$numberDecimal": "-0.00011211000000"
+      },
+      "sats_hive": 101,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hive",
+      "value": -111,
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:45.881Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f66a2663a938d4f2fda"
+  },
+  "group_id": "binance_testnet_9802_b2a0d3_1_exc_fee",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "exc_fee",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:46.684Z"
+  },
+  "description": "Exchange fee for Rebalance executed: SELL 111.000 HIVE @ 0.00000101, fee: 0 sats",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "840.82500000000000"
+  },
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0083250000"
+    },
+    "hbd": {
+      "$numberDecimal": "0.000742"
+    },
+    "usd": {
+      "$numberDecimal": "0.000742"
+    },
+    "sats": {
+      "$numberDecimal": "0.84082500000000"
+    },
+    "msats": {
+      "$numberDecimal": "840.82500000000000"
+    },
+    "msats_fee": 50015,
+    "btc": {
+      "$numberDecimal": "8.40825E-9"
+    },
+    "sats_hive": 101,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": {
+      "$numberDecimal": "840.82500000000000"
+    },
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:45.881Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": {
+    "$numberDecimal": "840.82500000000000"
+  },
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0083250000"
+    },
+    "hbd": {
+      "$numberDecimal": "0.000742"
+    },
+    "usd": {
+      "$numberDecimal": "0.000742"
+    },
+    "sats": {
+      "$numberDecimal": "0.84082500000000"
+    },
+    "msats": {
+      "$numberDecimal": "840.82500000000000"
+    },
+    "msats_fee": 50015,
+    "btc": {
+      "$numberDecimal": "8.40825E-9"
+    },
+    "sats_hive": 101,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": {
+      "$numberDecimal": "840.82500000000000"
+    },
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:45.881Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Exchange Fees Paid",
+    "account_type": "Expense",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "credit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "op_type": "exchange_fee",
+  "debit_amount_signed": {
+    "$numberDecimal": "840.82500000000000"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-840.82500000000000"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "0.0083250000"
+      },
+      "hbd": {
+        "$numberDecimal": "0.000742"
+      },
+      "usd": {
+        "$numberDecimal": "0.000742"
+      },
+      "sats": {
+        "$numberDecimal": "0.84082500000000"
+      },
+      "msats": {
+        "$numberDecimal": "840.82500000000000"
+      },
+      "msats_fee": 50015,
+      "btc": {
+        "$numberDecimal": "8.40825E-9"
+      },
+      "sats_hive": 101,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": {
+        "$numberDecimal": "840.82500000000000"
+      },
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:45.881Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-0.0083250000"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.000742"
+      },
+      "usd": {
+        "$numberDecimal": "-0.000742"
+      },
+      "sats": {
+        "$numberDecimal": "-0.84082500000000"
+      },
+      "msats": {
+        "$numberDecimal": "-840.82500000000000"
+      },
+      "msats_fee": -50015,
+      "btc": {
+        "$numberDecimal": "-8.40825E-9"
+      },
+      "sats_hive": 101,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": {
+        "$numberDecimal": "-840.82500000000000"
+      },
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:45.881Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f67a2663a938d4f2fdb"
+  },
+  "group_id": "102209804_6f5b361ab388445bad389519a035a9332487cad2_1_real_recv_l",
+  "short_id": "9804_6f5b36_1",
+  "ledger_type": "recv_l",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:45.000Z"
+  },
+  "description": "Transfer devser.v4vapp -> v4vapp-test 11,321 sats",
+  "user_memo": "💬v4vapp-test Deposit to #SATS | received 11,321 sats from Lightning",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 11321841,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854747828"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841"
+    },
+    "msats": 11321841,
+    "msats_fee": 265115,
+    "btc": {
+      "$numberDecimal": "0.00011321841"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11321841,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 11321841,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "111.2854747828"
+    },
+    "hbd": {
+      "$numberDecimal": "9.999000"
+    },
+    "usd": {
+      "$numberDecimal": "9.999000"
+    },
+    "sats": {
+      "$numberDecimal": "11321.841"
+    },
+    "msats": 11321841,
+    "msats_fee": 265115,
+    "btc": {
+      "$numberDecimal": "0.00011321841"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11321841,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/6f5b361ab388445bad389519a035a9332487cad2",
+  "debit_amount_signed": -11321841,
+  "credit_amount_signed": 11321841,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-111.2854747828"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "-11321.841"
+      },
+      "msats": -11321841,
+      "msats_fee": -265115,
+      "btc": {
+        "$numberDecimal": "-0.00011321841"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11321841,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "111.2854747828"
+      },
+      "hbd": {
+        "$numberDecimal": "9.999000"
+      },
+      "usd": {
+        "$numberDecimal": "9.999000"
+      },
+      "sats": {
+        "$numberDecimal": "11321.841"
+      },
+      "msats": 11321841,
+      "msats_fee": 265115,
+      "btc": {
+        "$numberDecimal": "0.00011321841"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 11321841,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f6aa2663a938d4f2fdd"
+  },
+  "group_id": "102209804_2e83f0016f7c733b4e10b5c1d75b8146924931fb_1_real_c_j_fee",
+  "short_id": "9804_2e83f0_1",
+  "ledger_type": "c_j_fee",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:45.000Z"
+  },
+  "description": "Fee 265 sats v4vapp-test -> devser.v4vapp 265 sats",
+  "user_memo": "",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 265114,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 265114,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/2e83f0016f7c733b4e10b5c1d75b8146924931fb",
+  "debit_amount_signed": -265114,
+  "credit_amount_signed": 265114,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "-265.114"
+      },
+      "msats": -265114,
+      "msats_fee": -55037,
+      "btc": {
+        "$numberDecimal": "-0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "265.114"
+      },
+      "msats": 265114,
+      "msats_fee": 55037,
+      "btc": {
+        "$numberDecimal": "0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f6aa2663a938d4f2fde"
+  },
+  "group_id": "102209804_2e83f0016f7c733b4e10b5c1d75b8146924931fb_1_real_fee_inc",
+  "short_id": "9804_2e83f0_1",
+  "ledger_type": "fee_inc",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:50.632Z"
+  },
+  "description": "Fee for Keepsats 265 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 265114,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 265114,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "Fee Income Keepsats",
+    "account_type": "Revenue",
+    "sub": "to_keepsats",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/2e83f0016f7c733b4e10b5c1d75b8146924931fb",
+  "debit_amount_signed": -265114,
+  "credit_amount_signed": 265114,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "-265.114"
+      },
+      "msats": -265114,
+      "msats_fee": -55037,
+      "btc": {
+        "$numberDecimal": "-0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "265.114"
+      },
+      "msats": 265114,
+      "msats_fee": 55037,
+      "btc": {
+        "$numberDecimal": "0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f6aa2663a938d4f2fdf"
+  },
+  "group_id": "102209802_b2a0d385b46bcd08b0c683ea2d6be46aab50000a_1_real_release_k",
+  "short_id": "9802_b2a0d3_1",
+  "ledger_type": "release_k",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:50.644Z"
+  },
+  "description": "Release Keepsats for v4vapp-test after 00:10",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 265114,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 265114,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "2.6058780866"
+    },
+    "hbd": {
+      "$numberDecimal": "0.234138"
+    },
+    "usd": {
+      "$numberDecimal": "0.234138"
+    },
+    "sats": {
+      "$numberDecimal": "265.114"
+    },
+    "msats": 265114,
+    "msats_fee": 55037,
+    "btc": {
+      "$numberDecimal": "0.00000265114"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 265114,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "keepsats",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "debit_amount_signed": -265114,
+  "credit_amount_signed": 265114,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "-0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "-265.114"
+      },
+      "msats": -265114,
+      "msats_fee": -55037,
+      "btc": {
+        "$numberDecimal": "-0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "2.6058780866"
+      },
+      "hbd": {
+        "$numberDecimal": "0.234138"
+      },
+      "usd": {
+        "$numberDecimal": "0.234138"
+      },
+      "sats": {
+        "$numberDecimal": "265.114"
+      },
+      "msats": 265114,
+      "msats_fee": 55037,
+      "btc": {
+        "$numberDecimal": "0.00000265114"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 265114,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f6ca2663a938d4f2fe0"
+  },
+  "group_id": "102209806_5ed00bdd7647d776f4bfcf76e590febf6384333c_1_real",
+  "short_id": "9806_5ed00b_1",
+  "ledger_type": "cust_h_out",
+  "timestamp": {
+    "$date": "2025-12-20T13:06:52.383Z"
+  },
+  "description": "Withdrawal: 0.001 HBD from devser.v4vapp to v4vapp-test 💬Deposit 9.999 HBD to 11,057 sats with fee: 265 for v4vapp-test | 💬v4vapp-test Deposit to #SATS | § 9802_b2a0d3_1 | Thank you for using v4v.app",
+  "user_memo": "Deposit 9.999 HBD to 11,057 sats with fee: 265 for v4vapp-test | 💬v4vapp-test Deposit to #SATS | § 9802_b2a0d3_1 | Thank you for using v4v.app",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "0.001"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0111296605"
+    },
+    "hbd": {
+      "$numberDecimal": "0.001000"
+    },
+    "usd": {
+      "$numberDecimal": "0.001000"
+    },
+    "sats": {
+      "$numberDecimal": "1.132297338"
+    },
+    "msats": {
+      "$numberDecimal": "1132.297338000"
+    },
+    "msats_fee": 50022,
+    "btc": {
+      "$numberDecimal": "1.132297338E-8"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "0.001"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "0.001"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0111296605"
+    },
+    "hbd": {
+      "$numberDecimal": "0.001000"
+    },
+    "usd": {
+      "$numberDecimal": "0.001000"
+    },
+    "sats": {
+      "$numberDecimal": "1.132297338"
+    },
+    "msats": {
+      "$numberDecimal": "1132.297338000"
+    },
+    "msats_fee": 50022,
+    "btc": {
+      "$numberDecimal": "1.132297338E-8"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "0.001"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/5ed00bdd7647d776f4bfcf76e590febf6384333c",
+  "debit_amount_signed": {
+    "$numberDecimal": "-0.001"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-0.001"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-0.0111296605"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.001000"
+      },
+      "usd": {
+        "$numberDecimal": "-0.001000"
+      },
+      "sats": {
+        "$numberDecimal": "-1.132297338"
+      },
+      "msats": {
+        "$numberDecimal": "-1132.297338000"
+      },
+      "msats_fee": -50022,
+      "btc": {
+        "$numberDecimal": "-1.132297338E-8"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-0.001"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-0.0111296605"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.001000"
+      },
+      "usd": {
+        "$numberDecimal": "-0.001000"
+      },
+      "sats": {
+        "$numberDecimal": "-1.132297338"
+      },
+      "msats": {
+        "$numberDecimal": "-1132.297338000"
+      },
+      "msats_fee": -50022,
+      "btc": {
+        "$numberDecimal": "-1.132297338E-8"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-0.001"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8ca2663a938d4f2fe1"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_c_j_trans",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "c_j_trans",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:24.000Z"
+  },
+  "description": "Transfer v4vapp-test -> devser.v4vapp 11,000 sats",
+  "user_memo": "Converting 11,000 sats to #HBD | 11,000 sats from v4vapp-test -> devser.v4vapp",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 11000000,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714763"
+    },
+    "usd": {
+      "$numberDecimal": "9.714763"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 11000000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714763"
+    },
+    "usd": {
+      "$numberDecimal": "9.714763"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": -11000000,
+  "credit_amount_signed": 11000000,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.714763"
+      },
+      "usd": {
+        "$numberDecimal": "-9.714763"
+      },
+      "sats": -11000,
+      "msats": -11000000,
+      "msats_fee": -259000,
+      "btc": {
+        "$numberDecimal": "-0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "9.714763"
+      },
+      "usd": {
+        "$numberDecimal": "9.714763"
+      },
+      "sats": 11000,
+      "msats": 11000000,
+      "msats_fee": 259000,
+      "btc": {
+        "$numberDecimal": "0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8da2663a938d4f2fe3"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_k_conv_h",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "k_conv_h",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:25.770Z"
+  },
+  "description": "Convert 11,000 into 9.714 HBD for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.714762"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 11000000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "Treasury Lightning",
+    "account_type": "Asset",
+    "sub": "from_keepsats",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": {
+    "$numberDecimal": "9.714762"
+  },
+  "credit_amount_signed": -11000000,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "9.714762"
+      },
+      "sats": 11000,
+      "msats": 11000000,
+      "msats_fee": 259000,
+      "btc": {
+        "$numberDecimal": "0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "sats": -11000,
+      "msats": -11000000,
+      "msats_fee": -259000,
+      "btc": {
+        "$numberDecimal": "-0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8da2663a938d4f2fe4"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_k_contra_h",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "k_contra_h",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:25.786Z"
+  },
+  "description": "Contra Conversion: 11,000 sats for v4vapp-test Keepsats",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.714762"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.714762"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Converted Keepsats Offset",
+    "account_type": "Asset",
+    "sub": "from_keepsats",
+    "contra": true
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": {
+    "$numberDecimal": "9.714762"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-9.714762"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "9.714762"
+      },
+      "sats": 11000,
+      "msats": 11000000,
+      "msats_fee": 259000,
+      "btc": {
+        "$numberDecimal": "0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "sats": -11000,
+      "msats": -11000000,
+      "msats_fee": -259000,
+      "btc": {
+        "$numberDecimal": "-0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8da2663a938d4f2fe5"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_fee_inc",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "fee_inc",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:25.794Z"
+  },
+  "description": "Fee for Keepsats 259 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 259000,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "2.5457819067"
+    },
+    "hbd": {
+      "$numberDecimal": "0.228738"
+    },
+    "usd": {
+      "$numberDecimal": "0.228738"
+    },
+    "sats": 259,
+    "msats": 259000,
+    "msats_fee": 54921,
+    "btc": {
+      "$numberDecimal": "0.00000259"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 259000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 259000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "2.5457819067"
+    },
+    "hbd": {
+      "$numberDecimal": "0.228738"
+    },
+    "usd": {
+      "$numberDecimal": "0.228738"
+    },
+    "sats": 259,
+    "msats": 259000,
+    "msats_fee": 54921,
+    "btc": {
+      "$numberDecimal": "0.00000259"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 259000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "Fee Income Keepsats",
+    "account_type": "Revenue",
+    "sub": "from_keepsats",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": -259000,
+  "credit_amount_signed": 259000,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-2.5457819067"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.228738"
+      },
+      "usd": {
+        "$numberDecimal": "-0.228738"
+      },
+      "sats": -259,
+      "msats": -259000,
+      "msats_fee": -54921,
+      "btc": {
+        "$numberDecimal": "-0.00000259"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -259000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "2.5457819067"
+      },
+      "hbd": {
+        "$numberDecimal": "0.228738"
+      },
+      "usd": {
+        "$numberDecimal": "0.228738"
+      },
+      "sats": 259,
+      "msats": 259000,
+      "msats_fee": 54921,
+      "btc": {
+        "$numberDecimal": "0.00000259"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 259000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8da2663a938d4f2fe6"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_deposit_h",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "deposit_h",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:25.811Z"
+  },
+  "description": "Convert 9.486 HBD to 10,741 sats for v4vapp-test",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.486024"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5762295763"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486024"
+    },
+    "usd": {
+      "$numberDecimal": "9.486024"
+    },
+    "sats": 10741,
+    "msats": 10741000,
+    "msats_fee": 254079,
+    "btc": {
+      "$numberDecimal": "0.00010741"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10741000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.486024"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5762295763"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486024"
+    },
+    "usd": {
+      "$numberDecimal": "9.486024"
+    },
+    "sats": 10741,
+    "msats": 10741000,
+    "msats_fee": 254079,
+    "btc": {
+      "$numberDecimal": "0.00010741"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10741000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": {
+    "$numberDecimal": "-9.486024"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "9.486024"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-105.5762295763"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.486024"
+      },
+      "usd": {
+        "$numberDecimal": "-9.486024"
+      },
+      "sats": -10741,
+      "msats": -10741000,
+      "msats_fee": -254079,
+      "btc": {
+        "$numberDecimal": "-0.00010741"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -10741000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "105.5762295763"
+      },
+      "hbd": {
+        "$numberDecimal": "9.486024"
+      },
+      "usd": {
+        "$numberDecimal": "9.486024"
+      },
+      "sats": 10741,
+      "msats": 10741000,
+      "msats_fee": 254079,
+      "btc": {
+        "$numberDecimal": "0.00010741"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 10741000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8da2663a938d4f2fe7"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_r_vsc_sats",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "r_vsc_sats",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:25.826Z"
+  },
+  "description": "Reclassify positive SATS from VSC devser.v4vapp to Converted Keepsats Offset for Keepsats-to-Hive inflow",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 11000000,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 11000000,
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "108.1220114830"
+    },
+    "hbd": {
+      "$numberDecimal": "9.714762"
+    },
+    "usd": {
+      "$numberDecimal": "9.714762"
+    },
+    "sats": 11000,
+    "msats": 11000000,
+    "msats_fee": 259000,
+    "btc": {
+      "$numberDecimal": "0.00011"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 11000000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "credit": {
+    "name": "Converted Keepsats Offset",
+    "account_type": "Asset",
+    "sub": "from_keepsats",
+    "contra": true
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": -11000000,
+  "credit_amount_signed": -11000000,
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "sats": -11000,
+      "msats": -11000000,
+      "msats_fee": -259000,
+      "btc": {
+        "$numberDecimal": "-0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-108.1220114830"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "usd": {
+        "$numberDecimal": "-9.714762"
+      },
+      "sats": -11000,
+      "msats": -11000000,
+      "msats_fee": -259000,
+      "btc": {
+        "$numberDecimal": "-0.00011"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -11000000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f8ea2663a938d4f2fe9"
+  },
+  "group_id": "102209817_5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8_1_real_r_vsc_hive",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "r_vsc_hive",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:26.841Z"
+  },
+  "description": "Reclassify negative hbd from VSC devser.v4vapp to Converted Keepsats Offset for Keepsats-to-Hive outflow",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.486024"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5762295763"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486024"
+    },
+    "usd": {
+      "$numberDecimal": "9.486024"
+    },
+    "sats": 10741,
+    "msats": 10741000,
+    "msats_fee": 254079,
+    "btc": {
+      "$numberDecimal": "0.00010741"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10741000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.486024"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5762295763"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486024"
+    },
+    "usd": {
+      "$numberDecimal": "9.486024"
+    },
+    "sats": 10741,
+    "msats": 10741000,
+    "msats_fee": 254079,
+    "btc": {
+      "$numberDecimal": "0.00010741"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10741000,
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Converted Keepsats Offset",
+    "account_type": "Asset",
+    "sub": "from_keepsats",
+    "contra": true
+  },
+  "credit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "custom_json",
+  "link": "https://hivehub.dev/tx/5138c87f2c9bbd2e55e2bbf1cd61667c44e2a2e8",
+  "debit_amount_signed": {
+    "$numberDecimal": "9.486024"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "9.486024"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "105.5762295763"
+      },
+      "hbd": {
+        "$numberDecimal": "9.486024"
+      },
+      "usd": {
+        "$numberDecimal": "9.486024"
+      },
+      "sats": 10741,
+      "msats": 10741000,
+      "msats_fee": 254079,
+      "btc": {
+        "$numberDecimal": "0.00010741"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 10741000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "105.5762295763"
+      },
+      "hbd": {
+        "$numberDecimal": "9.486024"
+      },
+      "usd": {
+        "$numberDecimal": "9.486024"
+      },
+      "sats": 10741,
+      "msats": 10741000,
+      "msats_fee": 254079,
+      "btc": {
+        "$numberDecimal": "0.00010741"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 10741000,
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": true
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f91a2663a938d4f2feb"
+  },
+  "group_id": "binance_testnet_9817_5138c8_1_exc_conv",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "exc_conv",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:29.909Z"
+  },
+  "description": "Rebalance executed: BUY 105.000 HIVE @ 0.00000102, fee: 0.000 HIVE",
+  "cust_id": "v4vapp-test",
+  "debit_amount": 10710000,
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": 105,
+    "hbd": {
+      "$numberDecimal": "9.458646"
+    },
+    "usd": {
+      "$numberDecimal": "9.458646"
+    },
+    "sats": 10710,
+    "msats": 10710000,
+    "msats_fee": 253490,
+    "btc": {
+      "$numberDecimal": "0.00010710"
+    },
+    "sats_hive": 102,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10710000,
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:07:29.285Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": 105,
+  "credit_unit": "hive",
+  "credit_conv": {
+    "hive": 105,
+    "hbd": {
+      "$numberDecimal": "9.458646"
+    },
+    "usd": {
+      "$numberDecimal": "9.458646"
+    },
+    "sats": 10710,
+    "msats": 10710000,
+    "msats_fee": 253490,
+    "btc": {
+      "$numberDecimal": "0.00010710"
+    },
+    "sats_hive": 102,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": 10710000,
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:07:29.285Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "credit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "op_type": "exchange_trade",
+  "debit_amount_signed": 10710000,
+  "credit_amount_signed": -105,
+  "conv_signed": {
+    "debit": {
+      "hive": 105,
+      "hbd": {
+        "$numberDecimal": "9.458646"
+      },
+      "usd": {
+        "$numberDecimal": "9.458646"
+      },
+      "sats": 10710,
+      "msats": 10710000,
+      "msats_fee": 253490,
+      "btc": {
+        "$numberDecimal": "0.00010710"
+      },
+      "sats_hive": 102,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": 10710000,
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:07:29.285Z"
+      },
+      "in_limits": true
+    },
+    "credit": {
+      "hive": -105,
+      "hbd": {
+        "$numberDecimal": "-9.458646"
+      },
+      "usd": {
+        "$numberDecimal": "-9.458646"
+      },
+      "sats": -10710,
+      "msats": -10710000,
+      "msats_fee": -253490,
+      "btc": {
+        "$numberDecimal": "-0.00010710"
+      },
+      "sats_hive": 102,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": -10710000,
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:07:29.285Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f91a2663a938d4f2fec"
+  },
+  "group_id": "binance_testnet_9817_5138c8_1_exc_fee",
+  "short_id": "9817_5138c8_1",
+  "ledger_type": "exc_fee",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:29.915Z"
+  },
+  "description": "Exchange fee for Rebalance executed: BUY 105.000 HIVE @ 0.00000102, fee: 0.000 HIVE",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "795.37500000000000"
+  },
+  "debit_unit": "msats",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0077977941"
+    },
+    "hbd": {
+      "$numberDecimal": "0.000702"
+    },
+    "usd": {
+      "$numberDecimal": "0.000702"
+    },
+    "sats": {
+      "$numberDecimal": "0.79537500000000"
+    },
+    "msats": {
+      "$numberDecimal": "795.37500000000000"
+    },
+    "msats_fee": 50015,
+    "btc": {
+      "$numberDecimal": "7.95375E-9"
+    },
+    "sats_hive": 102,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": {
+      "$numberDecimal": "795.37500000000000"
+    },
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:07:29.285Z"
+    },
+    "in_limits": false
+  },
+  "credit_amount": {
+    "$numberDecimal": "795.37500000000000"
+  },
+  "credit_unit": "msats",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "0.0077977941"
+    },
+    "hbd": {
+      "$numberDecimal": "0.000702"
+    },
+    "usd": {
+      "$numberDecimal": "0.000702"
+    },
+    "sats": {
+      "$numberDecimal": "0.79537500000000"
+    },
+    "msats": {
+      "$numberDecimal": "795.37500000000000"
+    },
+    "msats_fee": 50015,
+    "btc": {
+      "$numberDecimal": "7.95375E-9"
+    },
+    "sats_hive": 102,
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "msats",
+    "value": {
+      "$numberDecimal": "795.37500000000000"
+    },
+    "source": "binance_testnet_trade",
+    "fetch_date": {
+      "$date": "2025-12-20T13:07:29.285Z"
+    },
+    "in_limits": false
+  },
+  "debit": {
+    "name": "Exchange Fees Paid",
+    "account_type": "Expense",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "credit": {
+    "name": "Exchange Holdings",
+    "account_type": "Asset",
+    "sub": "binance_testnet",
+    "contra": false
+  },
+  "op_type": "exchange_fee",
+  "debit_amount_signed": {
+    "$numberDecimal": "795.37500000000000"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-795.37500000000000"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "0.0077977941"
+      },
+      "hbd": {
+        "$numberDecimal": "0.000702"
+      },
+      "usd": {
+        "$numberDecimal": "0.000702"
+      },
+      "sats": {
+        "$numberDecimal": "0.79537500000000"
+      },
+      "msats": {
+        "$numberDecimal": "795.37500000000000"
+      },
+      "msats_fee": 50015,
+      "btc": {
+        "$numberDecimal": "7.95375E-9"
+      },
+      "sats_hive": 102,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": {
+        "$numberDecimal": "795.37500000000000"
+      },
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:07:29.285Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-0.0077977941"
+      },
+      "hbd": {
+        "$numberDecimal": "-0.000702"
+      },
+      "usd": {
+        "$numberDecimal": "-0.000702"
+      },
+      "sats": {
+        "$numberDecimal": "-0.79537500000000"
+      },
+      "msats": {
+        "$numberDecimal": "-795.37500000000000"
+      },
+      "msats_fee": -50015,
+      "btc": {
+        "$numberDecimal": "-7.95375E-9"
+      },
+      "sats_hive": 102,
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "msats",
+      "value": {
+        "$numberDecimal": "-795.37500000000000"
+      },
+      "source": "binance_testnet_trade",
+      "fetch_date": {
+        "$date": "2025-12-20T13:07:29.285Z"
+      },
+      "in_limits": false
+    }
+  }
+},
+{
+  "_id": {
+    "$oid": "69469f94a2663a938d4f2fed"
+  },
+  "group_id": "102209819_b09e01a5311fe0cdb537e632d7972b5cdc55fb84_1_real",
+  "short_id": "9819_b09e01_1",
+  "ledger_type": "cust_h_out",
+  "timestamp": {
+    "$date": "2025-12-20T13:07:32.764Z"
+  },
+  "description": "Withdrawal: 9.486 HBD from devser.v4vapp to v4vapp-test 💬Converted 11,000 sats to 9.486 HBD with fee: 259 sats for v4vapp-test | 11,000 sats to #HBD | § 9817_5138c8_1 | Thank you for using v4v.app",
+  "user_memo": "Converted 11,000 sats to 9.486 HBD with fee: 259 sats for v4vapp-test | 11,000 sats to #HBD | § 9817_5138c8_1 | Thank you for using v4v.app",
+  "cust_id": "v4vapp-test",
+  "debit_amount": {
+    "$numberDecimal": "9.486"
+  },
+  "debit_unit": "hbd",
+  "debit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5759597457"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486000"
+    },
+    "usd": {
+      "$numberDecimal": "9.486000"
+    },
+    "sats": {
+      "$numberDecimal": "10740.972548268"
+    },
+    "msats": {
+      "$numberDecimal": "10740972.548268000"
+    },
+    "msats_fee": 254078,
+    "btc": {
+      "$numberDecimal": "0.00010740972548268"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.486"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "credit_amount": {
+    "$numberDecimal": "9.486"
+  },
+  "credit_unit": "hbd",
+  "credit_conv": {
+    "hive": {
+      "$numberDecimal": "105.5759597457"
+    },
+    "hbd": {
+      "$numberDecimal": "9.486000"
+    },
+    "usd": {
+      "$numberDecimal": "9.486000"
+    },
+    "sats": {
+      "$numberDecimal": "10740.972548268"
+    },
+    "msats": {
+      "$numberDecimal": "10740972.548268000"
+    },
+    "msats_fee": 254078,
+    "btc": {
+      "$numberDecimal": "0.00010740972548268"
+    },
+    "sats_hive": {
+      "$numberDecimal": "101.736916"
+    },
+    "sats_hbd": {
+      "$numberDecimal": "1132.297338"
+    },
+    "conv_from": "hbd",
+    "value": {
+      "$numberDecimal": "9.486"
+    },
+    "source": "Binance",
+    "fetch_date": {
+      "$date": "2025-12-20T13:06:04.071Z"
+    },
+    "in_limits": true
+  },
+  "debit": {
+    "name": "VSC Liability",
+    "account_type": "Liability",
+    "sub": "v4vapp-test",
+    "contra": false
+  },
+  "credit": {
+    "name": "Customer Deposits Hive",
+    "account_type": "Asset",
+    "sub": "devser.v4vapp",
+    "contra": false
+  },
+  "op_type": "transfer",
+  "link": "https://hivehub.dev/tx/b09e01a5311fe0cdb537e632d7972b5cdc55fb84",
+  "debit_amount_signed": {
+    "$numberDecimal": "-9.486"
+  },
+  "credit_amount_signed": {
+    "$numberDecimal": "-9.486"
+  },
+  "conv_signed": {
+    "debit": {
+      "hive": {
+        "$numberDecimal": "-105.5759597457"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.486000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.486000"
+      },
+      "sats": {
+        "$numberDecimal": "-10740.972548268"
+      },
+      "msats": {
+        "$numberDecimal": "-10740972.548268000"
+      },
+      "msats_fee": -254078,
+      "btc": {
+        "$numberDecimal": "-0.00010740972548268"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-9.486"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    },
+    "credit": {
+      "hive": {
+        "$numberDecimal": "-105.5759597457"
+      },
+      "hbd": {
+        "$numberDecimal": "-9.486000"
+      },
+      "usd": {
+        "$numberDecimal": "-9.486000"
+      },
+      "sats": {
+        "$numberDecimal": "-10740.972548268"
+      },
+      "msats": {
+        "$numberDecimal": "-10740972.548268000"
+      },
+      "msats_fee": -254078,
+      "btc": {
+        "$numberDecimal": "-0.00010740972548268"
+      },
+      "sats_hive": {
+        "$numberDecimal": "101.736916"
+      },
+      "sats_hbd": {
+        "$numberDecimal": "1132.297338"
+      },
+      "conv_from": "hbd",
+      "value": {
+        "$numberDecimal": "-9.486"
+      },
+      "source": "Binance",
+      "fetch_date": {
+        "$date": "2025-12-20T13:06:04.071Z"
+      },
+      "in_limits": false
+    }
+  }
+}]
