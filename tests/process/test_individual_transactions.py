@@ -1,8 +1,8 @@
 import asyncio
-from decimal import Decimal
 import math
 import os
 from datetime import datetime
+from decimal import Decimal
 from pprint import pprint
 
 import pytest
@@ -42,6 +42,11 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
+turn_off_these_tests = False
+if turn_off_these_tests:
+    pytest.skip("Skipping all process tests", allow_module_level=True)
+
+
 if os.getenv("GITHUB_ACTIONS") == "true":
     pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
 
@@ -54,8 +59,6 @@ This must be run after the three watchers are running, as it relies on the watch
 
 
 """
-
-pytest.skip("Skipping all process tests", allow_module_level=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
