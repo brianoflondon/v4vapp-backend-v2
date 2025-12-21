@@ -3,7 +3,6 @@ from timeit import default_timer as timer
 from typing import List
 from uuid import uuid4
 
-from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntry,
@@ -12,6 +11,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -124,21 +124,6 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 else:
                     raise ValueError("Invalid tracked object")
 
-                for ledger_entry in ledger_entries:
-                    try:
-                        # DEBUG section
-                        is_balanced, _ = await check_balance_sheet_mongodb()
-                        if not is_balanced:
-                            logger.warning(
-                                f"The balance sheet is not balanced for\n{ledger_entry.group_id}",
-                                extra={"notification": False},
-                            )
-                    except Exception as e:
-                        logger.exception(
-                            f"Error saving ledger entry: {e}",
-                            extra={**ledger_entry.log_extra, "notification": False},
-                        )
-
                 return ledger_entries
 
         except CustomJsonRetryError as e:
@@ -182,6 +167,19 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         finally:
             if finalize:
+                try:
+                    await log_all_sanity_checks(
+                        local_logger=logger,
+                        log_only_failures=False,
+                        notification=True,
+                        append_str=f" {cust_id}",
+                    )
+
+                except Exception as e:
+                    logger.exception(
+                        f"Error running sanity checks: {e}",
+                        extra={"notification": False},
+                    )
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
@@ -189,6 +187,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 logger.debug(tracked_op.log_str)
                 logger.info(f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}")
                 logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
+                # DEBUG section
 
 
 # MARK: Lightning Transactions
