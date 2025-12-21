@@ -106,5 +106,5 @@ asyncio_default_test_loop_scope = "module"
 exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a single regex pattern
 
 [tool.uv.sources]
-hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" }
+hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , rev="2832f5cc85c9fb1d7b33f1efb1c164b9c39222e0" }
 # hive-nectar = { git = "https://github.com/brianoflondon/hive-nectar.git", branch = "fix/correct-api-for-find_proposals-is-condenser_api" }
