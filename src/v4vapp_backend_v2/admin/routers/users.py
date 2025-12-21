@@ -20,6 +20,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
+from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
@@ -227,6 +228,9 @@ async def users_page(request: Request):
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Users", "url": "/admin/users"},
             ],
+            # Provide a minimal empty sanity results model so templates that expect
+            # `sanity_results` (base.html) don't fail when it's not provided.
+            "sanity_results": SanityCheckResults(),
         },
     )
 

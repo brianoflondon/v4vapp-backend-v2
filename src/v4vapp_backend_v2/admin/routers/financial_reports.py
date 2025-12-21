@@ -4,7 +4,7 @@ Financial Reports Router
 Handles routes for displaying financial reports including balance sheet, profit and loss, and comprehensive account reports.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -23,6 +23,7 @@ from v4vapp_backend_v2.accounting.profit_and_loss import (
     generate_profit_and_loss_report,
     profit_and_loss_printout,
 )
+from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
@@ -49,7 +50,7 @@ async def financial_reports_page(request: Request):
         raise RuntimeError("Templates and navigation not initialized")
 
     nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-
+    sanity_results = await run_all_sanity_checks()
     return templates.TemplateResponse(
         "financial_reports/index.html",
         {
@@ -61,6 +62,7 @@ async def financial_reports_page(request: Request):
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Financial Reports", "url": "/admin/financial-reports"},
             ],
+            "sanity_results": sanity_results,
         },
     )
 
@@ -73,7 +75,7 @@ async def balance_sheet_page(request: Request):
 
     try:
         # Generate balance sheet
-        balance_sheet = await generate_balance_sheet_mongodb()
+        balance_sheet: Dict[str, Any] = await generate_balance_sheet_mongodb()
         balance_sheet = convert_decimals_to_float_or_int(balance_sheet)
         balance_sheet_currencies_str = balance_sheet_all_currencies_printout(balance_sheet)
 
@@ -85,7 +87,7 @@ async def balance_sheet_page(request: Request):
             ].isoformat()
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "financial_reports/balance_sheet.html",
             {
@@ -100,6 +102,7 @@ async def balance_sheet_page(request: Request):
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Balance Sheet", "url": "/admin/financial-reports/balance-sheet"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
     except Exception as e:
@@ -118,6 +121,7 @@ async def balance_sheet_page(request: Request):
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )
 
@@ -135,7 +139,7 @@ async def profit_loss_page(request: Request):
         profit_loss_str = await profit_and_loss_printout(pl_report=pl_report)
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "financial_reports/profit_loss.html",
             {
@@ -150,6 +154,7 @@ async def profit_loss_page(request: Request):
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Profit & Loss", "url": "/admin/financial-reports/profit-loss"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
     except Exception as e:
@@ -168,6 +173,7 @@ async def profit_loss_page(request: Request):
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )
 
@@ -230,7 +236,7 @@ async def complete_report_page(
                 ledger_entries_text = "Error loading ledger entries"
 
         nav_items = nav_manager.get_navigation_items("/admin/financial-reports")
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "financial_reports/complete_report.html",
             {
@@ -248,6 +254,7 @@ async def complete_report_page(
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Complete Report", "url": "/admin/financial-reports/complete-report"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
     except Exception as e:
@@ -266,6 +273,7 @@ async def complete_report_page(
                     {"name": "Financial Reports", "url": "/admin/financial-reports"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )
 
