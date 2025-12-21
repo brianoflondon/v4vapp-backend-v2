@@ -148,6 +148,10 @@ class DatabaseConnectionConfig(BaseConfig):
     admin_dbs: Dict[str, DatabaseDetailsConfig] | None = None
     icon: str | None = None
 
+    @property
+    def hosts_str(self) -> str:
+        return ",".join(self.hosts)
+
 
 class DbsConfig(BaseConfig):
     default_connection: str = ""
@@ -155,6 +159,12 @@ class DbsConfig(BaseConfig):
     default_user: str = ""
     connections: Dict[str, DatabaseConnectionConfig] = {}
     dbs: Dict[str, DatabaseDetailsConfig] = {}
+
+    @property
+    def default_db_connection(self) -> DatabaseConnectionConfig | None:
+        if self.default_connection not in self.connections:
+            return None
+        return self.connections[self.default_connection]
 
 
 class RedisConnectionConfig(BaseConfig):
@@ -791,6 +801,11 @@ class InternalConfig:
             self.setup_logging(log_filename)
             self.setup_redis()
             logger.info(f"{ICON} Config filename: {config_filename}")
+            logger.info(f"{ICON} Log filename: {log_filename}")
+            if self.config.dbs_config.default_db_connection:
+                logger.info(
+                    f"{ICON} Database URI: {self.config.dbs_config.default_db_connection.hosts_str}"
+                )
             atexit.register(self.shutdown)
 
     def __exit__(self, exc_type, exc_value, traceback):
