@@ -20,6 +20,7 @@ from pymongo.errors import (
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
+from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -464,6 +465,7 @@ async def main_async_start(use_resume: bool = True):
     db_conn = DBConn()
     await db_conn.setup_database()
     # await LockStr.clear_all_locks()  # Clear any existing locks before starting
+    await log_all_sanity_checks(local_logger=logger, log_only_failures=True, notification=True)
     await resend_transactions()
 
     loop = asyncio.get_event_loop()
