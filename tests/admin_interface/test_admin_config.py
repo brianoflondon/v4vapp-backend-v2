@@ -33,7 +33,13 @@ def template_env():
 
     from jinja2 import Environment, FileSystemLoader
 
-    return Environment(loader=FileSystemLoader(str(templates_dir)))
+    from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
+
+    env = Environment(loader=FileSystemLoader(str(templates_dir)))
+    # Provide an empty sanity results object so base.html rendering doesn't fail
+    env.globals["sanity_results"] = (SanityCheckResults(),)
+
+    return env
 
 
 @pytest.fixture

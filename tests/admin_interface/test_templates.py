@@ -8,6 +8,10 @@ def test_ledger_entries_template_compiles_and_renders():
     env = Environment(loader=loader)
     # Provide a minimal url_for stub used by base.html
     env.globals["url_for"] = lambda *args, **kwargs: "/static/fake"
+    from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
+
+    # Provide an empty sanity results object so base.html rendering doesn't fail
+    env.globals["sanity_results"] = (SanityCheckResults(),)
 
     # Ensure the template parses and renders with a minimal context
     template = env.get_template("ledger_entries/entries.html")
