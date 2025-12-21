@@ -110,8 +110,6 @@ async def one_account_balance(
     pipeline = all_account_balances_pipeline(account=account, as_of_date=as_of_date, age=age)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
-    if not results:
-        logger.warning(f"No results for {account}", extra={"notification": False})
     clean_results = convert_datetime_fields(results)
     account_balance = AccountBalances.model_validate(clean_results)
     ledger_details = (
