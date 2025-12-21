@@ -140,7 +140,7 @@
 
                 <!-- Sanity Checks Warning  -->
                 {% if sanity_results.failed %}
-                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">
                     <strong>⚠️ Failed Sanity Checks</strong>
                     <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
                         data-bs-target="#sanityChecksModal">
@@ -315,9 +315,9 @@
             });
         });
 
-        // Auto-dismiss alerts after 5 seconds
+        // Auto-dismiss alerts after 5 seconds (exclude alerts marked with 'no-auto-dismiss')
         setTimeout(function () {
-            var alerts = document.querySelectorAll('.alert-dismissible');
+            var alerts = document.querySelectorAll('.alert-dismissible:not(.no-auto-dismiss)');
             alerts.forEach(function (alert) {
                 var bsAlert = new bootstrap.Alert(alert);
                 bsAlert.close();
