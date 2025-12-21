@@ -202,9 +202,15 @@ async def conversion_keepsats_to_hive(
     # MARK: 4 Fee Income From Customer
     # The Fee is ALREADY to the server as part of the start of the conversion
     ledger_type = LedgerType.FEE_INCOME
-    # Recognise fee income funded from the server's captured sats. Debit the server's VSC Liability
-    # so the fee is taken from the sats retained by the server after reclassification; keep cust_id
-    # on the entry for traceability to the original customer.
+    # For non-direct conversions the fee is taken from the server's captured SATS (server VSC Liability).
+    # For direct LND->HIVE conversions the server capture hasn't been reclassified yet, so take the
+    # fee directly from the customer's VSC Liability *before* consuming the customer's sats.
+    debit_account = (
+        LiabilityAccount(name="VSC Liability", sub=cust_id)
+        if isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive
+        else LiabilityAccount(name="VSC Liability", sub=server_id)
+    )
+
     fee_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
@@ -213,10 +219,7 @@ async def conversion_keepsats_to_hive(
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="VSC Liability",
-            sub=server_id,
-        ),
+        debit=debit_account,
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.fee_conv.msats,
         debit_conv=conv_result.fee_conv,
