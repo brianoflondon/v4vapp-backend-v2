@@ -117,9 +117,7 @@ all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = 
 ]
 
 
-async def run_all_sanity_checks(
-    log_only_failures: bool = True,
-) -> SanityCheckResults:
+async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
     a `SanityCheckResults` Pydantic model.
@@ -200,7 +198,7 @@ async def log_all_sanity_checks(
     SanityCheckResults
         The full set of sanity check results (passed, failed, results).
     """
-    results_model = await run_all_sanity_checks(log_only_failures=log_only_failures)
+    results_model = await run_all_sanity_checks()
     if append_str:
         append_str = " " + append_str
     for check_name, sanity_result in results_model.results:
