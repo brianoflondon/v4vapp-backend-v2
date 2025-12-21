@@ -167,25 +167,21 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         finally:
             if finalize:
-                try:
-                    await log_all_sanity_checks(
-                        local_logger=logger,
-                        log_only_failures=False,
-                        notification=True,
-                        append_str=f" {cust_id}",
-                    )
-
-                except Exception as e:
-                    logger.exception(
-                        f"Error running sanity checks: {e}",
-                        extra={"notification": False},
-                    )
+                sanity_results = await log_all_sanity_checks(
+                    local_logger=logger,
+                    log_only_failures=False,
+                    notification=True,
+                    append_str=f" {cust_id}",
+                )
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
                 logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
                 logger.debug(tracked_op.log_str)
-                logger.info(f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}")
+                logger.info(
+                    f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}",
+                    extra={"notification": False, "sanity_results": sanity_results.model_dump()},
+                )
                 logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
                 # DEBUG section
 

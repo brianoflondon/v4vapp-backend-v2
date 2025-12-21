@@ -1,7 +1,10 @@
 import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 from logging import Logger
 from typing import Any, Callable, Coroutine, List, Tuple
+
+from pydantic import BaseModel
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
@@ -11,10 +14,58 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 ICON = "🧪"  # Test Tube
 
 
-async def server_account_balances() -> Tuple[bool, str]:
+class SanityCheckResult(BaseModel):
+    name: str
+    is_valid: bool
+    details: str
+
+
+class SanityCheckResults(BaseModel):
+    check_time: datetime = datetime.now(tz=timezone.utc)
+    passed: List[Tuple[str, SanityCheckResult]] = []
+    failed: List[Tuple[str, SanityCheckResult]] = []
+    results: List[Tuple[str, SanityCheckResult]] = []
+
+    def len(self) -> int:
+        """Return the number of failed sanity checks.
+
+        Returns:
+            int: The count of entries in self.failed.
+        """
+        return len(self.failed)
+
+    @property
+    def log_str(self) -> str:
+        """Generate a log string summarizing the sanity check result.
+
+        Returns:
+            str: A formatted string indicating the check name, validity, and details.
+        """
+        if self.failed:
+            answer = "FAILED" + "; ".join(
+                f"{name}: {result.details}" for name, result in self.failed
+            )
+        else:
+            answer = "PASSED"
+        return answer
+
+    def log_extra(self) -> dict:
+        """Generate extra logging information.
+
+        Returns:
+            dict: A dictionary with counts of passed and failed checks.
+        """
+        return {"sanity_check_results": self.model_dump()}
+
+
+async def server_account_balances() -> SanityCheckResult:
     server_id = InternalConfig().server_id
     if server_id is None:
-        return False, "Hive server account is not configured."
+        return SanityCheckResult(
+            name="server_account_balances",
+            is_valid=False,
+            details="Hive server account is not configured.",
+        )
 
     accounts_to_check = ["keepsats", server_id]
 
@@ -27,85 +78,107 @@ async def server_account_balances() -> Tuple[bool, str]:
             )
 
     if results:
-        return False, "; ".join(results)
+        return SanityCheckResult(
+            name="server_account_balances", is_valid=False, details="; ".join(results)
+        )
 
-    return True, f"Server account balances: {', '.join(accounts_to_check)} sanity check passed."
+    return SanityCheckResult(
+        name="server_account_balances",
+        is_valid=True,
+        details=f"Server account balances: {', '.join(accounts_to_check)} sanity check passed.",
+    )
 
 
-async def balanced_balance_sheet() -> Tuple[bool, str]:
+async def balanced_balance_sheet() -> SanityCheckResult:
     is_balanced, tolerance = await check_balance_sheet_mongodb()
     # tolerate a missing/None tolerance value and format numeric tolerances safely
     if tolerance is None:
         tol_text = "unknown"
     else:
-        tol_text = f"{tolerance:.1f}"
+        # tolerance may be Decimal/int/float — format safely to one decimal place
+        try:
+            tol_text = f"{float(tolerance):.1f}"
+        except Exception:
+            tol_text = str(tolerance)
     if is_balanced:
         balance_line_text = f"The balance sheet is balanced ({tol_text} msats tolerance)."
     else:
         balance_line_text = (
             f"******* The balance sheet is NOT balanced. Tolerance: {tol_text} msats. ********"
         )
-    return is_balanced, balance_line_text
+    return SanityCheckResult(
+        name="balanced_balance_sheet", is_valid=is_balanced, details=balance_line_text
+    )
 
 
-all_sanity_checks: List[Callable[[], Coroutine[Any, Any, Tuple[bool, str]]]] = [
+all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = [
     server_account_balances,
     balanced_balance_sheet,
 ]
 
 
-async def run_all_sanity_checks() -> List[Tuple[str, bool, str]]:
+async def run_all_sanity_checks(
+    log_only_failures: bool = True,
+) -> SanityCheckResults:
     """
-    Run all registered sanity checks concurrently and return their results.
+    Run all registered sanity checks concurrently and return their results as
+    a `SanityCheckResults` Pydantic model.
 
-    This coroutine collects coroutines from the global `all_sanity_checks` (each element
-    is expected to be an async callable that returns a Tuple[bool, str]) and schedules
-    them using an asyncio.TaskGroup. There is a hard overall timeout of 5.0 seconds for
-    all checks combined.
+    Each registered check is expected to be an async callable that returns a
+    `SanityCheckResult` instance. Checks are scheduled concurrently using an
+    asyncio.TaskGroup with a 5.0 second aggregate timeout.
 
     Returns:
-        List[Tuple[str, bool, str]]: A list of tuples (check_name, is_valid, details),
-            where `check_name` is the check callable's __name__, `is_valid` is True when
-            the check completed successfully and reported success, and `details` is the
-            message returned by the check or an error description if the check failed.
-
-    Behavior/Errors:
-        - Each check is created and scheduled with TaskGroup.create_task().
-        - If an individual check raises an exception, it will be recorded as
-          is_valid=False and `details` will contain the exception message.
-        - If the aggregate 5-second timeout is exceeded, asyncio.TimeoutError is raised
-          (no partial results are returned in that case).
-
-    Notes:
-        - The order of returned results corresponds to the order of checks in
-          `all_sanity_checks`.
-        - Checks must be coroutines (async functions); invoking a non-coroutine may
-          raise at call time.
+        SanityCheckResults: Pydantic model containing `passed`, `failed` and
+        `results` lists of tuples (check_name, SanityCheckResult).
     """
-    results: List[Tuple[str, bool, str]] = []
-    # Collect coroutines for checks so we can create TaskGroup tasks from coroutines (TaskGroup.create_task expects a coroutine)
-    coros: List[Tuple[str, Coroutine[Any, Any, Tuple[bool, str]]]] = []
-    for check in all_sanity_checks:
-        check_name = check.__name__
-        coros.append((check_name, check()))
+    # Collect coroutines for checks so we can create TaskGroup tasks from coroutines
+    try:
+        coros: List[Tuple[str, Coroutine[Any, Any, SanityCheckResult]]] = []
+        for check in all_sanity_checks:
+            check_name = check.__name__
+            coros.append((check_name, check()))
 
-    # Will hold (check_name, Task) pairs created inside the TaskGroup
-    task_list: List[Tuple[str, asyncio.Task]] = []
+        # Will hold (check_name, Task) pairs created inside the TaskGroup
+        task_list: List[Tuple[str, asyncio.Task]] = []
 
-    async with asyncio.timeout(5.0):  # 5 seconds timeout for all checks
-        async with asyncio.TaskGroup() as tg:
-            for check_name, coro in coros:
-                task = tg.create_task(coro)
-                task_list.append((check_name, task))
+        async with asyncio.timeout(5.0):  # 5 seconds timeout for all checks
+            async with asyncio.TaskGroup() as tg:
+                for check_name, coro in coros:
+                    task = tg.create_task(coro)
+                    task_list.append((check_name, task))
 
-    for check_name, task in task_list:
-        try:
-            is_valid, details = task.result()
-        except Exception as e:
-            is_valid = False
-            details = f"Sanity check '{check_name}' raised an exception: {e}"
-        results.append((check_name, is_valid, details))
-    return results
+        passed: List[Tuple[str, SanityCheckResult]] = []
+        failed: List[Tuple[str, SanityCheckResult]] = []
+        all_results: List[Tuple[str, SanityCheckResult]] = []
+
+        for check_name, task in task_list:
+            try:
+                sanity_result = task.result()
+            except Exception as e:
+                sanity_result = SanityCheckResult(name=check_name, is_valid=False, details=str(e))
+            if sanity_result.is_valid:
+                passed.append((check_name, sanity_result))
+            else:
+                failed.append((check_name, sanity_result))
+            # keep the full ordered list as well
+            all_results.append((check_name, sanity_result))
+
+        # Optionally filter logging elsewhere; always return the full model
+        return SanityCheckResults(passed=passed, failed=failed, results=all_results)
+    except Exception as e:
+        return SanityCheckResults(
+            passed=[],
+            failed=[
+                (
+                    "run_all_sanity_checks",
+                    SanityCheckResult(
+                        name="run_all_sanity_checks", is_valid=False, details=str(e)
+                    ),
+                )
+            ],
+            results=[],
+        )
 
 
 async def log_all_sanity_checks(
@@ -113,38 +186,26 @@ async def log_all_sanity_checks(
     log_only_failures: bool = True,
     notification: bool = False,
     append_str: str = "",
-) -> None:
+) -> SanityCheckResults:
     """
-    Run all sanity checks and log their outcomes.
+    Run all sanity checks, log their outcomes, and return the Pydantic results model.
 
-    This coroutine invokes run_all_sanity_checks(), iterates over the returned
-    results and logs a message for each check. Failed checks are logged at WARNING
-    level with extra={"notification": True}. Passed checks are logged at INFO
-    level only when log_only_failures is False.
-
-    Parameters
-    ----------
-    local_logger : Logger
-        Logger used to emit messages for each sanity check.
-    log_only_failures : bool, optional
-        If True (default), only failed checks are logged. If False, both passed
-        and failed checks are logged.
+    The function calls `run_all_sanity_checks()` to obtain a `SanityCheckResults`
+    instance, then logs each check's outcome. Failed checks are logged at WARNING
+    level with extra={"notification": True}; passed checks are logged at INFO
+    level only when `log_only_failures` is False.
 
     Returns
     -------
-    None
-        The function performs logging as a side effect and does not return a value.
-
-    Notes
-    -----
-    - Expects run_all_sanity_checks() to return an iterable of tuples
-      (check_name: str, is_valid: bool, details: Any).
-    - Any exceptions raised by run_all_sanity_checks() will propagate to the caller.
+    SanityCheckResults
+        The full set of sanity check results (passed, failed, results).
     """
-    results = await run_all_sanity_checks()
+    results_model = await run_all_sanity_checks(log_only_failures=log_only_failures)
     if append_str:
         append_str = " " + append_str
-    for check_name, is_valid, details in results:
+    for check_name, sanity_result in results_model.results:
+        is_valid = sanity_result.is_valid
+        details = sanity_result.details
         if not is_valid:
             local_logger.warning(
                 f"{ICON} Sanity check '{check_name}' failed: {details}{append_str}",
@@ -155,6 +216,7 @@ async def log_all_sanity_checks(
                 local_logger.info(
                     f"{ICON}Sanity check '{check_name}' passed: {details}{append_str}"
                 )
+    return results_model
 
 
 if __name__ == "__main__":
