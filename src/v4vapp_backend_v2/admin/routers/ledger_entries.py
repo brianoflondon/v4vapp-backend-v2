@@ -19,7 +19,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
-from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import async_time_stats_decorator
 from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
