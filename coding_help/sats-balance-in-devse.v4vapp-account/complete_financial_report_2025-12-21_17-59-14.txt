@@ -1,0 +1,738 @@
+COMPLETE FINANCIAL REPORT
+================================================================================
+
+Generated: 2025-12-21T15:59:14.268Z
+
+BALANCE SHEET
+----------------------------------------
+Balance Sheet in All Currencies
+-------------------------------------------------------------------------------------------------------------------
+Note: Unit lines represent values converted into each unit; they are NOT additive across columns. Intra-account exchange trades may show gross (both sides) and will net to zero in totals — only fees and net flows remain.
+Account                                  Sub                     SATS         HIVE          HBD          USD
+-------------------------------------------------------------------------------------------------------------------
+
+                                                       Assets                                                      
+------------------------------
+Converted Keepsats Offset                from_keepsats          1,071       10.799        0.942        0.942
+Converted Keepsats Offset                to_keepsats           -5,345      -53.929       -4.705       -4.705
+   Total Converted Keepsats Offset                             -4,274      -43.130       -3.763       -3.763
+-------------------------------------------------------------------------------------------------------------------
+Customer Deposits Hive                   devser.v4vapp          4,344       43.839        3.825        3.825
+   Total Customer Deposits Hive                                 4,344       43.839        3.825        3.825
+-------------------------------------------------------------------------------------------------------------------
+External Lightning Payments              umbrel                 2,069       20.872        1.821        1.821
+   Total External Lightning Payments                            2,069       20.872        1.821        1.821
+-------------------------------------------------------------------------------------------------------------------
+Treasury Lightning                       from_keepsats         -1,071      -10.799       -0.942       -0.942
+Treasury Lightning                       to_keepsats            5,345       53.929        4.705        4.705
+   Total Treasury Lightning                                     4,274       43.130        3.763        3.763
+-------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+   Total Assets                                                 6,413       64.711        5.646        5.646
+===================================================================================================================
+
+                                                    Liabilities                                                    
+------------------------------
+   Total VSC Liability                                          6,192       62.472        5.451        5.451
+-------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+   Total Liabilities                                            6,192       62.472        5.451        5.451
+===================================================================================================================
+
+                                                       Equity                                                      
+------------------------------
+Retained Earnings                        from_keepsats             70        0.709        0.062        0.062
+Retained Earnings                        to_keepsats              152        1.529        0.133        0.133
+   Total Retained Earnings                                        222        2.239        0.195        0.195
+-------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+   Total Equity                                                   222        2.239        0.195        0.195
+===================================================================================================================
+-------------------------------------------------------------------------------------------------------------------
+Total Liabilities &amp; Equity                                      6,413       64.711        5.646        5.646
+
+                     The balance sheet is balanced (0.0 msats tolerance).                     
+===================================================================================================================
+
+PROFIT & LOSS
+----------------------------------------
+Profit and Loss Report for 2025-12-21 15:53:39 UTC
+------------------------------------------------------------------------------------------------------------------------------
+Account                                  Sub                     SATS        msats         HIVE          HBD          USD
+------------------------------------------------------------------------------------------------------------------------------
+
+Revenue
+------------------------------
+Fee Income Keepsats                      from_keepsats             70       70,344        0.709        0.062         0.06
+Fee Income Keepsats                      to_keepsats              152      151,552        1.529        0.133         0.13
+   Total Fee Income Keepsats                                      222      221,896        2.239        0.195         0.20
+------------------------------------------------------------------------------------------------------------------------------
+
+Expenses
+------------------------------
+------------------------------------------------------------------------------------------------------------------------------
+
+Net Income
+------------------------------
+Net Income                               from_keepsats             70       70,344        0.709        0.062         0.06
+Net Income                               to_keepsats              152      151,552        1.529        0.133         0.13
+   Total Net Income                                               222      221,896        2.239        0.195         0.20
+==============================================================================================================================
+
+ACCOUNT BALANCES
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Converted Keepsats Offset (Asset) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:46:13.0   Contra Conversion: 1,071 sats for v4vapp.qrc Ke...     -c-      10.799           0      10.799      Unopo5Dk5o  k_contra_h
+15:46:13.8   Reclassify negative hive from VSC devser.v4vapp...     -c-      10.090           0      20.889      Unopo5Dk5o  r_vsc_hive
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           20.889 HIVE        1.825 HBD        1.825 USD        2,072 SATS        2,071,660 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE     20.889 HIVE 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              1.825 USD
+Total SATS:         2,071.660 SATS
+Converted Keepsats Offset (Asset) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Converted Keepsats Offset (Asset) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:42:29.1   Contra Conversion: 5,345 sats for v4vapp-test K...     -c-           0      53.929     -53.929   1644_56c4e8_1  h_contra_k
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted          -53.929 HIVE       -4.711 HBD       -4.711 USD       -5,348 SATS       -5,348,268 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE    -53.929 HIVE 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:             -4.711 USD
+Total SATS:        -5,348.268 SATS
+Converted Keepsats Offset (Asset) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Customer Deposits Hive (Asset) - Sub: devser.v4vapp balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:42:29.0   Deposit: 53.930 HIVE from v4vapp-test to devser...              53.930           0      53.930   1644_56c4e8_1   cust_h_in
+              💬💬test_deposit_hive_to_keepsats | #sats
+15:42:29.1   Convert 53.9290000000 into 5,345 sats for v4vap...                   0      53.929       0.001   1644_56c4e8_1    h_conv_k
+15:42:29.1   Contra Conversion: 5,345 sats for v4vapp-test K...              53.929           0      53.930   1644_56c4e8_1  h_contra_k
+15:42:37.1   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...                   0       0.001      53.929   1647_d81896_1  cust_h_out
+              💬Deposit 53.929 HIVE to 5,193 sats with fee: 152 for v4va...
+15:44:47.6   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...                   0       0.001      53.928   1690_333263_1  cust_h_out
+              💬v4v-d8BLd | #sats | v4v-d8BLd | § FZn6qqaU6X | Thank you...
+15:46:13.0   Convert 1,071 into 10.799 HIVE for v4vapp.qrc                   10.799           0      64.727      Unopo5Dk5o    k_conv_h
+15:46:13.0   Contra Conversion: 1,071 sats for v4vapp.qrc Ke...                   0      10.799      53.928      Unopo5Dk5o  k_contra_h
+15:46:17.4   Withdrawal: 10.089 HIVE from devser.v4vapp to v...                   0      10.089      43.839   1720_097afc_1  cust_h_out
+              💬Testing receive Hive via sats v4v-fMX8r | § Unopo5Dk5o
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           43.839 HIVE        3.829 HBD        3.829 USD        4,348 SATS        4,347,618 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE     43.839 HIVE 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              3.829 USD
+Total SATS:         4,347.618 SATS
+Customer Deposits Hive (Asset) - Sub: devser.v4vapp balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+External Lightning Payments (Asset) - Sub: umbrel balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:44:37.2   Receive incoming Lightning 1,000 sats v4vapp.qr...     -c-     1,000.0         0.0     1,000.0      FZn6qqaU6X   deposit_l
+15:46:07.0   Receive incoming Lightning 1,069 sats v4vapp.qr...     -c-     1,069.0         0.0     2,069.0      Unopo5Dk5o   deposit_l
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           20.863 HIVE        1.822 HBD        1.822 USD        2,069 SATS        2,069,000 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS      2,069 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              1.822 USD
+Total SATS:         2,069.000 SATS
+External Lightning Payments (Asset) - Sub: umbrel balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Treasury Lightning (Asset) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:46:13.0   Convert 1,071 into 10.799 HIVE for v4vapp.qrc                      0.0     1,070.7    -1,070.7      Unopo5Dk5o    k_conv_h
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted          -10.797 HIVE       -0.943 HBD       -0.943 USD       -1,071 SATS       -1,070,745 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS     -1,071 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:             -0.943 USD
+Total SATS:        -1,070.745 SATS
+Treasury Lightning (Asset) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Treasury Lightning (Asset) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:42:29.1   Convert 53.9290000000 into 5,345 sats for v4vap...             5,344.9         0.0     5,344.9   1644_56c4e8_1    h_conv_k
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           53.895 HIVE        4.708 HBD        4.708 USD        5,345 SATS        5,344,859 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS      5,345 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              4.708 USD
+Total SATS:         5,344.859 SATS
+Treasury Lightning (Asset) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+VSC Liability (Liability) - Sub: devser.v4vapp balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE, MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:46:13.0   Convert 10.090 HIVE to 1,000 sats for v4vapp.qrc                10.090           0     -10.090      Unopo5Dk5o   deposit_h
+15:46:13.8   Reclassify negative hive from VSC devser.v4vapp...                   0      10.090       0.000      Unopo5Dk5o  r_vsc_hive
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.000 HIVE        0.000 HBD        0.000 USD            0 SATS                0 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE      0.000 HIVE 
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:42:29.1   Withdraw 53.929 HIVE from 5,193 sats for v4vapp...                 0.0     5,344.9     5,344.9   1644_56c4e8_1  withdraw_h
+15:42:33.0   Transfer devser.v4vapp -&gt; v4vapp-test 5,344 sats               5,344.9         0.0         0.0   1646_f817b3_1      recv_l
+              💬💬test_deposit_hive_to_keepsats | #sats | received 5,344 ...
+15:42:33.0   Fee 152 sats v4vapp-test -&gt; devser.v4vapp 151 sats                 0.0       151.6       151.6   1646_9f28ed_1     c_j_fee
+15:42:34.9   Fee for Keepsats 151 sats for v4vapp-test                        151.6         0.0         0.0   1646_9f28ed_1     fee_inc
+15:44:37.2   Receive incoming Lightning 1,000 sats v4vapp.qr...                 0.0     1,000.0     1,000.0      FZn6qqaU6X   deposit_l
+15:44:39.0   Transfer devser.v4vapp -&gt; v4vapp.qrc 1,000 sats                1,000.0         0.0         0.0   1688_bc2ef1_1      recv_l
+              💬💬v4vapp.qrc | v4v-d8BLd | #SATS 1000 | #SATS #CLEAN #v4v...
+15:46:07.0   Receive incoming Lightning 1,069 sats v4vapp.qr...                 0.0     1,069.0     1,069.0      Unopo5Dk5o   deposit_l
+15:46:09.0   Transfer devser.v4vapp -&gt; v4vapp.qrc 1,069 sats                1,069.0         0.0         0.0   1718_4fe7d6_1      recv_l
+              💬💬v4vapp.qrc | Testing receive Hive via sats v4v-fMX8r | ...
+15:46:13.0   Fee for Keepsats 70 sats for v4vapp.qrc                           70.3         0.0       -70.3      Unopo5Dk5o     fee_inc
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           -0.709 HIVE       -0.062 HBD       -0.062 USD          -70 SATS          -70,344 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS        -70 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:             -0.062 USD
+Total SATS:           -70.344 SATS
+VSC Liability (Liability) - Sub: devser.v4vapp balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+VSC Liability (Liability) - Sub: keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:42:29.1   Hold Keepsats 152 sats for v4vapp-test                             0.0       151.6       151.6   1644_56c4e8_1      hold_k
+15:42:34.9   Release Keepsats for v4vapp-test after 00:05                     151.6         0.0         0.0   1644_56c4e8_1   release_k
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.000 HIVE        0.000 HBD        0.000 USD            0 SATS                0 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS          0 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              0.000 USD
+Total SATS:             0.000 SATS
+VSC Liability (Liability) - Sub: keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+VSC Liability (Liability) - Sub: v4vapp-test balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE, MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:42:29.0   Deposit: 53.930 HIVE from v4vapp-test to devser...                   0      53.930      53.930   1644_56c4e8_1   cust_h_in
+              💬💬test_deposit_hive_to_keepsats | #sats
+15:42:29.1   Withdraw 53.929 HIVE from 5,193 sats for v4vapp...              53.929           0       0.001   1644_56c4e8_1  withdraw_h
+15:42:37.1   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...               0.001           0       0.000   1647_d81896_1  cust_h_out
+              💬Deposit 53.929 HIVE to 5,193 sats with fee: 152 for v4va...
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.000 HIVE        0.000 HBD        0.000 USD            0 SATS                0 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE      0.000 HIVE 
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:42:29.1   Hold Keepsats 152 sats for v4vapp-test                           151.6         0.0      -151.6   1644_56c4e8_1      hold_k
+15:42:33.0   Fee 152 sats v4vapp-test -&gt; devser.v4vapp 151 sats               151.6         0.0      -303.1   1646_9f28ed_1     c_j_fee
+15:42:33.0   Transfer devser.v4vapp -&gt; v4vapp-test 5,344 sats                   0.0     5,344.9     5,041.8   1646_f817b3_1      recv_l
+              💬💬test_deposit_hive_to_keepsats | #sats | received 5,344 ...
+15:42:34.9   Release Keepsats for v4vapp-test after 00:05                       0.0       151.6     5,193.3   1644_56c4e8_1   release_k
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           52.366 HIVE        4.574 HBD        4.574 USD        5,193 SATS        5,193,307 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS      5,193 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              4.574 USD
+Total SATS:         5,193.307 SATS
+VSC Liability (Liability) - Sub: v4vapp-test balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+VSC Liability (Liability) - Sub: v4vapp.qrc balance as of 2025-12-21 15:53:39 UTC
+Units: HIVE, MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: HIVE
+----------
+
+=== 2025-12-21 ===
+15:44:47.6   Withdrawal: 0.001 HIVE from devser.v4vapp to v4...               0.001           0      -0.001   1690_333263_1  cust_h_out
+              💬v4v-d8BLd | #sats | v4v-d8BLd | § FZn6qqaU6X | Thank you...
+15:46:13.0   Convert 10.090 HIVE to 1,000 sats for v4vapp.qrc                     0      10.090      10.089      Unopo5Dk5o   deposit_h
+15:46:17.4   Withdrawal: 10.089 HIVE from devser.v4vapp to v...              10.089           0       0.000   1720_097afc_1  cust_h_out
+              💬Testing receive Hive via sats v4v-fMX8r | § Unopo5Dk5o
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.000 HIVE        0.000 HBD        0.000 USD            0 SATS                0 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance HIVE      0.000 HIVE 
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:44:39.0   Transfer devser.v4vapp -&gt; v4vapp.qrc 1,000 sats                    0.0     1,000.0     1,000.0   1688_bc2ef1_1      recv_l
+              💬💬v4vapp.qrc | v4v-d8BLd | #SATS 1000 | #SATS #CLEAN #v4v...
+15:46:09.0   Transfer devser.v4vapp -&gt; v4vapp.qrc 1,069 sats                    0.0     1,069.0     2,069.0   1718_4fe7d6_1      recv_l
+              💬💬v4vapp.qrc | Testing receive Hive via sats v4v-fMX8r | ...
+15:46:13.0   Consume customer SATS for Keepsats-to-hive conv...             1,000.4         0.0     1,068.6      Unopo5Dk5o   consume_k
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted           10.775 HIVE        0.941 HBD        0.941 USD        1,069 SATS        1,068,599 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS      1,069 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              0.941 USD
+Total SATS:         1,068.599 SATS
+VSC Liability (Liability) - Sub: v4vapp.qrc balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Fee Income Keepsats (Revenue) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:46:13.0   Fee for Keepsats 70 sats for v4vapp.qrc                            0.0        70.3        70.3      Unopo5Dk5o     fee_inc
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            0.709 HIVE        0.062 HBD        0.062 USD           70 SATS           70,344 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS         70 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              0.062 USD
+Total SATS:            70.344 SATS
+Fee Income Keepsats (Revenue) - Sub: from_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+_______________________________________________________________________________________________________________________________________
+Fee Income Keepsats (Revenue) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+Units: MSATS
+Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals.
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Unit: SATS
+----------
+
+=== 2025-12-21 ===
+15:42:34.9   Fee for Keepsats 151 sats for v4vapp-test                          0.0       151.6       151.6   1646_9f28ed_1     fee_inc
+---------------------------------------------------------------------------------------------------------------------------------------
+Converted            1.528 HIVE        0.133 HBD        0.133 USD          152 SATS          151,552 msats
+---------------------------------------------------------------------------------------------------------------------------------------
+Final Balance SATS        152 SATS 
+---------------------------------------------------------------------------------------------------------------------------------------
+Total USD:              0.133 USD
+Total SATS:           151.552 SATS
+Fee Income Keepsats (Revenue) - Sub: to_keepsats balance as of 2025-12-21 15:53:39 UTC
+=======================================================================================================================================
+
+----------------------------------------
+
+
+LEDGER ENTRIES
+----------------------------------------
+J/E NUMBER  : 102241720_097afc9b9526ce2ba0590ac3b10c4cfb55275999_1_real
+LEDGER TYPE : 📤Customer Hive Out (CUSTOMER_HIVE_OUT cust_h_out)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:17
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                          v4vapp.qrc     10.089 HIVE                
+    Customer Deposits Hive (Asset)                  devser.v4vapp                     10.089 HIVE
+
+Converted        10.089 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Withdrawal: 10.089 HIVE from devser.v4vapp to v4vapp.qrc 💬Testing receive Hive via sats v4v-fMX8r |
+§ Unopo5Dk5o
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_r_vsc_hive
+LEDGER TYPE : ❓Reclassify Vsc Hive (RECLASSIFY_VSC_HIVE r_vsc_hive)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Converted Keepsats Offset (Asset)               from_keepsats -c- 10.090 HIVE                
+    VSC Liability (Liability)                       devser.v4vapp                     10.090 HIVE
+
+Converted        10.090 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Reclassify negative hive from VSC devser.v4vapp to Converted Keepsats Offset for Keepsats-to-Hive
+outflow
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_deposit_h
+LEDGER TYPE : 📥Deposit Hive (DEPOSIT_HIVE deposit_h)   
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp     10.090 HIVE                
+    VSC Liability (Liability)                          v4vapp.qrc                     10.090 HIVE
+
+Converted        10.090 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Convert 10.090 HIVE to 1,000 sats for v4vapp.qrc
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_consume_k
+LEDGER TYPE : 🍽️Consume Customer Keepsats (CONSUME_CUSTOMER_KEEPSATS consume_k)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                          v4vapp.qrc      1,000 SATS                
+    Converted Keepsats Offset (Asset)               from_keepsats                      1,000 SATS
+
+Converted        10.090 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Consume customer SATS for Keepsats-to-hive conversion 1,000 msats for v4vapp.qrc
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_fee_inc
+LEDGER TYPE : 💵Fee Income (FEE_INCOME fee_inc)         
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp         70 SATS                
+    Fee Income Keepsats (Revenue)                   from_keepsats                         70 SATS
+
+Converted         0.709 HIVE       0.062 HBD       0.062 USD             70.000 SATS 
+DESCRIPTION
+💬Fee for Keepsats 70 sats for v4vapp.qrc
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_k_contra_h
+LEDGER TYPE : ❓Contra Keepsats To Hive (CONTRA_KEEPSATS_TO_HIVE k_contra_h)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Converted Keepsats Offset (Asset)               from_keepsats -c- 10.799 HIVE                
+    Customer Deposits Hive (Asset)                  devser.v4vapp                     10.799 HIVE
+
+Converted        10.799 HIVE       0.942 HBD       0.942 USD          1,071.000 SATS 
+DESCRIPTION
+💬Contra Conversion: 1,071 sats for v4vapp.qrc Keepsats
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_k_conv_h
+LEDGER TYPE : ❓Conv Keepsats To Hive (CONV_KEEPSATS_TO_HIVE k_conv_h)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:13
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Customer Deposits Hive (Asset)                  devser.v4vapp     10.799 HIVE                
+    Treasury Lightning (Asset)                      from_keepsats                      1,071 SATS
+
+Converted        10.799 HIVE       0.942 HBD       0.942 USD          1,071.000 SATS 
+DESCRIPTION
+💬Convert 1,071 into 10.799 HIVE for v4vapp.qrc
+====================================================================================================
+
+J/E NUMBER  : 102241718_4fe7d6aba82c1c521867abee59480f20f18b6465_1_real_recv_l
+LEDGER TYPE : ⚡Receive Lightning (RECEIVE_LIGHTNING recv_l)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:46:09
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp      1,069 SATS                
+    VSC Liability (Liability)                          v4vapp.qrc                      1,069 SATS
+
+Converted        10.782 HIVE       0.941 HBD       0.941 USD          1,069.000 SATS 
+DESCRIPTION
+💬Transfer devser.v4vapp -&gt; v4vapp.qrc 1,069 sats
+====================================================================================================
+
+J/E NUMBER  : Unopo5Dk5o/TKOwHEdw4xbxUIcVOgIDreZCjNn7NzCI=_deposit_l
+LEDGER TYPE : ❓Deposit Lightning (DEPOSIT_LIGHTNING deposit_l)
+CUSTOMER_ID : devser.v4vapp                                                    Dec 21, 2025 15:46:07
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+External Lightning Payments (Asset)                    umbrel  -c- 1,069 SATS                
+    VSC Liability (Liability)                       devser.v4vapp                      1,069 SATS
+
+Converted        10.782 HIVE       0.941 HBD       0.941 USD          1,069.000 SATS 
+DESCRIPTION
+💬Receive incoming Lightning 1,069 sats v4vapp.qrc | Testing receive Hive via sats v4v-fMX8r | #UUID
+bde69c #CLEAN #v4vapp
+====================================================================================================
+
+J/E NUMBER  : 102241690_333263c326cd2e0de426c3a54ea69e357658406f_1_real
+LEDGER TYPE : 📤Customer Hive Out (CUSTOMER_HIVE_OUT cust_h_out)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:44:47
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                          v4vapp.qrc      0.001 HIVE                
+    Customer Deposits Hive (Asset)                  devser.v4vapp                      0.001 HIVE
+
+Converted         0.001 HIVE       0.000 HBD       0.000 USD              0.000 SATS 
+DESCRIPTION
+💬Withdrawal: 0.001 HIVE from devser.v4vapp to v4vapp.qrc 💬v4v-d8BLd | #sats | v4v-d8BLd | §
+FZn6qqaU6X | Thank you for using v4v.app
+====================================================================================================
+
+J/E NUMBER  : 102241688_bc2ef1408ae9118083da55e99020408ff214a36e_1_real_recv_l
+LEDGER TYPE : ⚡Receive Lightning (RECEIVE_LIGHTNING recv_l)
+CUSTOMER_ID : v4vapp.qrc                                                       Dec 21, 2025 15:44:39
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp      1,000 SATS                
+    VSC Liability (Liability)                          v4vapp.qrc                      1,000 SATS
+
+Converted        10.090 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Transfer devser.v4vapp -&gt; v4vapp.qrc 1,000 sats
+====================================================================================================
+
+J/E NUMBER  : FZn6qqaU6XBnPcaO/KPSCMkET32QJNS0eDvvmA2bO8o=_deposit_l
+LEDGER TYPE : ❓Deposit Lightning (DEPOSIT_LIGHTNING deposit_l)
+CUSTOMER_ID : devser.v4vapp                                                    Dec 21, 2025 15:44:37
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+External Lightning Payments (Asset)                    umbrel  -c- 1,000 SATS                
+    VSC Liability (Liability)                       devser.v4vapp                      1,000 SATS
+
+Converted        10.090 HIVE       0.880 HBD       0.880 USD          1,000.000 SATS 
+DESCRIPTION
+💬Receive incoming Lightning 1,000 sats v4vapp.qrc | v4v-d8BLd | #SATS 1000 | #SATS #CLEAN #v4vapp
+====================================================================================================
+
+J/E NUMBER  : 102241647_d818963ec2dc55a8a33e5808483e8c67711406f9_1_real
+LEDGER TYPE : 📤Customer Hive Out (CUSTOMER_HIVE_OUT cust_h_out)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:37
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                         v4vapp-test      0.001 HIVE                
+    Customer Deposits Hive (Asset)                  devser.v4vapp                      0.001 HIVE
+
+Converted         0.001 HIVE       0.000 HBD       0.000 USD              0.000 SATS 
+DESCRIPTION
+💬Withdrawal: 0.001 HIVE from devser.v4vapp to v4vapp-test 💬Deposit 53.929 HIVE to 5,193 sats with
+fee: 152 for v4vapp-test | 💬test_deposit_hive_to_keepsats | #sats | § 1644_56c4e8_1 | Thank you for
+using v4v.app
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real_release_k
+LEDGER TYPE : 🚀Release Keepsats (RELEASE_KEEPSATS release_k)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:34
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                            keepsats        152 SATS                
+    VSC Liability (Liability)                         v4vapp-test                        152 SATS
+
+Converted         1.529 HIVE       0.133 HBD       0.133 USD            152.000 SATS 
+DESCRIPTION
+💬Release Keepsats for v4vapp-test after 00:05
+====================================================================================================
+
+J/E NUMBER  : 102241646_9f28eda9fe8cf5d2f7848a5f8baaf8f9dd5774c5_1_real_fee_inc
+LEDGER TYPE : 💵Fee Income (FEE_INCOME fee_inc)         
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:34
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp        152 SATS                
+    Fee Income Keepsats (Revenue)                     to_keepsats                        152 SATS
+
+Converted         1.529 HIVE       0.133 HBD       0.133 USD            152.000 SATS 
+DESCRIPTION
+💬Fee for Keepsats 151 sats for v4vapp-test
+====================================================================================================
+
+J/E NUMBER  : 102241646_9f28eda9fe8cf5d2f7848a5f8baaf8f9dd5774c5_1_real_c_j_fee
+LEDGER TYPE : 💵Custom Json Fee (CUSTOM_JSON_FEE c_j_fee)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:33
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                         v4vapp-test        152 SATS                
+    VSC Liability (Liability)                       devser.v4vapp                        152 SATS
+
+Converted         1.529 HIVE       0.133 HBD       0.133 USD            152.000 SATS 
+DESCRIPTION
+💬Fee 152 sats v4vapp-test -&gt; devser.v4vapp 151 sats
+====================================================================================================
+
+J/E NUMBER  : 102241646_f817b3c32f72592899a2275e98f44a378e4a4c5b_1_real_recv_l
+LEDGER TYPE : ⚡Receive Lightning (RECEIVE_LIGHTNING recv_l)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:33
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                       devser.v4vapp      5,345 SATS                
+    VSC Liability (Liability)                         v4vapp-test                      5,345 SATS
+
+Converted        53.929 HIVE       4.705 HBD       4.705 USD          5,345.000 SATS 
+DESCRIPTION
+💬Transfer devser.v4vapp -&gt; v4vapp-test 5,344 sats
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real_withdraw_h
+LEDGER TYPE : 📤Withdraw Hive (WITHDRAW_HIVE withdraw_h)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:29
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                         v4vapp-test     53.929 HIVE                
+    VSC Liability (Liability)                       devser.v4vapp                      5,345 SATS
+
+Converted        53.929 HIVE       4.705 HBD       4.705 USD          5,345.000 SATS 
+DESCRIPTION
+💬Withdraw 53.929 HIVE from 5,193 sats for v4vapp-test
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real_h_contra_k
+LEDGER TYPE : ❓Contra Hive To Keepsats (CONTRA_HIVE_TO_KEEPSATS h_contra_k)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:29
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Customer Deposits Hive (Asset)                  devser.v4vapp     53.929 HIVE                
+    Converted Keepsats Offset (Asset)                 to_keepsats                 -c- 53.929 HIVE
+
+Converted        53.929 HIVE       4.705 HBD       4.705 USD          5,345.000 SATS 
+DESCRIPTION
+💬Contra Conversion: 5,345 sats for v4vapp-test Keepsats
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real_h_conv_k
+LEDGER TYPE : ❓Conv Hive To Keepsats (CONV_HIVE_TO_KEEPSATS h_conv_k)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:29
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Treasury Lightning (Asset)                        to_keepsats      5,345 SATS                
+    Customer Deposits Hive (Asset)                  devser.v4vapp                     53.929 HIVE
+
+Converted        53.929 HIVE       4.705 HBD       4.705 USD          5,345.000 SATS 
+DESCRIPTION
+💬Convert 53.9290000000 into 5,345 sats for v4vapp-test
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real_hold_k_fee
+LEDGER TYPE : ⏳Hold Keepsats (HOLD_KEEPSATS hold_k)    
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:29
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+VSC Liability (Liability)                         v4vapp-test        152 SATS                
+    VSC Liability (Liability)                            keepsats                        152 SATS
+
+Converted         1.529 HIVE       0.133 HBD       0.133 USD            152.000 SATS 
+DESCRIPTION
+💬Hold Keepsats 152 sats for v4vapp-test
+====================================================================================================
+
+J/E NUMBER  : 102241644_56c4e85617c1f3955f269a7e107a033e8f37af54_1_real
+LEDGER TYPE : 📥Customer Hive In (CUSTOMER_HIVE_IN cust_h_in)
+CUSTOMER_ID : v4vapp-test                                                      Dec 21, 2025 15:42:29
+
+ACCOUNT                                                                 DEBIT          CREDIT
+----------------------------------------------------------------------------------------------------
+Customer Deposits Hive (Asset)                  devser.v4vapp     53.930 HIVE                
+    VSC Liability (Liability)                         v4vapp-test                     53.930 HIVE
+
+Converted        53.930 HIVE       4.705 HBD       4.705 USD          5,345.000 SATS 
+DESCRIPTION
+💬Deposit: 53.930 HIVE from v4vapp-test to devser.v4vapp 💬test_deposit_hive_to_keepsats | #sats
+====================================================================================================
+
+
