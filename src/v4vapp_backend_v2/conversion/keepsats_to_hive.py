@@ -1,45 +1,42 @@
 """
-Internal conversions of Keepsats to Hive or HBD.
-Operates by moving funds between the Server and VSC Liability accounts:
+Internal conversion flow: Keepsats -> Hive/HBD.
 
-->  pre performed Step 1: Customer's balance debited of sats
-        Debit: Liability VSC Liability (customer) - SATS
-        Credit: Liability VSC Liability (server) - SATS
+Overview:
+- Assumes customer's sats are debited before the main conversion steps.
+    (This pre-step removes msats from customer VSC liability.)
 
-    No net value change
-    LedgerType.CONV_KEEPSATS_TO_HIVE k_conv_h
-Step 2: Convert the keepsats into Hive or HBD Server's Asset account.
-        Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Asset Treasury Lightning (from_keepsats) - SATS
+Steps:
+1) Conversion initiation (LedgerType.CONV_KEEPSATS_TO_HIVE)
+     - Debit:  Liability "VSC Liability" (customer) - MSATS
+     - Credit: Liability "VSC Liability" (server)   - MSATS
+     (No net value change; shifts msats ownership to server.)
 
-    No net value change
-    LedgerType.CONTRA_KEEPSATS_TO_HIVE k_contra_h
-Step 3: Contra entry to keep Asset Customer Deposits Hive (server) balanced:
-        Debit: Asset Converted Keepsats Offset (from_keepsats) - HIVE/HBD
-        Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
+2) Convert sats into server Hive/HBD asset (LedgerType.CONV_KEEPSATS_TO_HIVE)
+     - Debit:  Asset "Customer Deposits Hive" (server) - HIVE/HBD
+     - Credit: Asset "Treasury Lightning" (from_keepsats) - MSATS
 
-    Net income change no change to DEA = LER
-    LedgerType.FEE_INCOME fee_inc
-Step 4: Fee Income
-        Debit: Liability VSC Liability (customer) - SATS
-        Credit: Revenue Fee Income Keepsats (from_keepsats) - SATS
+3) Contra to balance server Hive asset (LedgerType.CONTRA_KEEPSATS_TO_HIVE)
+     - Debit:  Asset "Converted Keepsats Offset" (from_keepsats) - HIVE/HBD
+     - Credit: Asset "Customer Deposits Hive" (server)           - HIVE/HBD
 
-    No net value change (conversion to Keepsats on VSC)
-    LedgerType.DEPOSIT_HIVE deposit_h
-Step 5: Deposit Hive into SERVER's Liability account:
-        Debit: Liability VSC Liability (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
+4) Fee recognition (LedgerType.FEE_INCOME)
+     - Debit:  Liability "VSC Liability" (server)        - MSATS
+     - Credit: Revenue "Fee Income Keepsats" (server)    - MSATS
+     (Fee is funded from sats captured by the server.)
 
+5) Deposit converted Hive to customer liability (LedgerType.DEPOSIT_HIVE)
+     - Debit:  Liability "VSC Liability" (server) - HIVE/HBD
+     - Credit: Liability "VSC Liability" (customer) - HIVE/HBD
 
+6) Reclassification and send (LedgerType.RECLASSIFY_VSC_HIVE)
+     - Reclassify converted Hive from server liability to offset
+         and execute the outbound Hive transfer to the customer.
 
-
-
-    No net value change but net sats owned to customer
-Then Send hive Transfer from Server to Customer:
-        Debit: Liability VSC Liability (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
-
-
+Notes:
+- Contra and reclassify entries preserve balance across asset/liability books.
+- Direct LND->Hive conversions (is_lndtohive) include a consume step that
+    debits customer sats from their VSC liability and avoids reclassification
+    imbalance.
 """
 
 import asyncio
