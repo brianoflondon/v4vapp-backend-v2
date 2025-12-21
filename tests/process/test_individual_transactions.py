@@ -30,6 +30,7 @@ from v4vapp_backend_v2.accounting.balance_sheet import (
 )
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.profit_and_loss import profit_and_loss_printout
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.calculate import calc_keepsats_to_hive
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -182,6 +183,8 @@ async def test_hive_and_hbd_to_lnd_only():
     limit_used = limits_after.first_period().sats - limits_before.first_period().sats
     logger.info(f"Limit used: {limit_used} sats")
     assert limit_used >= 2 * invoice_value_sat, "Total sats should increase after the transaction"
+    sanity_check = await run_all_sanity_checks()
+    assert len(sanity_check.failed) == 0, f"Sanity checks failed: {sanity_check.log_str}"
 
 
 async def test_hive_to_lnd_and_lnd_to_hive():

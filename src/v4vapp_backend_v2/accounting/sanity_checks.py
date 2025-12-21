@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 ICON = "🧪"  # Test Tube
@@ -117,6 +117,7 @@ all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = 
 ]
 
 
+@async_time_stats_decorator()
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
