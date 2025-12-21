@@ -1074,8 +1074,8 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.2.1"
-source = { git = "https://github.com/thecrazygm/hive-nectar.git?rev=2832f5cc85c9fb1d7b33f1efb1c164b9c39222e0#2832f5cc85c9fb1d7b33f1efb1c164b9c39222e0" }
+version = "0.2.8"
+source = { git = "https://github.com/thecrazygm/hive-nectar.git?rev=5d7c5d82d133f29c13cbbe7d4b12a41aa7ef627e#5d7c5d82d133f29c13cbbe7d4b12a41aa7ef627e" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -1085,7 +1085,6 @@ dependencies = [
     { name = "ecdsa" },
     { name = "httpx" },
     { name = "prettytable" },
-    { name = "pycryptodome" },
     { name = "pycryptodomex" },
     { name = "requests" },
     { name = "ruamel-yaml" },
@@ -3721,7 +3720,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "hive-nectar", git = "https://github.com/thecrazygm/hive-nectar.git?rev=2832f5cc85c9fb1d7b33f1efb1c164b9c39222e0" },
+    { name = "hive-nectar", git = "https://github.com/thecrazygm/hive-nectar.git?rev=5d7c5d82d133f29c13cbbe7d4b12a41aa7ef627e" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "mypy-protobuf", specifier = ">=3.6.0,<4.0.0" },
     { name = "packaging", specifier = ">=25.0" },
