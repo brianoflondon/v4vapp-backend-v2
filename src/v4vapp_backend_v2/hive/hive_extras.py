@@ -15,7 +15,7 @@ from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
 from nectar.transactionbuilder import TransactionBuilder
-from nectarapi.exceptions import UnhandledRPCError
+from nectarapi.exceptions import UnhandledRPCError, RPCError
 from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
@@ -107,6 +107,16 @@ class HiveNotHiveAccount(HiveTransferError):
 class HiveNotEnoughHiveInAccount(HiveTransferError):
     """
     Exception raised when there are not enough Hive funds in the account.
+    """
+
+    def __init__(self, message: str, sending_amount: Amount):
+        super().__init__(message)
+        self.sending_amount = sending_amount
+
+
+class HiveNotEnoughHiveRCMana(HiveTransferError):
+    """
+    Exception raised when there is not enough Hive RC mana to perform the transfer.
     """
 
     def __init__(self, message: str, sending_amount: Amount):
@@ -965,13 +975,20 @@ async def send_transfer(
             )
             return trx
 
-        except UnhandledRPCError as ex:
+        except (UnhandledRPCError, RPCError) as ex:
             # Handle insufficient funds
             for arg in ex.args:
                 if "does not have sufficient funds" in arg:
                     raise HiveNotEnoughHiveInAccount(
                         f"{from_account} Failure during send | "
                         f"Not enough to pay {amount.amount_decimal:.3f} {amount.symbol} | "
+                        f"to: {to_account} | Hive error: {ex}",
+                        sending_amount=amount,
+                    )
+                elif "not enough RC mana" in arg:
+                    raise HiveNotEnoughHiveRCMana(
+                        f"{from_account} Failure during send | "
+                        f"Not enough RC mana to pay {amount.amount_decimal:.3f} {amount.symbol} | "
                         f"to: {to_account} | Hive error: {ex}",
                         sending_amount=amount,
                     )

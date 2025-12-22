@@ -19,6 +19,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import async_time_stats_decorator
 from v4vapp_backend_v2.helpers.general_purpose_funcs import parse_dt_with_tz
@@ -299,6 +300,7 @@ async def ledger_entries_page(
         ledger_entries = []
 
     nav_items = nav_manager.get_navigation_items("/admin/ledger-entries")
+    sanity_results = await run_all_sanity_checks()
 
     return templates.TemplateResponse(
         "ledger_entries/entries.html",
@@ -323,5 +325,6 @@ async def ledger_entries_page(
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Ledger Entries", "url": "/admin/ledger-entries"},
             ],
+            "sanity_results": sanity_results,
         },
     )

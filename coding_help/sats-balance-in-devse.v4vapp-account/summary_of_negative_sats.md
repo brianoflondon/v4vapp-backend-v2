@@ -21,8 +21,14 @@
 
 ## Root cause analysis 💡
 
-- Conversions and reclassifications are posted correctly, but conversion fees and rounding at msat/hive precision leave a small net residual in the server VSC Liability sub-account.
+- Conversions and reclassifications were being posted correctly in the non-direct conversion path, but the _direct_ LND→HIVE path handled fee recognition differently: the fee was debited from the **server** VSC Liability while the customer's sats were consumed later. That ordering effectively caused the fee to be double-included against the server's balance and left a negative residual in the server `devser.v4vapp` sub-account.
 - Presentation/aggregation: unit sections are separate views (SATS vs HIVE vs HBD); rounding/display conversion choices can make small residuals more visible.
+
+## Fix implemented ✅
+
+- Change: For direct LND→HIVE conversions we now **debit the fee from the customer's VSC Liability before consuming the customer's sats** (i.e., fee is taken from the customer, not the server). This avoids double-counting and prevents the server sub-account from going negative.
+- Reverted earlier naive attempt to add a server-side `r_vsc_sats` for direct flows (that approach caused double inclusion). The working change is minimal and localized to `src/v4vapp_backend_v2/conversion/keepsats_to_hive.py`.
+- Verification: I reproduced the previously failing scenario (1,070.339 sats → fee 70.336 → net 1,000.003) and the server `VSC Liability` no longer shows the negative residual after the change.
 
 ---
 

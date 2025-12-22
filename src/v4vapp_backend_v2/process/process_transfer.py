@@ -533,10 +533,10 @@ async def check_keepsats_balance(extra_spend_msats: Decimal, cust_id: str) -> st
     net_msats, balance = await keepsats_balance(cust_id=cust_id)
     if not balance.balances.get(Currency.MSATS):
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({round(net_msats / Decimal(1000)):, .0f} sats) to cover payment request: {round(extra_spend_msats / Decimal(1000)):, .0f} sats"
+            f"Insufficient Keepsats balance ({int(net_msats / Decimal(1000)):,.0f} sats) to cover payment request: {int(extra_spend_msats / Decimal(1000)):,.0f} sats"
         )
     if net_msats < extra_spend_msats:
         raise HiveTransferError(
-            f"Insufficient Keepsats balance ({round(net_msats / Decimal(1000)):, .0f} sats) to cover payment request: {round(extra_spend_msats / Decimal(1000)):, .0f} sats"
+            f"Insufficient Keepsats balance ({int(net_msats / Decimal(1000)):,.0f} sats) to cover payment request: {int(extra_spend_msats / Decimal(1000)):,.0f} sats"
         )
     return ""

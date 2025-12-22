@@ -1,39 +1,49 @@
 """
-Internal conversions of Hive or HBD to Keepsats.
-Operates by moving funds between the Server and VSC Liability accounts:
+Internal conversion: HIVE/HBD -> Keepsats (msats).
 
-Pre-performed Step 1: Receive Hive or HBD (external to this function):
+High-level flow:
+Precondition (external): Customer deposits HIVE/HBD to Server:
     Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
     Credit: Liability VSC Liability (customer) - HIVE/HBD
 
-Step 2: Convert the received Hive or HBD to Keepsats in the Server's Asset account.
-    Debit: Asset Treasury Lightning (server) - SATS
+1) Reserve fee msats:
+    hold_keepsats(...) reserves fee msats to ensure fee collection.
+
+2) Conversion ledger (CONV_HIVE_TO_KEEPSATS):
+    Debit: Asset Treasury Lightning (server) - MSATS
     Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
-    LedgerType: CONV_HIVE_TO_KEEPSATS
+    (Records conversion at the agreed quote; no net balance change until
+    transfers settle.)
 
-Step 3: Contra entry to balance Asset Customer Deposits Hive (server):
+3) Contra reclassification (CONTRA_HIVE_TO_KEEPSATS):
     Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-    Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD
-    LedgerType: CONTRA_HIVE_TO_KEEPSATS
+    Credit: Asset Converted Keepsats Offset (server) - HIVE/HBD (contra asset)
+    (Offsets the original deposit so converted value is not double-counted.)
 
-Step 4: Deposit Keepsats into Server's Liability account:
-    Debit: Liability VSC Liability (customer) - HIVE/HBD
-    Credit: Liability VSC Liability (server) - SATS
-    LedgerType: WITHDRAW_HIVE
+4) Deposit keepsats into liabilities (WITHDRAW_HIVE):
+    Debit: Liability VSC Liability (customer) - HIVE/HBD (reduce customer's
+           HIVE liability)
+    Credit: Liability VSC Liability (server) - MSATS (increase server's keepsats
+           liability)
+    (Represents the internal move prior to on-chain/custom_json transfers.)
 
-Step 5: Send custom_json transfer of full Keepsats amount from Server to Customer:
-    Debit: Liability VSC Liability (server) - SATS
-    Credit: Liability VSC Liability (customer) - SATS
+5) Custom JSON transfers (external moves):
+    a) Main keepsats transfer: Server -> Customer for full msats amount
+       (includes fee).
+    b) Fee transfer: Customer -> Server for fee msats.
+    (Fees are collected via the fee custom_json transfer; fee was reserved by
+    hold_keepsats.)
 
-Step 6: Send custom_json transfer of fee from Customer to Server:
-    Debit: Liability VSC Liability (customer) - SATS
-    Credit: Liability VSC Liability (server) - SATS
-    (Fee is deducted from the customer's received amount via this transfer)
+6) Post-processing:
+    - Tracked op updated with conversion/change values and saved.
+    - Rebalance task enqueued to manage base/quote exposure.
 
 Notes:
-- Fee income is handled via the custom_json fee transfer, not a separate ledger entry.
-- All ledger entries maintain no net value change until the custom_json transfers.
-- The function updates the tracked operation with conversion details and change amounts.
+- Fee income is realized via the fee custom_json transfer (the process that
+  handles that transfer should record/recognize fee income). This function
+  does not emit a separate fee ledger entry.
+- Ledger entries are persisted immediately; the net effect depends on the
+  external/custom_json transfers completing.
 """
 
 import asyncio

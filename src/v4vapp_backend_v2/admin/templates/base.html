@@ -138,6 +138,18 @@
                 </div>
                 {% endif %}
 
+                <!-- Sanity Checks Warning  -->
+                {% if sanity_results.failed %}
+                <div class="alert alert-warning alert-dismissible no-auto-dismiss fade show" role="alert">
+                    <strong>⚠️ Failed Sanity Checks</strong>
+                    <button type="button" class="btn btn-sm btn-outline-warning ms-2" data-bs-toggle="modal"
+                        data-bs-target="#sanityChecksModal">
+                        View Details ({{ sanity_results.failed|length }})
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
                 <!-- Main content area -->
                 {% block content %}{% endblock %}
             </main>
@@ -165,6 +177,49 @@
                             <div class="d-flex align-items-start">
                                 <div class="flex-grow-1">
                                     <code class="text-break">{{ transaction }}</code>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Sanity Checks Modal -->
+    {% if sanity_results %}
+    <div class="modal fade" id="sanityChecksModal" tabindex="-1" aria-labelledby="sanityChecksModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="sanityChecksModalLabel">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        Sanity Check Results ({{ sanity_results.failed|length }})
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">The following sanity checks have reported issues:</p>
+                    <div class="list-group">
+                        {% for check_name, sanity_result in sanity_results.failed %}
+                        <div class="list-group-item">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-grow-1">
+                                    <strong>{{ check_name }}</strong>
+                                    <p class="mb-0">{{ sanity_result.details }}</p>
+                                </div>
+                                <div>
+                                    {% if passed %}
+                                    <span class="badge bg-success">Passed</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -260,9 +315,9 @@
             });
         });
 
-        // Auto-dismiss alerts after 5 seconds
+        // Auto-dismiss alerts after 5 seconds (exclude alerts marked with 'no-auto-dismiss')
         setTimeout(function () {
-            var alerts = document.querySelectorAll('.alert-dismissible');
+            var alerts = document.querySelectorAll('.alert-dismissible:not(.no-auto-dismiss)');
             alerts.forEach(function (alert) {
                 var bsAlert = new bootstrap.Alert(alert);
                 bsAlert.close();

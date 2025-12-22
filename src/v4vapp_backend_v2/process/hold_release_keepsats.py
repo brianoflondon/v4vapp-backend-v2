@@ -76,8 +76,8 @@ async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerE
         None explicitly, but may propagate exceptions from database operations or model validation.
     """
     ledger_type = LedgerType.HOLD_KEEPSATS
-    fee_str = "-fee" if fee else ""
-    group_id = f"{tracked_op.group_id}-{ledger_type.value}{fee_str}"
+    fee_str = "_fee" if fee else ""
+    group_id = f"{tracked_op.group_id}_{ledger_type.value}{fee_str}"
     existing_entry_raw = await LedgerEntry.collection().find_one(
         filter={"group_id": group_id},
     )
@@ -93,7 +93,7 @@ async def release_keepsats(tracked_op: TrackedAny, fee: bool = False) -> LedgerE
     lock_time = timestamp - existing_entry.timestamp
 
     ledger_type = LedgerType.RELEASE_KEEPSATS
-    group_id = f"{tracked_op.group_id}-{ledger_type.value}"
+    group_id = f"{tracked_op.group_id}_{ledger_type.value}"
     release_ledger_entry = LedgerEntry(
         cust_id=existing_entry.cust_id,
         short_id=tracked_op.short_id,

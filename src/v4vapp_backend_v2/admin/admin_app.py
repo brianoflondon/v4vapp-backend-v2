@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from v4vapp_backend_v2 import __version__ as project_version
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -144,6 +145,9 @@ class AdminApp:
         @self.app.get("/admin/", response_class=HTMLResponse)
         async def admin_dashboard(request: Request):
             """Main admin dashboard"""
+            sanity_results = await log_all_sanity_checks(
+                local_logger=logger, log_only_failures=True, notification=False
+            )
             nav_items = self.nav_manager.get_navigation_items()
             server_id = InternalConfig().server_id
             # Gather hive account balances for display
@@ -236,6 +240,7 @@ class AdminApp:
                     "nav_items": nav_items,
                     "hive_balances": hive_balances,
                     "pending_transactions": pending_transactions,
+                    "sanity_results": sanity_results,
                     "admin_info": {
                         "version": "1.0.0",
                         "project_version": project_version,
@@ -255,6 +260,7 @@ class AdminApp:
         @self.app.get("/admin/health")
         async def health_check():
             """Health check endpoint"""
+            sanity_results = await run_all_sanity_checks()
             return {
                 "status": "healthy",
                 "admin_version": "1.0.0",
@@ -262,6 +268,7 @@ class AdminApp:
                 "config": self.config.config_filename,
                 "local_machine_name": InternalConfig().local_machine_name,
                 "server_id": InternalConfig().server_id,
+                "sanity_checks": sanity_results,
             }
 
         @self.app.get("/favicon.ico", include_in_schema=False)

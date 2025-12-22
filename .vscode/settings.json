@@ -8,6 +8,8 @@
         "colorama",
         "convertbits",
         "convertkeepsats",
+        "coro",
+        "coros",
         "cummulative",
         "dedupe",
         "devhive",

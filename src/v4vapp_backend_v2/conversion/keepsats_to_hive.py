@@ -1,45 +1,42 @@
 """
-Internal conversions of Keepsats to Hive or HBD.
-Operates by moving funds between the Server and VSC Liability accounts:
+Internal conversion flow: Keepsats -> Hive/HBD.
 
-->  pre performed Step 1: Customer's balance debited of sats
-        Debit: Liability VSC Liability (customer) - SATS
-        Credit: Liability VSC Liability (server) - SATS
+Overview:
+- Assumes customer's sats are debited before the main conversion steps.
+    (This pre-step removes msats from customer VSC liability.)
 
-    No net value change
-    LedgerType.CONV_KEEPSATS_TO_HIVE k_conv_h
-Step 2: Convert the keepsats into Hive or HBD Server's Asset account.
-        Debit: Asset Customer Deposits Hive (server) - HIVE/HBD
-        Credit: Asset Treasury Lightning (from_keepsats) - SATS
+Steps:
+1) Conversion initiation (LedgerType.CONV_KEEPSATS_TO_HIVE)
+     - Debit:  Liability "VSC Liability" (customer) - MSATS
+     - Credit: Liability "VSC Liability" (server)   - MSATS
+     (No net value change; shifts msats ownership to server.)
 
-    No net value change
-    LedgerType.CONTRA_KEEPSATS_TO_HIVE k_contra_h
-Step 3: Contra entry to keep Asset Customer Deposits Hive (server) balanced:
-        Debit: Asset Converted Keepsats Offset (from_keepsats) - HIVE/HBD
-        Credit: Asset Customer Deposits Hive (server) - HIVE/HBD
+2) Convert sats into server Hive/HBD asset (LedgerType.CONV_KEEPSATS_TO_HIVE)
+     - Debit:  Asset "Customer Deposits Hive" (server) - HIVE/HBD
+     - Credit: Asset "Treasury Lightning" (from_keepsats) - MSATS
 
-    Net income change no change to DEA = LER
-    LedgerType.FEE_INCOME fee_inc
-Step 4: Fee Income
-        Debit: Liability VSC Liability (customer) - SATS
-        Credit: Revenue Fee Income Keepsats (from_keepsats) - SATS
+3) Contra to balance server Hive asset (LedgerType.CONTRA_KEEPSATS_TO_HIVE)
+     - Debit:  Asset "Converted Keepsats Offset" (from_keepsats) - HIVE/HBD
+     - Credit: Asset "Customer Deposits Hive" (server)           - HIVE/HBD
 
-    No net value change (conversion to Keepsats on VSC)
-    LedgerType.DEPOSIT_HIVE deposit_h
-Step 5: Deposit Hive into SERVER's Liability account:
-        Debit: Liability VSC Liability (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
+4) Fee recognition (LedgerType.FEE_INCOME)
+     - Debit:  Liability "VSC Liability" (server)        - MSATS
+     - Credit: Revenue "Fee Income Keepsats" (server)    - MSATS
+     (Fee is funded from sats captured by the server.)
 
+5) Deposit converted Hive to customer liability (LedgerType.DEPOSIT_HIVE)
+     - Debit:  Liability "VSC Liability" (server) - HIVE/HBD
+     - Credit: Liability "VSC Liability" (customer) - HIVE/HBD
 
+6) Reclassification and send (LedgerType.RECLASSIFY_VSC_HIVE)
+     - Reclassify converted Hive from server liability to offset
+         and execute the outbound Hive transfer to the customer.
 
-
-
-    No net value change but net sats owned to customer
-Then Send hive Transfer from Server to Customer:
-        Debit: Liability VSC Liability (server) - HIVE/HBD
-        Credit: Liability VSC Liability (customer) - HIVE/HBD
-
-
+Notes:
+- Contra and reclassify entries preserve balance across asset/liability books.
+- Direct LND->Hive conversions (is_lndtohive) include a consume step that
+    debits customer sats from their VSC liability and avoids reclassification
+    imbalance.
 """
 
 import asyncio
@@ -205,6 +202,15 @@ async def conversion_keepsats_to_hive(
     # MARK: 4 Fee Income From Customer
     # The Fee is ALREADY to the server as part of the start of the conversion
     ledger_type = LedgerType.FEE_INCOME
+    # For non-direct conversions the fee is taken from the server's captured SATS (server VSC Liability).
+    # For direct LND->HIVE conversions the server capture hasn't been reclassified yet, so take the
+    # fee directly from the customer's VSC Liability *before* consuming the customer's sats.
+    debit_account = (
+        LiabilityAccount(name="VSC Liability", sub=cust_id)
+        if isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive
+        else LiabilityAccount(name="VSC Liability", sub=server_id)
+    )
+
     fee_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
@@ -213,13 +219,7 @@ async def conversion_keepsats_to_hive(
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
-        debit=LiabilityAccount(
-            name="VSC Liability",
-            # sub=cust_id,  # Changed from server_id to cust_id for direct conversions
-            sub=server_id,
-            # I think this might need to be the server_id, because the fee is included in the amount of sats
-            # Taken and factored into the conversion already. 2025-12-15
-        ),
+        debit=debit_account,
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.fee_conv.msats,
         debit_conv=conv_result.fee_conv,
@@ -301,17 +301,17 @@ async def conversion_keepsats_to_hive(
             ledger_type=ledger_type,
             group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Reclassify positive SATS from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
+            description=f"Reclassify positive SATS (net) from VSC {server_id} to Converted Keepsats Offset for Keepsats-to-Hive inflow",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
             debit_unit=Currency.MSATS,
-            debit_amount=conv_result.to_convert_conv.msats,
-            debit_conv=conv_result.to_convert_conv,
+            debit_amount=conv_result.net_to_receive_conv.msats,
+            debit_conv=conv_result.net_to_receive_conv,
             credit=AssetAccount(
                 name="Converted Keepsats Offset", sub="from_keepsats", contra=True
             ),
             credit_unit=Currency.MSATS,
-            credit_amount=conv_result.to_convert_conv.msats,
-            credit_conv=conv_result.to_convert_conv,
+            credit_amount=conv_result.net_to_receive_conv.msats,
+            credit_conv=conv_result.net_to_receive_conv,
             link=tracked_op.link,
         )
         ledger_entries.append(reclassify_sats_entry)

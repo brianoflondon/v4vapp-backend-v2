@@ -17,9 +17,10 @@ from v4vapp_backend_v2.accounting.account_balances import (
     list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
-from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
 router = APIRouter()
 
@@ -77,6 +78,7 @@ async def accounts_page(request: Request):
 
     # Fetch pending transactions
     pending_transactions = await PendingTransaction.list_all_str()
+    sanity_results = await run_all_sanity_checks()
 
     return templates.TemplateResponse(
         "accounts/accounts.html",
@@ -90,6 +92,7 @@ async def accounts_page(request: Request):
                 {"name": "Admin", "url": "/admin"},
                 {"name": "Accounts", "url": "/admin/accounts"},
             ],
+            "sanity_results": sanity_results,
         },
     )
 
@@ -191,6 +194,7 @@ async def get_user_balance_get(
                         "error": f"Could not serialize details: {str(e)}",
                         "string_repr": str(details),
                     }
+        sanity_results = await run_all_sanity_checks()
 
         return templates.TemplateResponse(
             "accounts/balance_result.html",
@@ -213,6 +217,7 @@ async def get_user_balance_get(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": f"VSC Liability ({acc_name})", "url": "#"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
 
@@ -232,6 +237,7 @@ async def get_user_balance_get(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )
 
@@ -350,7 +356,7 @@ async def get_user_balance(
                         "error": f"Could not serialize details: {str(e)}",
                         "string_repr": str(details),
                     }
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "accounts/balance_result.html",
             {
@@ -373,6 +379,7 @@ async def get_user_balance(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": f"VSC Liability ({acc_name})", "url": "#"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
 
@@ -392,6 +399,7 @@ async def get_user_balance(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )
 
@@ -507,7 +515,7 @@ async def get_account_balance(
                         "error": f"Could not serialize details: {str(e)}",
                         "string_repr": str(details),
                     }
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "accounts/balance_result.html",
             {
@@ -530,6 +538,7 @@ async def get_account_balance(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": f"{account.name} ({account.sub})", "url": "#"},
                 ],
+                "sanity_results": sanity_results,
             },
         )
 
@@ -551,5 +560,6 @@ async def get_account_balance(
                     {"name": "Accounts", "url": "/admin/accounts"},
                     {"name": "Error", "url": "#"},
                 ],
+                "sanity_results": SanityCheckResults(),
             },
         )

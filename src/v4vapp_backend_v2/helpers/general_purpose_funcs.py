@@ -2,7 +2,7 @@ import decimal
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, Generator
+from typing import Any, Generator
 
 from bson.decimal128 import Decimal128
 
@@ -59,9 +59,7 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: Database
 
 
-def convert_decimals_for_mongodb(
-    obj: Dict[str, Any] | Dict | list | Decimal | Any,
-) -> Dict | Dict[str, Any] | Dict | list | Decimal128 | int | float | Any:
+def convert_decimals_for_mongodb(obj: Any) -> Any:
     """
     Recursively converts Decimal instances within a nested structure (dicts, lists) to appropriate MongoDB types:
     - Whole-number Decimals to Python int (for MongoDB int64).
@@ -140,7 +138,9 @@ def convert_decimals_for_mongodb(
         return obj
 
 
-def convert_decimals_to_float_or_int(obj: Any) -> dict | list | float | int | Any | Dict[str, Any]:
+def convert_decimals_to_float_or_int(
+    obj: Any,
+) -> Any:
     """
     Recursively converts Decimal and Decimal128 instances within a nested structure (dicts, lists) to appropriate Python types:
     - Whole-number Decimals to Python int.

@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
+from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig, V4VConfigData, V4VConfigRateLimits
@@ -58,7 +59,7 @@ async def v4vconfig_dashboard(request: Request):
 
         nav_items = nav_manager.get_navigation_items(str(request.url.path))
         breadcrumbs = nav_manager.get_breadcrumbs(str(request.url.path))
-
+        sanity_results = await run_all_sanity_checks()
         return templates.TemplateResponse(
             "v4vconfig/dashboard.html",
             {
@@ -70,6 +71,7 @@ async def v4vconfig_dashboard(request: Request):
                 "timestamp": config.timestamp,
                 "server_account": config.server_accname,
                 "pending_transactions": await PendingTransaction.list_all_str(),
+                "sanity_results": sanity_results,
             },
         )
 
@@ -216,6 +218,7 @@ async def update_v4vconfig_form(
                 "error": f"Validation error: {e}",
                 "back_url": "/admin/v4vconfig",
                 "pending_transactions": await PendingTransaction.list_all_str(),
+                "sanity_results": SanityCheckResults(),
             },
         )
     except Exception as e:
@@ -230,6 +233,7 @@ async def update_v4vconfig_form(
                 "error": str(e),
                 "back_url": "/admin/v4vconfig",
                 "pending_transactions": await PendingTransaction.list_all_str(),
+                "sanity_results": SanityCheckResults(),
             },
         )
 
