@@ -10,7 +10,7 @@ from colorama import Fore, Style
 
 from v4vapp_backend_v2.config.error_code_class import ErrorCode
 from v4vapp_backend_v2.config.notification_protocol import BotNotification, NotificationProtocol
-from v4vapp_backend_v2.config.setup import BASE_DISPLAY_LOG_LEVEL, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -67,6 +67,45 @@ def human_readable_datetime_str(dt_obj: datetime) -> str:
     """
     ms = dt_obj.microsecond // 1000
     return f"{dt_obj:%H:%M:%S}.{ms:03d} {dt_obj:%a %d %b}"
+
+
+def parse_log_level(level: str | int | None, fallback: int = logging.INFO) -> int:
+    """
+    Parse a logging level into its numeric value without using
+    logging.getLevelName (which can return a string for unknown names).
+
+    Accepts:
+      - int -> returned unchanged
+      - numeric string like "20" -> parsed to int
+      - name like "INFO" or "debug" -> looked up in logging._nameToLevel
+      - common synonym "WARN" is accepted for "WARNING"
+
+    On unknown inputs, returns `fallback` (default: logging.INFO).
+    """
+    # Already numeric
+    if isinstance(level, int):
+        return level
+    if level is None:
+        return fallback
+
+    s = str(level).strip()
+
+    # Numeric string
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        pass
+
+    name = s.upper()
+    if name == "WARN":
+        name = "WARNING"
+
+    name_to_level = getattr(logging, "_nameToLevel", None)
+    if name_to_level is not None and name in name_to_level:
+        return name_to_level[name]
+
+    # Unknown -> fallback
+    return fallback
 
 
 class MyJSONFormatter(logging.Formatter):
@@ -403,9 +442,23 @@ class ConsoleLogFilter(logging.Filter):
             if the log level is more than debug, otherwise False.
     """
 
+    # cached value for the configured console level (parsed to int)
+    _cached_levelno: int | None = None
+
+    @classmethod
+    def refresh_cached_level(cls) -> None:
+        """Refresh the cached level from the current config. Call this after
+        reloading/changing config if you need the filter to pick up the new value."""
+        cls._cached_levelno = parse_log_level(
+            InternalConfig().config.logging.console_log_level, fallback=logging.INFO
+        )
+
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        return record.levelno >= BASE_DISPLAY_LOG_LEVEL
+        # Initialize cached level on first call (or if None)
+        if ConsoleLogFilter._cached_levelno is None:
+            ConsoleLogFilter.refresh_cached_level()
+        return record.levelno >= ConsoleLogFilter._cached_levelno  # type: ignore[return-value]
 
 
 class AddNotificationBellFilter(logging.Filter):

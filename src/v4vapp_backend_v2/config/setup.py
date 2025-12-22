@@ -34,6 +34,35 @@ DEFAULT_CONFIG_FILENAME = "config.yaml"
 
 BASE_DISPLAY_LOG_LEVEL = logging.INFO  # Default log level for stdout
 
+
+def _parse_log_level(level: str | int | None, fallback: int) -> int:
+    """Parse a logging level into its numeric value without using logging.getLevelName.
+
+    Accepts ints, numeric strings (e.g. "20"), and named levels (case-insensitive).
+    Falls back to `fallback` for unknown values.
+    """
+    if isinstance(level, int):
+        return level
+    if level is None:
+        return fallback
+
+    s = str(level).strip()
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        pass
+
+    name = s.upper()
+    if name == "WARN":
+        name = "WARNING"
+
+    name_to_level = getattr(logging, "_nameToLevel", None)
+    if name_to_level and name in name_to_level:
+        return name_to_level[name]
+
+    return fallback
+
+
 DB_RATES_COLLECTION = "rates"
 
 """
@@ -58,10 +87,27 @@ class AdminConfig(BaseConfig):
 class LoggingConfig(BaseConfig):
     log_config_file: str = ""
     default_log_level: str = "DEBUG"
+    console_log_level: str = "INFO"
     log_levels: Dict[str, str] = {}
     log_folder: Path = Path("logs/")
     log_notification_silent: List[str] = []
     default_notification_bot_name: str = ""
+
+    def default_log_level_numeric(self) -> int:
+        # Cache the numeric value after first parse so we don't re-parse on every call
+        if not hasattr(self, "_default_log_level_numeric_cache"):
+            self._default_log_level_numeric_cache = _parse_log_level(
+                self.default_log_level, fallback=logging.DEBUG
+            )
+        return self._default_log_level_numeric_cache
+
+    def console_log_level_numeric(self) -> int:
+        # Cache the numeric value after first parse so we don't re-parse on every call
+        if not hasattr(self, "_console_log_level_numeric_cache"):
+            self._console_log_level_numeric_cache = _parse_log_level(
+                self.console_log_level, fallback=logging.INFO
+            )
+        return self._console_log_level_numeric_cache
 
 
 class LndConnectionConfig(BaseConfig):
