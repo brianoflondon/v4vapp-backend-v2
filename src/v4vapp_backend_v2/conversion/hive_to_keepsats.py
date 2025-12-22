@@ -110,8 +110,8 @@ async def conversion_hive_to_keepsats(
     await hold_keepsats(conv_result.fee_conv.msats, cust_id, tracked_op=tracked_op, fee=True)
 
     from_currency = conv_result.from_currency
-    logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
-    logger.info(f"Conversion result: \n{conv_result}")
+    logger.debug(f"{tracked_op.group_id} {conv_result.log_str}")
+    logger.debug(f"Conversion result: \n{conv_result}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
@@ -247,7 +247,7 @@ async def conversion_hive_to_keepsats(
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
-    logger.info(
+    logger.debug(
         f"Sent main transfer custom_json: {trx['trx_id']}",
         extra={"trx": trx, **transfer.log_extra},
     )
@@ -260,7 +260,7 @@ async def conversion_hive_to_keepsats(
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer_fee, nobroadcast=nobroadcast)
-    logger.info(
+    logger.debug(
         f"Sent fee custom_json: {trx['trx_id']}", extra={"trx": trx, **transfer_fee.log_extra}
     )
 

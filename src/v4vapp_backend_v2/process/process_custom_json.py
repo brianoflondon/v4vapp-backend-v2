@@ -49,7 +49,7 @@ async def process_custom_json_func(
     """
     server_id = InternalConfig().server_id
     if custom_json.cj_id in ["v4vapp_notification", "v4vapp_dev_notification"]:
-        logger.info(f"Notification CustomJson: {custom_json.json_data.memo}")
+        logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
         return []
 
     if not custom_json.authorized:
@@ -99,7 +99,7 @@ async def process_custom_json_func(
                         return ledger_entries
                     if isinstance(parent_op, CustomJson) and custom_json.to_account == server_id:
                         # Process this as if it were a request to convert Keepsats to Hive/HBD
-                        logger.info(
+                        logger.debug(
                             f"Processing Keepsats to Hive conversion: {custom_json.json_data.memo}"
                         )
                         # await conversion_keepsats_to_hive(server_id= server_id, cust_id=tracked_op=custom_json, nobroadcast=nobroadcast)
@@ -160,7 +160,7 @@ async def custom_json_internal_transfer(
         - The function saves the ledger entry and optionally sends a notification to the recipient.
     """
     # This is a transfer between two accounts
-    logger.info(
+    logger.debug(
         f"{custom_json.short_id} Processing CustomJson transfer: {keepsats_transfer.log_str}"
     )
     if not keepsats_transfer or not keepsats_transfer.sats:
@@ -195,7 +195,7 @@ async def custom_json_internal_transfer(
 
     if message:
         if fee_transfer:
-            logger.info(message)
+            logger.warning(message)
         # The order in which refunds arrive from payment, and fees are taken is not always predictable
         # ALWAYS account for fees when processing refunds
         if not fee_transfer:
@@ -210,7 +210,7 @@ async def custom_json_internal_transfer(
                 nobroadcast=nobroadcast,
             )
             trx = await reply_with_hive(details=return_details, nobroadcast=nobroadcast)
-            logger.info(
+            logger.warning(
                 f"{Fore.WHITE}Reply after custom_json transfer failure due to insufficient balance{Style.RESET_ALL}",
                 extra={
                     "notification": False,

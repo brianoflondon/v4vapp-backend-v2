@@ -71,20 +71,20 @@ async def follow_on_transfer(
     # if this was a Fee memo from a conversion, don't follow on process.
     reply_messages = []
     if getattr(tracked_op, "fee_memo", 0) > 0:
-        logger.info(f"Operation is a fee memo, skipping processing. {tracked_op.memo}")
+        logger.debug(f"Operation is a fee memo, skipping processing. {tracked_op.memo}")
         return
 
     if tracked_op.replies:
         for reply in tracked_op.replies:
             if reply.reply_type not in [ReplyType.LEDGER_ERROR, ReplyType.CUSTOM_JSON]:
                 message = f"Operation has a {reply.reply_type} reply, skipping processing."
-                logger.info(
+                logger.debug(
                     message,
                     extra={"notification": False, **tracked_op.log_extra},
                 )
                 reply_messages.append(message)
             else:
-                logger.info(f"Ignoring {reply.reply_type} {reply.reply_id}.")
+                logger.debug(f"Ignoring {reply.reply_type} {reply.reply_id}.")
         if reply_messages:
             logger.warning(
                 f"Operation {tracked_op.group_id} already has replies: {', '.join(reply_messages)}",
@@ -145,7 +145,7 @@ async def follow_on_transfer(
         if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
             # This is a conversion of Hive/HBD and deposit Lightning Keepsats
             # use msats=0 to use all the funds sent (leaving only the amount for the return transaction)
-            logger.info(
+            logger.debug(
                 f"Detected keepsats operation in memo: {tracked_op.d_memo}",
                 extra={"notification": False, **tracked_op.log_extra},
             )
@@ -407,12 +407,12 @@ async def decode_incoming_and_checks(
             pass
 
         message = f"Lightning decode error: {e}"
-        logger.info(
+        logger.debug(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
         )
         # Here we process as a keepsats to Hive/HBD conversion
-        logger.info("Lightning Invoice not found, processing as a Keepsats withdrawal")
+        logger.debug("Lightning Invoice not found, processing as a Keepsats withdrawal")
         return None
 
     except Exception as e:

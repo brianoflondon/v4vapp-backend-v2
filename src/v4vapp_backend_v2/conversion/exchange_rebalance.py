@@ -534,7 +534,7 @@ async def add_pending_rebalance(
 
         # Add the pending amount
         pending.add_pending(qty=qty, quote_value=quote_value, transaction_id=transaction_id)
-        logger.info(pending.log_str, extra={"notification": True, **pending.log_extra})
+        logger.debug(pending.log_str, extra={"notification": True, **pending.log_extra})
 
         # Check if we can execute
         can_execute, reason = pending.can_execute()
@@ -557,7 +557,7 @@ async def add_pending_rebalance(
         pending.reset_after_execution(order_result.executed_qty)
         await pending.save()
 
-        logger.info(order_result.log_str, extra={"notification": True, **order_result.log_extra})
+        logger.debug(order_result.log_str, extra={"notification": True, **order_result.log_extra})
 
         result = RebalanceResult(
             executed=True,
@@ -568,7 +568,7 @@ async def add_pending_rebalance(
         )
         await result.save()
 
-        logger.info(result.log_str, extra={"notification": True, **result.log_extra})
+        logger.debug(result.log_str, extra={"notification": True, **result.log_extra})
         return result
 
     except ExchangeBelowMinimumError as e:
@@ -838,7 +838,7 @@ async def execute_net_rebalance(
         quote_asset=quote_asset,
     )
 
-    logger.info(
+    logger.debug(
         f"Net position: sell={net_position.sell_pending_qty} "
         f"buy={net_position.buy_pending_qty} "
         f"net={net_position.net_qty} {base_asset} "

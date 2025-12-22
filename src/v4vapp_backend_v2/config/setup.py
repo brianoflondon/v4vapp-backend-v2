@@ -1316,7 +1316,7 @@ def async_time_stats_decorator(runs=1):
 
                 if len(timings) >= runs:
                     avg_time = mean(timings)
-                    logger.info(
+                    logger.debug(
                         f"{ICON} Last: {execution_time * 1000:>4.0f}ms, Avg: {avg_time * 1000:>4.0f}ms, Runs: {len(timings)} {func.__qualname__[:34]:<38}",
                         extra={
                             "func_name": func.__qualname__,
@@ -1326,7 +1326,7 @@ def async_time_stats_decorator(runs=1):
                         },
                     )
                     if len(timings) > 1:
-                        logger.info(f"{ICON} Std Dev: {stdev(timings) * 1000:>4.0f}ms")
+                        logger.debug(f"{ICON} Std Dev: {stdev(timings) * 1000:>4.0f}ms")
                     timings = []  # Reset after reporting
 
                 return result
