@@ -418,6 +418,25 @@ class RebalanceResult(BaseModel):
             )
 
     @property
+    def ledger_description(self) -> str:
+        """
+        Generate a description for ledger entries based on the rebalance result.
+        Used in the exchange_accounting ledger entry.
+
+        """
+        if self.executed and self.order_result:
+            base, quote = self.order_result._get_assets()
+            qty_str = format_base_asset(self.order_result.executed_qty, base)
+            fee_str = format_quote_asset(
+                self.order_result.fee_original, self.order_result.fee_asset
+            )
+            return (
+                f"{self.order_result.side} "
+                f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
+            )
+        return "Rebalance not executed"
+
+    @property
     def log_extra(self) -> dict:
         """Dictionary of rebalance details for structured logging."""
 

@@ -126,7 +126,7 @@ async def exchange_accounting(
         cust_id=tracked_op.cust_id,
         group_id=f"{group_id_base}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=rebalance_result.log_str,
+        description=rebalance_result.ledger_description,
         debit=AssetAccount(name="Exchange Holdings", sub=rebalance_result.order_result.exchange),
         debit_unit=debit_unit,
         debit_amount=debit_amount,
@@ -140,16 +140,16 @@ async def exchange_accounting(
 
     # Record fee if there is one (fee_msats > 0)
     if order_result.fee_msats > 0:
-        logger.info(f"Exchange fee conversion details: {fee_conv}")
+        logger.debug(f"Exchange fee conversion details: {fee_conv.log_str}")
         ledger_type = LedgerType.EXCHANGE_FEES
-        fee_entry = LedgerEntry(    
+        fee_entry = LedgerEntry(
             ledger_type=ledger_type,
             short_id=rebalance_result.order_result.client_order_id,
             op_type="exchange_fee",
             cust_id=tracked_op.cust_id,
             group_id=f"{group_id_base}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Exchange fee for {rebalance_result.log_str}",
+            description=f"Exchange Fee for {rebalance_result.ledger_description}",
             debit=ExpenseAccount(
                 name="Exchange Fees Paid", sub=rebalance_result.order_result.exchange
             ),
