@@ -44,9 +44,9 @@ async def resend_pending_transactions() -> None:
     """
     all_pending = await PendingTransaction.list_all()
     if len(all_pending) == 0:
-        logger.info(f"{ICON} No pending Hive transactions to resend.")
+        logger.debug(f"{ICON} No pending Hive transactions to resend.")
         return
-    logger.info(f"{ICON} Resending pending Hive transaction {len(all_pending)}")
+    logger.debug(f"{ICON} Resending pending Hive transaction {len(all_pending)}")
 
     server_id = InternalConfig().server_id
     server_balance = account_hive_balances(hive_accname=server_id)
@@ -86,7 +86,7 @@ async def resend_pending_transactions() -> None:
         try:
             pending.resend_attempt += 1
             trx = await send_pending(pending=pending, hive_client=hive_client)
-            logger.info(
+            logger.debug(
                 f"{Fore.GREEN}Resent pending transaction {pending}, trx: {trx.get('trx_id')}{Style.RESET_ALL}"
             )
             await pending.delete()
@@ -115,9 +115,9 @@ async def resend_pending_custom_jsons():
     """
     all_pending_cj = await PendingCustomJson.list_all()
     if len(all_pending_cj) == 0:
-        logger.info(f"{ICON} No pending custom JSONs to resend.")
+        logger.debug(f"{ICON} No pending custom JSONs to resend.")
         return
-    logger.info(f"{ICON} Resending {len(all_pending_cj)} pending custom JSONs.")
+    logger.debug(f"{ICON} Resending {len(all_pending_cj)} pending custom JSONs.")
 
     sending_cj: List[PendingCustomJson] = []
 
@@ -146,7 +146,7 @@ async def resend_pending_custom_jsons():
                 nobroadcast=pending.nobroadcast,
                 resend_attempt=pending.resend_attempt,
             )
-            logger.info(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
+            logger.debug(f"Resent pending custom JSON {pending}, trx: {trx.get('trx_id')}")
             await pending.delete()
         except CustomJsonSendError as e:
             logger.error(f"CustomJsonSendError when resending custom JSON {pending}: {e}")

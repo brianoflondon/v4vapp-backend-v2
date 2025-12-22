@@ -139,8 +139,8 @@ async def conversion_keepsats_to_hive(
         )
         raise
     to_currency = conv_result.to_currency
-    logger.info(f"{tracked_op.group_id} {conv_result.log_str}")
-    logger.info(f"Conversion result: \n{conv_result}")
+    logger.debug(f"{tracked_op.group_id} {conv_result.log_str}")
+    logger.debug(f"Conversion result: \n{conv_result}")
 
     ledger_entries: List[LedgerEntry] = []
     # MARK: 2. Convert
@@ -238,7 +238,7 @@ async def conversion_keepsats_to_hive(
     # MARK: Consume Customer SATS for Conversion
     # This is only necessary for direct sats to Hive conversions
     if isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive:
-        logger.info(f"Direct sats to Hive conversion {tracked_op.group_id}")
+        logger.debug(f"Direct sats to Hive conversion {tracked_op.group_id}")
         ledger_type = LedgerType.CONSUME_CUSTOMER_KEEPSATS  # Add this to LedgerType
         consume_entry = LedgerEntry(
             short_id=tracked_op.short_id,
@@ -404,7 +404,7 @@ async def conversion_keepsats_to_hive(
     #             qty=hive_qty,
     #             transaction_id=str(tracked_op.short_id),
     #         )
-    #         logger.info(
+    #         logger.debug(
     #             f"Rebalance queued: BTC->HIVE ({hive_qty:.3f} HIVE for {to_currency.name}), "
     #             f"executed={rebalance_result.executed}, "
     #             f"pending_qty={rebalance_result.pending_qty}",

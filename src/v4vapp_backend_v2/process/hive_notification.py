@@ -82,7 +82,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     Raises:
         HiveTransferError: If the recipient customer ID is not a valid Hive account.
     """
-    logger.info(
+    logger.debug(
         f"Replying with Hive details: {details.original_memo}", extra={"notification": False}
     )
     if not LockStr(details.pay_to_cust_id).is_hive:
@@ -98,7 +98,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     #     f"Tracked operation customer ID {details.pay_to_cust_id} is not a valid Hive account."
     # )
 
-    logger.info(
+    logger.debug(
         f"Processing return/change for: {details.tracked_op.group_id}",
         extra={"notification": False, **details.tracked_op.log_extra},
     )
@@ -112,7 +112,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         if details.tracked_op.change_amount:
             amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
         else:
-            logger.info(
+            logger.debug(
                 "No change amount found in tracked operation, using default amount.",
                 extra={"notification": False, **details.tracked_op.log_extra},
             )
@@ -222,7 +222,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         )
         await details.tracked_op.save()
 
-        logger.info(
+        logger.debug(
             "Updated tracked_op with reply",
             extra={"notification": False, **details.tracked_op.log_extra},
         )
@@ -264,7 +264,7 @@ async def send_notification_custom_json(
             id="v4vapp_dev_notification",
             hive_client=hive_client,
         )
-        logger.info(
+        logger.debug(
             f"Sent custom_json notification for: {notification.log_str} {trx.get('trx_id', '')}",
             extra={"notification": True, **notification.log_extra},
         )
@@ -278,7 +278,7 @@ async def send_notification_custom_json(
         )
         await tracked_op.save()
         reply = tracked_op.replies[-1] if tracked_op.replies else ""
-        logger.info(
+        logger.debug(
             f"Updated tracked_op with reply: {reply}",
             extra={"notification": False, **tracked_op.log_extra},
         )
@@ -329,7 +329,7 @@ async def send_transfer_custom_json(
             hive_client=hive_client,
             nobroadcast=nobroadcast,
         )
-        logger.info(
+        logger.debug(
             f"Sent custom_json transfer: {transfer.log_str} {trx.get('trx_id', '')}",
             extra={"notification": True, **transfer.log_extra},
         )
