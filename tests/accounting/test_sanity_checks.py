@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from pprint import pprint
 
 import pytest
 from bson import json_util
@@ -37,7 +38,6 @@ async def set_base_config_path_combined(module_monkeypatch):
     print("InternalConfig initialized:", i_c)
     db_conn = DBConn()
     await db_conn.setup_database()
-    await load_ledger_events()
     yield
     await i_c.db["ledger"].drop()
     module_monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
@@ -67,17 +67,34 @@ async def test_sanity_check_server_account_balances():
 async def test_check_balance_sheet():
     from v4vapp_backend_v2.accounting.sanity_checks import balanced_balance_sheet
 
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger-bad-vsc-liability.json")
+    # Load good data set
+    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
     result = await balanced_balance_sheet()
+    print(result)
     assert result.is_valid, f"Balance sheet sanity check failed: {result.details}"
 
 
-@pytest.mark.skip(reason="Requires a different data set which passes all checks")
+# @pytest.mark.skip(reason="Requires a different data set which passes all checks")
 async def test_run_all_sanity_checks():
     from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 
+    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
     results = await run_all_sanity_checks()
     for check_name, sanity_result in results.results:
         assert sanity_result.is_valid, (
             f"Sanity check '{check_name}' failed: {sanity_result.details}"
         )
+
+    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
+    results = await run_all_sanity_checks()
+    for check_name, sanity_result in results.results:
+        assert sanity_result.is_valid, (
+            f"Sanity check '{check_name}' failed: {sanity_result.details}"
+        )
+
+    # Bad ledger
+    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger-bad-vsc-liability.json")
+
+    results = await run_all_sanity_checks()
+    pprint(results.model_dump())
+    assert results.failed, "Expected failure not found"
