@@ -35,7 +35,7 @@
                         <li class="nav-item">
                             <a class="nav-link {% if item.active %}active{% endif %}" href="{{ item.url }}">
                                 <span class="me-2">{{ item.icon }}</span>
-                                {{ item.name }}
+                                {{ item.name }}<br>
                                 {% if item.badge %}
                                 <span class="badge bg-{{ item.badge_color }} ms-auto">{{ item.badge }}</span>
                                 {% endif %}
