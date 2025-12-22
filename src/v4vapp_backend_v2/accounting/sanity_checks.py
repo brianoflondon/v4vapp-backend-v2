@@ -58,7 +58,31 @@ class SanityCheckResults(BaseModel):
         return {"sanity_check_results": self.model_dump()}
 
 
+# MARK: Individual sanity check tests
+
+
 async def server_account_balances() -> SanityCheckResult:
+    """Asynchronously verify that server-related accounts have near-zero balances.
+
+    This coroutine reads the server identifier from InternalConfig().server_id and
+    checks the balances of two accounts: the hard-coded "keepsats" account and the
+    server account (if configured). For each account it calls await one_account_balance(account)
+    and treats a balance as non-zero if abs(balance.msats) > Decimal(2_000) (i.e., greater
+    than 2,000 msats, or 2 sats).
+
+    Returns:
+        SanityCheckResult: A result object with
+            - name: "server_account_balances"
+            - is_valid: False and details describing accounts with balances exceeding the tolerance,
+                        or True and a pass message naming the checked accounts when all are within tolerance.
+
+    Special cases:
+        - If InternalConfig().server_id is None, returns is_valid=False with details indicating
+          the hive server account is not configured.
+
+    Exceptions:
+        Exceptions from InternalConfig() or one_account_balance(...) may propagate.
+    """
     server_id = InternalConfig().server_id
     if server_id is None:
         return SanityCheckResult(
@@ -90,6 +114,25 @@ async def server_account_balances() -> SanityCheckResult:
 
 
 async def balanced_balance_sheet() -> SanityCheckResult:
+    """Asynchronously check whether the balance sheet is balanced and return a SanityCheckResult.
+
+    This coroutine calls check_balance_sheet_mongodb() to obtain a tuple (is_balanced, tolerance)
+    where `is_balanced` is a boolean indicating whether the balance sheet balances and `tolerance`
+    is an optional numeric value (in millisatoshis, "msats") describing allowable discrepancy.
+    The function formats the tolerance for display: if tolerance is None it is rendered as "unknown";
+    if numeric, it attempts to format it to one decimal place and falls back to str(tolerance) on failure.
+
+    Returns:
+        SanityCheckResult: an object with
+            - name: "balanced_balance_sheet"
+            - is_valid: the boolean `is_balanced` returned by the underlying check
+            - details: a human-readable message stating whether the balance sheet is balanced and
+                       including the formatted tolerance in msats.
+
+    Raises:
+        Any exceptions raised by check_balance_sheet_mongodb() are propagated. Formatting errors
+        when converting the tolerance to float are caught and handled internally.
+    """
     is_balanced, tolerance = await check_balance_sheet_mongodb()
     # tolerate a missing/None tolerance value and format numeric tolerances safely
     if tolerance is None:
@@ -115,6 +158,8 @@ all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = 
     server_account_balances,
     balanced_balance_sheet,
 ]
+
+# MARK: Runner for all sanity checks
 
 
 @async_time_stats_decorator()
