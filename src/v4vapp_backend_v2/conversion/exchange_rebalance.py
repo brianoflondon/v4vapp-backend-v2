@@ -418,6 +418,25 @@ class RebalanceResult(BaseModel):
             )
 
     @property
+    def ledger_description(self) -> str:
+        """
+        Generate a description for ledger entries based on the rebalance result.
+        Used in the exchange_accounting ledger entry.
+
+        """
+        if self.executed and self.order_result:
+            base, quote = self.order_result._get_assets()
+            qty_str = format_base_asset(self.order_result.executed_qty, base)
+            fee_str = format_quote_asset(
+                self.order_result.fee_original, self.order_result.fee_asset
+            )
+            return (
+                f"{self.order_result.side} "
+                f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
+            )
+        return "Rebalance not executed"
+
+    @property
     def log_extra(self) -> dict:
         """Dictionary of rebalance details for structured logging."""
 
@@ -534,7 +553,7 @@ async def add_pending_rebalance(
 
         # Add the pending amount
         pending.add_pending(qty=qty, quote_value=quote_value, transaction_id=transaction_id)
-        logger.info(pending.log_str, extra={"notification": True, **pending.log_extra})
+        logger.debug(pending.log_str, extra={"notification": True, **pending.log_extra})
 
         # Check if we can execute
         can_execute, reason = pending.can_execute()
@@ -557,7 +576,7 @@ async def add_pending_rebalance(
         pending.reset_after_execution(order_result.executed_qty)
         await pending.save()
 
-        logger.info(order_result.log_str, extra={"notification": True, **order_result.log_extra})
+        logger.debug(order_result.log_str, extra={"notification": True, **order_result.log_extra})
 
         result = RebalanceResult(
             executed=True,
@@ -568,7 +587,7 @@ async def add_pending_rebalance(
         )
         await result.save()
 
-        logger.info(result.log_str, extra={"notification": True, **result.log_extra})
+        logger.debug(result.log_str, extra={"notification": True, **result.log_extra})
         return result
 
     except ExchangeBelowMinimumError as e:
@@ -838,7 +857,7 @@ async def execute_net_rebalance(
         quote_asset=quote_asset,
     )
 
-    logger.info(
+    logger.debug(
         f"Net position: sell={net_position.sell_pending_qty} "
         f"buy={net_position.buy_pending_qty} "
         f"net={net_position.net_qty} {base_asset} "

@@ -137,7 +137,7 @@ class V4VConfig:
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()
-            logger.info(
+            logger.debug(
                 f"{ICON} V4VConfig initialized {self.server_accname}", extra={**self.log_extra}
             )
             return
@@ -209,7 +209,7 @@ class V4VConfig:
         try:
             if not self.server_accname:
                 # Uses the default values and doesn't check Hive.
-                logger.info(f"{ICON} No server account name provided, using default values.")
+                logger.warning(f"{ICON} No server account name provided, using default values.")
                 self.data = V4VConfigData()
                 return False
 
@@ -219,14 +219,14 @@ class V4VConfig:
                 if existing_hive_config_raw:
                     self.data = V4VConfigData.model_validate(existing_hive_config_raw)
                     self.timestamp = datetime.now(tz=timezone.utc)
-                    logger.info(
+                    logger.debug(
                         f"{ICON} Fetched settings from Hive. {self.server_accname}",
                         extra={**self.log_extra},
                     )
                     return True
             else:
                 metadata = {}
-                logger.info(
+                logger.warning(
                     f"{ICON} No settings found in Hive. {self.server_accname}",
                 )
                 self.data = V4VConfigData()

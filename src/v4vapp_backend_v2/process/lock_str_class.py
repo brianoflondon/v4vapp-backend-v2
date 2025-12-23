@@ -85,8 +85,8 @@ async def _log_outstanding_locks() -> None:
             + f"{Style.RESET_ALL}",
             extra={"notification": False},
         )
-    else:
-        logger.debug(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
+    # else:
+    #     logger.debug(f"{ICON} No outstanding lock waiters.", extra={"notification": False})
 
     # Active Redis locks (cross-process visibility)
     try:
@@ -110,8 +110,8 @@ async def _log_outstanding_locks() -> None:
                 + f"{Style.RESET_ALL}",
                 extra={"notification": False, "error_code_clear": "redis_locks"},
             )
-        else:
-            logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
+        # else:
+        #     logger.debug(f"{ICON} No active Redis locks.", extra={"notification": False})
     except Exception as e:
         logger.warning(
             f"{ICON} Failed to list Redis locks: {e}",

@@ -239,15 +239,15 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
         try:
             op = tracked_any_filter(full_document)
         except ValueError as e:
-            logger.info(
+            logger.warning(
                 f"{ICON} {lock_str} Error in tracked_any: {e}", extra={"notification": False}
             )
             return
-        logger.info(f"{ICON} {lock_str} Processing {op.group_id_query}")
+        logger.debug(f"{ICON} {lock_str} Processing {op.group_id_query}")
         while True:
             try:
                 ledger_entries = await process_tracked_event(op)
-                logger.info(
+                logger.debug(
                     f"{ICON} {lock_str} Processed operation: {op.group_id} result: {len(ledger_entries)} Ledger Entries",
                     extra={
                         **op.log_extra,
@@ -272,7 +272,7 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
                 logger.error(f"{ICON} CustID lock error: {e}", extra={"notification": False})
                 await asyncio.sleep(5)
             finally:
-                logger.info(f"{ICON} Lock release: {lock_str}")
+                logger.debug(f"{ICON} Lock release: {lock_str}")
 
 
 async def subscribe_stream(
@@ -346,7 +346,7 @@ async def subscribe_stream(
                         break
                     full_document = change.get("fullDocument") or {}
                     group_id = full_document.get("group_id", None) or ""
-                    logger.info(
+                    logger.debug(
                         f"{ICON}✳️ Change detected in {collection_name} {group_id}",
                         extra={"notification": False, "change": change},
                     )
