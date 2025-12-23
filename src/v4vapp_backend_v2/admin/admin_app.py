@@ -15,14 +15,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2 import __version__ as project_version
-from v4vapp_backend_v2.accounting.account_balances import one_account_balance
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks, run_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
 
@@ -144,7 +141,55 @@ class AdminApp:
         @self.app.get("/admin", response_class=HTMLResponse)
         @self.app.get("/admin/", response_class=HTMLResponse)
         async def admin_dashboard(request: Request):
-            """Main admin dashboard"""
+            """
+            Render the admin dashboard page.
+
+            This asynchronous handler composes the context required to render the admin
+            dashboard template. It performs the following operations:
+
+            - Runs sanity checks via `log_all_sanity_checks` (only logs failures; notifications
+                suppressed) and includes the results in the context.
+            - Retrieves navigation items from `self.nav_manager`.
+            - Reads `server_id` and the list of highlighted users from `InternalConfig()`.
+            - For each highlighted user:
+                    - Calls the potentially-blocking `account_hive_balances` inside
+                        `run_in_threadpool`.
+                    - Normalizes balance keys to upper-case (preferring "HIVE" and "HBD").
+                    - Attempts to coerce balance values to floats using several fallbacks:
+                            1. Direct float conversion
+                            2. Converting an `amount` attribute or its string representation
+                            3. Parsing the leading numeric token from the string (stripping commas)
+                        If coercion fails the recorded value will be None.
+                    - On retrieval errors, stores an `{"error": <message>}` dict for that user.
+                    - Adds formatted string representations for "HIVE_fmt" and "HBD_fmt" for display,
+                        using a 3-decimal format (falls back to the raw string on formatting error).
+            - Fetches pending transactions via `PendingTransaction.list_all_str()`.
+            - If the server account is among the highlighted users and its balance retrieval
+                did not fail, attempts to verify the "Customer Deposits Hive" account balances:
+                    - Builds an `AssetAccount(name="Customer Deposits Hive", sub=server_id)` and
+                        calls `one_account_balance`.
+                    - Compares reported HIVE and HBD balances with the actual wallet values using
+                        `Decimal` with a tolerance of 0.001. Sets `server_balance_check` to one of:
+                        {"status": "match", "icon": "✅"}, {"status": "mismatch", "icon": "❌"},
+                        {"status": "error", "icon": "⚠️"}.
+                    - Logs a warning with `extra={"notification": False}` if this verification fails.
+            - Returns a TemplateResponse (via `self.templates.TemplateResponse`) rendering
+                "dashboard.html" with context keys:
+                    - request, title, nav_items, hive_balances, pending_transactions,
+                        sanity_results, and admin_info containing:
+                            version, project_version, config_file, server_account,
+                            server_balance_check, local_machine_name.
+
+            Notes:
+            - The function handles most exceptions locally and encodes error information
+                into the returned context rather than propagating them.
+            - It relies on several external helpers and objects being available in scope:
+                `log_all_sanity_checks`, `run_in_threadpool`, `account_hive_balances`,
+                `InternalConfig`, `PendingTransaction`, `AssetAccount`, `one_account_balance`,
+                `Currency`, `Decimal`, `logger`, `self.templates`, and `self.nav_manager`.
+            - `project_version` must be defined in the surrounding scope before calling.
+            """
+
             sanity_results = await log_all_sanity_checks(
                 local_logger=logger, log_only_failures=True, notification=False
             )
@@ -164,15 +209,15 @@ class AdminApp:
                             # Try multiple ways to coerce to float
                             val = None
                             try:
-                                val = float(v)
+                                val = Decimal(v)
                             except Exception:
                                 try:
                                     # some Amount objects may expose 'amount' property
-                                    val = float(str(getattr(v, "amount", v)))
+                                    val = Decimal(str(getattr(v, "amount", v)))
                                 except Exception:
                                     try:
                                         # fallback: try parsing numeric from string
-                                        val = float(str(v).split()[0].replace(",", ""))
+                                        val = Decimal(str(v).split()[0].replace(",", ""))
                                     except Exception:
                                         val = None
                             balances_norm[key] = val
@@ -202,28 +247,12 @@ class AdminApp:
             server_balance_check = {"status": "unknown", "icon": "❓"}
             if server_id in hive_balances and "error" not in hive_balances[server_id]:
                 try:
-                    # Get customer deposits balance
-                    customer_deposits_account = AssetAccount(
-                        name="Customer Deposits Hive", sub=server_id
-                    )
-                    deposits_details = await one_account_balance(customer_deposits_account)
-
-                    # Get balances with tolerance
-                    hive_deposits = deposits_details.balances_net.get(Currency.HIVE, 0.0)
-                    hbd_deposits = deposits_details.balances_net.get(Currency.HBD, 0.0)
-
-                    hive_actual = hive_balances[server_id].get("HIVE", 0.0)
-                    hbd_actual = hive_balances[server_id].get("HBD", 0.0)
-
-                    # Check with tolerance
-                    tolerance = Decimal(0.001)
-                    hive_match = abs(Decimal(hive_deposits) - Decimal(hive_actual)) <= tolerance
-                    hbd_match = abs(Decimal(hbd_deposits) - Decimal(hbd_actual)) <= tolerance
-
-                    if hive_match and hbd_match:
-                        server_balance_check = {"status": "match", "icon": "✅"}
-                    else:
+                    if "server_account_hive_balances" in [
+                        name for name, _ in sanity_results.failed
+                    ]:
                         server_balance_check = {"status": "mismatch", "icon": "❌"}
+                    else:
+                        server_balance_check = {"status": "match", "icon": "✅"}
 
                 except Exception as e:
                     logger.warning(

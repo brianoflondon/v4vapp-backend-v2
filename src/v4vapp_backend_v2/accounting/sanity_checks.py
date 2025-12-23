@@ -4,12 +4,16 @@ from decimal import Decimal
 from logging import Logger
 from typing import Any, Callable, Coroutine, List, Tuple
 
+from nectar.amount import Amount
 from pydantic import BaseModel
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 
 ICON = "🧪"  # Test Tube
 
@@ -18,6 +22,25 @@ class SanityCheckResult(BaseModel):
     name: str
     is_valid: bool
     details: str
+
+    @property
+    def log_extra(self) -> dict:
+        """Generate extra logging information.
+
+        Returns:
+            dict: A dictionary with the sanity check result details.
+        """
+        return {"sanity_check_result": self.model_dump()}
+
+    @property
+    def log_str(self) -> str:
+        """Generate a log string summarizing the sanity check result.
+
+        Returns:
+            str: A formatted string indicating the check name, validity, and details.
+        """
+        status = "PASSED ✅" if self.is_valid else "FAILED ❌"
+        return f"{ICON} Sanity check {self.name} {status}: {self.details}"
 
 
 class SanityCheckResults(BaseModel):
@@ -49,6 +72,7 @@ class SanityCheckResults(BaseModel):
             answer = "PASSED"
         return answer
 
+    @property
     def log_extra(self) -> dict:
         """Generate extra logging information.
 
@@ -113,6 +137,64 @@ async def server_account_balances() -> SanityCheckResult:
     )
 
 
+async def server_account_hive_balances() -> SanityCheckResult:
+    # return SanityCheckResult(
+    #     name="server_account_hive_balances", is_valid=True, details="Placeholder implementation."
+    # )
+    try:
+        # Get customer deposits balance
+        server_id = InternalConfig().server_id
+        customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
+        deposits_details = await one_account_balance(customer_deposits_account)
+
+        balances = account_hive_balances(hive_accname=server_id)
+
+        # Get balances with tolerance
+        hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
+        hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
+
+        hive_actual = Amount(balances.get("HIVE", 0.0))
+        hbd_actual = Amount(balances.get("HBD", 0.0))
+
+        # Check with tolerance
+        tolerance = Decimal(0.001)
+        hive_delta = hive_deposits - hive_actual.amount_decimal
+        hbd_delta = hbd_deposits - hbd_actual.amount_decimal
+        hive_match = abs(hive_delta) <= tolerance
+        hbd_match = abs(hbd_delta) <= tolerance
+
+        if hive_match and hbd_match:
+            return SanityCheckResult(
+                name="server_account_hive_balances",
+                is_valid=True,
+                details=(
+                    f"Server Hive balances match: HIVE deposits {hive_deposits}, "
+                    f"HBD deposits {hbd_deposits}."
+                ),
+            )
+        else:
+            return SanityCheckResult(
+                name="server_account_hive_balances",
+                is_valid=False,
+                details=(
+                    f"Server Hive Mismatch: {hive_delta:.3f} HIVE, {hbd_delta:.3f} HBD; "
+                    f"balances mismatch: HIVE deposits {hive_deposits:.3f} vs actual {hive_actual}, "
+                    f"HBD deposits {hbd_deposits:.3f} vs actual {hbd_actual}."
+                ),
+            )
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to check customer deposits balance: {e}",
+            extra={"notification": False},
+        )
+        return SanityCheckResult(
+            name="server_account_hive_balances",
+            is_valid=False,
+            details=f"Failed to check customer deposits balance: {e}",
+        )
+
+
 async def balanced_balance_sheet() -> SanityCheckResult:
     """Asynchronously check whether the balance sheet is balanced and return a SanityCheckResult.
 
@@ -157,6 +239,7 @@ async def balanced_balance_sheet() -> SanityCheckResult:
 all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = [
     server_account_balances,
     balanced_balance_sheet,
+    server_account_hive_balances,
 ]
 
 # MARK: Runner for all sanity checks
@@ -247,18 +330,16 @@ async def log_all_sanity_checks(
     results_model = await run_all_sanity_checks()
     if append_str:
         append_str = " " + append_str
-    for check_name, sanity_result in results_model.results:
-        is_valid = sanity_result.is_valid
-        details = sanity_result.details
-        if not is_valid:
+    for _, sanity_result in results_model.results:
+        if not sanity_result.is_valid:
             local_logger.warning(
-                f"{ICON} Sanity check '{check_name}' failed: {details}{append_str}",
-                extra={"notification": notification},
+                f"{sanity_result.log_str}{append_str}",
+                extra={"notification": notification, **sanity_result.log_extra},
             )
         else:
             if not log_only_failures:
                 local_logger.info(
-                    f"{ICON}Sanity check '{check_name}' passed: {details}{append_str}"
+                    f"{sanity_result.log_str}{append_str}",
                 )
     return results_model
 
