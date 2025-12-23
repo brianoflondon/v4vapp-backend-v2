@@ -132,6 +132,7 @@ async def send_server_balance_to_test() -> dict[str, Any]:
                 from_account=server_name,
                 amount=str(amount),
                 memo="Clearing balance transfer from v4vapp backend to v4vapp-test account",
+                unique_key=f"clear_balance_{amount.symbol}",
             )
             transfer_list.append(hive_transfer)
     trx = {}

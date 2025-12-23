@@ -261,7 +261,8 @@ async def conversion_keepsats_to_hive(
         ledger_entries.append(consume_entry)
         await consume_entry.save()
 
-    # MARK: 5 Hive to Keepsats Customer Deposit
+    # MARK: 5 Keepsats to Hive Customer Deposit
+
     ledger_type = LedgerType.DEPOSIT_HIVE
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
@@ -270,7 +271,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Convert {conv_result.net_to_receive_amount} to {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
+        description=f"Convert {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats to {conv_result.net_to_receive_amount} for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=server_id,

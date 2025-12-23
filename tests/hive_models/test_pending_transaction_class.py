@@ -1,5 +1,6 @@
 from pathlib import Path
 from random import choice, uniform
+from uuid import uuid4
 
 import pytest
 from nectar.amount import Amount
@@ -48,7 +49,9 @@ async def test_store_pending():
             memo=memo,
             nobroadcast=True,
             is_private=False,
+            unique_key=f"unique_key_{uuid4()}",
         ).save()
+        assert store_pending.id is not None
 
     pending_hive = await PendingTransaction.list_all_hive()
     pending_hbd = await PendingTransaction.list_all_hbd()
@@ -111,6 +114,7 @@ async def test_store_pending_custom_json():
             send_account="v4vapp-test",
             active=True,
             cj_id="v4vapp_transfer",
+            unique_key=f"custom_json_unique_key_{n}_{uuid4()}",
         )
         await pending_custom.save()
 
@@ -154,6 +158,7 @@ async def test_mixed_pending_types():
         memo="Mixed test",
         nobroadcast=True,
         is_private=False,
+        unique_key=f"mixed_transaction_key_{uuid4()}",
     )
     await pending_tx.save()
 
@@ -162,6 +167,7 @@ async def test_mixed_pending_types():
         send_account="v4vapp-test",
         active=True,
         cj_id="v4vapp_transfer",
+        unique_key=f"mixed_custom_json_key_{uuid4()}",
     )
     await pending_custom.save()
 

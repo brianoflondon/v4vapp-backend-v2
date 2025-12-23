@@ -281,7 +281,7 @@ async def test_deposit_hive_to_keepsats_send_to_account():
     ledger_count_after_transfer = await get_ledger_count()
     print(f"Ledger count after transfer: {ledger_count_after_transfer}")
     net_msats_after, balance_after = await keepsats_balance_printout(cust_id="v4vapp.qrc")
-    assert (net_msats_after - net_msats) // Decimal(1000) == 4500, (
+    assert (net_msats_after - net_msats) / Decimal(1000) == Decimal(4500), (
         f"Expected 4500, got {net_msats_after // Decimal(1000)}"
     )
     assert net_msats_after is not None, "Failed to retrieve net msats"

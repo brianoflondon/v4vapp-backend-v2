@@ -1,4 +1,4 @@
-import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Self, TypeVar
 
 from bson import ObjectId
@@ -17,7 +17,8 @@ T = TypeVar("T", bound="PendingBase")
 
 class PendingBase(BaseModel):
     id: ObjectId | None = Field(default=None, alias="_id")
-    timestamp: float = Field(default_factory=time.time)
+    unique_key: str = Field(..., description="A unique key to prevent duplicate pending entries")
+    timestamp: datetime = datetime.now(tz=timezone.utc)
     nobroadcast: bool = False
     pending_type: str = Field(
         default="pending_base"
@@ -64,8 +65,15 @@ class PendingBase(BaseModel):
         return f"{self.__class__.__name__}({self.id}, timestamp: {self.timestamp})"
 
     async def save(self) -> Self:
+        get_id = await InternalConfig.db["pending"].find_one({"unique_key": self.unique_key})
+        if get_id and "_id" in get_id:
+            self.id = get_id["_id"]
+            return self
+
         result = await mongo_call(
-            lambda: InternalConfig.db["pending"].insert_one(self.model_dump(exclude={"id"})),
+            lambda: InternalConfig.db["pending"].insert_one(
+                self.model_dump(exclude={"id"}),
+            ),
             error_code="db_save_error_pending",
             context=f"pending:{self.timestamp} ({self.pending_type})",  # Updated reference
         )
