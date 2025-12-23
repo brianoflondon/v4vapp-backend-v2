@@ -45,17 +45,15 @@ async def rebalance_queue_task(
         )
 
         if rebalance_result.error:
-            logger.warning(
-                f"Rebalance queuing encountered an error (non-critical): {rebalance_result.error}",
-                extra={**rebalance_result.log_extra, "group_id": tracked_op.group_id},
-            )
+            return
+
         if rebalance_result.executed:
             await exchange_accounting(rebalance_result, tracked_op=tracked_op)
 
     except Exception as e:
         # Rebalance errors should not fail the customer transaction
-        logger.warning(
-            f"Rebalance queuing failed (non-critical): {e}",
+        logger.error(
+            f"Unexpected rebalance queuing failed: {e}",
             extra={"error": str(e), "group_id": tracked_op.group_id},
         )
 
