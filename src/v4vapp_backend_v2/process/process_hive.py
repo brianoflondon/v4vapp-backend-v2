@@ -91,20 +91,25 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
         raise e
 
     except LedgerEntryException as e:
-        logger.error(f"Error processing transfer operation: {e}")
+        logger.error(
+            f"Error processing transfer operation: {e}",
+            extra={"notification": False, **op.log_extra},
+        )
         return []
         # raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
 
     except HiveLightningError as e:
-        logger.error(f"Hive to Lightning error: {e}")
+        logger.error(f"Hive to Lightning error: {e}", extra={"notification": True, **op.log_extra})
         return []
 
     except HiveNotHiveAccount as e:
-        logger.info(f"Not sending to a non-Hive Account: {e}")
+        logger.info(
+            f"Not sending to a non-Hive Account: {e}", extra={"notification": True, **op.log_extra}
+        )
         return []
 
     except HiveTransferError as e:
-        logger.error(f"Hive transfer error: {e}")
+        logger.error(f"Hive transfer error: {e}", extra={"notification": True, **op.log_extra})
         return []
 
 
@@ -122,10 +127,21 @@ async def process_transfer_op(
     Returns:
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
+    # Guard against transfers from and to the same account -- no ledger entry possible
+    if hive_transfer.from_account == hive_transfer.to_account:
+        message = f"Transfer from and to the same account: {hive_transfer.from_account}, no ledger entry possible."
+        logger.debug(
+            message,
+            extra={"notification": False, **hive_transfer.log_extra},
+        )
+        raise LedgerEntryCreationException(message)
+
     if not hive_transfer.conv or hive_transfer.conv.is_unset():
         await hive_transfer.update_conv()
         if hive_transfer.conv and hive_transfer.conv.is_unset():
-            raise LedgerEntryCreationException("Conversion not set in operation.")
+            raise LedgerEntryCreationException(
+                "Conversion failed during update_conv, conversion not set in operation."
+            )
 
     ledger_entry = LedgerEntry(
         group_id=hive_transfer.group_id,
