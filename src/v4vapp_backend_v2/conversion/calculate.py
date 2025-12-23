@@ -335,7 +335,7 @@ async def calc_keepsats_to_hive(
         to_currency = Currency(amount.symbol.lower())
 
     # Threshold (msats) for applying notification fee is either minimum sats value configured or 250 sats
-    notification_threshold_msats = min(
+    notification_threshold_msats = max(
         V4VConfig().data.minimum_invoice_payment_sats * Decimal(1_000), Decimal(250_000)
     )
 
