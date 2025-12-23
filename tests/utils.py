@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 from pprint import pprint
 from timeit import default_timer as timeit
@@ -10,7 +11,10 @@ from nectar.account import Account
 from nectar.amount import Amount
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -26,6 +30,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
+from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances_from_default
 
 # MARK: Hive Helper functions
 
@@ -162,9 +167,73 @@ async def clear_and_reset():
         logger.info(f"Transaction sent: {trx}")
         await watch_for_ledger_count(ledger_count + 1)
 
+    logger.info("Clearing Database.")
     await clear_database()
     await watch_for_ledger_count(0)
-    logger.info("Clearing Database.")
+
+    logger.info("Resetting Lightning Node Balance.")
+    await reset_lightning_node_balance()
+
+
+async def reset_lightning_node_balance():
+    node = InternalConfig().config.lnd_config.default
+    wallet_balance, channel_balance = await fetch_balances_from_default()
+    if channel_balance:
+        logger.info(f"Current Channel balance: {channel_balance.local_sats:,.0f} sats")
+        await TrackedBaseModel.update_quote()
+        quote = TrackedBaseModel.last_quote
+
+        opening_conv = CryptoConversion(
+            conv_from=Currency.MSATS,
+            value=channel_balance.local_msat,
+            quote=quote,
+        ).conversion
+
+        opening_balance = LedgerEntry(
+            cust_id="opening_balance",
+            short_id="opening_balance",
+            op_type="funding",
+            ledger_type=LedgerType.FUNDING,
+            group_id=f"opening_balance_{datetime.now(tz=timezone.utc).isoformat()}",
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Resetting opening balance for {node} for testing",
+            debit=AssetAccount(name="External Lightning Payments", sub=node),
+            debit_unit=Currency.MSATS,
+            debit_amount=channel_balance.local_msat,
+            debit_conv=opening_conv,
+            credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node),
+            credit_unit=Currency.MSATS,
+            credit_amount=channel_balance.local_msat,
+            credit_conv=opening_conv,
+        )
+        await opening_balance.save()
+        # Diagnostic check: confirm the opening balance was saved and is visible for the node
+        try:
+            found = (
+                await LedgerEntry.collection()
+                .find(
+                    {
+                        "$or": [
+                            {"debit.name": "External Lightning Payments", "debit.sub": node},
+                            {"credit.name": "External Lightning Payments", "credit.sub": node},
+                        ]
+                    }
+                )
+                .to_list()
+            )
+            logger.info(
+                f"Diagnostic: Found {len(found)} ledger entries for External Lightning Payments - Sub: {node}",
+                extra={"notification": False},
+            )
+            # Log timestamp and description for quick inspection
+            for doc in found:
+                ts = doc.get("timestamp")
+                desc = doc.get("description")
+                logger.debug(f"Entry: {ts} - {desc}", extra={"notification": False})
+        except Exception as e:
+            logger.warning(f"Diagnostic check failed: {e}", extra={"notification": False})
+    else:
+        logger.warning("No wallet balance available to reset.")
 
 
 async def clear_database():
