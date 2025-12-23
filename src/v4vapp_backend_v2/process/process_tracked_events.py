@@ -11,7 +11,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntryException,
 )
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
-from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, load_tracked_object
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -169,12 +169,7 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         finally:
             if finalize:
-                sanity_results = await log_all_sanity_checks(
-                    local_logger=logger,
-                    log_only_failures=True,
-                    notification=False,
-                    append_str=f" {cust_id}",
-                )
+                sanity_results = await run_all_sanity_checks()
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
