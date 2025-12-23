@@ -261,7 +261,8 @@ async def conversion_keepsats_to_hive(
         ledger_entries.append(consume_entry)
         await consume_entry.save()
 
-    # MARK: 5 Hive to Keepsats Customer Deposit
+    # MARK: 5 Keepsats to Hive Customer Deposit
+
     ledger_type = LedgerType.DEPOSIT_HIVE
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,

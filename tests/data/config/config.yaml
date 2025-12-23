@@ -119,6 +119,11 @@ dbs_config:
             test_index2:
               index_key: [["test2", 1], ["test3", -1]]
               unique: false
+        pending:
+          indexes:
+            unique_key:
+              index_key: [["unique_key", 1]]
+              unique: true
         ledger:
           indexes:
             ledger_id:

@@ -2,6 +2,7 @@ import json
 import random
 import struct
 from typing import Any, Dict, List, Tuple
+from uuid import uuid4
 
 import backoff
 import httpx
@@ -15,7 +16,7 @@ from nectar.market import Market
 from nectar.memo import Memo
 from nectar.price import Price
 from nectar.transactionbuilder import TransactionBuilder
-from nectarapi.exceptions import UnhandledRPCError, RPCError
+from nectarapi.exceptions import RPCError, UnhandledRPCError
 from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
@@ -669,6 +670,8 @@ async def send_custom_json(
             send_account=send_account,
             json_data=json_data_converted,
             active=active,
+            unique_key=f"{send_account}_{id}_{uuid4()}",
+            nobroadcast=nobroadcast,
         )
         await pending.save()
     if not isinstance(json_data_converted, dict):
@@ -884,6 +887,7 @@ async def send_pending(
         memo=pending.memo,
         nobroadcast=pending.nobroadcast,
         hive_client=hive_client,
+        store_pending=pending,
     )
 
 
@@ -896,6 +900,7 @@ async def send_transfer(
     keys: List[str] = [],
     nobroadcast: bool = False,
     is_private: bool = False,
+    store_pending: PendingTransaction | None = None,
 ) -> Dict[str, str]:
     """
     Sends a transfer of Hive tokens from one account to another, with support for retries,
@@ -945,16 +950,17 @@ async def send_transfer(
     )
     if is_private:
         memo = f"#{memo}"
-
     retries = 0
-    store_pending = await PendingTransaction(
-        from_account=from_account,
-        to_account=to_account,
-        amount=amount,
-        memo=memo,
-        nobroadcast=nobroadcast,
-        is_private=is_private,
-    ).save()
+    if not store_pending:
+        store_pending = await PendingTransaction(
+            from_account=from_account,
+            to_account=to_account,
+            amount=amount,
+            memo=memo,
+            nobroadcast=nobroadcast,
+            is_private=is_private,
+            unique_key=f"{from_account}_{to_account}_{amount}_{memo}",
+        ).save()
     while retries < 3:
         try:
             trx = account.transfer(
