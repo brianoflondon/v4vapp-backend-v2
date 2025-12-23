@@ -112,16 +112,48 @@ async def one_account_balance(
     results = await cursor.to_list()
     clean_results = convert_datetime_fields(results)
     account_balance = AccountBalances.model_validate(clean_results)
-    ledger_details = (
-        account_balance.root[0]
-        if (account_balance.root and len(account_balance.root) > 0)
-        else LedgerAccountDetails(
+    # If there are multiple entries (e.g., contra and non-contra groups), merge them so both show up
+    if account_balance.root and len(account_balance.root) > 0:
+        if len(account_balance.root) == 1:
+            ledger_details = account_balance.root[0]
+        else:
+            # Merge balances from multiple groups (preserve per-row contra flag and order)
+            merged_balances: dict = {}
+            for group in account_balance.root:
+                for unit, lines in group.balances.items():
+                    merged_balances.setdefault(unit, [])
+                    # copy to avoid mutating original objects
+                    merged_balances[unit].extend([l.model_copy() for l in lines])
+
+            # Sort and recompute running totals (amount_running_total and conv_running_total)
+            from datetime import datetime as _dt
+
+            for unit, rows in merged_balances.items():
+                rows.sort(key=lambda x: x.timestamp or _dt.min.replace(tzinfo=_dt.now().tzinfo))
+                running_amount = Decimal(0)
+                running_conv = ConvertedSummary()
+                for row in rows:
+                    running_amount += row.amount_signed
+                    row.amount_running_total = running_amount
+                    running_conv = running_conv + ConvertedSummary.from_crypto_conv(
+                        row.conv_signed
+                    )
+                    row.conv_running_total = running_conv
+
+            ledger_details = LedgerAccountDetails(
+                name=account.name,
+                account_type=account.account_type,
+                sub=account.sub,
+                contra=account.contra,
+                balances=merged_balances,
+            )
+    else:
+        ledger_details = LedgerAccountDetails(
             name=account.name,
             account_type=account.account_type,
             sub=account.sub,
             contra=account.contra,
         )
-    )
 
     # Find the most recent transaction date
     if ledger_details.balances:
