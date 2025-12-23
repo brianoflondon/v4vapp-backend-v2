@@ -695,7 +695,8 @@ def lightning_memo(memo: str) -> str:
         # Replace the entire memo with the matched lnbc pattern
         memo = f"⚡️{match.group(1)}...{memo[-5:]}"
     else:
-        memo = f"💬{memo}"
+        if not memo.startswith("💬"):
+            memo = f"💬{memo}"
     return memo
 
 
