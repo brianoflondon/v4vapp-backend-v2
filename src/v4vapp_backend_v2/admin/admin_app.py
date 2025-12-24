@@ -10,18 +10,24 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2 import __version__ as project_version
-from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks, run_all_sanity_checks
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
+from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTransaction
+
+# LND and accounting helpers used on dashboard
+from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 
 
 @asynccontextmanager
@@ -138,6 +144,7 @@ class AdminApp:
     def _setup_main_routes(self):
         """Setup main admin routes"""
 
+        @async_time_stats_decorator(runs=100)
         @self.app.get("/admin", response_class=HTMLResponse)
         @self.app.get("/admin/", response_class=HTMLResponse)
         async def admin_dashboard(request: Request):
@@ -189,6 +196,26 @@ class AdminApp:
                 `Currency`, `Decimal`, `logger`, `self.templates`, and `self.nav_manager`.
             - `project_version` must be defined in the surrounding scope before calling.
             """
+            # node_name = InternalConfig().node_name
+            # nb = NodeBalances(node=node_name)
+
+            # async with TaskGroup() as tg:
+            #     sanity_task = tg.create_task(
+            #         log_all_sanity_checks(
+            #             local_logger=logger, log_only_failures=True, notification=False
+            #         )
+            #     )
+            #     # Fetch pending transactions
+            #     pending_transactions_task = tg.create_task(PendingTransaction.list_all_str())
+            #     # Attempt to read latest stored node balances first (fast)
+            #     fetch_balances_task = tg.create_task(nb.fetch_balances())
+            #     asset = AssetAccount(name="External Lightning Payments", sub=node_name)
+            #     ledger_details_task = tg.create_task(one_account_balance(account=asset))
+
+            # sanity_results = await sanity_task
+            # pending_transactions = await pending_transactions_task
+            # ledger_details = await ledger_details_task
+            # await fetch_balances_task
 
             sanity_results = await log_all_sanity_checks(
                 local_logger=logger, log_only_failures=True, notification=False
@@ -261,6 +288,86 @@ class AdminApp:
                     )
                     server_balance_check = {"status": "error", "icon": "⚠️"}
 
+            # LND / External balances for System Information
+            lnd_info = {
+                "node": None,
+                "node_balance": None,
+                "node_balance_fmt": "N/A",
+                "external_sats": None,
+                "external_sats_fmt": "N/A",
+                "delta": None,
+                "delta_fmt": "N/A",
+            }
+
+            try:
+                # Get configured default LND node (if any)
+                node_name = InternalConfig().node_name
+                lnd_info["node"] = node_name
+                if node_name:
+                    # Attempt to read latest stored node balances first (fast)
+                    try:
+                        nb = NodeBalances(node=node_name)
+                        await nb.fetch_balances()
+                        if nb.channel and nb.channel.local_balance:
+                            lnd_info["node_balance"] = int(nb.channel.local_balance.sat)
+
+                    except Exception:
+                        # Non-fatal: leave node_balance as None
+                        lnd_info["node_balance"] = None
+
+                    # External Lightning Payments asset balance (sats)
+                    try:
+                        asset = AssetAccount(name="External Lightning Payments", sub=node_name)
+                        ledger_details = await one_account_balance(account=asset)
+                        lnd_info["external_sats"] = (
+                            int(ledger_details.sats)
+                            if ledger_details and ledger_details.sats is not None
+                            else None
+                        )
+                    except Exception:
+                        lnd_info["external_sats"] = None
+
+                    # Compute delta if possible
+                    try:
+                        if (
+                            lnd_info["node_balance"] is not None
+                            and lnd_info["external_sats"] is not None
+                        ):
+                            lnd_info["delta"] = int(
+                                lnd_info["node_balance"] - lnd_info["external_sats"]
+                            )
+                    except Exception:
+                        lnd_info["delta"] = None
+
+                    # Formatting helpers
+                    def fmt_sats(x):
+                        try:
+                            return f"{int(x):,}"
+                        except Exception:
+                            return "N/A"
+
+                    lnd_info["node_balance_fmt"] = (
+                        fmt_sats(lnd_info["node_balance"])
+                        if lnd_info["node_balance"] is not None
+                        else "N/A"
+                    )
+                    lnd_info["external_sats_fmt"] = (
+                        fmt_sats(lnd_info["external_sats"])
+                        if lnd_info["external_sats"] is not None
+                        else "N/A"
+                    )
+                    lnd_info["delta_fmt"] = (
+                        fmt_sats(lnd_info["delta"]) if lnd_info["delta"] is not None else "N/A"
+                    )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch LND/external balances for admin dashboard: {e}",
+                    extra={"notification": False},
+                )
+                # Use defaults in lnd_info
+                pass
+
             return self.templates.TemplateResponse(
                 "dashboard.html",
                 {
@@ -278,27 +385,9 @@ class AdminApp:
                         "server_balance_check": server_balance_check,
                         "local_machine_name": InternalConfig().local_machine_name,
                     },
+                    "lnd_info": lnd_info,
                 },
             )
-
-        @self.app.get("/", response_class=RedirectResponse)
-        async def root_redirect():
-            """Redirect root to admin"""
-            return RedirectResponse(url="/admin", status_code=302)
-
-        @self.app.get("/admin/health")
-        async def health_check():
-            """Health check endpoint"""
-            sanity_results = await run_all_sanity_checks()
-            return {
-                "status": "healthy",
-                "admin_version": "1.0.0",
-                "project_version": project_version,
-                "config": self.config.config_filename,
-                "local_machine_name": InternalConfig().local_machine_name,
-                "server_id": InternalConfig().server_id,
-                "sanity_checks": sanity_results,
-            }
 
         @self.app.get("/favicon.ico", include_in_schema=False)
         async def favicon():
