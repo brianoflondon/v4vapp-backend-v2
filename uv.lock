@@ -1074,8 +1074,8 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.2.12"
-source = { git = "https://github.com/thecrazygm/hive-nectar.git?branch=main#b2b9cb862e2c53abd92c86e4d5640a416381943e" }
+version = "0.2.9"
+source = { git = "https://github.com/thecrazygm/hive-nectar.git?rev=1daeed0a784e047b7522ad7e051dec2f135b2399#1daeed0a784e047b7522ad7e051dec2f135b2399" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -3720,7 +3720,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.62.0" },
     { name = "grpcio", specifier = ">=1.74.0" },
     { name = "grpcio-tools", specifier = ">=1.74.0" },
-    { name = "hive-nectar", git = "https://github.com/thecrazygm/hive-nectar.git?branch=main" },
+    { name = "hive-nectar", git = "https://github.com/thecrazygm/hive-nectar.git?rev=1daeed0a784e047b7522ad7e051dec2f135b2399" },
     { name = "httpx", specifier = ">=0.27.2,<1.0.0" },
     { name = "packaging", specifier = ">=25.0" },
     { name = "pandas", specifier = ">=2.3.1" },
