@@ -6,6 +6,7 @@ from v4vapp_backend_v2.config.setup import logger
 """
 General purpose functions
 """
+ICON = "⏰"
 
 
 def async_time_decorator(func):
