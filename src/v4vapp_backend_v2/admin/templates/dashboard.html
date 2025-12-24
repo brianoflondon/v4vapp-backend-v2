@@ -66,8 +66,8 @@
                             <li><strong>Project Version:</strong> {{ admin_info.project_version }}</li>
                             <li><strong>Local Machine Name:</strong> {{ admin_info.local_machine_name }}</li>
                             <li><strong>Config File:</strong> <code>{{ admin_info.config_file }}</code></li>
-                            <li><strong>Server Account:</strong> <code>{{ admin_info.server_account }}</code> {{
-                                admin_info.server_balance_check.icon }}</li>
+                            <li><strong>Server Account:</strong> <code>{{ admin_info.server_account }}</code> {{ admin_info.server_balance_check.icon }}</li>
+                            <li><strong>Load Time:</strong> {% if load_time is defined %}{{ "%.3f" % load_time }} s{% else %}N/A{% endif %}</li>
                         </ul>
                     </div>
                     <div class="col-md-4">

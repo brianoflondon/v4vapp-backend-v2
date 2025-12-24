@@ -1,6 +1,5 @@
 from asyncio import TaskGroup
 from dataclasses import dataclass
-from pprint import pprint
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -175,14 +174,9 @@ async def admin_data_helper() -> AdminDataHelper:
 
     server_id = InternalConfig().server_id
     server_balance_check = {"status": "unknown", "icon": "❓"}
-    if (
-        server_id in hive_balances
-        and "error" not in hive_balances[server_id]
-    ):
+    if server_id in hive_balances and "error" not in hive_balances[server_id]:
         try:
-            if "server_account_hive_balances" in [
-                name for name, _ in sanity_results.failed
-            ]:
+            if "server_account_hive_balances" in [name for name, _ in sanity_results.failed]:
                 server_balance_check = {"status": "mismatch", "icon": "❌"}
             else:
                 server_balance_check = {"status": "match", "icon": "✅"}
@@ -204,12 +198,5 @@ async def admin_data_helper() -> AdminDataHelper:
         server_balance_check=server_balance_check,
     )
 
-    pprint(
-        {
-            "node_balances": nb,
-            "ledger_details": ledger_details,
-            "pending_transactions": pending_transactions,
-            "sanity_checks": sanity_results,
-            "hive_balances": hive_balances,
-        }
-    )
+
+# End of file
