@@ -1118,15 +1118,3 @@ def per_diff(a: float, b: float) -> float:
 
 
 # Last line
-
-# Last line
-
-# Last line
-
-# Last line
-
-# Last line
-
-# Last line
-
-# Last line

@@ -1,11 +1,18 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, Optional, Tuple
+from typing import ClassVar, Dict, Optional
 
 from google.protobuf.json_format import MessageToDict
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
 
@@ -24,7 +31,7 @@ class LNDAmount(BaseModel):
 
     @property
     def msat_int(self) -> int:
-        """Return millisatoshi amount as int (rounded if necessary)."""
+        """Return millisatoshis amount as int (rounded if necessary)."""
         return int(self.msat)
 
 
@@ -90,25 +97,74 @@ class ChannelBalance(BaseModel):
         return self.remote_balance.msat if self.remote_balance else Decimal(0)
 
 
-async def fetch_balances_from_default() -> Tuple[WalletBalance | None, ChannelBalance | None]:
+class NodeBalances(BaseModel):
+    node: str = ""
+    timestamp: datetime = datetime.now(tz=timezone.utc)
+    wallet: Optional[WalletBalance] = None
+    channel: Optional[ChannelBalance] = None
+
+    db_client: ClassVar[AsyncCollection | None] = None
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.node:
+            lnd_config = InternalConfig().config.lnd_config
+            if lnd_config and lnd_config.default:
+                self.node = lnd_config.default
+
+    @classmethod
+    def collection(cls) -> AsyncCollection:
+        if cls.db_client is None:
+            cls.db_client = InternalConfig.db["lnd_balances"]
+        return cls.db_client
+
+    async def save(self) -> None:
+        """Save the balances to the database."""
+        mongo_data = convert_decimals_for_mongodb(self.model_dump())
+        await mongo_call(lambda: self.collection().insert_one(mongo_data))
+
+    async def fetch_balances(self) -> None:
+        """Fetch and update the balances for this node."""
+        balances = await fetch_balances(node=self.node)
+        self.wallet = balances.wallet
+        self.channel = balances.channel
+
+    async def nearest_balance(self, target: datetime) -> Optional["NodeBalances"]:
+        """Fetch the nearest balance document by timestamp for this node."""
+        filter = {"node": self.node}
+        coll = self.collection()
+
+        doc = await find_nearest_by_timestamp(
+            collection=coll, target=target, ts_field="timestamp", filter_extra=filter
+        )
+        if doc:
+            return NodeBalances.model_validate(doc)
+        return None
+
+
+@async_time_decorator
+async def fetch_balances(
+    node: str = "",
+) -> NodeBalances:
     """Fetch the current Wallet and Channel balances from the default configured LND node.
 
     Returns a tuple of (WalletBalance, ChannelBalance) or (None, None) if no default node configured
     or if an error occurs.
     """
-    try:
-        lnd_config = InternalConfig().config.lnd_config
-        default_node = lnd_config.default
-    except Exception:  # pragma: no cover - defensive
-        logger.debug("No LND config/default node configured")
-        return None, None
+    lnd_config = InternalConfig().config.lnd_config
+    if not lnd_config:
+        raise ValueError("LND config not available")
 
-    if not default_node:
+    if not node:
+        node = lnd_config.default
+
+    if not node:
         logger.debug("No default LND node configured")
-        return None, None
+        raise ValueError("No default LND node configured")
 
     try:
-        async with LNDClient(default_node) as client:
+        async with LNDClient(node) as client:
             wallet_resp = await client.call(
                 client.lightning_stub.WalletBalance, lnrpc.WalletBalanceRequest()
             )
@@ -117,12 +173,12 @@ async def fetch_balances_from_default() -> Tuple[WalletBalance | None, ChannelBa
             )
             wallet_model = protobuf_wallet_to_pydantic(wallet_resp)
             chan_model = protobuf_channel_to_pydantic(chan_resp)
-            return wallet_model, chan_model
+            return NodeBalances(wallet=wallet_model, channel=chan_model)
     except Exception as e:  # pragma: no cover - log and return None
         logger.warning(
             f"Error fetching balances from default node: {e}", extra={"notification": False}
         )
-        return None, None
+        raise ValueError(f"Error fetching balances from default node: {e}")
 
 
 def protobuf_wallet_to_pydantic(wallet_resp: lnrpc.WalletBalanceResponse) -> WalletBalance:
@@ -151,3 +207,36 @@ def protobuf_channel_to_pydantic(chan_resp: lnrpc.ChannelBalanceResponse) -> Cha
     except Exception:  # pragma: no cover - defensive logging
         logger.error("Error validating ChannelBalance", extra={"chan_dict": cd})
         raise
+
+
+async def main():
+    logger.info("Starting LND opening balance task...")
+    InternalConfig(config_filename="devhive.config.yaml")
+    db_conn = DBConn()
+    await db_conn.setup_database()
+    balances = NodeBalances()
+    await balances.fetch_balances()
+    await balances.save()
+
+    if not balances.wallet and not balances.channel:
+        logger.warning("No balances available (no default LND node configured or error).")
+        return
+
+    if balances.wallet:
+        logger.info(
+            f"Wallet total: {balances.wallet.total_sats} sats, confirmed: {balances.wallet.confirmed_sats} sats, unconfirmed: {balances.wallet.unconfirmed_sats} sats"
+        )
+    if balances.channel:
+        logger.info(
+            f"Channels local: {balances.channel.local_sats} sats, remote: {balances.channel.remote_sats} sats, balance: {balances.channel.balance} sats"
+        )
+
+    found_balance = await balances.nearest_balance(datetime.now(timezone.utc)-timedelta(minutes=10))
+    if found_balance:
+        logger.info(
+            f"Found nearest balance at {found_balance.timestamp} for node {found_balance.node}"
+        )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

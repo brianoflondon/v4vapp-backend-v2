@@ -4,13 +4,13 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.models.lnd_balance_models import (
     ChannelBalance,
     WalletBalance,
-    fetch_balances_from_default,
+    fetch_balances,
 )
 
 
 async def get_balances() -> tuple[WalletBalance | None, ChannelBalance | None]:
     """Fetch balances using the shared helper. Returns typed models or (None, None)."""
-    return await fetch_balances_from_default()
+    return await fetch_balances()
 
 
 async def main():

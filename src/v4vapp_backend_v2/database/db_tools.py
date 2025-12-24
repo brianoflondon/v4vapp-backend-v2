@@ -1,7 +1,9 @@
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Dict, Mapping, Optional
 
 from bson import Decimal128
+from pymongo.asynchronous.collection import AsyncCollection
 
 
 def convert_decimal128_to_decimal(value: Any) -> Any:
@@ -25,3 +27,85 @@ def convert_decimal128_to_decimal(value: Any) -> Any:
         return [convert_decimal128_to_decimal(item) for item in value]
     else:
         return value
+
+
+async def find_nearest_by_timestamp(
+    collection: AsyncCollection,
+    target: datetime,
+    ts_field: str = "timestamp",
+    max_window: Optional[timedelta] = None,
+    filter_extra: Optional[Mapping[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Find the document in a time-series collection whose timestamp field is nearest to
+    `target`.
+
+    This function uses two index-backed queries (one before-or-equal, one after-or-equal)
+    and compares their distances to the target. It is efficient for large collections so
+    long as there is an index on `ts_field` (e.g. `db.rates.create_index([("timestamp", 1)])`).
+
+    Args:
+        collection (AsyncCollection): The pymongo async collection to query.
+        target (datetime): The datetime to compare against.
+        ts_field (str): The name of the timestamp field in documents (default: "timestamp").
+        max_window (Optional[timedelta]): If provided, only documents within
+            `target +/- max_window` are considered. If no documents are found within this
+            window, `None` is returned.
+
+    Returns:
+        Optional[Dict[str, Any]]: The nearest document as a Python dict (with any
+        Decimal128 values converted to Decimal), or `None` if no document is found.
+
+    Raises:
+        ValueError: if `target` is not a datetime instance.
+    """
+    if not isinstance(target, datetime):
+        raise ValueError("target must be a datetime instance")
+
+    # Build bounded queries if a max_window was supplied
+    if max_window is not None:
+        start = target - max_window
+        end = target + max_window
+        before_filter = {ts_field: {"$lte": target, "$gte": start}}
+        after_filter = {ts_field: {"$gte": target, "$lte": end}}
+    else:
+        before_filter = {ts_field: {"$lte": target}}
+        after_filter = {ts_field: {"$gte": target}}
+
+    if filter_extra:
+        before_filter.update(filter_extra)
+        after_filter.update(filter_extra)
+
+    # Use index-backed queries: latest <= target and earliest >= target
+    before_docs = (
+        await collection.find(before_filter).sort(ts_field, -1).limit(1).to_list(length=1)
+    )
+    after_docs = await collection.find(after_filter).sort(ts_field, 1).limit(1).to_list(length=1)
+
+    candidate = None
+    if before_docs and after_docs:
+        b = before_docs[0]
+        a = after_docs[0]
+        b_dt = b.get(ts_field)
+        a_dt = a.get(ts_field)
+        # If timestamps missing, prefer the one that exists
+        if b_dt is None and a_dt is None:
+            return None
+        if b_dt is None:
+            candidate = a
+        elif a_dt is None:
+            candidate = b
+        else:
+            # Choose the closer one (prefer before on exact ties)
+            if (target - b_dt) <= (a_dt - target):
+                candidate = b
+            else:
+                candidate = a
+    elif before_docs:
+        candidate = before_docs[0]
+    elif after_docs:
+        candidate = after_docs[0]
+    else:
+        return None
+
+    return convert_decimal128_to_decimal(candidate)
