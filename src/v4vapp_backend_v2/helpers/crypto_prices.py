@@ -12,7 +12,8 @@ from bson import Decimal128
 from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.config.decorators import async_time_decorator
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_retry import (
     mongo_call,
     summarize_write_result,  # optional pretty log

@@ -8,10 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo.asynchronous.collection import AsyncCollection
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.config.decorators import async_time_decorator
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.database.db_retry import mongo_call
-from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp
+from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp_server_side
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 
@@ -126,7 +127,7 @@ class NodeBalances(BaseModel):
     @classmethod
     def collection(cls) -> AsyncCollection:
         if cls.db_client is None:
-            cls.db_client = InternalConfig.db["lnd_balances"]
+            cls.db_client = InternalConfig.db["lnd_balances_ts"]
         return cls.db_client
 
     async def save(self) -> None:
@@ -145,7 +146,7 @@ class NodeBalances(BaseModel):
         filter = {"node": self.node}
         coll = self.collection()
 
-        doc = await find_nearest_by_timestamp(
+        doc = await find_nearest_by_timestamp_server_side(
             collection=coll, target=target, ts_field="timestamp", filter_extra=filter
         )
         if doc:

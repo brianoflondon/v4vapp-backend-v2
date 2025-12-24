@@ -12,7 +12,7 @@ from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
 from v4vapp_backend_v2.database.db_retry import mongo_call
-from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp
+from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp_server_side
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -481,12 +481,12 @@ class TrackedBaseModel(BaseModel):
             collection = InternalConfig.db[DB_RATES_COLLECTION]
             # Try a 1-hour window first to avoid long searches; fallback to an unbounded search if none found
             one_hour = timedelta(hours=1)
-            nearest_doc = await find_nearest_by_timestamp(
+            nearest_doc = await find_nearest_by_timestamp_server_side(
                 collection, timestamp, ts_field="timestamp", max_window=one_hour
             )
             if nearest_doc is None:
                 # fallback to unbounded search
-                nearest_doc = await find_nearest_by_timestamp(
+                nearest_doc = await find_nearest_by_timestamp_server_side(
                     collection, timestamp, ts_field="timestamp", max_window=None
                 )
 

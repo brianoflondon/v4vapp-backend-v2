@@ -5,6 +5,8 @@ from typing import Any, Dict, Mapping, Optional
 from bson import Decimal128
 from pymongo.asynchronous.collection import AsyncCollection
 
+from v4vapp_backend_v2.config.decorators import async_time_decorator
+
 
 def convert_decimal128_to_decimal(value: Any) -> Any:
     """
@@ -29,6 +31,7 @@ def convert_decimal128_to_decimal(value: Any) -> Any:
         return value
 
 
+@async_time_decorator
 async def find_nearest_by_timestamp(
     collection: AsyncCollection,
     target: datetime,
@@ -108,4 +111,65 @@ async def find_nearest_by_timestamp(
     else:
         return None
 
+    return convert_decimal128_to_decimal(candidate)
+
+
+@async_time_decorator
+async def find_nearest_by_timestamp_server_side(
+    collection: AsyncCollection,
+    target: datetime,
+    ts_field: str = "timestamp",
+    max_window: Optional[timedelta] = None,
+    filter_extra: Optional[Mapping[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Server-side aggregation version of `find_nearest_by_timestamp` that computes the
+    nearest document to `target` inside the database using an aggregation pipeline.
+
+    This builds an aggregation pipeline that optionally matches a bounded window and
+    additional filters, computes an absolute difference (delta) between the document
+    timestamp and `target`, sorts by delta (and by `ts_field` ascending to prefer
+    earlier timestamps on exact ties), and returns the single nearest document.
+
+    The returned document is passed through `convert_decimal128_to_decimal` to
+    convert BSON Decimal128 values to Python Decimal objects.
+    """
+    if not isinstance(target, datetime):
+        raise ValueError("target must be a datetime instance")
+
+    pipeline = []
+
+    # Build match stage if required (window or extra filters). Include a check to
+    # exclude documents with a null timestamp to avoid subtraction errors.
+    match: Dict[str, Any] = {}
+    if filter_extra:
+        match.update(filter_extra)
+
+    if max_window is not None:
+        start = target - max_window
+        end = target + max_window
+        # make sure timestamps are inside the window
+        match.update({ts_field: {"$gte": start, "$lte": end, "$ne": None}})
+    else:
+        # Ensure timestamp exists and is not null
+        match.setdefault(ts_field, {})
+        match[ts_field].update({"$ne": None})
+
+    if match:
+        pipeline.append({"$match": match})
+
+    # Compute absolute difference (MongoDB subtract on dates yields milliseconds)
+    pipeline.append({"$addFields": {"delta": {"$abs": {"$subtract": [f"${ts_field}", target]}}}})
+
+    # Sort by delta ascending; on ties prefer earlier timestamps (ts_field ascending)
+    pipeline.append({"$sort": {"delta": 1, ts_field: 1}})
+
+    pipeline.append({"$limit": 1})
+
+    cursor = collection.aggregate(pipeline)
+    docs = await cursor.to_list(length=1)
+    if not docs:
+        return None
+
+    candidate = docs[0]
     return convert_decimal128_to_decimal(candidate)
