@@ -1074,8 +1074,8 @@ wheels = [
 
 [[package]]
 name = "hive-nectar"
-version = "0.2.12"
-source = { git = "https://github.com/thecrazygm/hive-nectar.git?branch=main#b2b9cb862e2c53abd92c86e4d5640a416381943e" }
+version = "0.2.13"
+source = { git = "https://github.com/thecrazygm/hive-nectar.git?branch=main#175705f561c4c6354ccad2a40279a7be58f1d219" }
 dependencies = [
     { name = "appdirs" },
     { name = "asn1crypto" },
@@ -3647,7 +3647,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "0.10.3"
+version = "0.10.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },

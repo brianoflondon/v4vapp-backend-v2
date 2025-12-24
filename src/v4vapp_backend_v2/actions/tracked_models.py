@@ -12,6 +12,7 @@ from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
 from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_tools import find_nearest_by_timestamp_server_side
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes, HiveRatesDB, QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -476,48 +477,43 @@ class TrackedBaseModel(BaseModel):
             return cls.last_quote
 
         try:
-            # Find the nearest quote by timestamp
+            # Find the nearest quote using index-backed queries (prefer 1 hour window)
             collection = InternalConfig.db[DB_RATES_COLLECTION]
-            cursor = await collection.aggregate(
-                [
-                    {"$match": {"timestamp": {"$exists": True}}},
-                    {
-                        "$project": {
-                            "originalDoc": "$$ROOT",
-                            "time_diff_ms": {"$abs": {"$subtract": ["$timestamp", timestamp]}},
-                        }
-                    },
-                    {"$sort": {"time_diff_ms": 1}},
-                    {"$limit": 1},
-                    {"$replaceRoot": {"newRoot": "$originalDoc"}},
-                ]
+            # Try a 1-hour window first to avoid long searches; fallback to an unbounded search if none found
+            one_hour = timedelta(hours=1)
+            nearest_doc = await find_nearest_by_timestamp_server_side(
+                collection, timestamp, ts_field="timestamp", max_window=one_hour
             )
-            nearest_quote = await cursor.to_list(length=1)
+            if nearest_doc is None:
+                # fallback to unbounded search
+                nearest_doc = await find_nearest_by_timestamp_server_side(
+                    collection, timestamp, ts_field="timestamp", max_window=None
+                )
 
-            if nearest_quote:
-                quote = HiveRatesDB.model_validate(nearest_quote[0])
-                quote_response = QuoteResponse(
-                    hive_usd=quote.hive_usd,
-                    hbd_usd=quote.hbd_usd,  # Assuming sats_hbd is used for hbd_us
-                    btc_usd=quote.btc_usd,
-                    hive_hbd=quote.hive_hbd,
-                    raw_response={},
-                    source="HiveRatesDB",
-                    fetch_date=quote.timestamp,
-                    error="",  # No error in this case
-                    error_details={},
-                )
-                logger.info(
-                    f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
-                    extra={"notification": False, "quote": quote.model_dump()},
-                )
-                return quote_response
-            else:
+            if not nearest_doc:
                 logger.warning(
                     f"No quotes found for timestamp {timestamp}",
                     extra={"notification": False},
                 )
                 return cls.last_quote
+
+            quote = HiveRatesDB.model_validate(nearest_doc)
+            quote_response = QuoteResponse(
+                hive_usd=quote.hive_usd,
+                hbd_usd=quote.hbd_usd,
+                btc_usd=quote.btc_usd,
+                hive_hbd=quote.hive_hbd,
+                raw_response={},
+                source="HiveRatesDB",
+                fetch_date=quote.timestamp,
+                error="",
+                error_details={},
+            )
+            logger.info(
+                f"Found nearest quote delta from {timestamp}: {quote.timestamp - timestamp}",
+                extra={"notification": False, "quote": quote.model_dump()},
+            )
+            return quote_response
 
         except ServerSelectionTimeoutError as e:
             logger.error(

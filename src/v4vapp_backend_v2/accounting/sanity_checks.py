@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_stats_decorator, logger
+from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances

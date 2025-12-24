@@ -7,7 +7,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.models.lnd_balance_models import (
     ChannelBalance,
     WalletBalance,
-    fetch_balances_from_default,
+    fetch_balances,
     protobuf_channel_to_pydantic,
     protobuf_wallet_to_pydantic,
 )
@@ -58,5 +58,5 @@ async def test_fetch_balances_no_default(monkeypatch):
     cfg = InternalConfig().config.lnd_config
     monkeypatch.setattr(cfg, "default", "")
 
-    wallet, chan = await fetch_balances_from_default()
-    assert wallet is None and chan is None
+    with pytest.raises(ValueError):
+        await fetch_balances()

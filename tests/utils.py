@@ -30,7 +30,7 @@ from v4vapp_backend_v2.hive.hive_extras import (
 )
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
-from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances_from_default
+from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances
 
 # MARK: Hive Helper functions
 
@@ -177,21 +177,21 @@ async def clear_and_reset():
 
 async def reset_lightning_node_balance():
     node = InternalConfig().config.lnd_config.default
-    wallet_balance, channel_balance = await fetch_balances_from_default()
-    if channel_balance:
-        logger.info(f"Current Channel balance: {channel_balance.local_sats:,.0f} sats")
+    balances = await fetch_balances()
+    if balances.channel:
+        logger.info(f"Current Channel balance: {balances.channel.local_sats:,.0f} sats")
         await TrackedBaseModel.update_quote()
         quote = TrackedBaseModel.last_quote
 
         opening_conv = CryptoConversion(
             conv_from=Currency.MSATS,
-            value=channel_balance.local_msat,
+            value=balances.channel.local_msat,
             quote=quote,
         ).conversion
 
         opening_balance = LedgerEntry(
-            cust_id="opening_balance",
-            short_id="opening_balance",
+            cust_id="",
+            short_id="open",
             op_type="funding",
             ledger_type=LedgerType.FUNDING,
             group_id=f"opening_balance_{datetime.now(tz=timezone.utc).isoformat()}",
@@ -199,11 +199,11 @@ async def reset_lightning_node_balance():
             description=f"Resetting opening balance for {node} for testing",
             debit=AssetAccount(name="External Lightning Payments", sub=node),
             debit_unit=Currency.MSATS,
-            debit_amount=channel_balance.local_msat,
+            debit_amount=balances.channel.local_msat,
             debit_conv=opening_conv,
             credit=LiabilityAccount(name="Owner Loan Payable", sub=node),
             credit_unit=Currency.MSATS,
-            credit_amount=channel_balance.local_msat,
+            credit_amount=balances.channel.local_msat,
             credit_conv=opening_conv,
         )
         await opening_balance.save()
