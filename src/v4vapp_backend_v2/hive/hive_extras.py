@@ -219,6 +219,12 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
     errors = 0
     while errors < count:
         try:
+            # Normalize list types to tuples for parameters that may be passed through to SQLite bindings
+            if "keys" in kwargs and isinstance(kwargs["keys"], list):
+                kwargs["keys"] = tuple(kwargs["keys"])
+            if "node" in kwargs and isinstance(kwargs["node"], list):
+                kwargs["node"] = tuple(kwargs["node"])
+
             hive = Hive(*args, **kwargs)
             return hive
         except TypeError as e:

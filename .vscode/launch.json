@@ -14,7 +14,7 @@
             "justMyCode": false
         },
         {
-            "name": "DEV API",
+            "name": "DEV API v2",
             "type": "debugpy",
             "consoleName": "DEV API",
             "request": "launch",
