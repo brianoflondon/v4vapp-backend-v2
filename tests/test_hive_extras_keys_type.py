@@ -1,3 +1,5 @@
+import json
+
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
 
 
@@ -21,7 +23,8 @@ def test_get_hive_client_converts_keys_list_to_tuple(monkeypatch):
     # Assert
     assert isinstance(client, DummyHive)
     assert "keys" in captured["kwargs"]
-    assert isinstance(captured["kwargs"]["keys"], tuple)
+    assert isinstance(captured["kwargs"]["keys"], str)
+    assert json.loads(captured["kwargs"]["keys"]) == ["k1", "k2"]
 
 
 def test_get_hive_client_converts_node_list_to_tuple(monkeypatch):
@@ -38,4 +41,4 @@ def test_get_hive_client_converts_node_list_to_tuple(monkeypatch):
     client = get_hive_client(node=["https://api.syncad.com"])
     assert isinstance(client, DummyHive2)
     assert "node" in captured["kwargs"]
-    assert isinstance(captured["kwargs"]["node"], tuple)
+    assert isinstance(captured["kwargs"]["node"], list)
