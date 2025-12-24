@@ -173,8 +173,13 @@ async def find_nearest_by_timestamp_server_side(
 
     pipeline.append({"$limit": 1})
 
-    cursor = collection.aggregate(pipeline)
-    docs = await cursor.to_list(length=1)
+    import inspect
+    # collection.aggregate may be sync (test fakes) or async (real AsyncCollection).
+    agg = collection.aggregate(pipeline)
+    # If aggregate returned an awaitable (coroutine), await it to get the cursor
+    cursor = await agg if inspect.isawaitable(agg) else agg
+    # cursor is expected to support to_list(length=...)
+    docs = await cursor.to_list(length=1)  # type: ignore[attr-defined]
     if not docs:
         return None
 
