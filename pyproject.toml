@@ -106,4 +106,4 @@ exclude = ".*typing.py|.*_pb2.*|.*.proto"  # Combine all exclusions into a singl
 
 [tool.uv.sources]
 # hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , branch="main" }
-hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , rev="1daeed0a784e047b7522ad7e051dec2f135b2399" }
+hive-nectar = { git = "https://github.com/thecrazygm/hive-nectar.git" , rev="6ea6cb801e388cd856a40dd47bcf05ffd6a530d3" }
