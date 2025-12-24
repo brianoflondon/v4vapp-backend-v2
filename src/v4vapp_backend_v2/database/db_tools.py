@@ -137,6 +137,13 @@ async def find_nearest_by_timestamp_server_side(
     if not isinstance(target, datetime):
         raise ValueError("target must be a datetime instance")
 
+    # If the collection does not support aggregation (e.g., test fakes),
+    # fall back to the index-backed two-query implementation
+    if not hasattr(collection, "aggregate"):
+        return await find_nearest_by_timestamp(
+            collection, target, ts_field=ts_field, max_window=max_window, filter_extra=filter_extra
+        )
+
     pipeline = []
 
     # Build match stage if required (window or extra filters). Include a check to
