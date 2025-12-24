@@ -219,23 +219,6 @@ def get_hive_client(stream_only: bool = False, nobroadcast: bool = False, *args,
     errors = 0
     while errors < count:
         try:
-            # Normalize keys to a JSON string so downstream SQLite bindings don't try to bind
-            # Python list/tuple objects directly as SQL parameters (which fails in some environments).
-            if "keys" in kwargs and isinstance(kwargs["keys"], (list, tuple)):
-                try:
-                    kwargs["keys"] = json.dumps(list(kwargs["keys"]))
-                    logger.debug(
-                        "Normalized Hive keys to JSON string to avoid DB binding errors",
-                        extra={"normalized_keys_type": type(kwargs["keys"]).__name__},
-                    )
-                except Exception:
-                    # If JSON conversion fails, fall back to original value
-                    pass
-
-            # Ensure node is a list (nectar.Hive accepts list[str] or str). If a tuple sneaks in, convert back to list.
-            if "node" in kwargs and isinstance(kwargs["node"], tuple):
-                kwargs["node"] = list(kwargs["node"])
-
             hive = Hive(*args, **kwargs)
             return hive
         except TypeError as e:
