@@ -9,11 +9,12 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from v4vapp_backend_v2 import __version__ as project_version
+from v4vapp_backend_v2.accounting.sanity_checks import run_all_sanity_checks
 from v4vapp_backend_v2.admin.data_helpers import admin_data_helper
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
@@ -218,6 +219,27 @@ class AdminApp:
                     "load_time": timer() - start,
                 },
             )
+
+        @self.app.get("/", response_class=RedirectResponse)
+        async def root_redirect():
+            """Redirect root to admin"""
+            return RedirectResponse(url="/admin", status_code=302)
+
+        @self.app.get("/admin/health")
+        async def health_check():
+            """Health check endpoint"""
+            start = timer()
+            sanity_results = await run_all_sanity_checks()
+            return {
+                "status": "healthy",
+                "admin_version": "1.0.0",
+                "project_version": project_version,
+                "config": self.config.config_filename,
+                "local_machine_name": InternalConfig().local_machine_name,
+                "server_id": InternalConfig().server_id,
+                "sanity_checks": sanity_results,
+                "load_time": timer() - start,
+            }
 
         @self.app.get("/favicon.ico", include_in_schema=False)
         async def favicon():
