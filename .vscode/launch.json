@@ -94,7 +94,7 @@
             }
         },
         {
-            "name": "Hive Monitor v4vapp",
+            "name": "Hive Monitor v4vapp no Sale",
             "type": "debugpy",
             "consoleName": "Hive Monitor v4vapp no SALE",
             "request": "launch",
