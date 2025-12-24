@@ -6,6 +6,7 @@ FastAPI application for V4VApp backend administration.
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from timeit import default_timer as timer
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
@@ -16,7 +17,6 @@ from v4vapp_backend_v2 import __version__ as project_version
 from v4vapp_backend_v2.admin.data_helpers import admin_data_helper
 from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
-from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
@@ -137,58 +137,62 @@ class AdminApp:
     def _setup_main_routes(self):
         """Setup main admin routes"""
 
-        @async_time_stats_decorator(runs=100)
         @self.app.get("/admin", response_class=HTMLResponse)
         @self.app.get("/admin/", response_class=HTMLResponse)
         async def admin_dashboard(request: Request):
             """
-            Render the admin dashboard page.
+            Render the Admin Dashboard page.
 
-            This asynchronous handler composes the context required to render the admin
-            dashboard template. It performs the following operations:
+            Asynchronous request handler that composes the context required to render the
+            "dashboard.html" template. The handler performs the following high-level steps:
 
-            - Runs sanity checks via `log_all_sanity_checks` (only logs failures; notifications
-                suppressed) and includes the results in the context.
-            - Retrieves navigation items from `self.nav_manager`.
-            - Reads `server_id` and the list of highlighted users from `InternalConfig()`.
-            - For each highlighted user:
-                    - Calls the potentially-blocking `account_hive_balances` inside
-                        `run_in_threadpool`.
-                    - Normalizes balance keys to upper-case (preferring "HIVE" and "HBD").
-                    - Attempts to coerce balance values to floats using several fallbacks:
-                            1. Direct float conversion
-                            2. Converting an `amount` attribute or its string representation
-                            3. Parsing the leading numeric token from the string (stripping commas)
-                        If coercion fails the recorded value will be None.
-                    - On retrieval errors, stores an `{"error": <message>}` dict for that user.
-                    - Adds formatted string representations for "HIVE_fmt" and "HBD_fmt" for display,
-                        using a 3-decimal format (falls back to the raw string on formatting error).
-            - Fetches pending transactions via `PendingTransaction.list_all_str()`.
-            - If the server account is among the highlighted users and its balance retrieval
-                did not fail, attempts to verify the "Customer Deposits Hive" account balances:
-                    - Builds an `AssetAccount(name="Customer Deposits Hive", sub=server_id)` and
-                        calls `one_account_balance`.
-                    - Compares reported HIVE and HBD balances with the actual wallet values using
-                        `Decimal` with a tolerance of 0.001. Sets `server_balance_check` to one of:
-                        {"status": "match", "icon": "✅"}, {"status": "mismatch", "icon": "❌"},
-                        {"status": "error", "icon": "⚠️"}.
-                    - Logs a warning with `extra={"notification": False}` if this verification fails.
-            - Returns a TemplateResponse (via `self.templates.TemplateResponse`) rendering
-                "dashboard.html" with context keys:
-                    - request, title, nav_items, hive_balances, pending_transactions,
-                        sanity_results, and admin_info containing:
-                            version, project_version, config_file, server_account,
-                            server_balance_check, local_machine_name.
+            - Runs sanity checks (via `log_all_sanity_checks`) and includes results in the
+                context (failures are logged; notifications suppressed).
+            - Loads server and admin configuration from `InternalConfig`.
+            - For each highlighted user in the configuration:
+                    - Calls `account_hive_balances` inside `run_in_threadpool` (may perform
+                        blocking I/O).
+                    - Normalizes balance keys to preferred forms ("HIVE", "HBD").
+                    - Attempts to coerce balance values to floats using multiple fallbacks:
+                            2. Using an `amount` attribute or converting the value's string form
+                            3. Parsing the leading numeric token in a string (commas stripped)
+                        If coercion fails the numeric value is recorded as None; on retrieval
+                        errors the entry for that user is an `{"error": <message>}` dict.
+                    - Adds formatted display strings ("HIVE_fmt", "HBD_fmt") using 3 decimal
+                        places where possible (falls back to the raw string on formatting error).
+            - Retrieves pending transactions via `PendingTransaction.list_all_str()`.
+            - If the configured server account is among the highlighted users and its
+                balance retrieval succeeded, attempts to verify the "Customer Deposits Hive"
+                wallet balances using `one_account_balance` and Decimal comparison with a
+                tolerance of 0.001. The verification result is encoded as
+                `server_balance_check` with values like:
+                    {"status": "match", "icon": "✅"},
+                    {"status": "mismatch", "icon": "❌"},
+                Verification failures are logged with `extra={"notification": False}`.
 
-            Notes:
-            - The function handles most exceptions locally and encodes error information
-                into the returned context rather than propagating them.
-            - It relies on several external helpers and objects being available in scope:
-                `log_all_sanity_checks`, `run_in_threadpool`, `account_hive_balances`,
-                `InternalConfig`, `PendingTransaction`, `AssetAccount`, `one_account_balance`,
-                `Currency`, `Decimal`, `logger`, `self.templates`, and `self.nav_manager`.
-            - `project_version` must be defined in the surrounding scope before calling.
+            Returned template context includes:
+            - request: the incoming Request
+            - title: "Admin Dashboard"
+            - nav_items: navigation items for the UI
+            - hive_balances: mapping of highlighted users to balance info or error dicts
+            - pending_transactions: pending transaction list strings
+            - sanity_results: results from sanity checks
+            - admin_info: dict with keys:
+                    - version (str), project_version (must be defined in the surrounding scope),
+                    - config_file, server_account, server_balance_check, local_machine_name
+            - lnd_info: any LND-related info collected by the admin helper
+
+            - Most exceptions are handled locally; error details are encoded in the returned
+                context rather than propagated.
+            - Relies on external helpers/objects being present: `log_all_sanity_checks`,
+                `run_in_threadpool`, `account_hive_balances`, `InternalConfig`,
+                `PendingTransaction`, `AssetAccount`, `one_account_balance`, `Currency`,
+                `Decimal`, `logger`, `self.templates`, and `self.nav_manager`.
+            - This function is async and returns a TemplateResponse (via
+                `self.templates.TemplateResponse`).
+
             """
+            start = timer()
             nav_items = self.nav_manager.get_navigation_items()
             admin_data = await admin_data_helper()
             server_id = InternalConfig().server_id
@@ -211,6 +215,7 @@ class AdminApp:
                         "local_machine_name": InternalConfig().local_machine_name,
                     },
                     "lnd_info": admin_data.lnd_info,
+                    "load_time": timer() - start,
                 },
             )
 
