@@ -37,6 +37,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
     get_node_alias_from_pay_request,
 )
 from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
+from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
 
 ICON = "⚡"
@@ -345,19 +346,36 @@ async def db_store_payment(
             f"{payment_pyd.route_str}",
             extra={"db_ans": ans.raw_result, **payment_pyd.log_extra},
         )
-        # query = {"payment_hash": payment_pyd.payment_hash}
-        # payment_dict = payment_pyd.model_dump(exclude_none=True, exclude_unset=True)
-        # update = {"$set": payment_dict}
-        # ans = await Payment.collection().update_one(filter=query, update=update, upsert=True)
-        # logger.info(
-        #     f"{lnd_client.icon}{DATABASE_ICON} "
-        #     f"New payment recorded: {payment_pyd.payment_index:>6} "
-        #     f"{payment_pyd.payment_hash} {payment_pyd.route_str}",
-        #     extra={"db_ans": ans.raw_result, "payment": payment_dict},
-        # )
+
     except Exception as e:
         logger.info(e)
         return
+
+
+async def node_balance_report(
+    lnd_client: LNDClient,
+) -> None:
+    """
+    Asynchronously fetches and logs the current node balances.
+
+    Args:
+        lnd_client (LNDClient): The LND client instance used for RPC.
+
+    Returns:
+        None
+    """
+    try:
+        balances = NodeBalances()
+        await balances.fetch_balances(lnd_client=lnd_client)
+        if balances:
+            logger.info(f"{lnd_client.icon} {balances.log_str}", extra={**balances.log_extra})
+            await balances.save()
+
+    except Exception as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch or log node balance: {e}",
+            extra={"notification": False},
+        )
 
 
 async def invoice_report(
@@ -365,6 +383,7 @@ async def invoice_report(
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup | None = None,
 ) -> None:
+    asyncio.create_task(node_balance_report(lnd_client=lnd_client))
     expiry_datetime = datetime.fromtimestamp(
         htlc_event.creation_date + htlc_event.expiry, tz=timezone.utc
     )
@@ -393,11 +412,18 @@ async def payment_report(
     status = lnrpc.Payment.PaymentStatus.Name(htlc_event.status)
     creation_date = datetime.fromtimestamp(htlc_event.creation_time_ns / 1e9, tz=timezone.utc)
     pre_image = htlc_event.payment_preimage if htlc_event.payment_preimage else ""
+    asyncio.create_task(node_balance_report(lnd_client=lnd_client))
     try:
         dest_alias = await get_node_alias_from_pay_request(htlc_event.payment_request, lnd_client)
     except LNDConnectionError as e:
         logger.warning(
             f"{lnd_client.icon} Could not fetch dest alias (connection): {e}",
+            extra={"notification": False},
+        )
+        dest_alias = "Unknown"
+    except ValueError as e:
+        logger.warning(
+            f"{lnd_client.icon} Could not fetch or save node balance: {e}",
             extra={"notification": False},
         )
         dest_alias = "Unknown"
@@ -428,6 +454,31 @@ async def htlc_event_report(
     lnd_client: LNDClient,
     lnd_events_group: LndEventsGroup,
 ) -> None:
+    """Log a human-readable report for a single HTLC event.
+
+    This asynchronous helper formats and logs key information about an incoming
+    or outgoing HTLC (Hashed Time-Locked Contract) event observed from LND.
+    It derives a textual event type, selects the relevant HTLC id (incoming or
+    outgoing), extracts the settle preimage when present, and determines whether
+    the event completes a logical HTLC group via the provided LndEventsGroup.
+    A short emoji indicates completion (💎) or non-completion (🔨). The full
+    event is serialized into a dictionary and included in structured logging
+    metadata under the "htlc_event" key, and the completion boolean is included
+    under "complete".
+
+    Args:
+        htlc_event (routerrpc.HtlcEvent): The raw HTLC event message from LND.
+        lnd_client (LNDClient): Client wrapper used for contextual info (e.g. icon).
+        lnd_events_group (LndEventsGroup): Helper used to determine whether the
+            HTLC event completes a group of related events.
+
+    Returns:
+        None
+
+    Side effects:
+        Emits an INFO-level log entry containing a concise human-readable message
+        and structured metadata for downstream processing or debugging.
+    """
     event_type = (
         routerrpc.HtlcEvent.EventType.Name(htlc_event.event_type)
         if htlc_event.event_type
@@ -1262,12 +1313,6 @@ async def main_async_start(connection_name: str) -> None:
         # Let notifications flush before tearing down logging/redis
         await asyncio.sleep(1)
         InternalConfig().shutdown()
-
-
-# helper to bound notification wait
-async def _wait_notifications():
-    while getattr(InternalConfig, "notification_lock", False):
-        await asyncio.sleep(0.2)
 
 
 async def pause_for_database_sync() -> bool:
