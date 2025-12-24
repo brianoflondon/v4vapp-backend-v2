@@ -12,7 +12,8 @@ from bson import Decimal128
 from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.config.setup import InternalConfig, async_time_decorator, logger
+from v4vapp_backend_v2.config.decorators import async_time_decorator
+from v4vapp_backend_v2.config.setup import InternalConfig, logger, DB_RATES_COLLECTION
 from v4vapp_backend_v2.database.db_retry import (
     mongo_call,
     summarize_write_result,  # optional pretty log
@@ -50,7 +51,7 @@ CACHE_TIMES = {
     "Global": 60,
 }
 
-DB_RATES_COLLECTION: str = "rates"  # Collection name for storing rates in the database
+ # Collection name for storing rates in the database
 
 DB_RATES_MIN_INTERVAL: int = 60 * 2 - 10  # 2 minutes 50 seconds
 
