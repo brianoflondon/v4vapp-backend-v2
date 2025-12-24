@@ -510,7 +510,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         return HiveInternalQuote(error=message)
 
 
-def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount]:
+def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.
     Returns
@@ -523,12 +523,14 @@ def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount]:
         hive_accname = InternalConfig().server_id
     hive_account = Account(hive_accname, blockchain_instance=hive)
     try:
-        balances = hive_account.balances.get("available", {})
-        if balances is None or len(balances) < 2:
+        balances: List[Amount] | None = hive_account.balances.get("available", None)
+        if not balances or len(balances) < 2:
             return {"HIVE": Amount("0.000 HIVE"), "HBD": Amount("0.000 HBD")}
         return {
             "HIVE": balances[0],
             "HBD": balances[1],
+            "HIVE_fmt": f"{balances[0].amount:,.3f}",
+            "HBD_fmt": f"{balances[1].amount:,.3f}",
         }
     except Exception as e:
         logger.error(f"Error fetching server hive balances: {e}")
