@@ -201,7 +201,7 @@ async def reset_lightning_node_balance():
             debit_unit=Currency.MSATS,
             debit_amount=channel_balance.local_msat,
             debit_conv=opening_conv,
-            credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node),
+            credit=LiabilityAccount(name="Owner Loan Payable", sub=node),
             credit_unit=Currency.MSATS,
             credit_amount=channel_balance.local_msat,
             credit_conv=opening_conv,

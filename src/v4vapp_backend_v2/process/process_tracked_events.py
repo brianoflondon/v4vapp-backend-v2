@@ -233,7 +233,7 @@ async def process_lightning_invoice(
             debit=AssetAccount(name="Treasury Lightning", sub=node_name),
             debit_unit=Currency.MSATS,
             debit_amount=float(invoice.amt_paid_msat),
-            credit=LiabilityAccount(name="Owner Loan Payable (funding)", sub=node_name),
+            credit=LiabilityAccount(name="Owner Loan Payable", sub=node_name),
             credit_amount=float(invoice.amt_paid_msat),
             credit_unit=Currency.MSATS,
             link=invoice.link,

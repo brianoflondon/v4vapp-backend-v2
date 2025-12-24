@@ -45,7 +45,7 @@ async def test_send_lightning_to_pay_req():
     # generating a transaction (a return from Umbrel back to the owner's loan account)
     group_id = "00000000-0000-0000-0000-000000000002"
     test_address = "v4vapp.dhf@sats.v4v.app"
-    chat_message = f"Funding Umbrel return DEBIT 'Owner Loan Payable (funding)' CREDIT 'Customer Deposits Lightning' {group_id}"
+    chat_message = f"Funding Umbrel return DEBIT 'Owner Loan Payable' CREDIT 'Customer Deposits Lightning' {group_id}"
 
     random_amt = 500 + randint(1, 99)
     lnd_client = LNDClient(connection_name="umbrel")
