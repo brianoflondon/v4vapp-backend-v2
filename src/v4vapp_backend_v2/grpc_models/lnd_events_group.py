@@ -395,6 +395,7 @@ class LndEventsGroup:
                 f"{to_channel} "
                 f"{end_message} ({htlc_id})"
             )
+            #TODO: #223 This is where we generate a Forward event which can be stored
             ans_dict = {
                 "htlc_id": htlc_id,
                 "from_channel": from_channel,
