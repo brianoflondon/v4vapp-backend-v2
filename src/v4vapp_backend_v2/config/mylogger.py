@@ -3,7 +3,7 @@ import datetime as dt
 import json
 import logging
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import OrderedDict, override
 
 from colorama import Fore, Style
@@ -133,10 +133,9 @@ class MyJSONFormatter(logging.Formatter):
                  parent class's format method if an error occurs.
         """
 
+        # Use module-level json_default helper so it's testable and robust
         def json_default(o):
-            if isinstance(o, Decimal):
-                return float(round(o, 11))
-            return str(o)
+            return _json_default(o)
 
         try:
             message = self._prepare_log_dict(record)
@@ -492,6 +491,55 @@ IGNORE_REPORT_FIELDS = LOG_RECORD_BUILTIN_ATTRS | {
     "_error_tracking_processed",
     "_error_tracking_result",
 }
+
+
+def _json_default(o):
+    """JSON default handler for structured logs.
+
+    Handles Decimal, bson.Decimal128, and fallbacks safely without raising
+    decimal.InvalidOperation or OverflowError for pathological inputs.
+
+    Strategy:
+      - If value is bson.Decimal128, convert to Decimal using .to_decimal()
+      - If value is Decimal:
+          - If NaN or infinite -> return str(o)
+          - Try safe float conversion and round to 11 places
+          - On conversion error -> fallback to string
+      - Otherwise -> fallback to str(o)
+    """
+
+    # Lazy import so module doesn't require pymongo/bson unless used
+    try:
+        from bson.decimal128 import Decimal128  # type: ignore
+    except Exception:  # pragma: no cover - environment may not have bson
+        Decimal128 = None
+
+    # Support bson.Decimal128 (convert to Decimal then handle)
+    if Decimal128 is not None and isinstance(o, Decimal128):
+        try:
+            o = o.to_decimal()
+        except Exception:
+            return str(o)
+
+    if isinstance(o, Decimal):
+        try:
+            # Preserve special values as strings so json doesn't try to use NaN
+            if o.is_nan() or o.is_infinite():
+                return str(o)
+            # Try converting to float; catch errors and detect overflow to inf
+            f = float(o)
+            import math
+
+            # If conversion produced an infinite float (too large), return string
+            if not math.isfinite(f):
+                return str(o)
+        except (InvalidOperation, OverflowError):
+            return str(o)
+        # Safe to return rounded float
+        return round(f, 11)
+
+    # Final fallback
+    return str(o)
 
 
 class AddJsonDataIndicatorFilter(logging.Filter):
