@@ -230,12 +230,6 @@ async def process_op(change: Mapping[str, Any], collection: str) -> None:
     async with LockStr(lock_str).locked(
         timeout=None, blocking_timeout=None, request_details="db_monitor"
     ):
-        if not full_document:
-            logger.warning(
-                f"{ICON} {lock_str} No fullDocument found in change: {change}",
-                extra={"notification": False},
-            )
-            return
         try:
             op = tracked_any_filter(full_document)
         except ValueError as e:
@@ -476,29 +470,17 @@ async def main_async_start(use_resume: bool = True):
     try:
         logger.info(f"{ICON} Database Monitor App started.")
         # Start streams once and wait for shutdown_event; then cancel streams
-        tasks = [
-            asyncio.create_task(
+        tasks = []
+        for name, pipeline in db_pipelines.items():
+            task = asyncio.create_task(
                 subscribe_stream(
-                    collection_name="invoices",
-                    pipeline=db_pipelines["invoices"],
+                    collection_name=name,
+                    pipeline=pipeline,
                     use_resume=use_resume,
                 )
-            ),
-            asyncio.create_task(
-                subscribe_stream(
-                    collection_name="payments",
-                    pipeline=db_pipelines["payments"],
-                    use_resume=use_resume,
-                )
-            ),
-            asyncio.create_task(
-                subscribe_stream(
-                    collection_name="hive_ops",
-                    pipeline=db_pipelines["hive_ops"],
-                    use_resume=use_resume,
-                )
-            ),
-        ]
+            )
+            tasks.append(task)
+
         await shutdown_event.wait()
         for t in tasks:
             t.cancel()
