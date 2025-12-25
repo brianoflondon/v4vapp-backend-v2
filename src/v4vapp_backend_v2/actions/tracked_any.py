@@ -15,6 +15,7 @@ from v4vapp_backend_v2.hive_models.op_producer_missed import ProducerMissed
 from v4vapp_backend_v2.hive_models.op_producer_reward import ProducerReward
 from v4vapp_backend_v2.hive_models.op_recurrent_transfer import RecurrentTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import Transfer, TransferBase
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
 
@@ -68,11 +69,17 @@ def get_tracked_any_type(value: Any) -> str:
         if payment_index and payment_index != 0:
             return "payment"
 
+        message_type = value.get("message_type", None)
+        if message_type == "FORWARD":
+            return "htlc_event"
+
     # Check for a Lightning Tracked Hive Event
     if isinstance(value, Invoice):
         return value.op_type or "invoice"
     if isinstance(value, Payment):
         return value.op_type or "payment"
+    if isinstance(value, TrackedForwardEvent):
+        return "htlc_event"
     if not isinstance(value, dict) and isinstance(
         value, (OpAllTransfers, FillOrder, LimitOrderCreate, CustomJson)
     ):
@@ -95,14 +102,19 @@ business logic, such as financial transactions, invoices, or payments.
 It focuses on operations/invoices/payments that the app monitors for
 accounting, conversions, or notifications.
 """
+
+# TODO: HtlcEvents need to be collected here
 TrackedAny = Annotated[
-    Annotated[Transfer, Tag("transfer")]
+    # LND Invoices, Payments and HTLC Events
+    Annotated[Invoice, Tag("invoice")]
+    | Annotated[Payment, Tag("payment")]
+    | Annotated[TrackedForwardEvent, Tag("htlc_event")]
+    # Hive Operations
+    | Annotated[Transfer, Tag("transfer")]
     | Annotated[RecurrentTransfer, Tag("recurrent_transfer")]
     | Annotated[FillRecurrentTransfer, Tag("fill_recurrent_transfer")]
     | Annotated[FillOrder, Tag("fill_order")]
     | Annotated[LimitOrderCreate, Tag("limit_order_create")]
-    | Annotated[Invoice, Tag("invoice")]
-    | Annotated[Payment, Tag("payment")]
     | Annotated[CustomJson, Tag("custom_json")]
     | Annotated[AccountUpdate2, Tag("account_update2")]
     | Annotated[TransferBase, Tag("transfer_base")]
@@ -230,27 +242,3 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
             f"Invalid tracked object type: Expected OpAny, Invoice, or Payment. {e}"
         ) from e
 
-
-# def tracked_transfer_filter(tracked: dict[str, Any]) -> TrackedTransfer:
-#     """
-#     Validates and filters a tracked object, ensuring it is of type TrackedTransfer.
-
-#     Removes the '_id' field from the input dictionary if present, then attempts to validate
-#     the object using the TrackedTransfer model. If validation is successful, returns
-#     the validated object as a TrackedTransfer type. Raises a ValueError if validation fails.
-
-#     Args:
-#         tracked (dict[str, Any]): The tracked object to validate and filter.
-
-#     Returns:
-#         TrackedTransfer: The validated tracked object of type TrackedTransfer.
-
-#     Raises:
-#         ValueError: If the object cannot be validated as a TrackedTransfer.
-#     """
-#     tracked_any = tracked_any_filter(tracked)
-#     if isinstance(tracked_any, (TransferBase, Transfer, RecurrentTransfer, FillRecurrentTransfer)):
-#         return tracked_any
-#     raise ValueError(
-#         f"Invalid tracked object type: Expected TrackedTransfer, got {type(tracked_any)}"
-#     )

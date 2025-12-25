@@ -1,0 +1,77 @@
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
+
+SAMPLE_DOC_1 = {
+    "_id": {"$oid": "694d099b1ef642d77b19c8c0"},
+    "htlc_id": 5183,
+    "message_type": "FORWARD",
+    "message:": "💰 Attempted 60,985 ACINQ → fortuna-custody-stroom ❌ (5183)",
+    "from_channel": "ACINQ",
+    "to_channel": "fortuna-custody-stroom",
+    "amount": {"$numberDecimal": "60985.206"},
+    "fee": {"$numberDecimal": "29.333"},
+    "fee_percent": {"$numberDecimal": "0.048"},
+    "fee_ppm": 481,
+    "htlc_event_dict": {
+        "incoming_channel_id": "993059111034945537",
+        "incoming_htlc_id": "5183",
+        "timestamp_ns": "1766656411792420910",
+        "final_htlc_event": {"offchain": True},
+    },
+    "notification": False,
+    "silent": True,
+    "timestamp": {"$date": "2025-12-25T09:53:31.557Z"},
+}
+
+SAMPLE_DOC_2 = {
+    "_id": {"$oid": "694d095e1ef642d77b19c8bf"},
+    "htlc_id": 5182,
+    "message_type": "FORWARD",
+    "message:": "💰 Attempted 60,670 ACINQ → fortuna-custody-stroom ❌ (5182)",
+    "from_channel": "ACINQ",
+    "to_channel": "fortuna-custody-stroom",
+    "amount": {"$numberDecimal": "60670.470"},
+    "fee": {"$numberDecimal": "29.182"},
+    "fee_percent": {"$numberDecimal": "0.048"},
+    "fee_ppm": 481,
+    "htlc_event_dict": {
+        "incoming_channel_id": "993059111034945537",
+        "incoming_htlc_id": "5182",
+        "timestamp_ns": "1766656349845728201",
+        "final_htlc_event": {"offchain": True},
+    },
+    "notification": False,
+    "silent": True,
+    "timestamp": {"$date": "2025-12-25T09:52:30.778Z"},
+}
+
+
+def test_parse_sample_doc_1():
+    m = TrackedForwardEvent.model_validate(SAMPLE_DOC_1)
+
+    assert m.id == "694d099b1ef642d77b19c8c0"
+    assert m.htlc_id == 5183
+    assert "Attempted" in (m.message or "")
+    assert isinstance(m.amount, Decimal)
+    assert m.amount == Decimal("60985.206")
+    assert m.fee == Decimal("29.333")
+    assert isinstance(m.timestamp, datetime)
+    assert m.timestamp.tzinfo is not None and m.timestamp.tzinfo.utcoffset(
+        m.timestamp
+    ) == timezone.utc.utcoffset(m.timestamp)
+    assert m.htlc_event_dict is not None
+    assert m.htlc_event_dict.final_htlc_event is not None
+    assert m.htlc_event_dict.final_htlc_event.offchain is True
+
+
+def test_parse_sample_doc_2():
+    m = TrackedForwardEvent.model_validate(SAMPLE_DOC_2)
+
+    assert m.id == "694d095e1ef642d77b19c8bf"
+    assert m.htlc_id == 5182
+    assert m.amount == Decimal("60670.470")
+    assert m.fee == Decimal("29.182")
+    assert m.htlc_event_dict.timestamp_ns == Decimal("1766656349845728201")
+    assert m.silent is True
