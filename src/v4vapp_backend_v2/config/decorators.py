@@ -31,13 +31,13 @@ def async_time_decorator(func):
             result = await func(*args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.info(f"{ICON} Function '{func.__qualname__[:26]}' took {execution_time:.4f}s")
+            logger.info(f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s")
             return result
         except Exception as e:
             end_time = time.time()
             execution_time = end_time - start_time
             logger.warning(
-                f"{ICON} Function '{func.__qualname__[:26]}' failed after {execution_time:.4f}s: {str(e)}",
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' failed after {execution_time:.4f}s: {str(e)}",
                 extra={"notification": False, "error": e},
             )
             raise
