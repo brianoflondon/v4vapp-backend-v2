@@ -395,8 +395,11 @@ class LndEventsGroup:
                 f"{to_channel} "
                 f"{end_message} ({htlc_id})"
             )
+            # TODO: #223 This is where we generate a Forward event which can be stored
             ans_dict = {
                 "htlc_id": htlc_id,
+                "message_type": "FORWARD",
+                "message:": message_str,
                 "from_channel": from_channel,
                 "to_channel": to_channel,
                 "amount": self.forward_amt_fee(primary_event).forward_amount,
@@ -470,6 +473,8 @@ class LndEventsGroup:
         )
         ans_dict = {
             "htlc_id": htlc_id,
+            "message_type": "SEND",
+            "message": message_str,
             "amount": amount,
             "sent_via": sent_via,
             "dest_alias": dest_alias,
@@ -498,6 +503,8 @@ class LndEventsGroup:
         message_str = f"💵 Receiving {amount:,}{for_memo} via {received_via}{htlc_id_str}"
         ans_dict = {
             "htlc_id": htlc_id,
+            "message_type": "RECEIVE",
+            "message": message_str,
             "amount": amount,
             "received_via": received_via,
             "for_memo": for_memo,
