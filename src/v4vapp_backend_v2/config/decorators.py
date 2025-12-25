@@ -31,7 +31,7 @@ def async_time_decorator(func):
             result = await func(*args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.debug(f"{ICON} Function '{func.__qualname__[:26]}' took {execution_time:.4f}s")
+            logger.info(f"{ICON} Function '{func.__qualname__[:26]}' took {execution_time:.4f}s")
             return result
         except Exception as e:
             end_time = time.time()
@@ -84,7 +84,7 @@ def async_time_stats_decorator(runs=1):
 
                 if len(timings) >= runs:
                     avg_time = mean(timings)
-                    logger.debug(
+                    logger.info(
                         f"{ICON} Last: {execution_time * 1000:>4.0f}ms, Avg: {avg_time * 1000:>4.0f}ms, Runs: {len(timings)} {func.__qualname__[:34]:<38}",
                         extra={
                             "func_name": func.__qualname__,

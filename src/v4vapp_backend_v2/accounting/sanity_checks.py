@@ -246,7 +246,7 @@ all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = 
 # MARK: Runner for all sanity checks
 
 
-@async_time_stats_decorator()
+@async_time_stats_decorator(runs=10)
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
