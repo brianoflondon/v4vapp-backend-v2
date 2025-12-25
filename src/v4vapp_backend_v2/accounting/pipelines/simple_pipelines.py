@@ -291,9 +291,19 @@ def db_monitor_pipelines() -> Dict[str, Sequence[Mapping[str, Any]]]:
         },
         ignore_updates_match,
     ]
+    htlc_events_pipeline: Sequence[Mapping[str, Any]] = [
+        {
+            "$match": {
+                "operationType": {"$ne": "delete"},
+                "fullDocument.group_id": {"$ne": None},
+            }
+        },
+        ignore_updates_match,
+    ]
 
     return {
         "payments": payments_pipeline,
         "invoices": invoices_pipeline,
         "hive_ops": hive_ops_pipeline,
+        "htlc_events": htlc_events_pipeline,
     }

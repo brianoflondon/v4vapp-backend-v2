@@ -30,6 +30,7 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
@@ -103,6 +104,13 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             # CustomJson notification is a special case.
             logger.debug(f"Notification CustomJson: {tracked_op.log_str}")
             return []
+
+        if isinstance(tracked_op, TrackedForwardEvent):
+            ledger_entries = []
+            logger.info(tracked_op.log_str, extra={"notification": False, **tracked_op.log_extra})
+            # extra processing for HTLC events can go here
+            # No ledger entry necessary for HTLC events
+            return ledger_entries
 
         unknown_cust_id = f"unknown_cust_id_{uuid4()}"
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))

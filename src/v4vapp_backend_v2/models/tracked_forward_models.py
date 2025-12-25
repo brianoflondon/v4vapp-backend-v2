@@ -5,10 +5,13 @@ from decimal import Decimal
 from time import time_ns
 from typing import Any, Dict
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.results import UpdateResult
 
 from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
 
 
 class FinalHtlcEvent(BaseModel):
@@ -150,6 +153,9 @@ class TrackedForwardEvent(BaseModel):
     notification: bool = False
     silent: bool = False
     timestamp: datetime | None = None
+    process_time: float | None = Field(
+        None, description="Time in (s) it took to process this transaction"
+    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
@@ -166,6 +172,99 @@ class TrackedForwardEvent(BaseModel):
             AsyncCollection: The collection object for this model.
         """
         return InternalConfig.db["htlc_events"]
+
+    async def save(self) -> UpdateResult:
+        """
+        Saves the current instance to the database.
+
+        This method inserts or updates the document in the database collection
+        associated with this model.
+        """
+        collection = self.collection()
+        update = self.model_dump(
+            exclude_unset=True,
+            exclude_none=True,
+            by_alias=True,
+        )
+
+        # Convert Decimal objects to floats for MongoDB compatibility
+        update = convert_decimals_for_mongodb(update)
+
+        update = {
+            "$set": update,
+        }
+        # Delegate retries and logging to the wrapper
+        return await mongo_call(
+            lambda: self.collection().update_one(
+                filter=self.group_id_query,
+                update=update,
+                upsert=True,
+            ),
+            error_code=f"db_save_error_{self.collection_name}",
+            context=f"{self.collection_name}:{self.group_id_p}",
+        )
+
+    @property
+    def op_type(self) -> str:
+        """
+        Returns the operation type for this tracked forward event.
+
+        Returns:
+            str: The operation type.
+        """
+        return self.message_type or "FORWARD"
+
+    @property
+    def group_id_p(self) -> str:
+        """
+        Returns the group ID for this tracked forward event.
+
+        Returns:
+            str: The group ID.
+        """
+        return self.group_id or ""
+
+    @computed_field
+    def short_id(self) -> str:
+        """
+        Returns a short identifier for this tracked forward event.
+
+        Returns:
+            str: The short identifier.
+        """
+        return f"{self.htlc_id}"
+
+    @property
+    def short_id_p(self) -> str:
+        """
+        Returns a short identifier for this tracked forward event.
+
+        Returns:
+            str: The short identifier.
+        """
+        return f"{self.htlc_id}"
+
+    @property
+    def log_str(self) -> str:
+        """
+        Returns a string representation for logging purposes.
+
+        Returns:
+            str: The log string.
+        """
+        if self.message:
+            return self.message
+        return f"{self.message_type} HTLC {self.htlc_id}"
+
+    @property
+    def log_extra(self) -> Dict[str, Any]:
+        """
+        Returns extra logging information as a dictionary.
+
+        Returns:
+            dict: The extra logging information.
+        """
+        return {"tracked_forward_event": self.model_dump(exclude_unset=True)}
 
     @property
     def group_id_query(self) -> Dict[str, Any]:
