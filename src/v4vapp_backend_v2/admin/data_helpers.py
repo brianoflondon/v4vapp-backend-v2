@@ -77,19 +77,42 @@ async def admin_data_helper() -> AdminDataHelper:
     node_name = InternalConfig().node_name
     nb = NodeBalances(node=node_name)
 
+    async def _safe_fetch_balances(nb_obj: NodeBalances):
+        try:
+            await nb_obj.fetch_balances()
+        except Exception as e:
+            logger.warning(f"Safe fetch balances failed: {e}", extra={"notification": False})
+        return nb_obj
+
+    async def _safe_ledger_details(asset: AssetAccount):
+        try:
+            return await one_account_balance(account=asset)
+        except Exception as e:
+            logger.warning(f"Safe ledger lookup failed: {e}", extra={"notification": False})
+            return None
+
+    async def _safe_account_balance(acc: str):
+        try:
+            return await run_in_threadpool(account_hive_balances, acc)
+        except Exception as e:
+            logger.warning(
+                f"Safe account balance for {acc} failed: {e}", extra={"notification": False}
+            )
+            return {"error": str(e)}
+
     async with TaskGroup() as tg:
         sanity_task = tg.create_task(
             log_all_sanity_checks(local_logger=logger, log_only_failures=True, notification=False)
         )
         # Fetch pending transactions
         pending_transactions_task = tg.create_task(PendingTransaction.list_all_str())
-        # Attempt to read latest stored node balances first (fast)
-        fetch_balances_task = tg.create_task(nb.fetch_balances())
+        # Attempt to read latest stored node balances first (fast) using safe wrappers
+        fetch_balances_task = tg.create_task(_safe_fetch_balances(nb))
         asset = AssetAccount(name="External Lightning Payments", sub=node_name)
-        ledger_details_task = tg.create_task(one_account_balance(account=asset))
+        ledger_details_task = tg.create_task(_safe_ledger_details(asset))
         balance_tasks = {}
         for acc in InternalConfig().config.admin_config.highlight_users:
-            balance_tasks[acc] = tg.create_task(run_in_threadpool(account_hive_balances, acc))
+            balance_tasks[acc] = tg.create_task(_safe_account_balance(acc))
 
     sanity_results = await sanity_task
     pending_transactions = await pending_transactions_task
