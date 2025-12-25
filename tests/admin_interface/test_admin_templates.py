@@ -66,6 +66,9 @@ class TestTemplateCompilation:
             content = f.read()
             assert '{% extends "base.html" %}' in content
             assert "Account Balances" in content  # Check for dashboard-specific content
+            assert "LND Balances" in content
+            assert "Delta:" in content
+            assert "Load Time:" in content
 
     def test_template_inheritance(self, template_env):
         """Test template inheritance works correctly"""
