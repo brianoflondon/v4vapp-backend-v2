@@ -6,7 +6,7 @@ from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 
-async def process_tracked_forward(
+async def process_forward(
     tracked_forward_event: TrackedForwardEvent,
 ) -> List[LedgerEntry]:
     """
