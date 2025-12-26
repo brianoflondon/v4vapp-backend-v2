@@ -37,6 +37,7 @@ from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
+from v4vapp_backend_v2.process.process_tracked_forward_events import process_tracked_forward
 from v4vapp_backend_v2.witness_monitor.witness_events import process_witness_event
 
 
@@ -105,13 +106,6 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             logger.debug(f"Notification CustomJson: {tracked_op.log_str}")
             return []
 
-        if isinstance(tracked_op, TrackedForwardEvent):
-            ledger_entries = []
-            logger.info(tracked_op.log_str, extra={"notification": False, **tracked_op.log_extra})
-            # extra processing for HTLC events can go here
-            # No ledger entry necessary for HTLC events
-            return ledger_entries
-
         unknown_cust_id = f"unknown_cust_id_{uuid4()}"
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
         cust_id = str(unknown_cust_id) if not cust_id else cust_id
@@ -131,6 +125,12 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                     ledger_entries = await process_lightning_invoice(invoice=tracked_op)
                 elif isinstance(tracked_op, Payment):
                     ledger_entries = await process_lightning_payment(payment=tracked_op)
+                elif isinstance(tracked_op, TrackedForwardEvent):
+                    # No ledger entry necessary for HTLC events
+                    ledger_entries = await process_tracked_forward(tracked_forward_event=tracked_op)
+                    logger.info(
+                        tracked_op.log_str, extra={"notification": False, **tracked_op.log_extra}
+                    )
                 else:
                     raise ValueError("Invalid tracked object")
 

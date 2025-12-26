@@ -5,6 +5,7 @@ from pydantic import BaseModel, Discriminator, Tag, ValidationError
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.hive_models.op_account_update2 import AccountUpdate2
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.hive_models.op_account_witness_vote import AccountWitnessVote
 from v4vapp_backend_v2.hive_models.op_all import OpAllTransfers
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
@@ -227,6 +228,9 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
     if "_id" in tracked:
         del tracked["_id"]  # Remove _id field if present
 
+    # Convert any bson Decimal128 fields to Decimal to make Pydantic happy
+    tracked = convert_decimal128_to_decimal(tracked)
+
     try:
         value = {"value": tracked}
         answer = DiscriminatedTracked.model_validate(value)
@@ -241,4 +245,3 @@ def tracked_any_filter(tracked: dict[str, Any]) -> TrackedAny:
         raise ValueError(
             f"Invalid tracked object type: Expected OpAny, Invoice, or Payment. {e}"
         ) from e
-

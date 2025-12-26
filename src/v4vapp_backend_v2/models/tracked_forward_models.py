@@ -3,15 +3,26 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from time import time_ns
-from typing import Any, Dict
+from typing import Any, Dict, List, Mapping, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.results import UpdateResult
 
+try:
+    from bson.decimal128 import Decimal128 as BSONDecimal128
+except Exception:  # pragma: no cover - bson may not be present in all test envs
+    BSONDecimal128 = None
+
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_retry import mongo_call
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal, convert_object_ids
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
+
+try:
+    from bson import ObjectId
+except Exception:  # pragma: no cover - bson may not be available in tests
+    ObjectId = None
 
 
 class FinalHtlcEvent(BaseModel):
@@ -35,6 +46,12 @@ class HtlcInfo(BaseModel):
     @classmethod
     def _to_decimal(cls, v: Any) -> Any:
         # Accept dicts from Mongo like {'$numberDecimal': '...'}, ints or strings
+        # Handle bson Decimal128 values coming straight from Mongo
+        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
+            try:
+                return v.to_decimal()
+            except Exception:
+                return Decimal(str(v))
         if isinstance(v, dict):
             if "$numberDecimal" in v:
                 return Decimal(v["$numberDecimal"])
@@ -104,6 +121,13 @@ class HtlcEventDict(BaseModel):
     @classmethod
     def _id_to_str(cls, v: Any) -> Any:
         # Accept ints or decimals and convert to string for stable handling
+        # Handle bson Decimal128 for ids
+        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
+            try:
+                return str(v.to_decimal())
+            except Exception:
+                return str(v)
+
         if isinstance(v, (int, Decimal)):
             return str(v)
         if isinstance(v, dict):
@@ -118,6 +142,13 @@ class HtlcEventDict(BaseModel):
     @classmethod
     def _timestamp_to_decimal(cls, v: Any) -> Any:
         # Accept Mongo style, ints or string
+        # Handle bson Decimal128 timestamps
+        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
+            try:
+                return v.to_decimal()
+            except Exception:
+                return Decimal(str(v))
+
         if isinstance(v, dict):
             if "$numberLong" in v:
                 return Decimal(v["$numberLong"])
@@ -131,7 +162,10 @@ class HtlcEventDict(BaseModel):
 
 
 class TrackedForwardEvent(BaseModel):
-    """Pydantic model for HTLC Event forward notification documents.
+    """
+    Pydantic model for HTLC Event forward notification documents.
+
+    This is set up only to track FORWARD events currently which result in success and accrue fees.
 
     This model accepts BSON-style MongoDB JSON representations (e.g. {"$numberDecimal": "..."}
     for decimals and {"$date": "...Z"} for timestamps) and normalizes them to standard
@@ -157,6 +191,14 @@ class TrackedForwardEvent(BaseModel):
         None, description="Time in (s) it took to process this transaction"
     )
 
+    included_on_ledger: bool = Field(
+        False,
+        description="Whether this forward event has been recorded on ledger. This will be set when a ledger entry is created for this forward.",
+    )
+    ledger_entry_id: str | None = Field(
+        None, description="The ID of the ledger entry associated with this forward event, if any."
+    )
+
     model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     @classmethod
@@ -173,6 +215,64 @@ class TrackedForwardEvent(BaseModel):
         """
         return InternalConfig.db["htlc_events"]
 
+    @classmethod
+    async def pending_for_ledger_inclusion(cls) -> Tuple[Decimal, List[TrackedForwardEvent]]:
+        """
+        Asynchronously aggregate and return tracked forward events that are still pending inclusion on the ledger.
+
+        This classmethod queries the collection for documents where `included_on_ledger` is False or missing,
+        groups those documents to compute the total of the `fee` field and collects the matching documents,
+        and then returns:
+
+        - total_fee: a Decimal representing the sum of `fee` across all pending documents (Decimal(0) if none),
+        - a list of TrackedForwardEvent model instances corresponding to the pending documents.
+
+        Notes:
+        - The aggregation may produce Decimal128 values for numeric fields; these are converted to Python Decimal
+            prior to returning.
+        - ObjectId fields are converted to standard serializable representations before model validation.
+        - Returned model instances are created via `model_validate`, so they are validated and converted to the
+            model's types.
+        - This method does not modify the database.
+
+                Tuple[Decimal, List[TrackedForwardEvent]]: (total_fee, pending_events)
+
+        Example:
+                total_fee, pending_events = await TrackedForwardEvent.pending_for_ledger_inclusion()
+
+        """
+        pipeline: list[Mapping[str, Any]] = [
+            {
+                "$match": {
+                    "$or": [
+                        {"included_on_ledger": False},
+                        {"included_on_ledger": {"$exists": False}},
+                    ]
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_fee": {"$sum": "$fee"},
+                    "pending_fees": {"$push": "$$ROOT"},
+                }
+            },
+            {"$project": {"_id": 0, "total_fee": 1, "pending_fees": 1}},
+        ]
+        cursor = await cls.collection().aggregate(pipeline)
+        results = await cursor.to_list(length=None)
+        if not results:
+            return Decimal(0), []
+
+        # Convert any Decimal128s returned from aggregation into Decimal
+        doc = convert_decimal128_to_decimal(results[0])
+        convert_object_ids(doc)
+
+        total_fee = Decimal(str(doc.get("total_fee", 0)))
+        pending = doc.get("pending_fees", [])
+
+        return total_fee, [cls.model_validate(item) for item in pending]
+
     async def save(self) -> UpdateResult:
         """
         Saves the current instance to the database.
@@ -180,7 +280,6 @@ class TrackedForwardEvent(BaseModel):
         This method inserts or updates the document in the database collection
         associated with this model.
         """
-        collection = self.collection()
         update = self.model_dump(
             exclude_unset=True,
             exclude_none=True,
@@ -287,6 +386,12 @@ class TrackedForwardEvent(BaseModel):
     @field_validator("amount", "fee", "fee_percent", mode="before")
     @classmethod
     def _parse_decimal(cls, v: Any) -> Any:
+        # Handle bson Decimal128 values coming straight from Mongo
+        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
+            try:
+                return v.to_decimal()
+            except Exception:
+                return Decimal(str(v))
         # Accept Mongo style {"$numberDecimal": "..."}, strings or Decimal
         if isinstance(v, dict) and "$numberDecimal" in v:
             return Decimal(v["$numberDecimal"])

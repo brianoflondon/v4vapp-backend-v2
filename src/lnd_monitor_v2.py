@@ -44,7 +44,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
-from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
+from v4vapp_backend_v2.models.tracked_forward_models import HtlcEventDict, TrackedForwardEvent
 
 ICON = "⚡"
 
@@ -165,6 +165,7 @@ async def track_events(
                 pass
         await asyncio.sleep(0.2)
         message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
+
         if check_for_attempted_forwards(htlc_event, message_str):
             silent = True
             notification = False
@@ -184,10 +185,19 @@ async def track_events(
                 },
             )
             if ans_dict.get("message_type") == "FORWARD":
-                forward_event = TrackedForwardEvent.model_validate(ans_dict)
+                try:
+                    forward_event = HtlcEventDict.model_validate(htlc_event_dict)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not save HTLC event: {e}", extra={"notification": False}
+                    )
+                    forward_event = htlc_event_dict
+                ans_dict["htlc_event_dict"] = forward_event
                 asyncio.create_task(
                     db_store_htlc_event(
-                        htlc_event_ans=forward_event.model_dump(exclude_none=True, by_alias=True)
+                        htlc_event_ans=TrackedForwardEvent.model_validate(ans_dict).model_dump(
+                            by_alias=True, exclude_unset=True
+                        )
                     )
                 )
         asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))

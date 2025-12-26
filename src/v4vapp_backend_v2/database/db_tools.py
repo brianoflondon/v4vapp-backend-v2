@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Mapping, Optional
 
-from bson import Decimal128
+from bson import Decimal128, ObjectId
 from pymongo.asynchronous.collection import AsyncCollection
 
 from v4vapp_backend_v2.config.decorators import async_time_decorator
@@ -29,6 +29,42 @@ def convert_decimal128_to_decimal(value: Any) -> Any:
         return [convert_decimal128_to_decimal(item) for item in value]
     else:
         return value
+
+
+def convert_object_ids(o: Any) -> None:
+    """
+    Recursively convert any ObjectId instances found in a nested dict/list structure to their string representation.
+    This function mutates the input structure in-place. It walks dictionaries and lists recursively and replaces
+    values that are instances of the global ObjectId with str(value). Non-dict/list values are left unchanged.
+    If the global ObjectId is None (not available), no conversion is performed.
+    Parameters
+    ----------
+    o : Any
+        The object to process. Typically a dict or list (possibly nested) containing ObjectId instances.
+    Returns
+    -------
+    None
+        The function returns None and modifies the input object in-place.
+    Notes
+    -----
+    - Only dict and list containers are traversed; other container types are not handled.
+    - The function performs a naive recursion and does not protect against cyclic references.
+    - Intended for preparing Mongo-style documents for JSON serialization by ensuring ObjectId values become strings.
+    """
+
+    if isinstance(o, dict):
+        for k, v in list(o.items()):
+            if ObjectId is not None and isinstance(v, ObjectId):
+                o[k] = str(v)
+            else:
+                convert_object_ids(v)
+    elif isinstance(o, list):
+        for i in range(len(o)):
+            v = o[i]
+            if ObjectId is not None and isinstance(v, ObjectId):
+                o[i] = str(v)
+            else:
+                convert_object_ids(v)
 
 
 @async_time_decorator
@@ -174,6 +210,7 @@ async def find_nearest_by_timestamp_server_side(
     pipeline.append({"$limit": 1})
 
     import inspect
+
     # collection.aggregate may be sync (test fakes) or async (real AsyncCollection).
     agg = collection.aggregate(pipeline)
     # If aggregate returned an awaitable (coroutine), await it to get the cursor
