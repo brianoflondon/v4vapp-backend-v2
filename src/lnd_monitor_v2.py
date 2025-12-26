@@ -165,10 +165,11 @@ async def track_events(
                 pass
         await asyncio.sleep(0.2)
         message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
-
+        forward_success = False
         if check_for_attempted_forwards(htlc_event, message_str):
             silent = True
             notification = False
+            forward_success = True
         else:
             silent = False
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
@@ -184,7 +185,7 @@ async def track_events(
                     "incoming_invoice": invoice_dict if incoming_invoice else None,
                 },
             )
-            if ans_dict.get("message_type") == "FORWARD":
+            if ans_dict.get("message_type") == "FORWARD" and forward_success:
                 try:
                     forward_event = HtlcEventDict.model_validate(htlc_event_dict)
                 except Exception as e:
