@@ -379,6 +379,46 @@ class TrackedForwardEvent(BaseModel):
         # Normalize that into the `message` field so both styles are supported.
         if "message" not in values and "message:" in values:
             values["message"] = values.pop("message:")
+        # Recursively normalize common Mongo/BSON wrappers so field validators see
+        # native Python types (Decimal, int, str) and avoid Pydantic early rejections.
+        def _normalize(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                # $numberDecimal, $numberLong, $numberInt -> plain strings/Decimals
+                if "$numberDecimal" in obj:
+                    return Decimal(obj["$numberDecimal"])
+                if "$numberLong" in obj:
+                    return Decimal(obj["$numberLong"])
+                if "$numberInt" in obj:
+                    return int(obj["$numberInt"])
+                if "$oid" in obj:
+                    return str(obj["$oid"])
+                # Recurse
+                return {k: _normalize(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_normalize(v) for v in obj]
+            return obj
+
+        values = _normalize(values)
+
+        # Ensure group_id exists early so discriminated unions that validate nested
+        # objects won't fail on the missing field; __init__ also sets it as a fallback.
+        if "group_id" not in values or values.get("group_id") is None:
+            htlc_id = values.get("htlc_id")
+            ts_ns = None
+            hed = values.get("htlc_event_dict")
+            if isinstance(hed, dict):
+                ts_ns = hed.get("timestamp_ns")
+            if htlc_id is not None:
+                if ts_ns is not None:
+                    values["group_id"] = f"forward-{htlc_id}-{str(ts_ns)}"
+                else:
+                    values["group_id"] = f"forward-{htlc_id}"
+
+        # Make sure `_id` alias is also accessible via the field name `id` so both
+        # `_id` and `id` can be used by downstream code and by model dumping.
+        if "_id" in values and "id" not in values:
+            values["id"] = values["_id"]
+
         return values
 
     def __init__(self, **data: Any):
