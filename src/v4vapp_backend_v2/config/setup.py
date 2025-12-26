@@ -1215,7 +1215,7 @@ class InternalConfig:
     @property
     def node_name(self) -> str:
         """
-        Retrieve the node name from the configuration.
+        Retrieve the default Lightning node name from the configuration.
 
         Returns:
             str: The node name, which is the name of the LND node.

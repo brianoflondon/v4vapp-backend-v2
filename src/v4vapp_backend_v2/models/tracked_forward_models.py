@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from time import time_ns
 from typing import Any, Dict, List, Mapping, Tuple
@@ -18,11 +18,6 @@ from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_retry import mongo_call
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal, convert_object_ids
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for_mongodb
-
-try:
-    from bson import ObjectId
-except Exception:  # pragma: no cover - bson may not be available in tests
-    ObjectId = None
 
 
 class FinalHtlcEvent(BaseModel):
@@ -47,21 +42,7 @@ class HtlcInfo(BaseModel):
     def _to_decimal(cls, v: Any) -> Any:
         # Accept dicts from Mongo like {'$numberDecimal': '...'}, ints or strings
         # Handle bson Decimal128 values coming straight from Mongo
-        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
-            try:
-                return v.to_decimal()
-            except Exception:
-                return Decimal(str(v))
-        if isinstance(v, dict):
-            if "$numberDecimal" in v:
-                return Decimal(v["$numberDecimal"])
-            if "$numberLong" in v:
-                return Decimal(v["$numberLong"])
-        if isinstance(v, (int, Decimal)):
-            return Decimal(v)
-        if isinstance(v, str) and v != "":
-            return Decimal(v)
-        return v
+        return convert_decimal128_to_decimal(v)
 
 
 class ForwardEvent(BaseModel):
@@ -172,9 +153,8 @@ class TrackedForwardEvent(BaseModel):
     Python types: Decimal for amounts/fees, datetime for timestamps and str for object ids.
     """
 
-    id: str | None = Field(None, alias="_id")
+    group_id: str
     htlc_id: int
-    group_id: str | None = None
     message_type: str
     message: str | None = None
     from_channel: str | None = None
@@ -186,7 +166,7 @@ class TrackedForwardEvent(BaseModel):
     htlc_event_dict: HtlcEventDict | None = None
     notification: bool = False
     silent: bool = False
-    timestamp: datetime | None = None
+    timestamp: datetime = datetime.now(tz=timezone.utc)
     process_time: float | None = Field(
         None, description="Time in (s) it took to process this transaction"
     )
@@ -375,29 +355,10 @@ class TrackedForwardEvent(BaseModel):
         """
         return {"group_id": self.group_id}
 
-    @field_validator("id", mode="before")
-    @classmethod
-    def _parse_id(cls, v: Any) -> Any:
-        # Accept {'$oid': '...'} or raw str
-        if isinstance(v, dict) and "$oid" in v:
-            return v["$oid"]
-        return v
-
     @field_validator("amount", "fee", "fee_percent", mode="before")
     @classmethod
     def _parse_decimal(cls, v: Any) -> Any:
-        # Handle bson Decimal128 values coming straight from Mongo
-        if BSONDecimal128 is not None and isinstance(v, BSONDecimal128):
-            try:
-                return v.to_decimal()
-            except Exception:
-                return Decimal(str(v))
-        # Accept Mongo style {"$numberDecimal": "..."}, strings or Decimal
-        if isinstance(v, dict) and "$numberDecimal" in v:
-            return Decimal(v["$numberDecimal"])
-        if isinstance(v, str):
-            return Decimal(v)
-        return v
+        return convert_decimal128_to_decimal(v)
 
     @field_validator("timestamp", mode="before")
     @classmethod

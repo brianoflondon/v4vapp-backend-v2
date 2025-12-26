@@ -211,6 +211,7 @@ class RevenueAccount(LedgerAccount):
         "Fee Income Keepsats",
         "DHF Income",
         "Other Income",
+        "Routing Fee Income",
     ] = Field(..., description="Specific revenue account name")
     account_type: Literal[AccountType.REVENUE] = Field(
         AccountType.REVENUE, description="Type of account"

@@ -2,7 +2,7 @@ import textwrap
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import isclose
-from typing import Any, Dict, Self
+from typing import Any, Dict, List, Self
 
 from pydantic import (
     BaseModel,
@@ -106,6 +106,7 @@ class LedgerEntry(BaseModel):
         credit (LedgerAccountAny | None): Account to be credited.
         op (TrackedAny | None): Associated operation.
         op_type (str): Type of the operation, defaults to 'ledger_entry'.
+        extra_data (List[Any]): Additional data related to the ledger entry.
         model_config (ConfigDict): Model configuration.
 
     Methods:
@@ -182,6 +183,9 @@ class LedgerEntry(BaseModel):
         description="Type of the operation, defaults to 'ledger_entry'",
     )
     link: str = Field("", description="Link to the Hive block explorer transaction if appropriate")
+    extra_data: List[Any] = Field(
+        default_factory=list, description="Additional data related to the ledger entry"
+    )
 
     @field_validator("debit_conv", "credit_conv", "credit_amount", "debit_amount", mode="before")
     @classmethod
