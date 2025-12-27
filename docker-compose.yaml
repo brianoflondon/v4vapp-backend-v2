@@ -101,6 +101,7 @@ services:
     ports:
       - "0.0.0.0:8080:8080"
     volumes:
+      - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker/admin:/app/logs
     command: [
