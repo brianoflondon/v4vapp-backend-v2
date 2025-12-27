@@ -1,5 +1,5 @@
 ########### TEST CONFIG NO SECRETS #################
-version: "0.2.0"
+version: "0.2.1"
 
 logging:
   log_config_file: 2-stderr-json-file.json

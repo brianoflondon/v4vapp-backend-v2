@@ -639,7 +639,7 @@ class Config(BaseModel):
 
     exchange_config: ExchangeConfig = ExchangeConfig()
 
-    min_config_version: ClassVar[str] = "0.2.0"
+    min_config_version: ClassVar[str] = "0.2.1"
 
     @model_validator(mode="after")
     def check_all_defaults(self) -> "Config":
