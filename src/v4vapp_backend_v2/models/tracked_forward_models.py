@@ -155,6 +155,7 @@ class TrackedForwardEvent(BaseModel):
 
     group_id: str
     htlc_id: int
+    forward_success: bool = False
     message_type: str
     message: str | None = None
     from_channel: str | None = None
@@ -164,8 +165,6 @@ class TrackedForwardEvent(BaseModel):
     fee_percent: Decimal | None = None
     fee_ppm: int | None = None
     htlc_event_dict: HtlcEventDict | None = None
-    notification: bool = False
-    silent: bool = False
     timestamp: datetime = datetime.now(tz=timezone.utc)
     process_time: float | None = Field(
         None, description="Time in (s) it took to process this transaction"
@@ -222,6 +221,7 @@ class TrackedForwardEvent(BaseModel):
 
         """
         pipeline: list[Mapping[str, Any]] = [
+            {"$match": {"forward_success": True}},
             {
                 "$match": {
                     "$or": [
@@ -379,6 +379,7 @@ class TrackedForwardEvent(BaseModel):
         # Normalize that into the `message` field so both styles are supported.
         if "message" not in values and "message:" in values:
             values["message"] = values.pop("message:")
+
         # Recursively normalize common Mongo/BSON wrappers so field validators see
         # native Python types (Decimal, int, str) and avoid Pydantic early rejections.
         def _normalize(obj: Any) -> Any:

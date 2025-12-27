@@ -20,8 +20,7 @@ SAMPLE_DOC_1 = {
         "timestamp_ns": "1766656411792420910",
         "final_htlc_event": {"offchain": True},
     },
-    "notification": False,
-    "silent": True,
+    "forward_success": False,
     "timestamp": {"$date": "2025-12-25T09:53:31.557Z"},
 }
 
@@ -42,8 +41,7 @@ SAMPLE_DOC_2 = {
         "timestamp_ns": "1766656349845728201",
         "final_htlc_event": {"offchain": True},
     },
-    "notification": False,
-    "silent": True,
+    "forward_success": False,
     "timestamp": {"$date": "2025-12-25T09:52:30.778Z"},
 }
 
@@ -65,8 +63,7 @@ SAMPLE_DOC_3 = {
         "timestamp_ns": {"$numberLong": "1766757287403535160"},
         "final_htlc_event": {"settled": True, "offchain": True},
     },
-    "notification": True,
-    "silent": False,
+    "forward_success": True,
     "short_id": "895",
     "timestamp": {"$date": "2025-12-26T13:54:47.247Z"},
     "process_time": 134.328696098004,
@@ -99,7 +96,6 @@ def test_parse_sample_doc_2():
     assert m.amount == Decimal("60670.470")
     assert m.fee == Decimal("29.182")
     assert m.htlc_event_dict.timestamp_ns == Decimal("1766656349845728201")
-    assert m.silent is True
 
 
 def test_parse_sample_doc_3():
