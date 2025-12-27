@@ -30,9 +30,11 @@ from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.invoice_models import Invoice
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.process_errors import CustomJsonRetryError
+from v4vapp_backend_v2.process.process_forward_events import process_forward
 from v4vapp_backend_v2.process.process_hive import process_hive_op
 from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
@@ -123,6 +125,12 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                     ledger_entries = await process_lightning_invoice(invoice=tracked_op)
                 elif isinstance(tracked_op, Payment):
                     ledger_entries = await process_lightning_payment(payment=tracked_op)
+                elif isinstance(tracked_op, TrackedForwardEvent):
+                    # No ledger entry necessary for HTLC events
+                    ledger_entries = await process_forward(tracked_forward_event=tracked_op)
+                    logger.info(
+                        tracked_op.log_str, extra={"notification": False, **tracked_op.log_extra}
+                    )
                 else:
                     raise ValueError("Invalid tracked object")
 

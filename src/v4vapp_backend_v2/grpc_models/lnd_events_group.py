@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List, Tuple, Union
 
 from google.protobuf.json_format import MessageToDict
@@ -35,20 +36,29 @@ class LndChannelName:
 
 
 class ForwardAmtFee:
-    forward_amount: float
-    fee: float
+    forward_amount: Decimal
+    fee: Decimal
 
-    def __init__(self, forward_amount: float = 0, fee: float = 0) -> None:
-        self.forward_amount = forward_amount
-        self.fee = fee
-
-    @property
-    def fee_percent(self) -> float:
-        return self.fee / self.forward_amount * 100 if self.forward_amount else 0
+    def __init__(self, forward_amount: Decimal = Decimal(0), fee: Decimal = Decimal(0)) -> None:
+        self.forward_amount = Decimal(forward_amount).quantize(Decimal("0.001"))
+        self.fee = Decimal(fee).quantize(Decimal("0.001"))
 
     @property
-    def fee_ppm(self) -> float:
-        return self.fee / self.forward_amount * 1_000_000 if self.forward_amount else 0
+    def fee_percent(self) -> Decimal:
+        answer = (
+            (Decimal(self.fee) / Decimal(self.forward_amount) * Decimal("100")).quantize(
+                Decimal("0.001")
+            )
+            if self.forward_amount > Decimal(0)
+            else Decimal(0)
+        )
+        return answer
+
+    @property
+    def fee_ppm(self) -> Decimal:
+        if self.forward_amount == Decimal(0):
+            return Decimal(0)
+        return (self.fee / self.forward_amount * 1_000_000).quantize(Decimal("1"))
 
 
 EventItem = Union[routerrpc.HtlcEvent, lnrpc.Invoice, lnrpc.Payment, LndChannelName]
@@ -160,7 +170,7 @@ class LndEventsGroup:
             f"Channel Names: {counts['channel_names']}"
         )
 
-    def message(self, event: EventItem, dest_alias: str = None) -> Tuple[str, dict]:
+    def message(self, event: EventItem, dest_alias: str = "") -> Tuple[str, dict]:
         """
         Generates a message string based on the type of the given event.
         Args:
@@ -219,11 +229,6 @@ class LndEventsGroup:
         #     datetime.now(tz=timezone.utc) - creation_date
         # )
         in_flight_time = get_in_flight_time(creation_date)
-        ans_dict = {
-            "creation_date": creation_date,
-            "in_flight_time": in_flight_time,
-            "dest_alias": dest_alias,
-        }
         ans = (
             f"💸 Payment: {event.value_msat // 1000:,.0f} sats "
             f"({event.payment_index}) "
@@ -231,6 +236,15 @@ class LndEventsGroup:
             f"in flight: {in_flight_time} "
             f"{payment_event_status_name(event.status)}"
         )
+        ans_dict = {
+            "htlc_id": event.payment_hash,
+            "message_type": "PAYMENT",
+            "amount": Decimal(event.value_msat) / Decimal(1000),
+            "creation_date": creation_date,
+            "in_flight_time": in_flight_time,
+            "dest_alias": dest_alias,
+            "message_str": ans,
+        }
 
         return ans, ans_dict
 
@@ -395,9 +409,11 @@ class LndEventsGroup:
                 f"{to_channel} "
                 f"{end_message} ({htlc_id})"
             )
-            #TODO: #223 This is where we generate a Forward event which can be stored
+            # TODO: #223 This is where we generate a Forward event which can be stored
             ans_dict = {
                 "htlc_id": htlc_id,
+                "message_type": "FORWARD",
+                "message:": message_str,
                 "from_channel": from_channel,
                 "to_channel": to_channel,
                 "amount": self.forward_amt_fee(primary_event).forward_amount,
@@ -471,6 +487,8 @@ class LndEventsGroup:
         )
         ans_dict = {
             "htlc_id": htlc_id,
+            "message_type": "SEND",
+            "message": message_str,
             "amount": amount,
             "sent_via": sent_via,
             "dest_alias": dest_alias,
@@ -499,6 +517,8 @@ class LndEventsGroup:
         message_str = f"💵 Receiving {amount:,}{for_memo} via {received_via}{htlc_id_str}"
         ans_dict = {
             "htlc_id": htlc_id,
+            "message_type": "RECEIVE",
+            "message": message_str,
             "amount": amount,
             "received_via": received_via,
             "for_memo": for_memo,

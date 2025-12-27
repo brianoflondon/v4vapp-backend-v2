@@ -39,6 +39,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.invoice_models import Invoice, ListInvoiceResponse
 from v4vapp_backend_v2.models.lnd_balance_models import NodeBalances
 from v4vapp_backend_v2.models.payment_models import ListPaymentsResponse, Payment
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "⚡"
 
@@ -159,22 +160,35 @@ async def track_events(
                 pass
         await asyncio.sleep(0.2)
         message_str, ans_dict = lnd_events_group.message(htlc_event, dest_alias=dest_alias)
+        forward_success = False
         if check_for_attempted_forwards(htlc_event, message_str):
             silent = True
             notification = False
+            forward_success = False
         else:
+            forward_success = True
             silent = False
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
+            ans_dict["htlc_event_dict"] = htlc_event_dict
+            ans_dict["forward_success"] = forward_success
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={
                     "notification": notification,
                     "silent": silent,
                     type(htlc_event).__name__: ans_dict,
-                    "htlc_event": htlc_event_dict,
                     "incoming_invoice": invoice_dict if incoming_invoice else None,
                 },
             )
+            if ans_dict.get("message_type") == "FORWARD" and forward_success:
+                try:
+                    forward_event = TrackedForwardEvent.model_validate(ans_dict)
+                    asyncio.create_task(db_store_htlc_event(forward_event=forward_event))
+                except Exception as e:
+                    logger.warning(
+                        f"Could not save HTLC event: {e}", extra={"notification": False}
+                    )
+
         asyncio.create_task(remove_event_group(htlc_event, lnd_client, lnd_events_group))
 
 
@@ -350,6 +364,20 @@ async def db_store_payment(
     except Exception as e:
         logger.info(e)
         return
+
+
+async def db_store_htlc_event(
+    forward_event: TrackedForwardEvent,
+) -> None:
+    """
+    Asynchronously stores an HTLC event in the MongoDB database.
+
+    Args:
+        htlc_event_ans (Dict[str, Any]): The HTLC event data to store as returned to the logger.
+    Returns:
+        None
+    """
+    await forward_event.save()
 
 
 async def node_balance_report(

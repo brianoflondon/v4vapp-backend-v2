@@ -294,7 +294,7 @@ def get_good_nodes() -> List[str]:
                 f"Failed to fetch good nodes: {e} using last good nodes.",
                 extra={
                     "error_code": "beacon_nodes_fail",
-                    "notification": True,
+                    "notification": False,
                 },
             )
         else:
@@ -302,7 +302,7 @@ def get_good_nodes() -> List[str]:
                 f"Failed to fetch good nodes: {e} using default nodes.",
                 extra={
                     "error_code": "beacon_nodes_fail",
-                    "notification": True,
+                    "notification": False,
                 },
             )
             good_nodes = DEFAULT_GOOD_NODES

@@ -619,7 +619,7 @@ class Config(BaseModel):
         Raises ValueError if the token is not found.
     """
 
-    version: str = "0.2.0"
+    version: str = "0.2.1"
     logging: LoggingConfig = LoggingConfig()
     development: DevelopmentConfig = DevelopmentConfig()
 
@@ -639,7 +639,7 @@ class Config(BaseModel):
 
     exchange_config: ExchangeConfig = ExchangeConfig()
 
-    min_config_version: ClassVar[str] = "0.2.0"
+    min_config_version: ClassVar[str] = "0.2.1"
 
     @model_validator(mode="after")
     def check_all_defaults(self) -> "Config":
@@ -1215,7 +1215,7 @@ class InternalConfig:
     @property
     def node_name(self) -> str:
         """
-        Retrieve the node name from the configuration.
+        Retrieve the default Lightning node name from the configuration.
 
         Returns:
             str: The node name, which is the name of the LND node.

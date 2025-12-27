@@ -26,6 +26,8 @@ class LedgerType(StrEnum):
 
     FUNDING = "funding"  # Funding from Owner to Treasury
 
+    ROUTING_FEE = "r_fee"  # Routing fee earned on HTLC forwards
+
     EXCHANGE_CONVERSION = "exc_conv"  # Conversion transaction on an external exchange
     EXCHANGE_FEES = "exc_fee"  # Fees paid to an external exchange
 

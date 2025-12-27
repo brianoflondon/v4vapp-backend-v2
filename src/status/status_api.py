@@ -123,6 +123,10 @@ class StatusAPI:
         # Check if port is available before starting
         logger.info(f"Checking availability of port {self.port} for Status API...")
         try:
+            for port in range(self.port, self.port + 10):
+                self.port = port
+                if self._is_port_available(self.port):
+                    break
             if not self._is_port_available(self.port):
                 logger.error(f"Port {self.port} is already in use. Cannot start Status API.")
                 raise StatusAPIPortInUseException(f"Port {self.port} is already in use.")
