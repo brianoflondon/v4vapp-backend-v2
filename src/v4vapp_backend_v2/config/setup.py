@@ -619,7 +619,7 @@ class Config(BaseModel):
         Raises ValueError if the token is not found.
     """
 
-    version: str = "0.2.0"
+    version: str = "0.2.1"
     logging: LoggingConfig = LoggingConfig()
     development: DevelopmentConfig = DevelopmentConfig()
 
