@@ -126,6 +126,8 @@ async def health_check() -> Dict[str, Any]:
                 f"{ICON} {task} task is not running",
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
+            # Exit the code to allow docker to restart the container
+            sys.exit(1)
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:

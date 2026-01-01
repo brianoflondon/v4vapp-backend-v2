@@ -91,6 +91,7 @@ async def health_check() -> Dict[str, Any]:
                 f"{ICON} {task} task is not running",
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
+            sys.exit(1)
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
