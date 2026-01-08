@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Dict
 
+import backoff
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
 from pydantic import BaseModel, ConfigDict
@@ -57,6 +58,13 @@ def get_client(testnet: bool = False) -> Client:
         raise e
 
 
+@backoff.on_exception(
+    backoff.expo,
+    (BinanceErrorBadConnection,),
+    max_tries=3,
+    jitter=backoff.full_jitter,
+    logger=logger,
+)
 def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | int]:
     """
     Get balances for a list of symbols.
