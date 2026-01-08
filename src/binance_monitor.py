@@ -120,14 +120,16 @@ async def check_binance_balances():
         except BinanceErrorBadConnection as ex:
             logger.warning(
                 f"{ICON} Problem with Binance API. {ex}",
-                extra={"error_code": "binance_api_error", "notification": True},
+                # extra={"error_code": "binance_api_error", "notification": True},
+                extra={"notification": True},
             )
             send_message = True  # This will allow the error to clear if things improve
 
         except NameResolutionError as ex:
             logger.error(
                 f"{ICON} Name resolution error: {ex}",
-                extra={"error_code": "network_error", "notification": False},
+                # extra={"error_code": "network_error", "notification": False},
+                extra={"notification": False},
             )
             send_message = True
 
