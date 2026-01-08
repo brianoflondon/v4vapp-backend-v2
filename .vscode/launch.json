@@ -59,8 +59,8 @@
                 "devhive.config.yaml",
                 // "--time-delay",
                 // "2",
-                "--start-block",
-                "-1"
+                "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                "-1" // -1 will start from the current head block
                 // "101170560"
             ],
             "justMyCode": true
