@@ -84,16 +84,16 @@ def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | in
             balances["SATS"] = Decimal(balances["BTC"] * Decimal("100000000"))
         return balances
     except ClientError as error:
-        logger.error(
+        logger.debug(
             f"Found error. status: {error.status_code}, error code: {error.error_code}, error message: {error.error_message}",
             extra={"notification": False},
         )
         raise BinanceErrorBadConnection(error.error_message)
     except RequestException as error:
-        logger.error(f"Connection error: {error}", extra={"notification": False})
+        logger.debug(f"Connection error: {error}", extra={"notification": False})
         raise BinanceErrorBadConnection(str(error))
     except Exception as error:
-        logger.error(error)
+        logger.debug(error, extra={"notification": False})
         raise BinanceErrorBadConnection(str(error))
 
 
