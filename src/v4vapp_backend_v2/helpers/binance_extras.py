@@ -4,6 +4,7 @@ from typing import Dict
 from binance.error import ClientError  # type: ignore
 from binance.spot import Spot as Client  # type: ignore
 from pydantic import BaseModel, ConfigDict
+from requests.exceptions import RequestException  # Import only the exception
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
@@ -88,6 +89,9 @@ def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | in
             extra={"notification": False},
         )
         raise BinanceErrorBadConnection(error.error_message)
+    except RequestException as error:
+        logger.error(f"Connection error: {error}", extra={"notification": False})
+        raise BinanceErrorBadConnection(str(error))
     except Exception as error:
         logger.error(error)
         raise BinanceErrorBadConnection(error)
