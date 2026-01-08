@@ -272,7 +272,7 @@ def get_good_nodes() -> List[str]:
             "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
         )
         nodes = response.json()
-        logger.debug(
+        logger.info(
             "Fetched good nodes Last good nodes",
             extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
         )
@@ -293,16 +293,16 @@ def get_good_nodes() -> List[str]:
             logger.warning(
                 f"Failed to fetch good nodes: {e} using last good nodes.",
                 extra={
-                    "error_code": "beacon_nodes_fail",
                     "notification": False,
+                    "error_code": "beacon_nodes_fail",
                 },
             )
         else:
             logger.warning(
                 f"Failed to fetch good nodes: {e} using default nodes.",
                 extra={
-                    "error_code": "beacon_nodes_fail",
                     "notification": False,
+                    "error_code": "beacon_nodes_fail",
                 },
             )
             good_nodes = DEFAULT_GOOD_NODES

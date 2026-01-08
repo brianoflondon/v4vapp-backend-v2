@@ -119,7 +119,8 @@ async def check_binance_balances():
 
         except BinanceErrorBadConnection as ex:
             logger.warning(
-                f"{ICON} Problem with Binance API. {ex}", extra={"error_code": "binance_api_error"}
+                f"{ICON} Problem with Binance API. {ex}",
+                extra={"error_code": "binance_api_error", "notification": True},
             )
             send_message = True  # This will allow the error to clear if things improve
 
@@ -167,7 +168,10 @@ def generate_message(saved_balances: dict):
     """
     delta_message = ""
     delta_balances = {}
-    balances = get_balances(["BTC", "HIVE"])
+    try:
+        balances = get_balances(["BTC", "HIVE"])
+    except BinanceErrorBadConnection:
+        raise
     hive_balance = Decimal(balances.get("HIVE", 0))
     sats_balance = Decimal(balances.get("SATS", 0))
     if saved_balances and balances != saved_balances:

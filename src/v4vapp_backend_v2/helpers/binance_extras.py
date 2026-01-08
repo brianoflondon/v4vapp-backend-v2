@@ -94,7 +94,7 @@ def get_balances(symbols: list, testnet: bool = False) -> Dict[str, Decimal | in
         raise BinanceErrorBadConnection(str(error))
     except Exception as error:
         logger.error(error)
-        raise BinanceErrorBadConnection(error)
+        raise BinanceErrorBadConnection(str(error))
 
 
 def get_current_price(symbol: str, testnet: bool = False) -> dict:
