@@ -260,6 +260,7 @@ def get_good_nodes() -> List[str]:
     Fetches a list of default nodes from the specified API endpoint.
 
     This function sends a GET request to "https://beacon.peakd.com/api/nodes"
+    but uses my proxy endpoint "https://devapi.v4v.app/v2/beacon/nodes/"
     and retrieves a list of nodes. It then filters the nodes to include only
     those with a score of 100 and returns their endpoints.
 
@@ -269,7 +270,7 @@ def get_good_nodes() -> List[str]:
     good_nodes: List[str] = []
     try:
         response = httpx.get(
-            "https://beacon.peakd.com/api/nodes", timeout=5, follow_redirects=True
+            "https://devapi.v4v.app/v2/beacon/nodes/", timeout=5, follow_redirects=True
         )
         nodes = response.json()
         logger.info(
