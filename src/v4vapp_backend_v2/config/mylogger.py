@@ -310,6 +310,9 @@ class ErrorTrackingFilter(logging.Filter):
         if hasattr(record, "_error_tracking_processed"):
             return record._error_tracking_result  # type: ignore[attr-defined]
 
+        # Is this a notifiable error?
+        notification = record.notification if hasattr(record, "notification") else True  # type: ignore[attr-defined]
+
         # Handle error_code_clear first - always allow these through and clear the code
         if hasattr(record, "error_code_clear") and record.error_code_clear:  # type: ignore[attr-defined]
             error_code_clear = record.error_code_clear  # type: ignore[attr-defined]
@@ -322,7 +325,7 @@ class ErrorTrackingFilter(logging.Filter):
                 logger.info(
                     f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
                     f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}",
-                    extra={"notification": True, "error_code_obj": error_code_obj},
+                    extra={"notification": notification, "error_code_obj": error_code_obj},
                 )
                 InternalConfig().error_codes.pop(error_code_clear)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
@@ -346,7 +349,7 @@ class ErrorTrackingFilter(logging.Filter):
                 logger.error(
                     f"❌ New error: {error_code}",
                     extra={
-                        "notification": True,
+                        "notification": notification,
                         "error_code_obj": error_code_obj,
                     },
                 )
