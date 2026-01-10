@@ -305,14 +305,18 @@ async def send_kuma_heartbeat(
             f"{ICON} Failed to send heartbeat to Kuma webhook. Status code: {e.response.status_code}",
             extra={"notification": False, "error": e},
         )
-    except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+    except (
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.ConnectError,
+    ) as e:  # Added httpx.ConnectError here
         logger.error(
-            f"{ICON} Timeout error sending heartbeat to Kuma webhook: {e}",
+            f"{ICON} Connection error sending heartbeat to Kuma webhook: {e}",
             extra={"notification": False, "error": e},
         )
     except Exception as e:
         logger.exception(
-            f"{ICON} Error sending heartbeat to Kuma webhook: {e}",
+            f"{ICON} Unexpected error sending heartbeat to Kuma webhook: {e}",
             extra={"notification": False, "error": e},
         )
 
