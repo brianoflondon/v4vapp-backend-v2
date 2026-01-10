@@ -273,7 +273,7 @@ def get_good_nodes() -> List[str]:
             "source": "v4vapp_backend",
         }
         response = httpx.get(
-            "https://devapi.v4v.app/v2/beacon/nodes/",
+            "https://beacon.v4v.app/",
             params=params,
             timeout=5,
             follow_redirects=True,
