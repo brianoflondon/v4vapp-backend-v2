@@ -15,6 +15,10 @@
 - New internal architecture means the ingestion side Hive and Lightning watching parts run independently feeding events into a MongoDB database.
 - This is completely isolated from the action sides which can make Lightning or Hive payments (the same as my current architecture) but allows much more compartmentalization and separation of functions.
 
+## Changes
+
+- Store and use a local cached copy (in system temp dir and Redis) of the Bad Actor list to allow operation when the remote source is unavailable. This adds a fallback order: Redis -> system /tmp -> bundled `bad_actors_backup_list.txt` (TODO #193).
+
 ### Nectar (Advancing Beem)
 
 - I've pushed a number of changes over to @thecrazygm fixing a few issues that crop up mostly and especially with error reporting
