@@ -19,9 +19,9 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 pytestmark = pytest.mark.integration
 
-@pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
-)
+if os.getenv("GITHUB_ACTIONS") == "true":
+    pytest.skip("Skipping tests on GitHub Actions", allow_module_level=True)
+
 
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
@@ -40,13 +40,16 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(scope="function")
-async def admin_client():
+def admin_client():
     """Create a test client for the admin app"""
     InternalConfig(config_filename="config.yaml")  # Use test config
     db_conn = DBConn()
-    await db_conn.setup_database()
+    import asyncio
+
+    asyncio.run(db_conn.setup_database())
     app = create_admin_app(config_filename="config.yaml")
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture(autouse=True)
