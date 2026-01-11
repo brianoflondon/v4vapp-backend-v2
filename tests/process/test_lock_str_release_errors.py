@@ -1,9 +1,7 @@
 import importlib.util
-import sys
 import types
 
 import pytest
-
 from redis.exceptions import LockError
 
 

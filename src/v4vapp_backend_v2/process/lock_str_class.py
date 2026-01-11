@@ -281,7 +281,15 @@ class LockStr(AccName):
             # a successful release after cleaning up the key.
             msg = str(e).lower()
             key = f"lock_str:{cust_id}"
-            if any(sub in msg for sub in ("cannot release an unlocked lock", "not owned", "already unlocked", "not owned by this process")):
+            if any(
+                sub in msg
+                for sub in (
+                    "cannot release an unlocked lock",
+                    "not owned",
+                    "already unlocked",
+                    "not owned by this process",
+                )
+            ):
                 try:
                     await redis_instance.delete(key)
                     logger.debug(f"{ICON} Release already expired or not-owned lock for {cust_id}")
