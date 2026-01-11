@@ -19,6 +19,9 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 
 pytestmark = pytest.mark.integration
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
@@ -74,9 +77,6 @@ def mock_user_data():
     ]
 
 
-@pytest.mark.skipif(
-    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
-)
 class TestAdminEndpoints:
     """Test all admin endpoints"""
 
