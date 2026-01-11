@@ -170,6 +170,15 @@ async def one_account_balance(
     return ledger_details
 
 
+def _add_notes() -> str:
+    # Clarify that unit sections are separate views and are not additive
+    return (
+        "Notes: \n"
+        "1.Unit sections are separate views and are NOT additive.\n"
+        "2.Transactions may appear in multiple unit sections (gross) and net in account totals.\n"
+    )
+
+
 # @async_time_stats_decorator()
 async def account_balance_printout(
     account: LedgerAccount | str,
@@ -218,10 +227,6 @@ async def account_balance_printout(
     output = ["_" * max_width]
     output.append(title_line)
     output.append(f"Units: {', '.join(unit.upper() for unit in units)}")
-    # Clarify that unit sections are separate views and are not additive
-    output.append(
-        "Note: Unit sections are separate views and are NOT additive. Transactions may appear in multiple unit sections (gross) and net in account totals."
-    )
     output.append("-" * max_width)
 
     if not ledger_account_details.balances:
@@ -250,10 +255,10 @@ async def account_balance_printout(
         left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
         output.append(
             f"\nUnit: {display_unit:<{left_pad - 6}} "
-            f"{'Debit':>{COL_DEBIT}} "
-            f"{'Credit':>{COL_CREDIT}} "
-            f"{'Total':>{COL_BAL}} "
-            f"{'Short ID':>{COL_SHORT_ID}} "
+            f"{'Debit ':>{COL_DEBIT}} "
+            f"{'Credit ':>{COL_CREDIT}} "
+            f"{'Total ':>{COL_BAL}} "
+            f"{'Short ID ':>{COL_SHORT_ID}} "
             f"{'Ledger Type':>{COL_LEDGER_TYPE}}"
         )
         # Underline for Unit and headings
@@ -348,6 +353,8 @@ async def account_balance_printout(
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
     output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
+    output.append(_add_notes())
+
     output.append(title_line)
 
     output.append("=" * max_width + "\n")
@@ -620,6 +627,8 @@ async def account_balance_printout_grouped_by_customer(
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
     output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
+    output.append(_add_notes())
+
     output.append(title_line)
 
     output.append("=" * max_width + "\n")
