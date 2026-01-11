@@ -1,5 +1,4 @@
 from grpc import StatusCode
-from grpc.aio import AioRpcError
 
 
 class LNDConnectionError(Exception):

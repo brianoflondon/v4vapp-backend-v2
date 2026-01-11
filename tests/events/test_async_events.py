@@ -1,11 +1,11 @@
-from v4vapp_backend_v2.events.async_event import (
-    get_subscribers,
-    async_subscribe,
-    async_publish,
-    clear_subscribers,
-)
 import pytest
 
+from v4vapp_backend_v2.events.async_event import (
+    async_publish,
+    async_subscribe,
+    clear_subscribers,
+    get_subscribers,
+)
 from v4vapp_backend_v2.events.event_models import Events
 
 

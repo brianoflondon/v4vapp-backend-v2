@@ -17,6 +17,8 @@ from v4vapp_backend_v2.admin.admin_app import create_admin_app
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True)
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):

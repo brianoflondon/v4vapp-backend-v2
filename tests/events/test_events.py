@@ -1,13 +1,15 @@
 from pathlib import Path
+
 import pytest
+
 from v4vapp_backend_v2.events.event import (
-    subscribe,
-    publish,
     clear_subscribers,
     get_subscribers,
     get_subscribers_for_event,
-    remove_subscriber,
+    publish,
     remove_all_subscribers,
+    remove_subscriber,
+    subscribe,
 )
 from v4vapp_backend_v2.events.event_models import Events
 

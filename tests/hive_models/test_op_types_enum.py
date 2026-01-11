@@ -1,7 +1,6 @@
 from v4vapp_backend_v2.hive_models.op_types_enums import (
     HiveOpTypes,
     MarketOpTypes,
-    OtherOpTypes,
     RealOpsLoopTypes,
     TransferOpTypes,
     VirtualOpTypes,

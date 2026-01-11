@@ -1,6 +1,6 @@
 import argparse
-from decimal import Decimal
 import socket
+from decimal import Decimal
 from typing import Any, Dict
 
 import uvicorn

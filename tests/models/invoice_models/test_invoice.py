@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.get_last_quote import last_quote
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.models.invoice_models import Invoice
-from tests.get_last_quote import last_quote
+
 
 @pytest.fixture
 def set_base_config_path_bad(monkeypatch: pytest.MonkeyPatch):
