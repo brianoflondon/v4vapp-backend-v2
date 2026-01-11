@@ -279,7 +279,7 @@ def get_good_nodes() -> List[str]:
             follow_redirects=True,
         )
         nodes = response.json()
-        logger.info(
+        logger.debug(
             "Fetched good nodes Last good nodes",
             extra={"beacon_response": nodes, "error_code_clear": "beacon_nodes_fail"},
         )
