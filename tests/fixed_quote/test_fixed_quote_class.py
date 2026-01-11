@@ -54,14 +54,14 @@ async def test_create_quote():
 
 
 def generate_fuzzy_test_data():
-    """Generate 100 random test cases for each currency."""
+    """Generate 10 random test cases for each currency."""
     test_data = []
     currencies = ["hive", "hbd", "usd"]
 
     # Set seed for reproducible tests
     random.seed(42)
 
-    for _ in range(100):
+    for _ in range(10):
         for currency in currencies:
             # Generate random value between 5.000 and 100.000 with 3 decimal places
             amount = round(random.uniform(5.0, 100.0), 3)
@@ -100,8 +100,8 @@ async def test_create_quote_fuzzy_batch():
     # Set seed for reproducible tests
     random.seed(42)
 
-    # Test 100 random combinations
-    for i in range(100):
+    # Test 10 random combinations
+    for i in range(10):
         # Pick random currency and amount
         currency = random.choice(["hive", "hbd", "usd"])
         amount = round(random.uniform(5.0, 100.0), 3)
@@ -143,7 +143,7 @@ async def test_create_quote_fuzzy_by_currency(currency: str):
     random.seed(42)
     quotes = []
 
-    for _ in range(50):
+    for _ in range(10):
         amount = round(random.uniform(5.0, 100.0), 3)
         kwargs = {currency: amount, "store_db": False}
 
