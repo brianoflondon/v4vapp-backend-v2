@@ -124,7 +124,7 @@ async def conversion_hive_to_keepsats(
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
         description=(
-            f"Convert {conv_result.to_convert_conv.value_in(from_currency)} "
+            f"Convert {conv_result.to_convert_conv.value_in(from_currency):,.3f} "
             f"into {conv_result.to_convert_conv.sats_rounded:,.0f} sats for {cust_id}"
         ),
         debit=AssetAccount(
@@ -175,7 +175,7 @@ async def conversion_hive_to_keepsats(
 
     # MARK: 5 Hive to Keepsats Customer Withdrawal
 
-    #TODO: #215 When we have incoming Hive we need to check if the customer has a negative Hive or HBD balance
+    # TODO: #215 When we have incoming Hive we need to check if the customer has a negative Hive or HBD balance
 
     ledger_type = LedgerType.WITHDRAW_HIVE
     deposit_ledger_entry = LedgerEntry(
