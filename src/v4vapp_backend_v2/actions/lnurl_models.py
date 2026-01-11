@@ -204,8 +204,6 @@ class LnurlPayResponseComment(LnurlResponseModel):
             raise ValidationError("`max_sendable` cannot be less than `min_sendable`.")
         return self
 
-    # TODO: #240 Add a field_validator to check if the metadata is a valid JSON string
-
 
 class LnurlCurrencyEnum(str, Enum):
     """
