@@ -879,7 +879,6 @@ class QuoteService(ABC):
 
 
 class CoinGecko(QuoteService):
-    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
@@ -916,7 +915,6 @@ class CoinGecko(QuoteService):
 
 
 class Binance(QuoteService):
-    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         """
         Retrieve a cryptocurrency quote, optionally using a cached value.
@@ -1003,7 +1001,6 @@ class Binance(QuoteService):
 
 
 class CoinMarketCap(QuoteService):
-    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
@@ -1067,7 +1064,6 @@ class CoinMarketCap(QuoteService):
 
 
 class HiveInternalMarket(QuoteService):
-    @async_time_decorator
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         self.source = "HiveInternalMarket"
         cached_quote = await self.check_cache(use_cache=use_cache)
