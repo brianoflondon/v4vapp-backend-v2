@@ -276,9 +276,25 @@ class LockStr(AccName):
             logger.warning(f"{ICON} Lock for {cust_id} was not owned by this process")
             return False
         except LockError as e:
-            if "Cannot release an unlocked lock" in str(e):
-                await redis_instance.delete(f"lock_str:{cust_id}")
-                logger.debug(f"{ICON} Release already expired lock for {cust_id}")
+            # Older/newer redis implementations may vary the exception text. Treat
+            # errors that indicate the lock is not owned or already released as
+            # a successful release after cleaning up the key.
+            msg = str(e).lower()
+            key = f"lock_str:{cust_id}"
+            if any(
+                sub in msg
+                for sub in (
+                    "cannot release an unlocked lock",
+                    "not owned",
+                    "already unlocked",
+                    "not owned by this process",
+                )
+            ):
+                try:
+                    await redis_instance.delete(key)
+                    logger.debug(f"{ICON} Release already expired or not-owned lock for {cust_id}")
+                except Exception:
+                    logger.debug(f"{ICON} Failed to delete lock key for {cust_id} after LockError")
                 return True
             else:
                 logger.error(f"{ICON} Lock error for {cust_id}: {e}")

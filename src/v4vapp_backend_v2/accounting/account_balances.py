@@ -246,8 +246,25 @@ async def account_balance_printout(
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
         conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
 
-        output.append(f"\nUnit: {display_unit}")
-        output.append("-" * 10)
+        # Headings on same line as Unit
+        left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
+        output.append(
+            f"\nUnit: {display_unit:<{left_pad - 6}} "
+            f"{'Debit':>{COL_DEBIT}} "
+            f"{'Credit':>{COL_CREDIT}} "
+            f"{'Total':>{COL_BAL}} "
+            f"{'Short ID':>{COL_SHORT_ID}} "
+            f"{'Ledger Type':>{COL_LEDGER_TYPE}}"
+        )
+        # Underline for Unit and headings
+        output.append(
+            f"{'-' * 10:<{left_pad}} "
+            f"{'-' * COL_DEBIT} "
+            f"{'-' * COL_CREDIT} "
+            f"{'-' * COL_BAL} "
+            f"{'-' * COL_SHORT_ID} "
+            f"{'-' * COL_LEDGER_TYPE}"
+        )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
             transactions_by_date: dict[str, list] = {}
@@ -413,8 +430,25 @@ async def account_balance_printout_grouped_by_customer(
         display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
         conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
 
-        output.append(f"\nUnit: {display_unit}")
-        output.append("-" * 10)
+        # Headings on same line as Unit
+        left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
+        output.append(
+            f"\nUnit: {display_unit:<{left_pad - 6}} "
+            f"{'Debit':>{COL_DEBIT}} "
+            f"{'Credit':>{COL_CREDIT}} "
+            f"{'Total':>{COL_BAL}} "
+            f"{'Short ID':>{COL_SHORT_ID}} "
+            f"{'Ledger Type':>{COL_LEDGER_TYPE}}"
+        )
+        # Underline for Unit and headings
+        output.append(
+            f"{'-' * 10:<{left_pad}} "
+            f"{'-' * COL_DEBIT} "
+            f"{'-' * COL_CREDIT} "
+            f"{'-' * COL_BAL} "
+            f"{'-' * COL_SHORT_ID} "
+            f"{'-' * COL_LEDGER_TYPE}"
+        )
         all_rows = ledger_account_details.balances[unit]
         if all_rows:
             # Group by date first

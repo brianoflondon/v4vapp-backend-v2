@@ -354,7 +354,7 @@ class CryptoConv(BaseModel):
         """
         return Amount(f"{self.hbd:.3f} HBD")
 
-    def value_in(self, currency: Currency) -> Decimal | int:
+    def value_in(self, currency: Currency) -> Decimal:
         """
         Returns the conversion value in the specified currency.
         This is useful when creating LedgerEntries with more decimal places than
