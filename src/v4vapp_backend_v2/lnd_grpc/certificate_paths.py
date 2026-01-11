@@ -1,6 +1,6 @@
 # Platform-specific CA certificate paths
-import platform
 import os
+import platform
 
 
 def get_ca_bundle_path():

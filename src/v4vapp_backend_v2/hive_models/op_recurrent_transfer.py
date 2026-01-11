@@ -1,4 +1,4 @@
-from typing import Any, override
+from typing import Any
 
 from pydantic import ConfigDict, Field
 

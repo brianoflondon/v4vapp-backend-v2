@@ -1,9 +1,10 @@
-from typing import Any
-from bson import Int64
-from google.protobuf.json_format import MessageToDict as OriginalMessageToDict
-from google.protobuf.descriptor import FieldDescriptor
-
 from datetime import datetime, timezone
+from typing import Any
+
+from bson import Int64
+from google.protobuf.descriptor import FieldDescriptor
+from google.protobuf.json_format import MessageToDict as OriginalMessageToDict
+
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 
 INT64_MIN = -(2**63)

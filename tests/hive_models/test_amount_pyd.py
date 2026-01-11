@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 from nectar.amount import Amount
 
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd

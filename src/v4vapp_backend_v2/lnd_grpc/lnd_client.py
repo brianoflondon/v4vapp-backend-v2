@@ -5,8 +5,11 @@ from typing import Any, AsyncGenerator, Callable
 
 import backoff
 from google.protobuf.json_format import MessageToDict
-from grpc import composite_channel_credentials  # type: ignore
-from grpc import metadata_call_credentials, ssl_channel_credentials
+from grpc import (
+    composite_channel_credentials,  # type: ignore
+    metadata_call_credentials,
+    ssl_channel_credentials,
+)
 from grpc.aio import AioRpcError, secure_channel  # type: ignore
 
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc

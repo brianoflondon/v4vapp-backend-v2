@@ -1,6 +1,6 @@
-import signal
 import asyncio
 import logging
+import signal
 import sys
 
 logger = logging.getLogger(__name__)

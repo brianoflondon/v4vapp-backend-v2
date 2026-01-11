@@ -1,7 +1,7 @@
-from typing import Any, Awaitable, Callable, Dict
-from v4vapp_backend_v2.events.event_models import Events
-from v4vapp_backend_v2.config.setup import logger
+from typing import Any, Callable, Dict
 
+from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.events.event_models import Events
 
 subscribers: Dict[Events, callable] = dict()
 

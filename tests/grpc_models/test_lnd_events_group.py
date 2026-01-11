@@ -1,12 +1,13 @@
 import json
 from typing import Generator
+
+from google.protobuf.json_format import MessageToDict, ParseDict
+
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
-from google.protobuf.json_format import MessageToDict, ParseDict
 from v4vapp_backend_v2.grpc_models.lnd_events_group import (
-    LndEventsGroup,
     LndChannelName,
-    event_type_name,
+    LndEventsGroup,
 )
 
 

@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from jinja2 import Environment, FileSystemLoader, TemplateSyntaxError
 
+pytestmark = pytest.mark.integration
+
 
 class TestTemplateCompilation:
     """Test template compilation and syntax validation"""

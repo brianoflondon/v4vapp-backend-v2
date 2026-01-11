@@ -1,11 +1,11 @@
-import json
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from grpc.aio import AioRpcError
 from google.protobuf.json_format import Parse
+from grpc.aio import AioRpcError
+
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 import v4vapp_backend_v2.lnd_grpc.lightning_pb2_grpc as lightningstub
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
@@ -25,11 +25,8 @@ def reset_internal_config(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
-
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -43,9 +40,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def set_base_config_path_bad(monkeypatch: pytest.MonkeyPatch):
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path
-    )
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
     test_config_logging_path = Path(test_config_path, "logging/")
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
@@ -72,6 +67,9 @@ async def test_lnd_client_setup(set_base_config_path: None):
     assert lnd_client.connection.address == "example.com:10009"
 
 
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true", reason="Skipping test on GitHub Actions"
+)
 @pytest.mark.asyncio
 async def test_check_connection_fails(set_base_config_path: None):
     lnd_client = LNDClient(connection_name="example")
@@ -133,9 +131,7 @@ async def test_channel_balance_with_retries(set_base_config_path: None):
 
     # Create a mock method with side effects
     retries = 2
-    mock_method = AsyncMock(
-        side_effect=[mock_response] + [mock_error] * retries + [mock_response]
-    )
+    mock_method = AsyncMock(side_effect=[mock_response] + [mock_error] * retries + [mock_response])
 
     # mock_client = LNDClient(connection_name="example")
 

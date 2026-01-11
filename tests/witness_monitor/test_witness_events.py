@@ -3,7 +3,6 @@ from pprint import pprint
 
 import pytest
 
-from v4vapp_backend_v2.hive.hive_extras import witness_signing_key
 from v4vapp_backend_v2.witness_monitor.witness_events import (
     check_witness_heartbeat,
     send_kuma_heartbeat,

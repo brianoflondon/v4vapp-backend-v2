@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class MongoDBRoles(StrEnum):
     READ = "read"
     READ_WRITE = "readWrite"

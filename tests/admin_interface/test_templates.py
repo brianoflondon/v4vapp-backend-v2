@@ -1,6 +1,9 @@
 import datetime
 
+import pytest
 from jinja2 import Environment, FileSystemLoader
+
+pytestmark = pytest.mark.integration
 
 
 def test_ledger_entries_template_compiles_and_renders():

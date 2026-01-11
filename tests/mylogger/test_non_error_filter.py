@@ -1,6 +1,8 @@
 import logging
 import unittest
+
 from v4vapp_backend_v2.config.mylogger import NonErrorFilter
+
 
 class TestNonErrorFilter(unittest.TestCase):
 

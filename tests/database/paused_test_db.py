@@ -8,7 +8,6 @@ import pytest
 from pymongo import InsertOne
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, WriteConcernError
 from pymongo.results import BulkWriteResult
-
 from v4vapp_backend_v2.database.db import MongoDBClient
 
 os.environ["TESTING"] = "True"

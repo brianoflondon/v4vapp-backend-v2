@@ -3,6 +3,7 @@ from typing import List
 
 from v4vapp_backend_v2.config.setup import logger
 
+
 def handle_tasks(tasks: List[asyncio.Task]) -> None:
     """
     Handles a list of asyncio tasks, waiting for them to complete and logging any exceptions.
