@@ -256,6 +256,9 @@ async def run_all_sanity_checks() -> SanityCheckResults:
     `SanityCheckResult` instance. Checks are scheduled concurrently using an
     asyncio.TaskGroup with a 5.0 second aggregate timeout.
 
+    This call will run `one_account_balance` and other database operations
+    multiple times, so it may be resource-intensive.
+
     Returns:
         SanityCheckResults: Pydantic model containing `passed`, `failed` and
         `results` lists of tuples (check_name, SanityCheckResult).
