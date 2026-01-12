@@ -167,7 +167,6 @@ async def one_account_balance(
 
     ledger_details.in_progress_msats = await in_progress(account.sub)
 
-    logger.info(f"Calculated ledger details for account: {account}")
     return ledger_details
 
 

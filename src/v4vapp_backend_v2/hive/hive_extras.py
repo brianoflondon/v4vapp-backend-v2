@@ -21,6 +21,7 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
+from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_bad_hive_accounts,
@@ -517,6 +518,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         return HiveInternalQuote(error=message)
 
 
+@time_decorator
 def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.
