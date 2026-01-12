@@ -704,6 +704,21 @@ async def get_channel_display_name(
             lnd_client=lnd_client,
         )
         return channel_name_obj.name if channel_name_obj else "Unknown"
+    except LNDConnectionError as e:
+        rpc_err = e.args[1] if len(e.args) > 1 else None
+        details = ""
+        try:
+            if rpc_err and hasattr(rpc_err, "details"):
+                details = rpc_err.details()
+            else:
+                details = getattr(rpc_err, "_details", "") or str(rpc_err)
+        except Exception:
+            details = str(rpc_err)
+        if "edge not found" in str(details).lower():
+            logger.warning(f"{lnd_client.icon} get_channel_name: channel {chan_id} not found")
+            return "Unknown"
+        logger.exception(e)
+        return "Unknown"
     except Exception:
         return "Unknown"
 
