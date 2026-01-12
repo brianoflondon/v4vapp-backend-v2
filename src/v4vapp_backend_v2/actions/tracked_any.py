@@ -104,7 +104,6 @@ It focuses on operations/invoices/payments that the app monitors for
 accounting, conversions, or notifications.
 """
 
-# TODO: HtlcEvents need to be collected here
 TrackedAny = Annotated[
     # LND Invoices, Payments and HTLC Events
     Annotated[Invoice, Tag("invoice")]

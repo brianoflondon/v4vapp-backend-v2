@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
-from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
+from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -20,6 +20,25 @@ ICON = "🧪"  # Test Tube
 
 
 class SanityCheckResult(BaseModel):
+    """
+    A Pydantic model representing the result of a single sanity check.
+
+    This model captures the identity, outcome, and human-readable details of a
+    sanity check. It also provides convenience properties for logging:
+    - `log_extra` returns a serialized dict suitable for structured logging.
+    - `log_str` returns a concise, human-readable summary string including an
+        emoji status and the check details.
+
+    Attributes:
+            name (str): The identifier or descriptive name of the sanity check.
+            is_valid (bool): True if the check passed, False if it failed.
+            details (str): A short message or explanation describing the result.
+
+    Example:
+            >>> SanityCheckResult(name="cache_health", is_valid=False, details="Miss rate too high")
+            SanityCheckResult(...)
+    """
+
     name: str
     is_valid: bool
     details: str
@@ -86,6 +105,7 @@ class SanityCheckResults(BaseModel):
 # MARK: Individual sanity check tests
 
 
+@async_time_decorator
 async def server_account_balances() -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
 
@@ -118,9 +138,26 @@ async def server_account_balances() -> SanityCheckResult:
 
     accounts_to_check = ["keepsats", server_id]
 
-    results = []
-    for account in accounts_to_check:
-        balance = await one_account_balance(account)
+    results: List[str] = []
+
+    async def _safe_one_account_balance(account_name: str):
+        try:
+            return await one_account_balance(account=account_name)
+        except Exception as e:
+            logger.error(e, extra={"notification": False})
+            return e
+
+    tasks: dict[str, asyncio.Task] = {}
+    async with asyncio.TaskGroup() as tg:
+        for account in accounts_to_check:
+            tasks[account] = tg.create_task(_safe_one_account_balance(account))
+
+    for account, task in tasks.items():
+        res = task.result()
+        if isinstance(res, Exception):
+            results.append(f"Account '{account}' check failed: {res}")
+            continue
+        balance = res
         if abs(balance.msats) > Decimal(2_000):  # 2,000 msats = 2 sats tolerance
             results.append(
                 f"Account '{account}' has non zero balance: {balance.msats / 1000:,.3f} sats"
@@ -138,6 +175,7 @@ async def server_account_balances() -> SanityCheckResult:
     )
 
 
+@async_time_decorator
 async def server_account_hive_balances() -> SanityCheckResult:
     # return SanityCheckResult(
     #     name="server_account_hive_balances", is_valid=True, details="Placeholder implementation."
@@ -146,9 +184,18 @@ async def server_account_hive_balances() -> SanityCheckResult:
         # Get customer deposits balance
         server_id = InternalConfig().server_id
         customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
-        deposits_details = await one_account_balance(customer_deposits_account)
 
-        balances = account_hive_balances(hive_accname=server_id)
+        tasks: dict[str, asyncio.Task] = {}
+        async with asyncio.TaskGroup() as tg:
+            tasks["deposits_details"] = tg.create_task(
+                one_account_balance(account=customer_deposits_account)
+            )
+            tasks["balances"] = tg.create_task(
+                asyncio.to_thread(account_hive_balances, hive_accname=server_id)
+            )
+
+        deposits_details = tasks["deposits_details"].result()
+        balances = tasks["balances"].result()
 
         # Get balances with tolerance
         hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
@@ -246,7 +293,7 @@ all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = 
 # MARK: Runner for all sanity checks
 
 
-@async_time_stats_decorator(runs=10)
+@async_time_decorator
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as
@@ -255,6 +302,9 @@ async def run_all_sanity_checks() -> SanityCheckResults:
     Each registered check is expected to be an async callable that returns a
     `SanityCheckResult` instance. Checks are scheduled concurrently using an
     asyncio.TaskGroup with a 5.0 second aggregate timeout.
+
+    This call will run `one_account_balance` and other database operations
+    multiple times, so it may be resource-intensive.
 
     Returns:
         SanityCheckResults: Pydantic model containing `passed`, `failed` and

@@ -1,5 +1,6 @@
 import json
 import re
+from decimal import Decimal
 from typing import List
 
 from pydantic import Field
@@ -163,13 +164,13 @@ class CustomJson(OpBase):
         return True if self.memo else False
 
     @property
-    def paywithsats_amount(self) -> int:
+    def paywithsats_amount(self) -> Decimal:
         """
         Extracts and returns the 'paywithsats' amount from the memo if present.
         This is in sats, not msats.
 
         Returns:
-            int: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
+            Decimal: The amount specified in the memo after 'paywithsats:', or 0 if not present or not applicable.
 
         Notes:
             - The memo is expected to be in the format "paywithsats:amount".
@@ -177,12 +178,12 @@ class CustomJson(OpBase):
         """
         return paywithsats_amount(self.memo)
 
-    def max_send_amount_msats(self) -> int:
+    def max_send_amount_msats(self) -> Decimal:
         """
         Returns the maximum amount in msats that can be sent.
 
         Returns:
-            int: The maximum amount in msats.
+            Decimal: The maximum amount in msats.
         """
         msats = getattr(self.json_data, "msats", None)
         if self.json_data and msats is not None:
@@ -202,7 +203,7 @@ class CustomJson(OpBase):
         return ""
 
     @property
-    def fee_memo(self) -> int:
+    def fee_memo(self) -> Decimal:
         """
         Extracts the fee amount in sats from a memo string in the format:
         "Fee for Keepsats {number} sats for {username} #Fee"
@@ -212,17 +213,17 @@ class CustomJson(OpBase):
             memo (str): The memo string to parse.
 
         Returns:
-            int: The extracted fee amount in sats, or 0 if the format doesn't match.
+            Decimal: The extracted fee amount in sats, or 0 if the format doesn't match.
         """
         if not self.memo:
-            return 0
+            return Decimal(0)
         # Updated pattern to be more flexible with username format and ignore everything after #Fee
         pattern = r"Fee for Keepsats (\d+(?:,\d{3})*) sats for [^#]+ #Fee"
         match = re.search(pattern, self.memo)
         if match:
             sats_str = match.group(1)
-            return int(sats_str.replace(",", ""))
-        return 0  # Return 0 if the memo doesn't match the expected format
+            return Decimal(sats_str.replace(",", ""))
+        return Decimal(0)  # Return 0 if the memo doesn't match the expected format
 
     @property
     def fee_direction(self) -> str:

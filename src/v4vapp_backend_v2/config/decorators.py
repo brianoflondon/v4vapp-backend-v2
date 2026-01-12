@@ -27,11 +27,23 @@ def async_time_decorator(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         start_time = time.time()
+        extra_info = ""
+        if "account" in kwargs:
+            extra_info = f" for '{kwargs['account']}'"
+        elif "cust_id" in kwargs:
+            extra_info = f" for cust_id '{kwargs['cust_id']}'"
         try:
             result = await func(*args, **kwargs)
             end_time = time.time()
             execution_time = end_time - start_time
-            logger.info(f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s")
+            logger.info(
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s{extra_info}",
+                extra={
+                    "func_name": func.__qualname__,
+                    "call_kwargs": kwargs,
+                    "execution_time": execution_time,
+                },
+            )
             return result
         except Exception as e:
             end_time = time.time()
@@ -45,7 +57,7 @@ def async_time_decorator(func):
     return wrapper
 
 
-def async_time_stats_decorator(runs=1):
+def async_time_stats_decorator(runs=1, notes: str = ""):
     """
     A decorator to measure and log the execution time of an asynchronous function.
 
@@ -109,3 +121,41 @@ def async_time_stats_decorator(runs=1):
         return wrapper
 
     return decorator
+
+
+def time_decorator(func):
+    """
+    Synchronous version: logs execution time and handles exceptions like the async decorator.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        extra_info = ""
+        if "account" in kwargs:
+            extra_info = f" for '{kwargs['account']}'"
+        elif "cust_id" in kwargs:
+            extra_info = f" for cust_id '{kwargs['cust_id']}'"
+        try:
+            result = func(*args, **kwargs)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            logger.info(
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s{extra_info}",
+                extra={
+                    "func_name": func.__qualname__,
+                    "call_kwargs": kwargs,
+                    "execution_time": execution_time,
+                },
+            )
+            return result
+        except Exception as e:
+            end_time = time.time()
+            execution_time = end_time - start_time
+            logger.warning(
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' failed after {execution_time:.4f}s: {str(e)}",
+                extra={"notification": False, "error": e},
+            )
+            raise
+
+    return wrapper

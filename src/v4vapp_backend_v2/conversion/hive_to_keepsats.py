@@ -175,8 +175,6 @@ async def conversion_hive_to_keepsats(
 
     # MARK: 5 Hive to Keepsats Customer Withdrawal
 
-    # TODO: #215 When we have incoming Hive we need to check if the customer has a negative Hive or HBD balance
-
     ledger_type = LedgerType.WITHDRAW_HIVE
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,

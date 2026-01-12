@@ -896,7 +896,6 @@ def main(
         HIVE_DATABASE = CONFIG.dbs_config.default_name
     if not database_user:
         HIVE_DATABASE_USER = CONFIG.dbs_config.default_user
-    # TODO: This is redundant, remove it no setting database here any more
 
     logger.info(
         f"{ICON}✅ Hive Monitor v2: {ICON}. Version: {__version__} on {InternalConfig().local_machine_name} pause: {time_delay:.2f}s",

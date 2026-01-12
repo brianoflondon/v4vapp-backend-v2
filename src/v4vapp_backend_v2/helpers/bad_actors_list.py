@@ -1,6 +1,8 @@
 import json
 import logging
+import tempfile
 from os.path import exists
+from pathlib import Path
 from typing import List, Set
 
 import httpx
@@ -73,6 +75,12 @@ async def get_bad_hive_accounts() -> Set[str]:
 
 async def fetch_bad_actor_list() -> Set[str]:
     url = "https://gitlab.syncad.com/hive/wallet/-/raw/master/src/app/utils/BadActorList.js?ref_type=heads"
+
+    TMP_DIR = Path(tempfile.gettempdir())
+    TMP_FILE = TMP_DIR / "bad_actors_backup_list.txt"
+    REDIS_KEY = "bad_actors:backup"
+    REDIS_TTL = 3600
+
     try:
         # Fetch the content from the URL
         async with httpx.AsyncClient() as client:
@@ -91,13 +99,69 @@ async def fetch_bad_actor_list() -> Set[str]:
         # Split into lines and filter out empty lines
         bad_actor_list = {line.strip() for line in list_content.split("\n") if line.strip()}
 
+        # Persist a local backup (atomic write using pathlib) and cache in Redis
+        try:
+            tmp_tmp = TMP_FILE.parent / (TMP_FILE.name + ".tmp")
+            tmp_tmp.write_text("\n".join(sorted(bad_actor_list)), encoding="utf-8")
+            tmp_tmp.replace(TMP_FILE)
+        except Exception as e:
+            logger.warning(f"Failed to write backup file {TMP_FILE}: {e}")
+
+        try:
+            # Store as JSON array in Redis with TTL
+            InternalConfig.redis_decoded.setex(
+                name=REDIS_KEY, time=REDIS_TTL, value=json.dumps(list(bad_actor_list))
+            )
+        except Exception as e:
+            logger.warning(f"Failed to cache bad actors in Redis: {e}")
+
         return bad_actor_list
 
-    # TODO: #193 Store a local cached copy of the list to use in case of failure
+    except (httpx.HTTPError, ValueError) as fetch_exc:
+        # On fetch/parsing errors, attempt fallbacks in order: Redis -> /tmp -> bundled file
+        logger.warning(f"Error fetching/parsing the list: {fetch_exc}")
 
-    except httpx.HTTPError as e:
-        logger.warning(f"Error fetching the list: {e}")
-        return set()
-    except ValueError as e:
-        logger.warning(f"Error parsing the list: {e}")
+        # 1) Try Redis
+        try:
+            cached = InternalConfig.redis_decoded.get(REDIS_KEY)
+            if cached:
+                try:
+                    payload = json.loads(cached)
+                    if isinstance(payload, (list, tuple)):
+                        return set(payload)
+                except Exception as e:
+                    logger.warning(f"Failed to parse cached bad actors from Redis: {e}")
+        except Exception as e:
+            logger.warning(f"Redis unavailable when loading bad actors backup: {e}")
+
+        # 2) Try /tmp file
+        try:
+            if TMP_FILE.exists():
+                text = TMP_FILE.read_text(encoding="utf-8")
+                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                if lines:
+                    return set(lines)
+        except Exception as e:
+            logger.warning(f"Failed to read tmp backup file {TMP_FILE}: {e}")
+
+        # 3) Final fallback: bundled file shipped with the repo (next to this module)
+        try:
+            bundled = Path(__file__).parent / "bad_actors_backup_list.txt"
+            if bundled.exists():
+                content = bundled.read_text(encoding="utf-8")
+                if "`" in content:
+                    start = content.find("`") + 1
+                    end = content.rfind("`")
+                    if start != 0 and end != -1:
+                        list_content = content[start:end]
+                        lines = {ln.strip() for ln in list_content.splitlines() if ln.strip()}
+                        if lines:
+                            return lines
+                # fallback: plain lines
+                lines = {ln.strip() for ln in content.splitlines() if ln.strip()}
+                if lines:
+                    return lines
+        except Exception as e:
+            logger.warning(f"Failed to read bundled fallback bad actors file: {e}")
+
         return set()
