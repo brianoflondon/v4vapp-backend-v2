@@ -34,6 +34,8 @@ class LedgerType(StrEnum):
     CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
     CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
 
+    CONV_CUSTOMER = "cust_conv"  # Customer conversion transaction
+
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
 
@@ -112,6 +114,20 @@ class LedgerType(StrEnum):
         return ans
 
 
+"""
+These two classes are used in the accounting classes to provide icons and string representations
+for different ledger types.
+
+These surface in the frontend UI and keep users from seeing the raw ledger type values.
+
+Class: AccountBalanceLine - src/v4vapp_backend_v2/accounting/accounting_classes.py
+
+Attributes:
+    - LedgerTypeIcon: A dictionary mapping LedgerType to its corresponding icon (str).
+    - LedgerTypeStr: A dictionary mapping LedgerType to its corresponding string representation (str).
+
+
+"""
 LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
     LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
@@ -125,4 +141,28 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.RELEASE_KEEPSATS: "🚀",  # Release Keepsats from the account
     LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
+    LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
 }
+
+LedgerTypeStr: Dict[LedgerType, str] = {
+    LedgerType.FEE_INCOME: "Fee",  # Fee income from Hive transactions
+    LedgerType.CUSTOM_JSON_FEE: "Fee",  # Custom JSON fee notification
+    LedgerType.CONV_CUSTOMER: "Conversion",  # Conversion to/from Keepsats to Hive
+    LedgerType.CUSTOMER_HIVE_OUT: "Withdraw",  # Customer withdrawal from Hive account
+    LedgerType.CUSTOMER_HIVE_IN: "Deposit",  # Customer deposit into Hive
+    LedgerType.WITHDRAW_LIGHTNING: "Send",  # Withdrawal to send to lightning invoice
+    LedgerType.RECEIVE_LIGHTNING: "Receive",  # Receive Lightning payment
+}
+
+
+# IconStr = str
+# TypeStr = str
+# DescriptionStr = str
+
+# LedgerTypeDetails: Dict[LedgerType, Tuple[IconStr, TypeStr, DescriptionStr]] = {
+#     LedgerType.FEE_INCOME: ("💵", "Fee", "Fee income from Hive transactions"),
+#     LedgerType.CUSTOM_JSON_FEE: ("💵", "Fee", "Custom JSON fee notification"),
+#     LedgerType.CONV_CUSTOMER: ("🔄", "Conversion", "Conversion to/from Keepsats to Hive"),
+#     LedgerType.CUSTOMER_HIVE_OUT: ("📤", "Withdraw", "Customer withdrawal from Hive account"),
+#     LedgerType.CUSTOMER_HIVE_IN: ("📥", "Deposit", "Customer deposit into Hive account"),
+# }

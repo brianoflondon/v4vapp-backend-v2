@@ -177,7 +177,10 @@ async def keepsats(
     )
 
     if line_items:
-        account_balance = account_balance.remove_balances()
+        if age > 0:
+            account_balance = account_balance.remove_older_than(hours=age)
+        else:
+            account_balance = account_balance.remove_balances()
 
     return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items)
 
