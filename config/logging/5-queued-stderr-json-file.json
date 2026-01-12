@@ -44,7 +44,7 @@
       "level": "DEBUG",
       "formatter": "json",
       "filename": "logs/v4vapp-backend-v2.log.jsonl",
-      "maxBytes": 50000000,
+      "maxBytes": 1000000,
       "backupCount": 10,
       "filters": ["error_tracking"]
     },
