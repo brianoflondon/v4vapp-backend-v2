@@ -20,7 +20,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import limit_check_pipeline
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
+from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -80,7 +80,7 @@ async def all_account_balances(
     return account_balances
 
 
-# @async_time_stats_decorator()
+@async_time_decorator
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
@@ -167,6 +167,7 @@ async def one_account_balance(
 
     ledger_details.in_progress_msats = await in_progress(account.sub)
 
+    logger.info(f"Calculated ledger details for account: {account}")
     return ledger_details
 
 
@@ -179,7 +180,6 @@ def _add_notes() -> str:
     )
 
 
-# @async_time_stats_decorator()
 async def account_balance_printout(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -363,7 +363,7 @@ async def account_balance_printout(
     return output_text, ledger_account_details
 
 
-# @async_time_stats_decorator()
+@async_time_decorator
 async def account_balance_printout_grouped_by_customer(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -654,7 +654,7 @@ async def list_all_accounts() -> List[LedgerAccount]:
     return accounts
 
 
-@async_time_stats_decorator()
+@async_time_decorator
 async def list_all_ledger_types() -> List[LedgerType]:
     """
     Lists all unique ledger types in the ledger.
@@ -819,7 +819,7 @@ async def get_next_limit_expiry(cust_id: CustIDType) -> Tuple[datetime, Decimal]
     return expiry, sats_freed
 
 
-# @async_time_stats_decorator()
+@async_time_decorator
 async def keepsats_balance(
     cust_id: CustIDType = "",
     as_of_date: datetime | None = None,
