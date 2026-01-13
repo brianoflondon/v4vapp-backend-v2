@@ -122,6 +122,8 @@ class StatusAPI:
         """
         # Check if port is available before starting
         logger.info(f"Checking availability of port {self.port} for Status API...")
+        server_task = None
+        server = None
         try:
             for port in range(self.port, self.port + 10):
                 self.port = port
@@ -143,7 +145,6 @@ class StatusAPI:
                 access_log=False,
             )
             server = uvicorn.Server(config)
-            server_task = None
             # Run the server in a task, but allow shutdown
             server_task = asyncio.create_task(server.serve())
 
@@ -156,7 +157,10 @@ class StatusAPI:
         except Exception as e:
             logger.error(f"Error while running Status API: {str(e)}")
         finally:
-            if server_task:
+            logger.info(
+                f"{Fore.WHITE}Shutting down Status API for {self.app.title} on port {self.port}{Style.RESET_ALL}"
+            )
+            if server_task and server:
                 server.should_exit = True
                 try:
                     await asyncio.wait_for(server_task, timeout=shutdown_timeout)
