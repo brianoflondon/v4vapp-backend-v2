@@ -37,7 +37,8 @@ def create_lifespan(config_file: str):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        InternalConfig(config_filename=config_file, log_filename="api_v2.jsonl")
+        print(f"{__name__}")
+        InternalConfig(config_filename=config_file, log_filename=__name__)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")

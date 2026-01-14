@@ -93,7 +93,7 @@ def main(
     Returns:
         None
     """
-    _ = InternalConfig(config_filename=config_filename, log_filename="template_app.jsonl")
+    _ = InternalConfig(config_filename=config_filename, log_filename=__name__)
     logger.info(
         f"{ICON} ✅ Template App. Started. Version: {__version__} on {InternalConfig().local_machine_name}",
         extra={"notification": True},

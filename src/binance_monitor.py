@@ -331,7 +331,7 @@ def main(
         None
     """
     icon = ICON
-    InternalConfig(config_filename=config_filename)
+    InternalConfig(config_filename=config_filename, log_filename=__name__)
     logger.info(
         f"{icon} ✅ Binance Monitor. Started. {__version__}",
         extra={"notification": True},
