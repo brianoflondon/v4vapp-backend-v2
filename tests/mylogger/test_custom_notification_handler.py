@@ -23,11 +23,19 @@ def set_base_config_path_combined(monkeypatch: pytest.MonkeyPatch):
         test_config_logging_path,
     )
     monkeypatch.setattr("v4vapp_backend_v2.config.setup.InternalConfig._instance", None)
+    # Reset ErrorCodeManager singleton for clean test state
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.error_code_manager.ErrorCodeManager._instance", None
+    )
     yield
     monkeypatch.setattr(
         "v4vapp_backend_v2.config.setup.InternalConfig._instance", None
     )  # Resetting InternalConfig instance
-    InternalConfig.error_codes.clear()  # Clear error codes between tests
+    # Reset ErrorCodeManager again after test
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.error_code_manager.ErrorCodeManager._instance", None
+    )
+    InternalConfig.error_code_manager.clear()  # Clear error codes between tests
 
 
 @pytest.fixture

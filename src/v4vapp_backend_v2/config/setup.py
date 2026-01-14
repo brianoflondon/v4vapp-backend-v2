@@ -21,7 +21,7 @@ from redis import Redis, RedisError
 from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
 
-from v4vapp_backend_v2.config.error_code_class import ErrorCode
+from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
 logger = logging.getLogger("backend")  # __name__ is a common choice
@@ -818,9 +818,18 @@ class InternalConfig:
     redis_decoded: ClassVar[Redis] = Redis(decode_responses=True)
     redis_async: ClassVar[AsyncRedis] = AsyncRedis()
 
-    error_codes: ClassVar[dict[Any, ErrorCode]] = {}
+    # Error code manager - singleton that handles in-memory tracking + MongoDB persistence
+    error_code_manager: ClassVar[ErrorCodeManager] = ErrorCodeManager(db_enabled=False)
 
     local_machine_name: str = "unknown"
+
+    @property
+    def error_codes(self) -> ErrorCodeManager:
+        """
+        Backward-compatible property that returns the ErrorCodeManager.
+        The manager provides dict-like interface for compatibility.
+        """
+        return InternalConfig.error_code_manager
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -848,6 +857,12 @@ class InternalConfig:
             self.setup_config(config_filename)
             self.setup_logging(log_filename)
             self.setup_redis()
+            # Configure error code manager with server/node info and enable DB persistence
+            InternalConfig.error_code_manager.configure(
+                server_id=self.server_id,
+                node_name=self.node_name,
+                db_enabled=True,
+            )
             logger.info(f"{ICON} Config filename: {config_filename}")
             logger.info(f"{ICON} Log filename: {log_filename}")
             if self.config.dbs_config.default_db_connection:
@@ -1081,7 +1096,7 @@ class InternalConfig:
             dict[Any, dict[str, Any]]: A dictionary where each key is an error code and
             each value is a dictionary representation of the corresponding ErrorCode object.
         """
-        return {code: error_code.to_dict() for code, error_code in self.error_codes.items()}
+        return InternalConfig.error_code_manager.to_dict()
 
     def shutdown_logging(self):
         for handler in logging.root.handlers[:]:

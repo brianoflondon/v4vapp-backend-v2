@@ -343,9 +343,9 @@ class ErrorTrackingFilter(logging.Filter):
                 re_alert_time = timedelta(hours=1)
 
             if error_code not in InternalConfig().error_codes:
-                # New error code - add it and allow the log through
+                # New error code - add it (triggers MongoDB persistence) and allow the log through
                 error_code_obj = ErrorCode(code=error_code, message=record.getMessage())
-                InternalConfig().error_codes[error_code_obj.code] = error_code_obj
+                InternalConfig().error_codes.add(error_code_obj)
                 logger.error(
                     f"❌ New error: {error_code}",
                     extra={
