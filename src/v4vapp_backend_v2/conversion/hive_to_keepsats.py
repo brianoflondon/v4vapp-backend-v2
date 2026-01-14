@@ -175,7 +175,7 @@ async def conversion_hive_to_keepsats(
 
     # MARK: 5 Hive to Keepsats Customer Withdrawal
 
-    ledger_type = LedgerType.WITHDRAW_HIVE
+    ledger_type = LedgerType.CONV_CUSTOMER
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
@@ -183,7 +183,7 @@ async def conversion_hive_to_keepsats(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
-        description=f"Withdraw {conv_result.to_convert_amount} from {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
+        description=f"Convert {conv_result.to_convert_amount} to {conv_result.net_to_receive_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(
             name="VSC Liability",
             sub=cust_id,

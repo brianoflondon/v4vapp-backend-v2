@@ -831,11 +831,14 @@ class InternalConfig:
         self,
         bot_name: str = "",
         config_filename: str = DEFAULT_CONFIG_FILENAME,
-        log_filename: str = "app.log.jsonl",
+        log_filename: str = "app_logs.jsonl",
         *args,
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            if not log_filename.endswith(".jsonl"):
+                log_filename += ".jsonl"
+
             self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
             print(f"Starting initialization... {config_filename} {log_filename}")
             self._initialized = True

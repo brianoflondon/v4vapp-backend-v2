@@ -11,7 +11,11 @@ from tabulate import tabulate
 from v4vapp_backend_v2.accounting.converted_summary_class import ConvertedSummary
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
-from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType, LedgerTypeIcon
+from v4vapp_backend_v2.accounting.ledger_type_class import (
+    LedgerType,
+    LedgerTypeIcon,
+    LedgerTypeStr,
+)
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConv
 from v4vapp_backend_v2.helpers.currency_class import Currency
 
@@ -93,6 +97,45 @@ class LightningLimitSummary:
 
 
 class AccountBalanceLine(BaseModel):
+    """
+    Data model representing a single ledger line/entry for account balance reporting.
+    These rows are passed directly to the frontend in the `all_transactions` array.
+
+    Attributes:
+        group_id (str): Identifier grouping related lines (default: "").
+        short_id (str): Short identifier for the line/transaction (default: "").
+        ledger_type (str): Internal ledger type key used for lookup (default: "").
+        ledger_type_str (str): Human-readable ledger type for display (default: "").
+        link (str): Optional URL or reference related to the entry (default: "").
+        icon (str): Emoji or short icon string representing the ledger type (default: "").
+        timestamp (datetime): UTC timestamp for the entry (default: now()).
+        timestamp_unix (float): Unix epoch timestamp (seconds) (default: 0.0).
+        description (str): Primary description of the entry (default: "").
+        user_memo (str): User-supplied note or memo (default: "").
+        cust_id (str): Customer identifier associated with the entry (default: "").
+        op_type (str): Operation type or tag for the entry (default: "").
+        account_type (str): The account classification (default: "").
+        name (str): Name of the account or counterparty (default: "").
+        sub (str): Optional sub-account or sub-type (default: "").
+        contra (bool): Whether the entry is a contra (reversal/inverse) entry (default: False).
+        amount (Decimal): Absolute amount for the entry (default: Decimal(0)).
+        amount_signed (Decimal): Amount adjusted for sign/side (default: Decimal(0)).
+        unit (str): Currency or unit code (e.g., 'BTC', 'USD') (default: "").
+        conv (CryptoConv | None): Optional conversion details for the amount (default: None).
+        conv_signed (CryptoConv): Conversion details for the signed amount (default: CryptoConv()).
+        side (str): Side of the transaction, e.g., 'debit' or 'credit' (default: "").
+        amount_running_total (Decimal): Running total of amounts up to this line (default: Decimal(0)).
+        conv_running_total (ConvertedSummary): Running total of converted values (default: ConvertedSummary()).
+
+    Behavior:
+        - On initialization, if either `icon` or `ledger_type_str` is empty,
+          the instance will attempt to resolve them from `ledger_type` using
+          the LedgerType, LedgerTypeIcon and LedgerTypeStr mappings.
+        - _set_ledger_type_str_icon() maps `ledger_type` to a LedgerType enum;
+          it sets `icon` (fallback: "❓") and `ledger_type_str` (fallback: the enum's capitalized form).
+          If the ledger type cannot be parsed an unknown value is used for `ledger_type_str`.
+    """
+
     group_id: str = ""
     short_id: str = ""
     ledger_type: str = ""
@@ -117,16 +160,27 @@ class AccountBalanceLine(BaseModel):
     side: str = Field("", description="The side of the transaction, e.g., 'debit' or 'credit'")
     amount_running_total: Decimal = Decimal(0)
     conv_running_total: ConvertedSummary = ConvertedSummary()
+    sats_hive: Decimal = Field(
+        Decimal(0), description="Sats/Hive conversion rate at time of transaction"
+    )
+    sats_hbd: Decimal = Field(
+        Decimal(0), description="Sats/HBD conversion rate at time of transaction"
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
-        if not self.icon:
-            try:
-                lt = LedgerType(self.ledger_type)
-                self.ledger_type_str = lt.capitalized
-                self.icon = LedgerTypeIcon.get(lt, "❓")
-            except ValueError:
-                self.icon = "❓"
+        if not self.icon or not self.ledger_type_str:
+            self._set_ledger_type_str_icon()
+        self.sats_hive = self.conv.sats_hive if self.conv else Decimal(0)
+        self.sats_hbd = self.conv.sats_hbd if self.conv else Decimal(0)
+
+    def _set_ledger_type_str_icon(self) -> None:
+        try:
+            lt = LedgerType(self.ledger_type)
+            self.icon = LedgerTypeIcon.get(lt, "❓")
+            self.ledger_type_str = LedgerTypeStr.get(lt, lt.capitalized)
+        except ValueError:
+            self.ledger_type_str = "Unknown"
 
 
 class LedgerAccountDetails(LedgerAccount):
@@ -194,13 +248,19 @@ class LedgerAccountDetails(LedgerAccount):
         super().__init__(**data)
 
         if Currency.HIVE in self.balances:
-            self.hive = round(self.balances[Currency.HIVE][-1].amount_running_total, 3)
+            self.hive = self.balances[Currency.HIVE][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
             self.conv_total += self.balances[Currency.HIVE][-1].conv_running_total
         if Currency.HBD in self.balances:
-            self.hbd = round(self.balances[Currency.HBD][-1].amount_running_total, 3)
+            self.hbd = self.balances[Currency.HBD][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
             self.conv_total += self.balances[Currency.HBD][-1].conv_running_total
         if Currency.USD in self.balances:
-            self.usd = round(self.balances[Currency.USD][-1].amount_running_total, 3)
+            self.usd = self.balances[Currency.USD][-1].amount_running_total.quantize(
+                Decimal("0.001"), rounding="ROUND_HALF_UP"
+            )
             self.conv_total += self.balances[Currency.USD][-1].conv_running_total
         if Currency.MSATS in self.balances:
             self.msats = self.balances[Currency.MSATS][-1].amount_running_total
@@ -303,6 +363,29 @@ class LedgerAccountDetails(LedgerAccount):
         copy_balance.balances = {}
         return copy_balance
 
+    def remove_older_than(self, hours: int) -> "LedgerAccountDetails":
+        """
+        Remove all balance lines older than the specified number of hours from this LedgerAccountDetails instance.
+
+        This method creates a deep copy of the current instance, filters its balance lines based on the provided
+        age threshold, and returns the modified copy. The original instance remains unchanged.
+
+        Args:
+            hours (int): The age threshold in hours. Balance lines older than this will be removed.
+
+        Returns:
+            LedgerAccountDetails: A new LedgerAccountDetails instance with older balance lines removed.
+        """
+        cutoff_time = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+        copy_balance = self.model_copy()
+
+        filtered_combined_balance = [
+            line for line in copy_balance.combined_balance if line.timestamp >= cutoff_time
+        ]
+        copy_balance.combined_balance = filtered_combined_balance
+
+        return copy_balance
+
     def to_api_response(self, hive_accname: str, line_items: bool = False) -> dict:
         """
         Returns a dictionary representation of the account balance details, with numeric values
@@ -317,19 +400,22 @@ class LedgerAccountDetails(LedgerAccount):
         Returns:
             dict: A dictionary with the specified keys and rounded float values.
         """
-        in_progress_sats = round(
-            Decimal(self.in_progress_msats / 1000).quantize(
-                Decimal("1"), rounding="ROUND_HALF_UP"
-            ),
-            0,
+        in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
+            Decimal("1"), rounding="ROUND_HALF_UP"
         )
+        # Prepare rounded Decimal values (using Decimal.quantize with ROUND_HALF_UP) then convert to float for API
+        net_msats_q = self.msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
         return {
             "hive_accname": hive_accname,
-            "net_msats": round(float(self.msats), 0),
-            "net_hive": round(float(self.hive), 3),
-            "net_usd": round(float(self.usd), 3),
-            "net_hbd": round(float(self.hbd), 3),
-            "net_sats": float(round(self.sats, 0)),
+            "net_msats": float(net_msats_q),
+            "net_hive": float(net_hive_q),
+            "net_usd": float(net_usd_q),
+            "net_hbd": float(net_hbd_q),
+            "net_sats": float(net_sats_q),
             "in_progress_sats": float(in_progress_sats),
             "all_transactions": self if line_items else [],
         }
@@ -351,21 +437,24 @@ class LedgerAccountDetails(LedgerAccount):
             dict: A dictionary with essential account details and simplified transaction data.
         """
         # Calculate in_progress_sats
-        in_progress_sats = round(
-            Decimal(self.in_progress_msats / 1000).quantize(
-                Decimal("1"), rounding="ROUND_HALF_UP"
-            ),
-            0,
+        in_progress_sats = (Decimal(self.in_progress_msats) / Decimal(1000)).quantize(
+            Decimal("1"), rounding="ROUND_HALF_UP"
         )
 
-        # Base response with net balances
+        # Prepare rounded Decimal values (using Decimal.quantize with ROUND_HALF_UP) then convert to float for API
+        net_msats_q = self.msats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        net_hive_q = self.hive.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_usd_q = self.usd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_hbd_q = self.hbd.quantize(Decimal("0.001"), rounding="ROUND_HALF_UP")
+        net_sats_q = self.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+
         response = {
             "hive_accname": hive_accname,
-            "net_msats": float(round(self.msats, 0)),
-            "net_hive": float(round(self.hive, 3)),
-            "net_usd": float(round(self.usd, 3)),
-            "net_hbd": float(round(self.hbd, 3)),
-            "net_sats": float(round(self.sats, 0)),
+            "net_msats": float(net_msats_q),
+            "net_hive": float(net_hive_q),
+            "net_usd": float(net_usd_q),
+            "net_hbd": float(net_hbd_q),
+            "net_sats": float(net_sats_q),
             "in_progress_sats": float(in_progress_sats),
             "all_transactions": [],
         }
@@ -384,11 +473,27 @@ class LedgerAccountDetails(LedgerAccount):
                     "link": line.link,
                     "unit": line.unit,
                     "conv_signed": {
-                        "sats": float(round(line.conv_signed.sats, 0)),
-                        "hive": float(round(line.conv_signed.hive, 3)),
-                        "hbd": float(round(line.conv_signed.hbd, 3)),
+                        "sats": float(
+                            line.conv_signed.sats.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+                        ),
+                        "hive": float(
+                            line.conv_signed.hive.quantize(
+                                Decimal("0.001"), rounding="ROUND_HALF_UP"
+                            )
+                        ),
+                        "hbd": float(
+                            line.conv_signed.hbd.quantize(
+                                Decimal("0.001"), rounding="ROUND_HALF_UP"
+                            )
+                        ),
                     },
-                    "conv_running_total": {"sats": float(round(line.conv_running_total.sats, 0))},
+                    "conv_running_total": {
+                        "sats": float(
+                            line.conv_running_total.sats.quantize(
+                                Decimal("1"), rounding="ROUND_HALF_UP"
+                            )
+                        )
+                    },
                 }
                 transactions.append(transaction)
 

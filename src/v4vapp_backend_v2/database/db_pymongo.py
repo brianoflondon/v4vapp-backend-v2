@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from datetime import datetime, timezone
@@ -338,6 +339,7 @@ class DBConn:
             logger.error(
                 "Database server selection timed out. Can't proceed", extra={"error": str(e)}
             )
+            await asyncio.sleep(5)
             raise DBConnConnectionException("Database server selection timed out.") from e
 
         except Exception as e:

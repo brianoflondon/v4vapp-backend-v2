@@ -263,7 +263,7 @@ async def conversion_keepsats_to_hive(
 
     # MARK: 5 Keepsats to Hive Customer Deposit
 
-    ledger_type = LedgerType.DEPOSIT_HIVE
+    ledger_type = LedgerType.CONV_CUSTOMER
     deposit_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,

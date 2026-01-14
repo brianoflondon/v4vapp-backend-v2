@@ -699,6 +699,9 @@ async def store_rates() -> None:
                         ),
                     },
                 )
+            except asyncio.CancelledError:
+                await asyncio.sleep(10)
+                continue  # Ignore cancellation during rate update, continue updating rates regardless
             except Exception as e:
                 logger.error(
                     f"{ICON} Error storing rates: {e}", extra={"error": e, "notification": False}

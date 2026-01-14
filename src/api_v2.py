@@ -37,7 +37,8 @@ def create_lifespan(config_file: str):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        InternalConfig(config_filename=config_file, log_filename="api_v2.jsonl")
+        print(f"{__name__}")
+        InternalConfig(config_filename=config_file, log_filename=__name__)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")
@@ -177,7 +178,10 @@ async def keepsats(
     )
 
     if line_items:
-        account_balance = account_balance.remove_balances()
+        if age > 0:
+            account_balance = account_balance.remove_older_than(hours=age)
+        else:
+            account_balance = account_balance.remove_balances()
 
     return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items)
 
