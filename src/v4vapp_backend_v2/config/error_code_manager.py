@@ -43,6 +43,7 @@ class ErrorCodeManager:
     _codes: dict[Any, ErrorCode]
     _server_id: str
     _node_name: str
+    _local_machine_name: str
     _db_enabled: bool
 
     def __new__(cls, *args, **kwargs):
@@ -55,6 +56,7 @@ class ErrorCodeManager:
         self,
         server_id: str = "",
         node_name: str = "",
+        local_machine_name: str = "",
         db_enabled: bool = True,
     ):
         """
@@ -63,12 +65,14 @@ class ErrorCodeManager:
         Args:
             server_id: Server identifier for MongoDB documents
             node_name: Node name for MongoDB documents
+            local_machine_name: Local machine name for MongoDB documents
             db_enabled: Whether to persist to MongoDB (can be disabled for testing)
         """
         if not hasattr(self, "_initialized") or not self._initialized:
             self._codes = {}
             self._server_id = server_id
             self._node_name = node_name
+            self._local_machine_name = local_machine_name
             self._db_enabled = db_enabled
             self._initialized = True
 
@@ -76,6 +80,7 @@ class ErrorCodeManager:
         self,
         server_id: str = "",
         node_name: str = "",
+        local_machine_name: str = "",
         db_enabled: bool = True,
     ) -> None:
         """
@@ -85,12 +90,15 @@ class ErrorCodeManager:
         Args:
             server_id: Server identifier for MongoDB documents
             node_name: Node name for MongoDB documents
+            local_machine_name: Local machine name for MongoDB documents
             db_enabled: Whether to persist to MongoDB
         """
         if server_id:
             self._server_id = server_id
         if node_name:
             self._node_name = node_name
+        if local_machine_name:
+            self._local_machine_name = local_machine_name
         self._db_enabled = db_enabled
 
     # MARK: Dict-like interface for backward compatibility
@@ -257,6 +265,8 @@ class ErrorCodeManager:
             doc = error_code.to_mongo_doc(
                 server_id=self._server_id or getattr(InternalConfig(), "server_id", ""),
                 node_name=self._node_name or getattr(InternalConfig(), "node_name", ""),
+                local_machine_name=self._local_machine_name
+                or getattr(InternalConfig(), "local_machine_name", ""),
                 active=True,
                 cleared_at=None,
             )
@@ -291,6 +301,8 @@ class ErrorCodeManager:
             doc = error_code.to_mongo_doc(
                 server_id=self._server_id or getattr(InternalConfig(), "server_id", ""),
                 node_name=self._node_name or getattr(InternalConfig(), "node_name", ""),
+                local_machine_name=self._local_machine_name
+                or getattr(InternalConfig(), "local_machine_name", ""),
                 active=False,
                 cleared_at=now,
             )

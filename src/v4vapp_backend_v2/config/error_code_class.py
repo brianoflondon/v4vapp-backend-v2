@@ -68,6 +68,7 @@ class ErrorCode:
         self,
         server_id: str = "",
         node_name: str = "",
+        local_machine_name: str = "",
         active: bool = True,
         cleared_at: datetime | None = None,
     ) -> dict[str, Any]:
@@ -78,6 +79,7 @@ class ErrorCode:
         Args:
             server_id: The server identifier (e.g., from InternalConfig.server_id)
             node_name: The node name (e.g., from InternalConfig.node_name)
+            local_machine_name: The local machine name (e.g., from InternalConfig.local_machine_name)
             active: Whether this error is currently active
             cleared_at: When the error was cleared (None if still active)
 
@@ -92,6 +94,7 @@ class ErrorCode:
             "last_log_time": self.last_log_time,
             "server_id": server_id,
             "node_name": node_name,
+            "local_machine_name": local_machine_name,
             "active": active,
             "cleared_at": cleared_at,
             "created_at": now,

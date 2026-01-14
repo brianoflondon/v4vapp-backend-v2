@@ -861,6 +861,7 @@ class InternalConfig:
             InternalConfig.error_code_manager.configure(
                 server_id=self.server_id,
                 node_name=self.node_name,
+                local_machine_name=self.local_machine_name,
                 db_enabled=True,
             )
             logger.info(f"{ICON} Config filename: {config_filename}")
