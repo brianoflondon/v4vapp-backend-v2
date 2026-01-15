@@ -445,7 +445,7 @@ class ConsoleLogFilter(logging.Filter):
     """
 
     # cached value for the configured console level (parsed to int)
-    _cached_levelno: int | None = None
+    _cached_levelno: int = logging.INFO
 
     @classmethod
     def refresh_cached_level(cls) -> None:
@@ -460,7 +460,7 @@ class ConsoleLogFilter(logging.Filter):
         # Initialize cached level on first call (or if None)
         if ConsoleLogFilter._cached_levelno is None:
             ConsoleLogFilter.refresh_cached_level()
-        return record.levelno >= ConsoleLogFilter._cached_levelno  # type: ignore[return-value]
+        return record.levelno >= ConsoleLogFilter._cached_levelno
 
 
 class AddNotificationBellFilter(logging.Filter):

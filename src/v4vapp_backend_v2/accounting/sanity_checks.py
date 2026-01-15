@@ -14,7 +14,6 @@ from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 
 ICON = "🧪"  # Test Tube

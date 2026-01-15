@@ -7,7 +7,6 @@ import typer
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
 
 ICON = "🧩"
 app = typer.Typer()

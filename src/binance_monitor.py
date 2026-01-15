@@ -21,10 +21,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     get_balances,
     get_current_price,
 )
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    draw_percentage_meter,
-    get_entrypoint_path,
-)
+from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
 ICON = "🅑"
 app = typer.Typer()

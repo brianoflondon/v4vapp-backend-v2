@@ -45,6 +45,7 @@ class ErrorCodeManager:
     _node_name: str
     _local_machine_name: str
     _db_enabled: bool
+    _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -68,7 +69,7 @@ class ErrorCodeManager:
             local_machine_name: Local machine name for MongoDB documents
             db_enabled: Whether to persist to MongoDB (can be disabled for testing)
         """
-        if not hasattr(self, "_initialized") or not self._initialized:
+        if not self._initialized:
             self._codes = {}
             self._server_id = server_id
             self._node_name = node_name
