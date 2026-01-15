@@ -80,7 +80,6 @@ async def all_account_balances(
     return account_balances
 
 
-@async_time_decorator
 async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,

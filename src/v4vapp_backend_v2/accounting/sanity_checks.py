@@ -105,7 +105,6 @@ class SanityCheckResults(BaseModel):
 # MARK: Individual sanity check tests
 
 
-@async_time_decorator
 async def server_account_balances() -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
 
@@ -175,7 +174,6 @@ async def server_account_balances() -> SanityCheckResult:
     )
 
 
-@async_time_decorator
 async def server_account_hive_balances() -> SanityCheckResult:
     # return SanityCheckResult(
     #     name="server_account_hive_balances", is_valid=True, details="Placeholder implementation."
