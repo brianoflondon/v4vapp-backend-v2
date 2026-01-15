@@ -22,6 +22,7 @@ from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, 
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_filename
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
@@ -37,8 +38,8 @@ def create_lifespan(config_file: str):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        print(f"{__name__}")
-        InternalConfig(config_filename=config_file, log_filename=__name__)
+        log_filename = get_entrypoint_filename()
+        InternalConfig(config_filename=config_file, log_filename=log_filename.stem)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")
