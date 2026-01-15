@@ -7,7 +7,7 @@ import typer
 
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
-from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_filename
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
 
 ICON = "🧩"
 app = typer.Typer()
@@ -94,8 +94,7 @@ def main(
     Returns:
         None
     """
-    log_filename = get_entrypoint_filename()
-    _ = InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
+    _ = InternalConfig(config_filename=config_filename)
     logger.info(
         f"{ICON} ✅ Template App. Started. Version: {__version__} on {InternalConfig().local_machine_name}",
         extra={"notification": True},

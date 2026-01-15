@@ -24,7 +24,7 @@ from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
 from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
-from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_filename, truncate_text
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path, truncate_text
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
 from v4vapp_backend_v2.process.process_pending_hive import resend_transactions
 from v4vapp_backend_v2.process.process_tracked_events import process_tracked_event
@@ -553,8 +553,7 @@ def main(
     Returns:
         None
     """
-    log_filename = get_entrypoint_filename()
-    _ = InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
+    _ = InternalConfig(config_filename=config_filename)
     logger.info(
         f"{ICON}{Fore.WHITE} ✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},

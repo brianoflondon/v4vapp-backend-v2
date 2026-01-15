@@ -61,7 +61,7 @@ def cap_camel_case(snake_str: str) -> str:
 # MARK: File System
 
 
-def get_entrypoint_filename() -> Path:
+def get_entrypoint_path() -> Path:
     """Return the most likely entry-point filename for the current process as a Path.
 
     Logic (in order):

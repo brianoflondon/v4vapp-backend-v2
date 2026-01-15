@@ -14,7 +14,7 @@ from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_filename
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
 from v4vapp_backend_v2.hive.hive_extras import account_hive_balances
 
 ICON = "🧪"  # Test Tube
@@ -400,8 +400,7 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        log_filename = get_entrypoint_filename()
-        InternalConfig(config_filename="devhive.config.yaml", log_filename=log_filename.stem)
+        InternalConfig(config_filename="devhive.config.yaml")
         db_conn = DBConn()
         await db_conn.setup_database()
         await log_all_sanity_checks(

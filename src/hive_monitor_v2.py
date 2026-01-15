@@ -24,7 +24,6 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     check_time_diff,
     format_time_delta,
-    get_entrypoint_filename,
     seconds_only,
 )
 from v4vapp_backend_v2.hive.hive_extras import get_hive_client
@@ -884,8 +883,7 @@ def main(
     Returns:
         None
     """
-    log_filename = get_entrypoint_filename()
-    CONFIG = InternalConfig(config_filename=config_filename, log_filename=log_filename.stem).config
+    CONFIG = InternalConfig(config_filename=config_filename).config
     global COMMAND_LINE_WATCH_ONLY
     global HIVE_DATABASE
     global HIVE_DATABASE_CONNECTION

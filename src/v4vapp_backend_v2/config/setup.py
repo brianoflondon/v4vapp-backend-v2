@@ -840,11 +840,15 @@ class InternalConfig:
         self,
         bot_name: str = "",
         config_filename: str = DEFAULT_CONFIG_FILENAME,
-        log_filename: str = "app_logs.jsonl",
+        log_filename: str = "",
         *args,
         **kwargs,
     ):
         if not hasattr(self, "_initialized"):
+            if not log_filename:
+                from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
+                log_filepath = get_entrypoint_path()
+                log_filename = log_filepath.stem
             if not log_filename.endswith(".jsonl"):
                 log_filename += ".jsonl"
 
