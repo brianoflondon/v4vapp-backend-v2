@@ -14,12 +14,13 @@ Usage:
 import asyncio
 import json
 import os
+import random
 import re
 import sys
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List, Optional
+from typing import Annotated, Dict, List, Optional
 
 import aiofiles
 import typer
@@ -64,6 +65,31 @@ LEVEL_PRIORITY = {
     "ERROR": 40,
     "CRITICAL": 50,
 }
+
+# Distinct colors for filename prefixes (avoiding red/yellow used by log levels)
+FILENAME_COLORS = [
+    "\033[92m",  # Bright green
+    "\033[95m",  # Bright magenta
+    "\033[96m",  # Bright cyan
+    "\033[94m",  # Bright blue
+    "\033[93m",  # Bright yellow
+    "\033[97m",  # Bright white
+    "\033[32m",  # Green
+    "\033[35m",  # Magenta
+    "\033[36m",  # Cyan
+    "\033[37m",  # White
+]
+
+# Global dict to store assigned colors for filenames
+_filename_colors: Dict[str, str] = {}
+
+
+def get_filename_color(filename: str) -> str:
+    """Get a consistent color for a filename, assigning randomly if new."""
+    if filename not in _filename_colors:
+        # Assign a random color from the pool
+        _filename_colors[filename] = random.choice(FILENAME_COLORS)
+    return _filename_colors[filename]
 
 
 def get_short_filename(file_path: str, max_len: int = 15) -> str:
@@ -134,10 +160,10 @@ def format_log_entry(
 
         # Apply color based on level
         if show_colors:
-            color = LEVEL_COLORS.get(level, "")
+            level_color = LEVEL_COLORS.get(level, "")
             reset = RESET_COLOR
         else:
-            color = ""
+            level_color = ""
             reset = ""
 
         # Build the formatted output
@@ -164,20 +190,32 @@ def format_log_entry(
                     extras_list = ", ".join(extras.keys())
                     extras_str = f" [{extras_list}]"
 
-            # Build filename prefix if provided
-            file_prefix = f"{filename:<15} | " if filename else ""
+            # Build filename prefix with its own color if provided
+            if filename and show_colors:
+                file_color = get_filename_color(filename)
+                file_prefix = f"{file_color}{filename:<15}{reset} | "
+            elif filename:
+                file_prefix = f"{filename:<15} | "
+            else:
+                file_prefix = ""
 
             formatted = (
-                f"{color}{file_prefix}{time_str} {level:<8} "
+                f"{file_prefix}{level_color}{time_str} {level:<8} "
                 f"{module:<25} {line_num:>4} : {message}{extras_str}{reset}"
             )
         else:
             # Verbose format
             logger = log_entry.get("logger", "")
             function = log_entry.get("function", "")
-            file_prefix = f"{filename:<15} | " if filename else ""
+            if filename and show_colors:
+                file_color = get_filename_color(filename)
+                file_prefix = f"{file_color}{filename:<15}{reset} | "
+            elif filename:
+                file_prefix = f"{filename:<15} | "
+            else:
+                file_prefix = ""
             formatted = (
-                f"{color}{file_prefix}{time_str} | {level:<8} | "
+                f"{file_prefix}{level_color}{time_str} | {level:<8} | "
                 f"{logger}:{module}.{function}:{line_num} | {message}{reset}"
             )
 
@@ -219,7 +257,10 @@ def process_line(
         log_entry = json.loads(line)
     except json.JSONDecodeError:
         # Not valid JSON, print as-is (could be plain text logs)
-        if filename:
+        if filename and show_colors:
+            file_color = get_filename_color(filename)
+            return f"{file_color}{filename:<15}{RESET_COLOR} | {line}"
+        elif filename:
             return f"{filename:<15} | {line}"
         return line
 
@@ -502,8 +543,6 @@ async def follow_file(
     observer.schedule(handler, watch_dir, recursive=False)
     observer.start()
 
-    print(f"--- Following {file_path} (Ctrl+C to stop) ---", file=sys.stderr)
-
     try:
         while True:
             await asyncio.sleep(0.5)
@@ -514,6 +553,24 @@ async def follow_file(
     finally:
         observer.stop()
         observer.join()
+
+
+class MultiFileHandler(FileSystemEventHandler):
+    """Watch multiple log files in a directory for changes."""
+
+    def __init__(
+        self,
+        file_handlers: Dict[str, LogFileHandler],
+        loop: asyncio.AbstractEventLoop,
+    ):
+        self.file_handlers = file_handlers  # Maps file_path -> LogFileHandler
+        self.loop = loop
+
+    def on_modified(self, event):
+        """Called when any file in the watched directory is modified."""
+        if event.src_path in self.file_handlers:
+            handler = self.file_handlers[event.src_path]
+            asyncio.run_coroutine_threadsafe(handler.process_new_lines(), self.loop)
 
 
 async def follow_multiple_files(
@@ -527,11 +584,20 @@ async def follow_multiple_files(
 ):
     """
     Follow multiple files for new content, showing filename prefix.
+    Uses a single observer per directory to avoid watchdog conflicts.
     """
     loop = asyncio.get_event_loop()
-    handlers = []
-    observers = []
 
+    # Group files by directory
+    dirs_to_files: Dict[str, List[str]] = {}
+    for file_path in file_paths:
+        watch_dir = os.path.dirname(file_path) or "."
+        if watch_dir not in dirs_to_files:
+            dirs_to_files[watch_dir] = []
+        dirs_to_files[watch_dir].append(file_path)
+
+    # Create handlers for each file
+    all_handlers: Dict[str, LogFileHandler] = {}
     for file_path in file_paths:
         short_name = get_short_filename(file_path)
         handler = LogFileHandler(
@@ -545,24 +611,25 @@ async def follow_multiple_files(
             show_extras=show_extras,
             filename=short_name,
         )
-        handlers.append(handler)
+        all_handlers[file_path] = handler
+
+    # Create one observer per directory with a multi-file handler
+    observers = []
+    for watch_dir, dir_files in dirs_to_files.items():
+        # Filter handlers for this directory
+        dir_handlers = {fp: all_handlers[fp] for fp in dir_files}
+        multi_handler = MultiFileHandler(dir_handlers, loop)
 
         observer = Observer()
-        watch_dir = os.path.dirname(file_path) or "."
-        observer.schedule(handler, watch_dir, recursive=False)
+        observer.schedule(multi_handler, watch_dir, recursive=False)
         observer.start()
         observers.append(observer)
-
-    file_list = ", ".join(get_short_filename(f) for f in file_paths)
-    print(
-        f"--- Following {len(file_paths)} files: {file_list} (Ctrl+C to stop) ---", file=sys.stderr
-    )
 
     try:
         while True:
             await asyncio.sleep(0.5)
             # Check all handlers periodically
-            for handler in handlers:
+            for handler in all_handlers.values():
                 await handler.process_new_lines()
     except KeyboardInterrupt:
         pass
