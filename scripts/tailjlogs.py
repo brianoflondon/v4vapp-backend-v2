@@ -46,13 +46,13 @@ class LogLevel(str, Enum):
     CRITICAL = "CRITICAL"
 
 
-# ANSI color codes for different log levels
+# ANSI color codes for different log levels (matching colorlog style)
 LEVEL_COLORS = {
     "DEBUG": "\033[36m",  # Cyan
-    "INFO": "\033[37m",  # White/default
+    "INFO": "\033[34m",  # Blue
     "WARNING": "\033[33m",  # Yellow
     "ERROR": "\033[31m",  # Red
-    "CRITICAL": "\033[35m",  # Magenta
+    "CRITICAL": "\033[31;47m",  # Red on white background
 }
 RESET_COLOR = "\033[0m"
 
@@ -66,6 +66,27 @@ LEVEL_PRIORITY = {
 }
 
 
+def get_short_filename(file_path: str, max_len: int = 15) -> str:
+    """
+    Get a short filename without .jsonl extension, capped at max_len chars.
+
+    Args:
+        file_path: Full path to file
+        max_len: Maximum length for the filename
+
+    Returns:
+        Shortened filename
+    """
+    name = Path(file_path).name
+    # Remove .jsonl and any rotation suffix like .1, .2, etc.
+    name = re.sub(r"\.jsonl(\.\d+)?$", "", name)
+    # Also remove .log if present
+    name = re.sub(r"\.log$", "", name)
+    if len(name) > max_len:
+        name = name[: max_len - 1] + "…"
+    return name
+
+
 def strip_ansi_codes(text: str) -> str:
     """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r"\x1b\[[0-9;]*m")
@@ -77,6 +98,7 @@ def format_log_entry(
     show_colors: bool = True,
     compact: bool = True,
     show_extras: bool = False,
+    filename: Optional[str] = None,
 ) -> Optional[str]:
     """
     Format a single log entry for display.
@@ -86,6 +108,7 @@ def format_log_entry(
         show_colors: Whether to use ANSI colors for levels
         compact: Use compact format (like docker logs)
         show_extras: Show extra fields from log entry
+        filename: Optional filename prefix (already shortened)
 
     Returns:
         Formatted string or None if entry is invalid
@@ -141,17 +164,21 @@ def format_log_entry(
                     extras_list = ", ".join(extras.keys())
                     extras_str = f" [{extras_list}]"
 
+            # Build filename prefix if provided
+            file_prefix = f"{filename:<15} | " if filename else ""
+
             formatted = (
-                f"{time_str} {color}{level:<8}{reset} "
-                f"{module:<25} {line_num:>4} : {message}{extras_str}"
+                f"{color}{file_prefix}{time_str} {level:<8} "
+                f"{module:<25} {line_num:>4} : {message}{extras_str}{reset}"
             )
         else:
             # Verbose format
             logger = log_entry.get("logger", "")
             function = log_entry.get("function", "")
+            file_prefix = f"{filename:<15} | " if filename else ""
             formatted = (
-                f"{time_str} | {color}{level:<8}{reset} | "
-                f"{logger}:{module}.{function}:{line_num} | {message}"
+                f"{color}{file_prefix}{time_str} | {level:<8} | "
+                f"{logger}:{module}.{function}:{line_num} | {message}{reset}"
             )
 
         return formatted
@@ -167,6 +194,7 @@ def process_line(
     show_colors: bool = True,
     compact: bool = True,
     show_extras: bool = False,
+    filename: Optional[str] = None,
 ) -> Optional[str]:
     """
     Process a single log line.
@@ -178,6 +206,7 @@ def process_line(
         show_colors: Whether to use colors
         compact: Use compact format
         show_extras: Show extra fields
+        filename: Optional filename prefix (already shortened)
 
     Returns:
         Formatted string or None if filtered out
@@ -190,6 +219,8 @@ def process_line(
         log_entry = json.loads(line)
     except json.JSONDecodeError:
         # Not valid JSON, print as-is (could be plain text logs)
+        if filename:
+            return f"{filename:<15} | {line}"
         return line
 
     # Filter by level
@@ -213,7 +244,24 @@ def process_line(
         show_colors=show_colors,
         compact=compact,
         show_extras=show_extras,
+        filename=filename,
     )
+
+
+def get_timestamp_from_line(line: str) -> datetime:
+    """
+    Extract timestamp from a JSON log line for sorting.
+
+    Returns datetime.min if timestamp cannot be extracted.
+    """
+    try:
+        log_entry = json.loads(line.strip())
+        timestamp_str = log_entry.get("timestamp", "")
+        if timestamp_str:
+            return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return datetime.min
 
 
 async def read_last_n_lines(file_path: str, n: int) -> List[str]:
@@ -257,6 +305,78 @@ async def read_last_n_lines(file_path: str, n: int) -> List[str]:
 
         # Return the last n lines
         return lines[-n:] if len(lines) > n else lines
+
+
+async def read_and_merge_files(
+    file_paths: List[str],
+    n_lines: int,
+) -> List[tuple[str, str, datetime]]:
+    """
+    Read the last N lines from multiple files and merge by timestamp.
+
+    Args:
+        file_paths: List of file paths to read
+        n_lines: Total number of lines to return
+
+    Returns:
+        List of (filename, line, timestamp) tuples sorted by timestamp
+    """
+    all_entries: List[tuple[str, str, datetime]] = []
+
+    # Read from each file - get more lines than needed since we'll merge and trim
+    lines_per_file = max(n_lines, n_lines // len(file_paths) + 10) if file_paths else n_lines
+
+    for file_path in file_paths:
+        short_name = get_short_filename(file_path)
+        lines = await read_last_n_lines(file_path, lines_per_file)
+        for line in lines:
+            timestamp = get_timestamp_from_line(line)
+            all_entries.append((short_name, line, timestamp))
+
+    # Sort by timestamp
+    all_entries.sort(key=lambda x: x[2])
+
+    # Return the last n_lines
+    return all_entries[-n_lines:] if len(all_entries) > n_lines else all_entries
+
+
+async def tail_merged_files(
+    file_paths: List[str],
+    n_lines: int,
+    min_level: Optional[str],
+    grep_pattern: Optional[re.Pattern],
+    show_colors: bool,
+    compact: bool,
+    show_extras: bool,
+) -> dict[str, int]:
+    """
+    Print the last N lines from multiple files, merged by timestamp.
+
+    Returns:
+        Dict mapping file_path to current file position for follow mode
+    """
+    entries = await read_and_merge_files(file_paths, n_lines)
+
+    for filename, line, _ in entries:
+        formatted = process_line(
+            line,
+            min_level=min_level,
+            grep_pattern=grep_pattern,
+            show_colors=show_colors,
+            compact=compact,
+            show_extras=show_extras,
+            filename=filename,
+        )
+        if formatted:
+            print(formatted)
+
+    # Return current file positions for follow mode
+    positions = {}
+    for file_path in file_paths:
+        async with aiofiles.open(file_path, "r") as f:
+            await f.seek(0, os.SEEK_END)
+            positions[file_path] = await f.tell()
+    return positions
 
 
 async def tail_file(
@@ -307,6 +427,7 @@ class LogFileHandler(FileSystemEventHandler):
         show_colors: bool,
         compact: bool,
         show_extras: bool,
+        filename: Optional[str] = None,
     ):
         self.file_path = file_path
         self.loop = loop
@@ -316,6 +437,7 @@ class LogFileHandler(FileSystemEventHandler):
         self.show_colors = show_colors
         self.compact = compact
         self.show_extras = show_extras
+        self.filename = filename
         self._processing = False
 
     async def process_new_lines(self):
@@ -335,6 +457,7 @@ class LogFileHandler(FileSystemEventHandler):
                         show_colors=self.show_colors,
                         compact=self.compact,
                         show_extras=self.show_extras,
+                        filename=self.filename,
                     )
                     if formatted:
                         print(formatted, flush=True)
@@ -356,6 +479,7 @@ async def follow_file(
     show_colors: bool,
     compact: bool,
     show_extras: bool,
+    filename: Optional[str] = None,
 ):
     """
     Follow a file for new content (like tail -f).
@@ -370,6 +494,7 @@ async def follow_file(
         show_colors=show_colors,
         compact=compact,
         show_extras=show_extras,
+        filename=filename,
     )
 
     observer = Observer()
@@ -389,6 +514,63 @@ async def follow_file(
     finally:
         observer.stop()
         observer.join()
+
+
+async def follow_multiple_files(
+    file_paths: List[str],
+    start_positions: dict[str, int],
+    min_level: Optional[str],
+    grep_pattern: Optional[re.Pattern],
+    show_colors: bool,
+    compact: bool,
+    show_extras: bool,
+):
+    """
+    Follow multiple files for new content, showing filename prefix.
+    """
+    loop = asyncio.get_event_loop()
+    handlers = []
+    observers = []
+
+    for file_path in file_paths:
+        short_name = get_short_filename(file_path)
+        handler = LogFileHandler(
+            file_path=file_path,
+            loop=loop,
+            last_position=start_positions.get(file_path, 0),
+            min_level=min_level,
+            grep_pattern=grep_pattern,
+            show_colors=show_colors,
+            compact=compact,
+            show_extras=show_extras,
+            filename=short_name,
+        )
+        handlers.append(handler)
+
+        observer = Observer()
+        watch_dir = os.path.dirname(file_path) or "."
+        observer.schedule(handler, watch_dir, recursive=False)
+        observer.start()
+        observers.append(observer)
+
+    file_list = ", ".join(get_short_filename(f) for f in file_paths)
+    print(
+        f"--- Following {len(file_paths)} files: {file_list} (Ctrl+C to stop) ---", file=sys.stderr
+    )
+
+    try:
+        while True:
+            await asyncio.sleep(0.5)
+            # Check all handlers periodically
+            for handler in handlers:
+                await handler.process_new_lines()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for observer in observers:
+            observer.stop()
+        for observer in observers:
+            observer.join()
 
 
 def get_jsonl_files(path: str) -> List[str]:
@@ -417,9 +599,7 @@ def get_jsonl_files(path: str) -> List[str]:
 def main(
     log_path: Annotated[
         str,
-        typer.Argument(
-            help="Path to JSONL log file or directory containing log files"
-        ),
+        typer.Argument(help="Path to JSONL log file or directory containing log files"),
     ],
     follow: Annotated[
         bool,
@@ -484,15 +664,21 @@ def main(
     Reads structured JSONL log files and displays them in a format similar
     to docker logs output, with proper emoji handling and optional filtering.
 
+    When given a directory, merges logs from all files by timestamp and shows
+    a filename prefix for each line.
+
     Examples:
         # Show last 50 lines and follow
-        python tail_jsonl_logs.py logs/lnd_monitor.jsonl -f
+        tailjlogs logs/lnd_monitor.jsonl -f
 
         # Show last 100 lines with WARNING or higher
-        python tail_jsonl_logs.py logs/hive_monitor.jsonl -n 100 -l WARNING
+        tailjlogs logs/hive_monitor.jsonl -n 100 -l WARNING
 
         # Filter by pattern and follow
-        python tail_jsonl_logs.py logs/api.jsonl -f -g "error|failed"
+        tailjlogs logs/api.jsonl -f -g "error|failed"
+
+        # Tail a directory (merges all .jsonl files by timestamp)
+        tailjlogs logs/ -n 100 -f
     """
     # Validate path
     if not os.path.exists(log_path):
@@ -521,47 +707,58 @@ def main(
     show_colors = not no_color
     compact = not verbose
 
+    # Check if we're dealing with a directory (multiple files to merge)
+    is_directory = Path(log_path).is_dir()
+
     async def run():
-        # If multiple files, show all of them
-        if len(log_files) > 1 and not follow:
-            for log_file in log_files[:-1]:
-                typer.echo(f"--- {log_file} ---", err=True)
-                await tail_file(
-                    log_file,
-                    n_lines=tail,
-                    min_level=min_level,
-                    grep_pattern=grep_pattern,
-                    show_colors=show_colors,
-                    compact=compact,
-                    show_extras=extras,
-                )
-
-        # Always process the last (most recent) file
-        target_file = log_files[-1]
-        if len(log_files) > 1:
-            typer.echo(f"--- {target_file} ---", err=True)
-
-        last_pos = await tail_file(
-            target_file,
-            n_lines=tail,
-            min_level=min_level,
-            grep_pattern=grep_pattern,
-            show_colors=show_colors,
-            compact=compact,
-            show_extras=extras,
-        )
-
-        # Follow mode
-        if follow:
-            await follow_file(
-                target_file,
-                start_position=last_pos,
+        if is_directory and len(log_files) > 1:
+            # Directory mode: merge all files by timestamp
+            positions = await tail_merged_files(
+                log_files,
+                n_lines=tail,
                 min_level=min_level,
                 grep_pattern=grep_pattern,
                 show_colors=show_colors,
                 compact=compact,
                 show_extras=extras,
             )
+
+            # Follow mode for multiple files
+            if follow:
+                await follow_multiple_files(
+                    log_files,
+                    start_positions=positions,
+                    min_level=min_level,
+                    grep_pattern=grep_pattern,
+                    show_colors=show_colors,
+                    compact=compact,
+                    show_extras=extras,
+                )
+        else:
+            # Single file mode
+            target_file = log_files[-1] if log_files else log_path
+
+            last_pos = await tail_file(
+                target_file,
+                n_lines=tail,
+                min_level=min_level,
+                grep_pattern=grep_pattern,
+                show_colors=show_colors,
+                compact=compact,
+                show_extras=extras,
+            )
+
+            # Follow mode
+            if follow:
+                await follow_file(
+                    target_file,
+                    start_position=last_pos,
+                    min_level=min_level,
+                    grep_pattern=grep_pattern,
+                    show_colors=show_colors,
+                    compact=compact,
+                    show_extras=extras,
+                )
 
     asyncio.run(run())
 
