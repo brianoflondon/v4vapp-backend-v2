@@ -20,6 +20,7 @@ from v4vapp_backend_v2.admin.navigation import NavigationManager
 from v4vapp_backend_v2.admin.routers import v4vconfig
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
+from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_filename
 
 # LND and accounting helpers used on dashboard
 
@@ -28,7 +29,8 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 async def lifespan(app: FastAPI):
     # Access config_filename from app.state
     config_filename = app.state.config_filename
-    InternalConfig(config_filename=config_filename, log_filename=__name__)
+    log_filename = get_entrypoint_filename()
+    InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
     db_conn = DBConn()
     await db_conn.setup_database()
     logger.info("Admin Interface and API started", extra={"notification": False})
@@ -39,7 +41,8 @@ class AdminApp:
     """Main admin application class"""
 
     def __init__(self, config_filename: str = "devhive.config.yaml"):
-        InternalConfig(config_filename=config_filename, log_filename=__name__)
+        log_filename = get_entrypoint_filename()
+        InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
         self.app = FastAPI(
             lifespan=lifespan,
             title="V4VApp Admin Interface",

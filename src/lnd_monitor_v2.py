@@ -28,7 +28,11 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndChannelName,
     LndEventsGroup,
 )
-from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, get_in_flight_time
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    format_time_delta,
+    get_entrypoint_filename,
+    get_in_flight_time,
+)
 from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDSubscriptionError
@@ -1415,9 +1419,8 @@ def main(
     Returns:
         None
     """
-    CONFIG = InternalConfig(
-        config_filename=config_filename, log_filename="lnd_monitor_v2.log.jsonl"
-    ).config
+    log_filename = get_entrypoint_filename()
+    CONFIG = InternalConfig(config_filename=config_filename, log_filename=log_filename.stem).config
     lnd_node = CONFIG.lnd_config.default
     icon = CONFIG.lnd_config.connections[lnd_node].icon
     if not lnd_node:

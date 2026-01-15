@@ -21,7 +21,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     get_balances,
     get_current_price,
 )
-from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
+from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter, get_entrypoint_filename
 
 ICON = "🅑"
 app = typer.Typer()
@@ -331,7 +331,8 @@ def main(
         None
     """
     icon = ICON
-    InternalConfig(config_filename=config_filename, log_filename=__name__)
+    log_filename = get_entrypoint_filename()
+    InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
     logger.info(
         f"{icon} ✅ Binance Monitor. Started. {__version__}",
         extra={"notification": True},

@@ -33,13 +33,13 @@ ICON = "🤖"
 config_filename = "devhive.config.yaml"
 
 
-def create_lifespan(config_file: str):
+def create_lifespan(config_filename: str):
     """Factory function to create lifespan with the correct config filename"""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         log_filename = get_entrypoint_filename()
-        InternalConfig(config_filename=config_file, log_filename=log_filename.stem)
+        InternalConfig(config_filename=config_filename, log_filename=log_filename.stem)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")
