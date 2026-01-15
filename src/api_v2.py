@@ -138,7 +138,7 @@ async def binance() -> Dict[str, str | int | float]:
         testnet = False
     try:
         balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=testnet)
-        logger.info(f"{ICON} Binance balances: {balances}")
+        logger.debug(f"{ICON} Binance balances: {balances}")
     except BinanceErrorBadConnection:
         return {"error": "Bad connection"}
     return {
