@@ -1,4 +1,7 @@
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +14,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     detect_paywithsats,
     draw_percentage_meter,
     format_time_delta,
+    get_entrypoint_path,
     get_in_flight_time,
     is_markdown,
     re_escape,
@@ -381,3 +385,48 @@ def test_timestamp_inc():
     inc_time = timestamp_inc(base_time_with_micro, inc=timedelta(seconds=0.01))
     for i in range(0, 100):
         print(f"Increment {i}: {next(inc_time)}")
+
+
+def test_main_file_takes_precedence(monkeypatch):
+    fake_main = SimpleNamespace(__file__="some/package/app.py")
+    monkeypatch.setitem(sys.modules, "__main__", fake_main)
+
+    p = get_entrypoint_path()
+    assert isinstance(p, Path)
+    assert p.name == "app.py"
+
+    # cleanup
+    monkeypatch.delitem(sys.modules, "__main__", raising=False)
+
+
+def test_argv_used_when_no_main(monkeypatch):
+    # ensure __main__ exists but has no __file__
+    monkeypatch.setitem(sys.modules, "__main__", SimpleNamespace())
+    monkeypatch.setattr(sys, "argv", ["relative/path/to/script.py"], raising=False)
+
+    p = get_entrypoint_path()
+    assert isinstance(p, Path)
+    assert p.name == "script.py"
+
+
+def test_inline_or_command_returns_none(monkeypatch):
+    monkeypatch.setitem(sys.modules, "__main__", SimpleNamespace())
+    monkeypatch.setattr(sys, "argv", ["-c"], raising=False)
+
+    p = get_entrypoint_path()
+    assert p.stem == "unknown"
+
+
+def test_frozen_returns_executable(monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/tmp/fakeexec", raising=False)
+
+    p = get_entrypoint_path()
+    assert isinstance(p, Path)
+    assert p == Path(sys.executable).resolve()
+
+
+def test_path_stem_usage():
+    # Demonstrate extracting filename without extension
+    p = Path("/foo/bar/baz.py")
+    assert p.stem == "baz"

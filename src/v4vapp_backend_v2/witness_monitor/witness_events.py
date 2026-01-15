@@ -343,7 +343,9 @@ async def verify_hive_witness_rpc_alive(url: str, machine_name: str) -> tuple[di
     }
 
     start_time = timer()
-    error_code = "witness_api_invalid_response"
+    # Make error_code unique per machine to avoid one machine's success
+    # clearing another machine's error
+    error_code = f"witness_api_invalid_response_{machine_name}"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload)
