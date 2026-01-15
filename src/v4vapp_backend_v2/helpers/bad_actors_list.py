@@ -119,7 +119,7 @@ async def fetch_bad_actor_list() -> Set[str]:
 
     except (httpx.HTTPError, ValueError) as fetch_exc:
         # On fetch/parsing errors, attempt fallbacks in order: Redis -> /tmp -> bundled file
-        logger.warning(f"Error fetching/parsing the list: {fetch_exc}")
+        logger.warning(f"Error fetching/parsing the list: {fetch_exc}", exc_info=True)
 
         # 1) Try Redis
         try:
@@ -130,9 +130,9 @@ async def fetch_bad_actor_list() -> Set[str]:
                     if isinstance(payload, (list, tuple)):
                         return set(payload)
                 except Exception as e:
-                    logger.warning(f"Failed to parse cached bad actors from Redis: {e}")
+                    logger.warning(f"Failed to parse cached bad actors from Redis: {e}", exc_info=True)
         except Exception as e:
-            logger.warning(f"Redis unavailable when loading bad actors backup: {e}")
+            logger.warning(f"Redis unavailable when loading bad actors backup: {e}", exc_info=True)
 
         # 2) Try /tmp file
         try:
@@ -142,7 +142,7 @@ async def fetch_bad_actor_list() -> Set[str]:
                 if lines:
                     return set(lines)
         except Exception as e:
-            logger.warning(f"Failed to read tmp backup file {TMP_FILE}: {e}")
+            logger.warning(f"Failed to read tmp backup file {TMP_FILE}: {e}", exc_info=True)
 
         # 3) Final fallback: bundled file shipped with the repo (next to this module)
         try:
@@ -162,6 +162,6 @@ async def fetch_bad_actor_list() -> Set[str]:
                 if lines:
                     return lines
         except Exception as e:
-            logger.warning(f"Failed to read bundled fallback bad actors file: {e}")
+            logger.warning(f"Failed to read bundled fallback bad actors file: {e}", exc_info=True)
 
         return set()
