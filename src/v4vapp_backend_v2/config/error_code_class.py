@@ -71,6 +71,7 @@ class ErrorCode:
         local_machine_name: str = "",
         active: bool = True,
         cleared_at: datetime | None = None,
+        clear_message: str = "",
     ) -> dict[str, Any]:
         """
         Convert the ErrorCode to a MongoDB document for persistence.
@@ -82,6 +83,7 @@ class ErrorCode:
             local_machine_name: The local machine name (e.g., from InternalConfig.local_machine_name)
             active: Whether this error is currently active
             cleared_at: When the error was cleared (None if still active)
+            clear_message: Message describing why/how the error was cleared
 
         Returns:
             dict: A MongoDB-ready document
@@ -97,6 +99,7 @@ class ErrorCode:
             "local_machine_name": local_machine_name,
             "active": active,
             "cleared_at": cleared_at,
+            "clear_message": clear_message,
             "created_at": now,
             "updated_at": now,
         }

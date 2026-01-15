@@ -322,12 +322,15 @@ class ErrorTrackingFilter(logging.Filter):
                     error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=0)
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
-                logger.info(
+                message = (
                     f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
-                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}",
+                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}"
+                )
+                logger.info(
+                    message,
                     extra={"notification": notification, "error_code_obj": error_code_obj},
                 )
-                InternalConfig().error_codes.pop(error_code_clear)
+                InternalConfig().error_codes.pop(error_code_clear, clear_message=message)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
             record._error_tracking_result = True  # type: ignore[attr-defined]
             return True  # Allow the clear message through

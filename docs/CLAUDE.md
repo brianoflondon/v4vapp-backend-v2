@@ -7,16 +7,19 @@ This PR (`feature/record-error_code-events-in-database-logs`) adds MongoDB persi
 ## Key Files
 
 ### Core Implementation
+
 - `src/v4vapp_backend_v2/config/error_code_manager.py` - Singleton manager with dict-like interface + MongoDB persistence
 - `src/v4vapp_backend_v2/config/error_code_class.py` - `ErrorCode` dataclass with `to_mongo_doc()` / `from_mongo_doc()` methods
 - `src/v4vapp_backend_v2/config/setup.py` - `InternalConfig` integration (see `error_code_manager` class var and `error_codes` property)
 - `src/v4vapp_backend_v2/config/mylogger.py` - `ErrorTrackingFilter` uses manager's `add()` method
 
 ### Tests
+
 - `tests/mylogger/test_error_code_manager.py` - 27 comprehensive tests
 - `tests/mylogger/test_custom_notification_handler.py` - Tests error tracking filter integration
 
 ### Documentation
+
 - `docs/error_code_manager.md` - Full feature documentation
 
 ## Architecture
@@ -38,6 +41,7 @@ ErrorCodeManager.add(ErrorCode)
 ## MongoDB Collection: `error_codes`
 
 Documents contain:
+
 - `code`, `message`, `start_time`, `last_log_time` - from ErrorCode
 - `server_id`, `node_name`, `local_machine_name` - from InternalConfig
 - `active` (bool), `cleared_at` (datetime) - tracks error lifecycle

@@ -144,11 +144,18 @@ class ErrorCodeManager:
         """Return all error code values."""
         return list(self._codes.values())
 
-    def pop(self, code: Any, *args) -> ErrorCode | None:
+    def pop(self, code: Any, *args, **kwargs) -> ErrorCode | None:
         """Remove and return an error code (also triggers async persistence)."""
+        clear_message = ""
+        if "clear_message" in kwargs:
+            clear_message = kwargs.pop("clear_message")
+            logger.info(
+                f"{ERROR_CODE_CLEAR_ICON} {clear_message}",
+                extra={"notification": True, "error_code_obj": self._codes.get(code)},
+            )
         if code in self._codes:
             error_code = self._codes.pop(code)
-            self._persist_clear(error_code)
+            self._persist_clear(error_code, clear_message=clear_message)
             return error_code
         if args:
             return args[0]
@@ -170,19 +177,20 @@ class ErrorCodeManager:
         self._codes[error_code.code] = error_code
         self._persist_add(error_code)
 
-    def remove(self, code: Any) -> ErrorCode | None:
+    def remove(self, code: Any, clear_message: str = "") -> ErrorCode | None:
         """
         Remove an error code from the manager and persist the clear event to MongoDB.
 
         Args:
             code: The error code to remove
+            clear_message: Message describing why/how the error was cleared
 
         Returns:
             The removed ErrorCode or None if not found
         """
         if code in self._codes:
             error_code = self._codes.pop(code)
-            self._persist_clear(error_code)
+            self._persist_clear(error_code, clear_message=clear_message)
             return error_code
         return None
 
@@ -224,13 +232,17 @@ class ErrorCodeManager:
             # Never let persistence errors break the logging system
             logger.debug(f"{ERROR_CODE_ICON} Error scheduling persistence: {e}")
 
-    def _persist_clear(self, error_code: ErrorCode) -> None:
+    def _persist_clear(self, error_code: ErrorCode, clear_message: str = "") -> None:
         """
         Persist an error code clear event to MongoDB asynchronously.
 
         This method fires and forgets - MongoDB failures won't break logging.
         Only persists when called from the same event loop where the MongoDB
         client was created to avoid "different event loop" errors.
+
+        Args:
+            error_code: The ErrorCode being cleared
+            clear_message: Message describing why/how the error was cleared
         """
         if not self._db_enabled:
             return
@@ -238,7 +250,7 @@ class ErrorCodeManager:
         try:
             # Only use the current running loop - don't try to use notification_loop
             loop = asyncio.get_running_loop()
-            loop.create_task(self._async_persist_clear(error_code))
+            loop.create_task(self._async_persist_clear(error_code, clear_message=clear_message))
         except RuntimeError:
             logger.debug(
                 f"{ERROR_CODE_CLEAR_ICON} No running event loop for error clear persistence: "
@@ -283,12 +295,16 @@ class ErrorCodeManager:
             # Log but don't raise - persistence failures shouldn't break logging
             logger.warning(f"{ERROR_CODE_ICON} Failed to persist error code to MongoDB: {e}")
 
-    async def _async_persist_clear(self, error_code: ErrorCode) -> None:
+    async def _async_persist_clear(self, error_code: ErrorCode, clear_message: str = "") -> None:
         """
         Async method to persist error code clear event to MongoDB.
 
         Inserts a new document marking the error as cleared.
         Uses mongo_call for consistent retry/error handling.
+
+        Args:
+            error_code: The ErrorCode being cleared
+            clear_message: Message describing why/how the error was cleared
         """
         try:
             from v4vapp_backend_v2.config.setup import InternalConfig
@@ -306,6 +322,7 @@ class ErrorCodeManager:
                 or getattr(InternalConfig(), "local_machine_name", ""),
                 active=False,
                 cleared_at=now,
+                clear_message=clear_message,
             )
 
             await mongo_call(
