@@ -1,7 +1,9 @@
 import decimal
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Generator
 
 from bson.decimal128 import Decimal128
@@ -54,6 +56,55 @@ def cap_camel_case(snake_str: str) -> str:
     """
     camel_case_word = camel_case(snake_str)
     return camel_case_word[0].upper() + camel_case_word[1:]
+
+
+# MARK: File System
+
+
+def get_entrypoint_path() -> Path:
+    """Return the most likely entry-point filename for the current process as a Path.
+
+    Logic (in order):
+    - If running in a frozen bundle (e.g. PyInstaller), returns the resolved path
+      to the executable (sys.executable).
+    - If the __main__ module has a __file__ attribute, returns its resolved path.
+    - If sys.argv[0] is provided and not one of "" or "-c", returns its resolved path.
+    - If sys.argv[0] is "" or "-c", returns None to indicate execution from a command
+      string/interactive code.
+    - If none of the above yields a result, returns None.
+
+    Returned values are pathlib.Path objects. Use the following to extract filename details:
+        path = get_entrypoint_filename()
+        if path is not None:
+            # filename with extension
+            filename_with_ext = path.name
+            # filename without extension
+            filename_without_ext = path.stem
+            # extension
+            ext = path.suffix
+
+    Notes:
+    - resolve(strict=False) is used to avoid raising if the file does not exist (helpful
+      when resolving entrypoints in some packaging scenarios).
+
+    Returns:
+        Path | None: The entry-point as a Path, or None when the entrypoint cannot be determined
+        (interactive, -c, or unknown cases).
+    """
+    # PyInstaller / frozen apps
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve()
+
+    main = sys.modules.get("__main__")
+    if main and getattr(main, "__file__", None):
+        return Path(main.__file__).resolve(strict=False)
+
+    if sys.argv and sys.argv[0]:
+        if sys.argv[0] in ("", "-c"):
+            return Path("unknown.py").resolve(strict=False)
+        return Path(sys.argv[0]).resolve(strict=False)
+
+    return Path("unknown.py").resolve(strict=False)
 
 
 # MARK: Database

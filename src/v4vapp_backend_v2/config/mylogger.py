@@ -322,12 +322,15 @@ class ErrorTrackingFilter(logging.Filter):
                     error_code_obj.elapsed_time if error_code_obj else timedelta(seconds=0)
                 )
                 elapsed_time_str = timedelta_display(elapsed_time)
-                logger.info(
+                message = (
                     f"✅ {Fore.WHITE}Error code {error_code_clear} cleared after "
-                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}",
+                    f"{elapsed_time_str} original: {error_code_obj.message if error_code_obj else ''}{Style.RESET_ALL}"
+                )
+                logger.info(
+                    message,
                     extra={"notification": notification, "error_code_obj": error_code_obj},
                 )
-                InternalConfig().error_codes.pop(error_code_clear)
+                InternalConfig().error_codes.pop(error_code_clear, clear_message=message)
             record._error_tracking_processed = True  # type: ignore[attr-defined]
             record._error_tracking_result = True  # type: ignore[attr-defined]
             return True  # Allow the clear message through
@@ -343,9 +346,9 @@ class ErrorTrackingFilter(logging.Filter):
                 re_alert_time = timedelta(hours=1)
 
             if error_code not in InternalConfig().error_codes:
-                # New error code - add it and allow the log through
+                # New error code - add it (triggers MongoDB persistence) and allow the log through
                 error_code_obj = ErrorCode(code=error_code, message=record.getMessage())
-                InternalConfig().error_codes[error_code_obj.code] = error_code_obj
+                InternalConfig().error_codes.add(error_code_obj)
                 logger.error(
                     f"❌ New error: {error_code}",
                     extra={
@@ -445,7 +448,7 @@ class ConsoleLogFilter(logging.Filter):
     """
 
     # cached value for the configured console level (parsed to int)
-    _cached_levelno: int | None = None
+    _cached_levelno: int = logging.INFO
 
     @classmethod
     def refresh_cached_level(cls) -> None:
@@ -460,7 +463,7 @@ class ConsoleLogFilter(logging.Filter):
         # Initialize cached level on first call (or if None)
         if ConsoleLogFilter._cached_levelno is None:
             ConsoleLogFilter.refresh_cached_level()
-        return record.levelno >= ConsoleLogFilter._cached_levelno  # type: ignore[return-value]
+        return record.levelno >= ConsoleLogFilter._cached_levelno
 
 
 class AddNotificationBellFilter(logging.Filter):

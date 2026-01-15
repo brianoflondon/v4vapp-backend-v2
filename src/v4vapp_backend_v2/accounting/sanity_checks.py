@@ -399,7 +399,7 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        InternalConfig(config_filename="devhive.config.yaml", log_filename=__name__)
+        InternalConfig(config_filename="devhive.config.yaml")
         db_conn = DBConn()
         await db_conn.setup_database()
         await log_all_sanity_checks(

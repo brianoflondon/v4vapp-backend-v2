@@ -15,7 +15,7 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-      - ./logs_docker/umbrel:/app/logs
+      - ./logs_docker:/app/logs
     command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
@@ -35,7 +35,7 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-      - ./logs_docker/hive:/app/logs
+      - ./logs_docker:/app/logs
     command: [
       "python", "src/hive_monitor_v2.py",
       "--config", "devdocker.config.yaml",
@@ -60,7 +60,7 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-      - ./logs_docker/hive:/app/logs
+      - ./logs_docker:/app/logs
     command: [
       "python", "src/db_monitor.py",
       "--config", "devdocker.config.yaml",
@@ -82,7 +82,7 @@ services:
       - "0.0.0.0:8000:8000"
     volumes:
       - ./config:/app/config
-      - ./logs_docker/api:/app/logs
+      - ./logs_docker:/app/logs
     command: ["python", "src/api_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
@@ -103,7 +103,7 @@ services:
     volumes:
       - ./.certs:/app/.certs
       - ./config:/app/config
-      - ./logs_docker/admin:/app/logs
+      - ./logs_docker:/app/logs
     command: [
       "python", "src/v4vapp_backend_v2/admin/run_admin.py",
       "--host", "0.0.0.0",

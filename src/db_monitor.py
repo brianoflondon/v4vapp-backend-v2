@@ -553,7 +553,7 @@ def main(
     Returns:
         None
     """
-    _ = InternalConfig(config_filename=config_filename, log_filename=__name__)
+    _ = InternalConfig(config_filename=config_filename)
     logger.info(
         f"{ICON}{Fore.WHITE} ✅ Database Monitor App. Started. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
         extra={"notification": True},
