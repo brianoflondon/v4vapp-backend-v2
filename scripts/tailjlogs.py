@@ -229,6 +229,7 @@ def process_line(
     line: str,
     min_level: Optional[str] = None,
     grep_pattern: Optional[re.Pattern] = None,
+    grep_exclude: Optional[re.Pattern] = None,
     show_colors: bool = True,
     compact: bool = True,
     show_extras: bool = False,
@@ -240,7 +241,8 @@ def process_line(
     Args:
         line: Raw line from log file
         min_level: Minimum log level to display
-        grep_pattern: Regex pattern to filter messages
+        grep_pattern: Regex pattern to include messages (like grep)
+        grep_exclude: Regex pattern to exclude messages (like grep -v)
         show_colors: Whether to use colors
         compact: Use compact format
         show_extras: Show extra fields
@@ -272,12 +274,19 @@ def process_line(
         if entry_priority < min_priority:
             return None
 
-    # Filter by grep pattern
+    # Filter by grep pattern (include)
     if grep_pattern:
         message = log_entry.get("message", "")
         # Strip ANSI codes for matching
         clean_message = strip_ansi_codes(message)
         if not grep_pattern.search(clean_message):
+            return None
+
+    # Filter by grep exclude pattern (exclude)
+    if grep_exclude:
+        message = log_entry.get("message", "")
+        clean_message = strip_ansi_codes(message)
+        if grep_exclude.search(clean_message):
             return None
 
     return format_log_entry(
@@ -386,6 +395,7 @@ async def tail_merged_files(
     n_lines: int,
     min_level: Optional[str],
     grep_pattern: Optional[re.Pattern],
+    grep_exclude: Optional[re.Pattern],
     show_colors: bool,
     compact: bool,
     show_extras: bool,
@@ -403,6 +413,7 @@ async def tail_merged_files(
             line,
             min_level=min_level,
             grep_pattern=grep_pattern,
+            grep_exclude=grep_exclude,
             show_colors=show_colors,
             compact=compact,
             show_extras=show_extras,
@@ -425,6 +436,7 @@ async def tail_file(
     n_lines: int,
     min_level: Optional[str],
     grep_pattern: Optional[re.Pattern],
+    grep_exclude: Optional[re.Pattern],
     show_colors: bool,
     compact: bool,
     show_extras: bool,
@@ -442,6 +454,7 @@ async def tail_file(
             line,
             min_level=min_level,
             grep_pattern=grep_pattern,
+            grep_exclude=grep_exclude,
             show_colors=show_colors,
             compact=compact,
             show_extras=show_extras,
@@ -465,6 +478,7 @@ class LogFileHandler(FileSystemEventHandler):
         last_position: int,
         min_level: Optional[str],
         grep_pattern: Optional[re.Pattern],
+        grep_exclude: Optional[re.Pattern],
         show_colors: bool,
         compact: bool,
         show_extras: bool,
@@ -475,6 +489,7 @@ class LogFileHandler(FileSystemEventHandler):
         self.last_position = last_position
         self.min_level = min_level
         self.grep_pattern = grep_pattern
+        self.grep_exclude = grep_exclude
         self.show_colors = show_colors
         self.compact = compact
         self.show_extras = show_extras
@@ -495,6 +510,7 @@ class LogFileHandler(FileSystemEventHandler):
                         line,
                         min_level=self.min_level,
                         grep_pattern=self.grep_pattern,
+                        grep_exclude=self.grep_exclude,
                         show_colors=self.show_colors,
                         compact=self.compact,
                         show_extras=self.show_extras,
@@ -517,6 +533,7 @@ async def follow_file(
     start_position: int,
     min_level: Optional[str],
     grep_pattern: Optional[re.Pattern],
+    grep_exclude: Optional[re.Pattern],
     show_colors: bool,
     compact: bool,
     show_extras: bool,
@@ -532,6 +549,7 @@ async def follow_file(
         last_position=start_position,
         min_level=min_level,
         grep_pattern=grep_pattern,
+        grep_exclude=grep_exclude,
         show_colors=show_colors,
         compact=compact,
         show_extras=show_extras,
@@ -578,6 +596,7 @@ async def follow_multiple_files(
     start_positions: dict[str, int],
     min_level: Optional[str],
     grep_pattern: Optional[re.Pattern],
+    grep_exclude: Optional[re.Pattern],
     show_colors: bool,
     compact: bool,
     show_extras: bool,
@@ -606,6 +625,7 @@ async def follow_multiple_files(
             last_position=start_positions.get(file_path, 0),
             min_level=min_level,
             grep_pattern=grep_pattern,
+            grep_exclude=grep_exclude,
             show_colors=show_colors,
             compact=compact,
             show_extras=show_extras,
@@ -698,7 +718,15 @@ def main(
         typer.Option(
             "-g",
             "--grep",
-            help="Filter messages by regex pattern",
+            help="Filter messages by regex pattern (include matches)",
+        ),
+    ] = None,
+    grep_exclude: Annotated[
+        Optional[str],
+        typer.Option(
+            "-G",
+            "--grep-exclude",
+            help="Exclude messages matching regex pattern (like grep -v)",
         ),
     ] = None,
     no_color: Annotated[
@@ -767,6 +795,15 @@ def main(
             typer.echo(f"Error: Invalid regex pattern: {e}", err=True)
             raise typer.Exit(code=1)
 
+    # Compile grep exclude pattern if provided
+    grep_exclude_pattern = None
+    if grep_exclude:
+        try:
+            grep_exclude_pattern = re.compile(grep_exclude, re.IGNORECASE)
+        except re.error as e:
+            typer.echo(f"Error: Invalid exclude regex pattern: {e}", err=True)
+            raise typer.Exit(code=1)
+
     # Get min level
     min_level = level.value if level else None
 
@@ -785,6 +822,7 @@ def main(
                 n_lines=tail,
                 min_level=min_level,
                 grep_pattern=grep_pattern,
+                grep_exclude=grep_exclude_pattern,
                 show_colors=show_colors,
                 compact=compact,
                 show_extras=extras,
@@ -797,6 +835,7 @@ def main(
                     start_positions=positions,
                     min_level=min_level,
                     grep_pattern=grep_pattern,
+                    grep_exclude=grep_exclude_pattern,
                     show_colors=show_colors,
                     compact=compact,
                     show_extras=extras,
@@ -810,6 +849,7 @@ def main(
                 n_lines=tail,
                 min_level=min_level,
                 grep_pattern=grep_pattern,
+                grep_exclude=grep_exclude_pattern,
                 show_colors=show_colors,
                 compact=compact,
                 show_extras=extras,
@@ -822,6 +862,7 @@ def main(
                     start_position=last_pos,
                     min_level=min_level,
                     grep_pattern=grep_pattern,
+                    grep_exclude=grep_exclude_pattern,
                     show_colors=show_colors,
                     compact=compact,
                     show_extras=extras,
