@@ -219,7 +219,7 @@ async def conversion_keepsats_to_hive(
             ledger_type=ledger_type,
             group_id=f"{tracked_op.group_id}_{ledger_type.value}",
             timestamp=datetime.now(tz=timezone.utc),
-            description=f"Fee refund {conv_result.fee_conv.sats_rounded:,.0f} sats {server_id} -> {cust_id} for keepsats-to-{to_currency} conversion",
+            description=f"Fee refund {conv_result.fee_conv.sats_rounded:,.0f} sats {server_id} -> {cust_id} for keepsats-to-{to_currency} conversion (fee charged in Transfer)",
             debit=LiabilityAccount(name="VSC Liability", sub=server_id),
             debit_unit=Currency.MSATS,
             debit_amount=conv_result.fee_conv.msats,
@@ -242,6 +242,7 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
+        # This test must not change, reference in op_custom_json.py
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
         debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
         debit_unit=Currency.MSATS,
