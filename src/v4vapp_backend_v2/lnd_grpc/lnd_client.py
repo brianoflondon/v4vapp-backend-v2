@@ -241,7 +241,7 @@ class LNDClient:
     # )
     async def call(self, method: Callable[..., Any], *args, **kwargs):
         try:
-            logger.debug(f"{ICON} Calling {method} with args: {args}, kwargs: {kwargs}")
+            # logger.debug(f"{ICON} Calling {method} with args: {str(args)[:50]}, kwargs: {str(kwargs)[:50]}")
             return await method(*args, **kwargs)
         except AioRpcError as e:
             if self.connection.use_proxy:

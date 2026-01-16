@@ -3620,7 +3620,7 @@ wheels = [
 
 [[package]]
 name = "v4vapp-backend-v2"
-version = "0.13.0"
+version = "0.13.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiocache" },
@@ -3703,7 +3703,7 @@ requires-dist = [
     { name = "python-telegram-bot", specifier = ">=22.3,<23.0" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "redis", specifier = "<=8.0.0" },
-    { name = "single-source", specifier = ">=0.3.0,<1.0.0" },
+    { name = "single-source", specifier = ">=0.3.0" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "tenacity", specifier = ">=9.1.2" },
     { name = "toml", specifier = ">=0.10.2,<1.0.0" },
