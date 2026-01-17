@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from typing import Dict
 
@@ -8,6 +9,44 @@ from pydantic import BaseModel, ConfigDict
 from requests.exceptions import RequestException  # Import only the exception
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+
+# Binance newClientOrderId must match ^[a-zA-Z0-9-_]{1,36}$
+# Only alphanumeric characters, hyphens, and underscores are allowed
+BINANCE_ORDER_ID_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]{1,36}$")
+
+
+def sanitize_client_order_id(order_id: str | None, max_length: int = 36) -> str | None:
+    """
+    Sanitize a client order ID to comply with Binance's requirements.
+
+    Binance requires newClientOrderId to match: ^[a-zA-Z0-9-_]{1,36}$
+    This function replaces illegal characters (like +, /, = from base64) with
+    allowed alternatives.
+
+    Args:
+        order_id: The original order ID string
+        max_length: Maximum length (default 36 for Binance)
+
+    Returns:
+        Sanitized order ID or None if input is None/empty
+    """
+    if not order_id:
+        return None
+
+    # Replace common base64 characters that aren't allowed
+    # + -> - (hyphen)
+    # / -> _ (underscore)
+    # = -> removed (padding)
+    sanitized = order_id.replace("+", "-").replace("/", "_").replace("=", "")
+
+    # Remove any other illegal characters (keep only alphanumeric, hyphen, underscore)
+    sanitized = re.sub(r"[^a-zA-Z0-9\-_]", "", sanitized)
+
+    # Truncate to max length
+    sanitized = sanitized[:max_length]
+
+    # Return None if the result is empty
+    return sanitized if sanitized else None
 
 
 class BinanceErrorLowBalance(Exception):
@@ -304,8 +343,11 @@ def market_order(
             "type": "MARKET",
             "quantity": str(quantity),
         }
-        if client_order_id:
-            order_params["newClientOrderId"] = client_order_id[:36]  # Binance max 36 chars
+        # Sanitize client_order_id to comply with Binance requirements
+        # Binance requires: ^[a-zA-Z0-9-_]{1,36}$
+        sanitized_order_id = sanitize_client_order_id(client_order_id)
+        if sanitized_order_id:
+            order_params["newClientOrderId"] = sanitized_order_id
         response = client.new_order(**order_params)
 
         logger.info(

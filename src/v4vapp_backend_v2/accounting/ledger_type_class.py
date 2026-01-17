@@ -7,19 +7,7 @@ class LedgerType(StrEnum):
     Enumeration of ledger entry types for accounting transactions.
     value char length must be less than or equal to 10 chars
 
-    Attributes:
-        - UNSET: Default value for unset ledger type
-        - CONV_H_L: Conversion from Hive to Lightning
-        - CONTRA_H_L: Contra entry for Hive to Lightning conversion
-        - CONV_L_H: Conversion from Lightning to Hive
-        - CONTRA_L_H: Contra entry for Lightning to Hive conversion
-        - HIVE_FEE: Fee applied to Hive transactions
-        - LIGHTNING_FEE: Fee applied to Lightning transactions
-        - LIGHTNING_CONTRA: Contra entry for Lightning transactions
-        - LIGHTNING_OUT: Outgoing Lightning transaction
-        - LIGHTNING_IN: Incoming Lightning transaction
-        - HIVE_IN: Incoming Hive transaction
-        - HIVE_OUT: Outgoing Hive transaction
+
     """
 
     UNSET = "unset"  # Default value for unset ledger type
@@ -49,6 +37,7 @@ class LedgerType(StrEnum):
 
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
+    CUSTOM_JSON_FEE_REFUND = "c_j_fee_r"  # Custom JSON fee refund notification
     CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
     RECEIVE_LIGHTNING = "recv_l"  # Receive Custom JSON from external source
 
@@ -138,6 +127,7 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.CONSUME_CUSTOMER_KEEPSATS: "🍽️",  # Consume customer SATS for conversion
     LedgerType.HOLD_KEEPSATS: "⏳",  # Holding Keepsats in the account
     LedgerType.CUSTOM_JSON_FEE: "💵",  # Custom JSON fee notification
+    LedgerType.CUSTOM_JSON_FEE_REFUND: "↩️",  # Custom JSON fee refund notification
     LedgerType.RELEASE_KEEPSATS: "🚀",  # Release Keepsats from the account
     LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
@@ -147,6 +137,7 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
 LedgerTypeStr: Dict[LedgerType, str] = {
     LedgerType.FEE_INCOME: "Fee",  # Fee income from Hive transactions
     LedgerType.CUSTOM_JSON_FEE: "Fee",  # Custom JSON fee notification
+    LedgerType.CUSTOM_JSON_FEE_REFUND: "Fee Refund",  # Custom JSON fee refund notification
     LedgerType.CONV_CUSTOMER: "Conversion",  # Conversion to/from Keepsats to Hive
     LedgerType.CUSTOMER_HIVE_OUT: "Withdraw",  # Customer withdrawal from Hive account
     LedgerType.CUSTOMER_HIVE_IN: "Deposit",  # Customer deposit into Hive

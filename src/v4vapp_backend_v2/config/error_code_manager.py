@@ -149,10 +149,6 @@ class ErrorCodeManager:
         clear_message = ""
         if "clear_message" in kwargs:
             clear_message = kwargs.pop("clear_message")
-            logger.info(
-                f"{ERROR_CODE_CLEAR_ICON} {clear_message}",
-                extra={"notification": True, "error_code_obj": self._codes.get(code)},
-            )
         if code in self._codes:
             error_code = self._codes.pop(code)
             self._persist_clear(error_code, clear_message=clear_message)

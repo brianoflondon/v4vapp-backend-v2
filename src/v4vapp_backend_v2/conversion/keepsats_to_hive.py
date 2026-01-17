@@ -199,18 +199,42 @@ async def conversion_keepsats_to_hive(
     ledger_entries.append(contra_ledger_entry)
     await contra_ledger_entry.save()
 
-    # MARK: 4 Fee Income From Customer
-    # The Fee is ALREADY to the server as part of the start of the conversion
-    ledger_type = LedgerType.FEE_INCOME
-    # For non-direct conversions the fee is taken from the server's captured SATS (server VSC Liability).
-    # For direct LND->HIVE conversions the server capture hasn't been reclassified yet, so take the
-    # fee directly from the customer's VSC Liability *before* consuming the customer's sats.
-    debit_account = (
-        LiabilityAccount(name="VSC Liability", sub=cust_id)
-        if isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive
-        else LiabilityAccount(name="VSC Liability", sub=server_id)
-    )
+    # MARK: 4 Fee Transfer and Income
+    # For non-direct conversions, the customer has already transferred the full amount
+    # (to_convert) to the server. To make the fee visible in the customer's ledger:
+    # 1. First "refund" the fee portion back to the customer (server -> customer)
+    # 2. Then charge the fee from customer to Fee Income
+    # This nets to zero for the customer's sats balance but makes the fee visible.
+    #
+    # For direct LND->HIVE conversions (is_lndtohive), the customer's sats haven't
+    # been transferred yet, so we charge the fee directly from the customer.
 
+    if not (isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive):
+        # 4a. Refund fee portion from server to customer
+        ledger_type = LedgerType.CUSTOM_JSON_FEE_REFUND
+        fee_refund_entry = LedgerEntry(
+            short_id=tracked_op.short_id,
+            op_type=tracked_op.op_type,
+            cust_id=cust_id,
+            ledger_type=ledger_type,
+            group_id=f"{tracked_op.group_id}_{ledger_type.value}",
+            timestamp=datetime.now(tz=timezone.utc),
+            description=f"Fee refund {conv_result.fee_conv.sats_rounded:,.0f} sats {server_id} -> {cust_id} for keepsats-to-{to_currency} conversion (fee charged in Transfer)",
+            debit=LiabilityAccount(name="VSC Liability", sub=server_id),
+            debit_unit=Currency.MSATS,
+            debit_amount=conv_result.fee_conv.msats,
+            debit_conv=conv_result.fee_conv,
+            credit=LiabilityAccount(name="VSC Liability", sub=cust_id),
+            credit_unit=Currency.MSATS,
+            credit_amount=conv_result.fee_conv.msats,
+            credit_conv=conv_result.fee_conv,
+            link=tracked_op.link,
+        )
+        ledger_entries.append(fee_refund_entry)
+        await fee_refund_entry.save()
+
+    # 4b. Charge fee from customer to Fee Income (visible in customer's ledger)
+    ledger_type = LedgerType.FEE_INCOME
     fee_ledger_entry = LedgerEntry(
         short_id=tracked_op.short_id,
         op_type=tracked_op.op_type,
@@ -218,8 +242,9 @@ async def conversion_keepsats_to_hive(
         ledger_type=ledger_type,
         group_id=f"{tracked_op.group_id}_{ledger_type.value}",
         timestamp=datetime.now(tz=timezone.utc),
+        # This test must not change, reference in op_custom_json.py
         description=f"Fee for Keepsats {conv_result.fee_conv.sats_rounded:,.0f} sats for {cust_id}",
-        debit=debit_account,
+        debit=LiabilityAccount(name="VSC Liability", sub=cust_id),
         debit_unit=Currency.MSATS,
         debit_amount=conv_result.fee_conv.msats,
         debit_conv=conv_result.fee_conv,
@@ -293,6 +318,8 @@ async def conversion_keepsats_to_hive(
 
     # MARK: Reclassify VSC sats Liability
     # Skip for direct conversions to avoid imbalance
+    # The fee was transferred from customer to server, then recognized as income,
+    # leaving the server with net_to_receive amount which gets reclassified.
     if not (isinstance(tracked_op, Invoice) and tracked_op.is_lndtohive):
         ledger_type = LedgerType.RECLASSIFY_VSC_SATS
         reclassify_sats_entry = LedgerEntry(

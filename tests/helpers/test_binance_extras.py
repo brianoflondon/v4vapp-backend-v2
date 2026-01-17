@@ -26,6 +26,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     market_order,
     market_sell,
     market_sell_to_btc,
+    sanitize_client_order_id,
 )
 
 
@@ -52,6 +53,90 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
     yield
     InternalConfig().shutdown()  # Ensure proper cleanup after tests
+
+
+class TestSanitizeClientOrderId:
+    """Tests for the sanitize_client_order_id function."""
+
+    def test_none_input_returns_none(self):
+        """Test that None input returns None."""
+        assert sanitize_client_order_id(None) is None
+
+    def test_empty_string_returns_none(self):
+        """Test that empty string returns None."""
+        assert sanitize_client_order_id("") is None
+
+    def test_valid_alphanumeric_unchanged(self):
+        """Test that valid alphanumeric strings pass through unchanged."""
+        assert sanitize_client_order_id("abc123") == "abc123"
+        assert sanitize_client_order_id("ABC123") == "ABC123"
+        assert sanitize_client_order_id("test123order") == "test123order"
+
+    def test_valid_with_underscore_hyphen_unchanged(self):
+        """Test that strings with underscores and hyphens pass through unchanged."""
+        assert sanitize_client_order_id("test_order_123") == "test_order_123"
+        assert sanitize_client_order_id("test-order-123") == "test-order-123"
+        assert sanitize_client_order_id("test_order-123") == "test_order-123"
+
+    def test_base64_plus_replaced_with_hyphen(self):
+        """Test that + (from base64) is replaced with hyphen."""
+        assert sanitize_client_order_id("abc+def") == "abc-def"
+        assert sanitize_client_order_id("a+b+c") == "a-b-c"
+
+    def test_base64_slash_replaced_with_underscore(self):
+        """Test that / (from base64) is replaced with underscore."""
+        assert sanitize_client_order_id("abc/def") == "abc_def"
+        assert sanitize_client_order_id("a/b/c") == "a_b_c"
+
+    def test_base64_equals_removed(self):
+        """Test that = (base64 padding) is removed."""
+        assert sanitize_client_order_id("abc==") == "abc"
+        assert sanitize_client_order_id("abcd=") == "abcd"
+        assert sanitize_client_order_id("a=b=c") == "abc"
+
+    def test_combined_base64_characters(self):
+        """Test sanitization of typical base64-like strings."""
+        # Typical base64 string with all special chars
+        assert sanitize_client_order_id("abc+def/ghi==") == "abc-def_ghi"
+        assert sanitize_client_order_id("A+B/C=") == "A-B_C"
+
+    def test_other_illegal_characters_removed(self):
+        """Test that other illegal characters are removed."""
+        assert sanitize_client_order_id("abc.def") == "abcdef"
+        assert sanitize_client_order_id("abc@def") == "abcdef"
+        assert sanitize_client_order_id("abc#def") == "abcdef"
+        assert sanitize_client_order_id("abc def") == "abcdef"  # space removed
+
+    def test_truncation_to_36_chars(self):
+        """Test that output is truncated to 36 characters by default."""
+        long_id = "a" * 50
+        result = sanitize_client_order_id(long_id)
+        assert len(result) == 36
+        assert result == "a" * 36
+
+    def test_custom_max_length(self):
+        """Test custom max_length parameter."""
+        long_id = "a" * 50
+        result = sanitize_client_order_id(long_id, max_length=20)
+        assert len(result) == 20
+        assert result == "a" * 20
+
+    def test_real_world_lnd_hash_example(self):
+        """Test with a realistic base64-encoded LND r_hash example."""
+        # A base64 encoded hash that might have +, /, = characters
+        # This simulates what might come from an Invoice.r_hash
+        base64_hash = "abc+def/ghi="
+        result = sanitize_client_order_id(base64_hash)
+        assert result == "abc-def_ghi"
+        # Verify it matches Binance regex
+        import re
+
+        assert re.match(r"^[a-zA-Z0-9\-_]{1,36}$", result)
+
+    def test_result_all_invalid_chars_returns_none(self):
+        """Test that a string with only invalid characters returns None."""
+        assert sanitize_client_order_id("...") is None
+        assert sanitize_client_order_id("@#$%") is None
 
 
 class TestGetClient:
