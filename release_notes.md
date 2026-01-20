@@ -1,5 +1,9 @@
 ## 2025-04-29
 
+## v0.14
+
+- Logging: rotated log files now place the rotation number before the file extension and zero-pad the rotation index (e.g. `hive_monitor_v2.001.jsonl`). Added `logging.rotation_folder: true|false` to optionally move rotated files into a `rotation/` subdirectory next to the active log file. Tests added: `tests/mylogger/test_rotating_namer.py`.
+
 ## v0.2.16
 
 - Accounting systems added but still in test

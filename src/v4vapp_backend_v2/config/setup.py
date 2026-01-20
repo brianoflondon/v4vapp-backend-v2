@@ -62,6 +62,49 @@ def _parse_log_level(level: str | int | None, fallback: int) -> int:
     return fallback
 
 
+def make_rotation_namer(handler, rotation_folder: bool = False, min_width: int = 3):
+    """Return a namer function for rotated log files.
+
+    The namer will transform names like:
+      logs/foo.jsonl.1 -> logs/foo.001.jsonl
+    and if `rotation_folder` is True will place rotated files under
+      logs/rotation/foo.001.jsonl
+
+    Padding width is the greater of `min_width` and the number of digits in
+    `handler.backupCount` (if present).
+    """
+
+    import os
+    from pathlib import Path
+
+    def namer(name: str) -> str:
+        # Only process names that end with .<digits>
+        base = str(name)
+        head, sep, tail = base.rpartition(".")
+        if not sep or not tail.isdigit():
+            return name
+
+        index = int(tail)
+        rest = head
+        rest_path = Path(rest)
+        ext = rest_path.suffix
+        prefix = rest[: -len(ext)] if ext else rest
+
+        backup_count = getattr(handler, "backupCount", None) or 0
+        width = max(min_width, len(str(int(backup_count))))
+        index_str = f"{index:0{width}d}"
+
+        new_filename = f"{Path(prefix).name}.{index_str}{ext}"
+        parent = rest_path.parent
+        if rotation_folder:
+            rotation_dir = parent / "rotation"
+            os.makedirs(rotation_dir, exist_ok=True)
+            return str(rotation_dir / new_filename)
+        return str(parent / new_filename)
+
+    return namer
+
+
 DB_RATES_COLLECTION = "rates_ts"
 
 """
@@ -91,6 +134,10 @@ class LoggingConfig(BaseConfig):
     log_folder: Path = Path("logs/")
     log_notification_silent: List[str] = []
     default_notification_bot_name: str = ""
+    # If True, place rotated files into a 'rotation/' subdirectory next to the
+    # configured log files. Default: False (keep rotated files next to the
+    # active log file with the rotation number before the extension).
+    rotation_folder: bool = False
 
     def default_log_level_numeric(self) -> int:
         # Cache the numeric value after first parse so we don't re-parse on every call
@@ -847,6 +894,7 @@ class InternalConfig:
         if not hasattr(self, "_initialized"):
             if not log_filename:
                 from v4vapp_backend_v2.helpers.general_purpose_funcs import get_entrypoint_path
+
                 log_filepath = get_entrypoint_path()
                 log_filename = log_filepath.stem
             if not log_filename.endswith(".jsonl"):
@@ -994,13 +1042,31 @@ class InternalConfig:
                 "%(asctime)s.%(msecs)03d %(levelname)-8s %(module)-22s %(lineno)6d : %(message)s"
             )
 
-        # Custom namer for file_json handler
-        def custom_log_namer(name):
-            return name
+        # Assign custom rotation namer to RotatingFileHandler instances.
+        rotation_folder_flag = getattr(self.config.logging, "rotation_folder", False)
 
         file_json_handler = logging.getHandlerByName("file_json")
-        if file_json_handler is not None:
-            file_json_handler.namer = custom_log_namer
+        if file_json_handler is not None and isinstance(
+            file_json_handler, logging.handlers.RotatingFileHandler
+        ):
+            file_json_handler.namer = make_rotation_namer(
+                file_json_handler, rotation_folder=rotation_folder_flag, min_width=3
+            )
+
+        # Also attach to any RotatingFileHandler on configured loggers (covers other handlers)
+        for logger_name, logger_obj in logging.root.manager.loggerDict.items():
+            if not isinstance(logger_obj, logging.Logger):
+                continue
+            for h in logger_obj.handlers:
+                if isinstance(h, logging.handlers.RotatingFileHandler):
+                    h.namer = make_rotation_namer(
+                        h, rotation_folder=rotation_folder_flag, min_width=3
+                    )
+
+        # Finally, ensure any handlers attached to the root logger are handled too
+        for h in logging.getLogger().handlers:
+            if isinstance(h, logging.handlers.RotatingFileHandler):
+                h.namer = make_rotation_namer(h, rotation_folder=rotation_folder_flag, min_width=3)
 
         # Helper: does root already have a console stream handler?
         def _root_has_console_handler() -> bool:
