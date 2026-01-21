@@ -472,9 +472,17 @@ class TrackedBaseModel(BaseModel):
         if not isinstance(timestamp, datetime):
             raise ValueError("timestamp must be a datetime object")
 
-        if datetime.now(tz=timezone.utc) - timestamp < timedelta(seconds=600):
-            await cls.update_quote()
-            return cls.last_quote
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+        try:
+            if datetime.now(tz=timezone.utc) - timestamp < timedelta(seconds=600):
+                await cls.update_quote()
+                return cls.last_quote
+        except Exception as e:
+            logger.warning(
+                f"Failed to update quote for recent timestamp: {e}", extra={"notification": False}
+            )
 
         try:
             # Find the nearest quote using index-backed queries (prefer 1 hour window)
