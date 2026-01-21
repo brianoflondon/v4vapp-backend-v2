@@ -19,18 +19,14 @@ class LedgerType(StrEnum):
     EXCHANGE_CONVERSION = "exc_conv"  # Conversion transaction on an external exchange
     EXCHANGE_FEES = "exc_fee"  # Fees paid to an external exchange
 
-    CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
-    CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
-
     CONV_CUSTOMER = "cust_conv"  # Customer conversion transaction
 
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
 
-    DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
-    WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
-    DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
+    # These two are deprecated; need new test data.
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
+    DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
 
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
@@ -38,17 +34,10 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
     CUSTOM_JSON_FEE_REFUND = "c_j_fee_r"  # Custom JSON fee refund notification
-    CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
     RECEIVE_LIGHTNING = "recv_l"  # Receive Custom JSON from external source
 
     WITHDRAW_LIGHTNING = "withdraw_l"
     DEPOSIT_LIGHTNING = "deposit_l"
-
-    LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
-    LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
-
-    CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
-    CONTRA_LIGHTNING_TO_HIVE = "l_contra_h"  # Contra entry for Lightning to Hive conversion
 
     CONSUME_CUSTOMER_KEEPSATS = "consume_k"  # Consume customer SATS for conversion
 
@@ -59,14 +48,12 @@ class LedgerType(StrEnum):
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
-    FEE_CHARGE = "fee_charge"  # Fee charges from a customer
 
     CUSTOMER_HIVE_IN = "cust_h_in"  # Customer deposit into Hive account
     CUSTOMER_HIVE_OUT = "cust_h_out"  # Customer withdrawal from Hive account
 
     SERVER_TO_TREASURY = "serv_to_t"  # Server to Treasury transfer
     TREASURY_TO_SERVER = "t_to_serv"  # Treasury to Server transfer
-    FUNDING_TO_TREASURY = "fund_to_t"  # Funding to Treasury transfer
     TREASURY_TO_FUNDING = "t_to_fund"  # Treasury to Funding transfer
     TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
@@ -118,8 +105,8 @@ Attributes:
 
 """
 LedgerTypeIcon: Dict[LedgerType, str] = {
-    LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
-    LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
+    # LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
+    # LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
     LedgerType.CUSTOMER_HIVE_OUT: "📤",  # Customer withdrawal from Hive account
     LedgerType.CUSTOMER_HIVE_IN: "📥",  # Customer deposit into Hive account
     LedgerType.CUSTOM_JSON_TRANSFER: "🔄",  # Custom JSON transfer or notification
