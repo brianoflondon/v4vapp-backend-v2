@@ -120,6 +120,8 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
     LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
+    LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
+    LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
 }
 
 LedgerTypeStr: Dict[LedgerType, str] = {
