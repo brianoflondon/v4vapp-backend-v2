@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pprint import pprint
+from random import Random
 
 import pytest
 
@@ -31,7 +32,7 @@ def set_base_config_path(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_ledger_entry_constructor():
-    ledger_type = LedgerType.CONV_HIVE_TO_LIGHTNING
+    ledger_type = Random().choice(list(LedgerType))
     timestamp = timestamp_inc(datetime.now(tz=timezone.utc), inc=timedelta(seconds=0.01))
     payment = Payment()
     await TrackedBaseModel.update_quote(store_db=False)
@@ -82,7 +83,7 @@ async def test_ledger_entry_constructor():
 
 @pytest.mark.asyncio
 async def test_ledger_entry_constructor_conv_account():
-    ledger_type = LedgerType.CONV_HIVE_TO_LIGHTNING
+    ledger_type = Random().choice(list(LedgerType))
     timestamp = timestamp_inc(datetime.now(tz=timezone.utc), inc=timedelta(seconds=0.01))
     payment = Payment()
     await TrackedBaseModel.update_quote(store_db=False)

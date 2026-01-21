@@ -69,7 +69,6 @@ class LNDClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        logger.debug(f"{ICON} Disconnecting from LND (async)")
         if self.connection_check_task is not None:
             self.connection_check_task.cancel()
             try:
@@ -84,7 +83,7 @@ class LNDClient:
 
     def setup(self):
         try:
-            logger.debug(f"{ICON} Connecting to LND")
+            logger.info(f"{ICON} Connecting to LND", extra={"connection": self.connection.name, "address": self.connection.address})
 
             # Try to load system root certificates
             ca_bundle_path = get_ca_bundle_path()
@@ -184,16 +183,17 @@ class LNDClient:
             try:
                 if self.lightning_stub is not None:
                     _ = await self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest())
-                    logger.warning(
-                        f"{ICON} {self.icon} Connection to LND is OK Error "
-                        f"cleared error_count: {error_count}",
-                        extra={
-                            "notification": True,
-                            "error_code_clear": str(original_error.code()),
-                            "error_count": error_count,
-                            "original_error": original_error,
-                        },
-                    )
+                    if original_error is not None:
+                        logger.warning(
+                            f"{ICON} {self.icon} Connection to LND is OK after Error "
+                            f"cleared error_count: {error_count}",
+                            extra={
+                                "notification": True,
+                                "error_code_clear": str(original_error.code()),
+                                "error_count": error_count,
+                                "original_error": original_error,
+                            },
+                        )
                     self.error_state = False
                     self.error_code = None
                     return

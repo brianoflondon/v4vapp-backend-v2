@@ -95,7 +95,7 @@
         </div>
 
         <div class="row">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="mb-3">
                     <label for="from_date_str" class="form-label">
                         <i class="bi bi-calendar me-1"></i>
@@ -107,7 +107,7 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="mb-3">
                     <label for="to_date_str" class="form-label">
                         <i class="bi bi-calendar2 me-1"></i>
@@ -119,23 +119,137 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="mb-3">
                     <label class="form-label">
                         <i class="bi bi-list-ul me-1"></i>
                         Ledger Type
                     </label>
-                    <select class="form-select" id="ledger_type" name="ledger_type">
-                        <option value="">Any</option>
-                        {% for lt in ledger_type_options %}
-                        <option value="{{ lt.value }}" {% if ledger_type and ledger_type==lt.value %}selected{% endif
-                            %}>{{ lt.capitalized }}</option>
-                        {% endfor %}
-                    </select>
+                    <!-- Custom dropdown to allow richer styling for each option -->
+                    <input type="hidden" name="ledger_type" id="ledger_type" value="{{ ledger_type or '' }}" />
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+                            id="ledgerTypeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span id="ledger-type-selected">{{ selected_display }}</span>
+                        </button>
+                        <ul class="dropdown-menu w-100" aria-labelledby="ledgerTypeDropdown" id="ledgerTypeMenu">
+                            <li><a href="#" class="dropdown-item" data-value="" id="ledger-type-clear">Any</a></li>
+                            <li>
+                                <hr class="dropdown-divider" />
+                            </li>
+                            {% for opt in ledger_type_options %}
+                            <li>
+                                <a class="dropdown-item d-flex justify-content-between align-items-center" href="#"
+                                    data-value="{{ opt.value }}">
+                                    <div>
+                                        <div>
+                                            <span class="fw-bold">{{ opt.full }}</span>
+                                            {% if opt.label %}
+                                            <small class="text-muted">({{ opt.label }})</small>
+                                            {% endif %}
+                                            <small class="text-muted ms-2">{{ opt.value }}</small>
+                                        </div>
+                                    </div>
+                                    {% if opt.icon %}
+                                    <span class="badge bg-light text-dark ms-2">{{ opt.icon }}</span>
+                                    {% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <style>
+                        /* Keep selected summary on one line and ellipsize if it overflows */
+                        #ledgerTypeDropdown {
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+
+                        #ledger-type-selected {
+                            display: inline-block;
+                            vertical-align: middle;
+                        }
+
+                        #ledger-type-selected .badge {
+                            display: inline-block;
+                            vertical-align: middle;
+                            margin-left: .5rem;
+                        }
+
+                        /* Ensure dropdown item content doesn't force block-level layout */
+                        .dropdown-menu .dropdown-item>div>div {
+                            display: inline-block;
+                        }
+                    </style>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function () {
+                            const menu = document.getElementById('ledgerTypeMenu');
+                            const hidden = document.getElementById('ledger_type');
+                            const selected = document.getElementById('ledger-type-selected');
+
+                            function setSelectionFromElement(el) {
+                                const v = el.getAttribute('data-value') || '';
+                                hidden.value = v;
+
+                                const fullSpan = el.querySelector('span.fw-bold');
+                                // label is small.text-muted but not the ms-2 one
+                                let labelSmall = null;
+                                const smalls = el.querySelectorAll('div small.text-muted');
+                                if (smalls && smalls.length > 0) {
+                                    for (let i = 0; i < smalls.length; i++) {
+                                        if (!smalls[i].classList.contains('ms-2')) {
+                                            labelSmall = smalls[i];
+                                            break;
+                                        }
+                                    }
+                                }
+                                const valueSmall = el.querySelector('div small.ms-2');
+                                const badgeEl = el.querySelector('.badge');
+
+                                const parts = [];
+                                if (fullSpan) parts.push(fullSpan.outerHTML);
+                                if (labelSmall) parts.push(' ' + labelSmall.outerHTML);
+                                if (valueSmall) parts.push(' ' + valueSmall.outerHTML);
+                                const badgeHtml = badgeEl ? ' ' + badgeEl.outerHTML : '';
+
+                                selected.innerHTML = parts.join('') + badgeHtml;
+                            }
+
+                            menu.querySelectorAll('a.dropdown-item[data-value]').forEach(function (a) {
+                                a.addEventListener('click', function (e) {
+                                    e.preventDefault();
+                                    setSelectionFromElement(a);
+                                    // close the dropdown (Bootstrap)
+                                    const dropdownToggle = document.getElementById('ledgerTypeDropdown');
+                                    if (dropdownToggle) {
+                                        const bs = bootstrap.Dropdown.getInstance(dropdownToggle);
+                                        if (bs) bs.hide();
+                                    }
+                                });
+                            });
+
+                            // Clear (Any) link
+                            const clearLink = document.getElementById('ledger-type-clear');
+                            if (clearLink) {
+                                clearLink.addEventListener('click', function (e) {
+                                    e.preventDefault();
+                                    hidden.value = '';
+                                    selected.textContent = 'Any';
+                                    const dropdownToggle = document.getElementById('ledgerTypeDropdown');
+                                    if (dropdownToggle) {
+                                        const bs = bootstrap.Dropdown.getInstance(dropdownToggle);
+                                        if (bs) bs.hide();
+                                    }
+                                });
+                            }
+                        });
+                    </script>
                 </div>
             </div>
 
-            <div class="col-md-8">
+            <div class="col-md-6">
                 <div class="mb-3">
                     <label for="general_search" class="form-label"><i class="bi bi-search me-1"></i> General Search
                         (regex)</label>
@@ -145,7 +259,7 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="mb-3">
                     <label class="form-label">
                         <i class="bi bi-list-ul me-1"></i>

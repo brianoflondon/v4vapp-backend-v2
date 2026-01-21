@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Dict
+from typing import Dict, List, Optional
 
 
 class LedgerType(StrEnum):
@@ -19,18 +20,14 @@ class LedgerType(StrEnum):
     EXCHANGE_CONVERSION = "exc_conv"  # Conversion transaction on an external exchange
     EXCHANGE_FEES = "exc_fee"  # Fees paid to an external exchange
 
-    CONV_HIVE_TO_LIGHTNING = "h_conv_l"  # Conversion from Hive to Lightning
-    CONV_LIGHTNING_TO_HIVE = "l_conv_h"  # Conversion from Lightning to Hive
-
     CONV_CUSTOMER = "cust_conv"  # Customer conversion transaction
 
     CONV_HIVE_TO_KEEPSATS = "h_conv_k"  # Conversion from Hive to Keepsats
     CONV_KEEPSATS_TO_HIVE = "k_conv_h"  # Conversion from Keepsats to Hive
 
-    DEPOSIT_KEEPSATS = "deposit_k"  # Deposit into Keepsats account
-    WITHDRAW_KEEPSATS = "withdraw_k"  # Withdrawal from Keepsats account
-    DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
+    # These two are deprecated; need new test data.
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
+    DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
 
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
@@ -38,17 +35,10 @@ class LedgerType(StrEnum):
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
     CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
     CUSTOM_JSON_FEE_REFUND = "c_j_fee_r"  # Custom JSON fee refund notification
-    CUSTOM_JSON_NOTIFICATION = "cust_json"  # Custom JSON notification
     RECEIVE_LIGHTNING = "recv_l"  # Receive Custom JSON from external source
 
     WITHDRAW_LIGHTNING = "withdraw_l"
     DEPOSIT_LIGHTNING = "deposit_l"
-
-    LIGHTNING_EXTERNAL_SEND = "l_ext_out"  # Perhaps change to l_external_out
-    LIGHTNING_EXTERNAL_IN = "l_ext_in"  # Lightning incoming transaction
-
-    CONTRA_HIVE_TO_LIGHTNING = "h_contra_l"
-    CONTRA_LIGHTNING_TO_HIVE = "l_contra_h"  # Contra entry for Lightning to Hive conversion
 
     CONSUME_CUSTOMER_KEEPSATS = "consume_k"  # Consume customer SATS for conversion
 
@@ -59,14 +49,12 @@ class LedgerType(StrEnum):
 
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
-    FEE_CHARGE = "fee_charge"  # Fee charges from a customer
 
     CUSTOMER_HIVE_IN = "cust_h_in"  # Customer deposit into Hive account
     CUSTOMER_HIVE_OUT = "cust_h_out"  # Customer withdrawal from Hive account
 
     SERVER_TO_TREASURY = "serv_to_t"  # Server to Treasury transfer
     TREASURY_TO_SERVER = "t_to_serv"  # Treasury to Server transfer
-    FUNDING_TO_TREASURY = "fund_to_t"  # Funding to Treasury transfer
     TREASURY_TO_FUNDING = "t_to_fund"  # Treasury to Funding transfer
     TREASURY_TO_EXCHANGE = "t_to_exc"  # Treasury to Exchange transfer
     EXCHANGE_TO_TREASURY = "exc_to_t"  # Exchange to Treasury transfer
@@ -118,8 +106,8 @@ Attributes:
 
 """
 LedgerTypeIcon: Dict[LedgerType, str] = {
-    LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
-    LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
+    # LedgerType.DEPOSIT_HIVE: "📥",  # Deposit into a customer's liability account
+    # LedgerType.WITHDRAW_HIVE: "📤",  # Withdrawal to a customer's liability account
     LedgerType.CUSTOMER_HIVE_OUT: "📤",  # Customer withdrawal from Hive account
     LedgerType.CUSTOMER_HIVE_IN: "📥",  # Customer deposit into Hive account
     LedgerType.CUSTOM_JSON_TRANSFER: "🔄",  # Custom JSON transfer or notification
@@ -132,6 +120,8 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.WITHDRAW_LIGHTNING: "⚡",  # Withdrawal to send to lightning invoice
     LedgerType.RECEIVE_LIGHTNING: "⚡",  # Receive Lightning payment
     LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
+    LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
+    LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
 }
 
 LedgerTypeStr: Dict[LedgerType, str] = {
@@ -146,14 +136,68 @@ LedgerTypeStr: Dict[LedgerType, str] = {
 }
 
 
-# IconStr = str
-# TypeStr = str
-# DescriptionStr = str
+@dataclass(frozen=True)
+class LedgerTypeDetails:
+    """Container for runtime details about a LedgerType.
 
-# LedgerTypeDetails: Dict[LedgerType, Tuple[IconStr, TypeStr, DescriptionStr]] = {
-#     LedgerType.FEE_INCOME: ("💵", "Fee", "Fee income from Hive transactions"),
-#     LedgerType.CUSTOM_JSON_FEE: ("💵", "Fee", "Custom JSON fee notification"),
-#     LedgerType.CONV_CUSTOMER: ("🔄", "Conversion", "Conversion to/from Keepsats to Hive"),
-#     LedgerType.CUSTOMER_HIVE_OUT: ("📤", "Withdraw", "Customer withdrawal from Hive account"),
-#     LedgerType.CUSTOMER_HIVE_IN: ("📥", "Deposit", "Customer deposit into Hive account"),
-# }
+    Attributes:
+        ledger_type: LedgerType enum member.
+        value: The raw enum value (exact string from the enum, unmodified).
+        name: The enum member name (e.g., 'RECEIVE_LIGHTNING').
+        icon: The icon for this ledger type (empty string if none).
+        label: Human-friendly label: uses LedgerTypeStr when available; otherwise falls back to raw value.
+        capitalized_name: Capitalized enum name via `LedgerType.capitalized`.
+
+    Intended use:
+        - Provide a small runtime-friendly container for UI templates and APIs that
+          need the enum's value, human label, and icon. The `value` is guaranteed
+          to be the exact enum string and is not modified.
+    """
+
+    ledger_type: LedgerType
+
+    @property
+    def value(self) -> str:
+        # EXACT value from the enum — do not alter it
+        return self.ledger_type.value
+
+    @property
+    def name(self) -> str:
+        return self.ledger_type.name
+
+    @property
+    def icon(self) -> str:
+        return LedgerTypeIcon.get(self.ledger_type, "")
+
+    @property
+    def label(self) -> str:
+        # Prefer the configured LedgerTypeStr; if missing, return the raw value unchanged
+        return LedgerTypeStr.get(self.ledger_type, self.value)
+
+    @property
+    def capitalized_name(self) -> str:
+        # Provided for compatibility with callers that expect a human-readable name
+        return self.ledger_type.capitalized
+
+    @property
+    def capitalized(self) -> str:
+        """Return the same capitalized string used elsewhere (e.g., for templates).
+
+        Kept named `capitalized` to match existing template expectations that access
+        `lt.capitalized` (where `lt` is a ledger type option).
+        """
+        return self.ledger_type.capitalized
+
+
+def list_all_ledger_type_details() -> List[LedgerTypeDetails]:
+    """Return details for all defined LedgerType members."""
+    return [LedgerTypeDetails(lt) for lt in LedgerType]
+
+
+def ledger_type_details_for_value(value: str) -> Optional[LedgerTypeDetails]:
+    """Lookup LedgerTypeDetails by enum *value* (exact match)."""
+    try:
+        lt = LedgerType(value)
+    except Exception:
+        return None
+    return LedgerTypeDetails(lt)

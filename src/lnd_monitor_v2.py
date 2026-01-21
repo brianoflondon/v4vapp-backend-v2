@@ -95,10 +95,6 @@ async def health_check() -> Dict[str, Any]:
 
     if exceptions:
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
-    logger.debug(
-        f"{ICON} Health check passed",
-        extra={"notification": False, "error_code_clear": "hive_monitor_task_failure"},
-    )
     return STATUS_OBJ.__dict__
 
 
