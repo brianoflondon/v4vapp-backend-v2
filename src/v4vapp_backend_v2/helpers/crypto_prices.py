@@ -12,7 +12,6 @@ from bson import Decimal128
 from pydantic import BaseModel, Field, computed_field, field_validator
 from pymongo.asynchronous.collection import AsyncCollection
 
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import DB_RATES_COLLECTION, InternalConfig, logger
 from v4vapp_backend_v2.database.db_retry import (
     mongo_call,
@@ -427,7 +426,7 @@ class AllQuotes(BaseModel):
         self.fetch_date = binance_quote.fetch_date
         return binance_quote
 
-    @async_time_decorator
+    # @async_time_decorator
     async def get_all_quotes(
         self, use_cache: bool = True, timeout: float = 60.0, store_db: bool = True
     ) -> None:
@@ -452,7 +451,8 @@ class AllQuotes(BaseModel):
         """
         start = timer()
         global_cache = await self.check_global_cache()
-        log_func = logger.debug if global_cache else logger.info
+        # log_func = logger.debug if global_cache else logger.info
+        log_func = logger.debug
         log_func(f"{ICON} Global rate check cache hit: {global_cache}, use_cache: {use_cache}")
         if use_cache and global_cache:
             logger.debug(
