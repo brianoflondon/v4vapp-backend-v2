@@ -15,7 +15,12 @@ from v4vapp_backend_v2.accounting.account_balances import list_all_ledger_types
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
 from v4vapp_backend_v2.accounting.ledger_entries import get_ledger_entries
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
-from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.accounting.ledger_type_class import (
+    LedgerType,
+    LedgerTypeIcon,
+    LedgerTypeStr,
+    list_all_ledger_type_details,
+)
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import (
     filter_by_account_as_of_date_query,
 )
@@ -262,9 +267,74 @@ async def ledger_entries_page(
         all_accounts = []
 
     try:
+        # Prefer async to the existing async helper if available
         ledger_type_options = await list_all_ledger_types()
+
     except Exception:
-        ledger_type_options = list(LedgerType)
+        try:
+            # Prefer the detailed runtime list (includes icon, label, capitalized name)
+            ledger_type_options = list_all_ledger_type_details()
+        except Exception:
+            # Final fallback: raw enum members are acceptable for template use
+            ledger_type_options = list(LedgerType)
+
+    # Build display strings for the select options in the format:
+    #   <Full Name> (Label) <value> <icon>
+    # Only include the (Label) part when a label is configured in LedgerTypeStr.
+    def _build_display(lt):
+        # Resolve enum member whether `lt` is a LedgerTypeDetails or a raw LedgerType
+        ledger = getattr(lt, "ledger_type", lt)
+
+        # Full human name (prefer the details' capitalized property)
+        full = getattr(lt, "capitalized", None) or getattr(ledger, "capitalized", None)
+        if not full:
+            full = getattr(ledger, "name", "").replace("_", " ").title()
+
+        # Only show label if it's configured explicitly
+        label = LedgerTypeStr.get(ledger)
+        label_part = f" ({label})" if label else ""
+
+        # Value (exact enum value)
+        val = (
+            getattr(lt, "value", None)
+            or getattr(ledger, "value", None)
+            or getattr(ledger, "name", "")
+        )
+
+        # Icon if available (placed at the end)
+        icon = getattr(lt, "icon", None) or LedgerTypeIcon.get(ledger, "")
+        icon_part = f" {icon}" if icon else ""
+
+        return f"{full}{label_part} {val}{icon_part}"
+
+    ledger_type_options = [
+        {
+            "value": getattr(lt, "value", getattr(lt, "name", "")),
+            "full": (
+                getattr(lt, "capitalized", None)
+                or getattr(getattr(lt, "ledger_type", lt), "capitalized", None)
+                or getattr(lt, "name", "").replace("_", " ").title()
+            ),
+            "label": (LedgerTypeStr.get(getattr(lt, "ledger_type", lt)) or ""),
+            "icon": (
+                getattr(lt, "icon", None) or LedgerTypeIcon.get(getattr(lt, "ledger_type", lt), "")
+            ),
+        }
+        for lt in ledger_type_options
+    ]
+
+    # Compute selected display for initial button text
+    selected_display = "Any"
+    if ledger_type:
+        for opt in ledger_type_options:
+            if opt["value"] == ledger_type:
+                selected_display = (
+                    f"{opt['full']}"
+                    + (f" ({opt['label']})" if opt["label"] else "")
+                    + f" {opt['value']}"
+                    + (f" {opt['icon']}" if opt["icon"] else "")
+                )
+                break
 
     # Group accounts by type similar to accounts page
     accounts_by_type: dict[str, list[LedgerAccount]] = {}

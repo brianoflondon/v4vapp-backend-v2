@@ -69,7 +69,6 @@ class LNDClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        logger.debug(f"{ICON} Disconnecting from LND (async)")
         if self.connection_check_task is not None:
             self.connection_check_task.cancel()
             try:
@@ -84,7 +83,7 @@ class LNDClient:
 
     def setup(self):
         try:
-            logger.debug(f"{ICON} Connecting to LND")
+            logger.info(f"{ICON} Connecting to LND", extra={"connection": self.connection.name, "address": self.connection.address})
 
             # Try to load system root certificates
             ca_bundle_path = get_ca_bundle_path()

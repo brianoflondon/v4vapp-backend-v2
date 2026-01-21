@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Dict
+from typing import Dict, List, Optional
 
 
 class LedgerType(StrEnum):
@@ -133,14 +134,68 @@ LedgerTypeStr: Dict[LedgerType, str] = {
 }
 
 
-# IconStr = str
-# TypeStr = str
-# DescriptionStr = str
+@dataclass(frozen=True)
+class LedgerTypeDetails:
+    """Container for runtime details about a LedgerType.
 
-# LedgerTypeDetails: Dict[LedgerType, Tuple[IconStr, TypeStr, DescriptionStr]] = {
-#     LedgerType.FEE_INCOME: ("💵", "Fee", "Fee income from Hive transactions"),
-#     LedgerType.CUSTOM_JSON_FEE: ("💵", "Fee", "Custom JSON fee notification"),
-#     LedgerType.CONV_CUSTOMER: ("🔄", "Conversion", "Conversion to/from Keepsats to Hive"),
-#     LedgerType.CUSTOMER_HIVE_OUT: ("📤", "Withdraw", "Customer withdrawal from Hive account"),
-#     LedgerType.CUSTOMER_HIVE_IN: ("📥", "Deposit", "Customer deposit into Hive account"),
-# }
+    Attributes:
+        ledger_type: LedgerType enum member.
+        value: The raw enum value (exact string from the enum, unmodified).
+        name: The enum member name (e.g., 'RECEIVE_LIGHTNING').
+        icon: The icon for this ledger type (empty string if none).
+        label: Human-friendly label: uses LedgerTypeStr when available; otherwise falls back to raw value.
+        capitalized_name: Capitalized enum name via `LedgerType.capitalized`.
+
+    Intended use:
+        - Provide a small runtime-friendly container for UI templates and APIs that
+          need the enum's value, human label, and icon. The `value` is guaranteed
+          to be the exact enum string and is not modified.
+    """
+
+    ledger_type: LedgerType
+
+    @property
+    def value(self) -> str:
+        # EXACT value from the enum — do not alter it
+        return self.ledger_type.value
+
+    @property
+    def name(self) -> str:
+        return self.ledger_type.name
+
+    @property
+    def icon(self) -> str:
+        return LedgerTypeIcon.get(self.ledger_type, "")
+
+    @property
+    def label(self) -> str:
+        # Prefer the configured LedgerTypeStr; if missing, return the raw value unchanged
+        return LedgerTypeStr.get(self.ledger_type, self.value)
+
+    @property
+    def capitalized_name(self) -> str:
+        # Provided for compatibility with callers that expect a human-readable name
+        return self.ledger_type.capitalized
+
+    @property
+    def capitalized(self) -> str:
+        """Return the same capitalized string used elsewhere (e.g., for templates).
+
+        Kept named `capitalized` to match existing template expectations that access
+        `lt.capitalized` (where `lt` is a ledger type option).
+        """
+        return self.ledger_type.capitalized
+
+
+def list_all_ledger_type_details() -> List[LedgerTypeDetails]:
+    """Return details for all defined LedgerType members."""
+    return [LedgerTypeDetails(lt) for lt in LedgerType]
+
+
+def ledger_type_details_for_value(value: str) -> Optional[LedgerTypeDetails]:
+    """Lookup LedgerTypeDetails by enum *value* (exact match)."""
+    try:
+        lt = LedgerType(value)
+    except Exception:
+        return None
+    return LedgerTypeDetails(lt)
