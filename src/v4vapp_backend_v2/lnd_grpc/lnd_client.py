@@ -184,16 +184,17 @@ class LNDClient:
             try:
                 if self.lightning_stub is not None:
                     _ = await self.lightning_stub.WalletBalance(lnrpc.WalletBalanceRequest())
-                    logger.warning(
-                        f"{ICON} {self.icon} Connection to LND is OK Error "
-                        f"cleared error_count: {error_count}",
-                        extra={
-                            "notification": True,
-                            "error_code_clear": str(original_error.code()),
-                            "error_count": error_count,
-                            "original_error": original_error,
-                        },
-                    )
+                    if original_error is not None:
+                        logger.warning(
+                            f"{ICON} {self.icon} Connection to LND is OK after Error "
+                            f"cleared error_count: {error_count}",
+                            extra={
+                                "notification": True,
+                                "error_code_clear": str(original_error.code()),
+                                "error_count": error_count,
+                                "original_error": original_error,
+                            },
+                        )
                     self.error_state = False
                     self.error_code = None
                     return
