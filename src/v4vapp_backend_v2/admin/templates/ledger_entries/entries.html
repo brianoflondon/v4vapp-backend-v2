@@ -159,6 +159,30 @@
                         </ul>
                     </div>
 
+                    <style>
+                        /* Keep selected summary on one line and ellipsize if it overflows */
+                        #ledgerTypeDropdown {
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+
+                        #ledger-type-selected {
+                            display: inline-block;
+                            vertical-align: middle;
+                        }
+
+                        #ledger-type-selected .badge {
+                            display: inline-block;
+                            vertical-align: middle;
+                            margin-left: .5rem;
+                        }
+
+                        /* Ensure dropdown item content doesn't force block-level layout */
+                        .dropdown-menu .dropdown-item>div>div {
+                            display: inline-block;
+                        }
+                    </style>
                     <script>
                         document.addEventListener('DOMContentLoaded', function () {
                             const menu = document.getElementById('ledgerTypeMenu');
@@ -168,13 +192,29 @@
                             function setSelectionFromElement(el) {
                                 const v = el.getAttribute('data-value') || '';
                                 hidden.value = v;
-                                // clone the label content for the selected button
-                                const contentDiv = el.querySelector('div');
-                                if (contentDiv) {
-                                    selected.innerHTML = contentDiv.innerHTML + (el.querySelector('.badge') ? ' ' + el.querySelector('.badge').textContent : '');
-                                } else {
-                                    selected.textContent = el.textContent.trim();
+
+                                const fullSpan = el.querySelector('span.fw-bold');
+                                // label is small.text-muted but not the ms-2 one
+                                let labelSmall = null;
+                                const smalls = el.querySelectorAll('div small.text-muted');
+                                if (smalls && smalls.length > 0) {
+                                    for (let i = 0; i < smalls.length; i++) {
+                                        if (!smalls[i].classList.contains('ms-2')) {
+                                            labelSmall = smalls[i];
+                                            break;
+                                        }
+                                    }
                                 }
+                                const valueSmall = el.querySelector('div small.ms-2');
+                                const badgeEl = el.querySelector('.badge');
+
+                                const parts = [];
+                                if (fullSpan) parts.push(fullSpan.outerHTML);
+                                if (labelSmall) parts.push(' ' + labelSmall.outerHTML);
+                                if (valueSmall) parts.push(' ' + valueSmall.outerHTML);
+                                const badgeHtml = badgeEl ? ' ' + badgeEl.outerHTML : '';
+
+                                selected.innerHTML = parts.join('') + badgeHtml;
                             }
 
                             menu.querySelectorAll('a.dropdown-item[data-value]').forEach(function (a) {
