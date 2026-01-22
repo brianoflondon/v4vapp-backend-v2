@@ -9,6 +9,10 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.accounting.account_balances import one_account_balance
 from v4vapp_backend_v2.accounting.balance_sheet import check_balance_sheet_mongodb
+from v4vapp_backend_v2.accounting.in_progress_results_class import (
+    InProgressResults,
+    all_held_msats,
+)
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
 from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
@@ -105,7 +109,7 @@ class SanityCheckResults(BaseModel):
 # MARK: Individual sanity check tests
 
 
-async def server_account_balances() -> SanityCheckResult:
+async def server_account_balances(in_progress: InProgressResults) -> SanityCheckResult:
     """Asynchronously verify that server-related accounts have near-zero balances.
 
     This coroutine reads the server identifier from InternalConfig().server_id and
@@ -139,9 +143,9 @@ async def server_account_balances() -> SanityCheckResult:
 
     results: List[str] = []
 
-    async def _safe_one_account_balance(account_name: str):
+    async def _safe_one_account_balance(account_name: str, in_progress: InProgressResults):
         try:
-            return await one_account_balance(account=account_name)
+            return await one_account_balance(account=account_name, in_progress=in_progress)
         except Exception as e:
             logger.error(e, extra={"notification": False})
             return e
@@ -149,7 +153,9 @@ async def server_account_balances() -> SanityCheckResult:
     tasks: dict[str, asyncio.Task] = {}
     async with asyncio.TaskGroup() as tg:
         for account in accounts_to_check:
-            tasks[account] = tg.create_task(_safe_one_account_balance(account))
+            tasks[account] = tg.create_task(
+                _safe_one_account_balance(account_name=account, in_progress=in_progress)
+            )
 
     for account, task in tasks.items():
         res = task.result()
@@ -174,7 +180,7 @@ async def server_account_balances() -> SanityCheckResult:
     )
 
 
-async def server_account_hive_balances() -> SanityCheckResult:
+async def server_account_hive_balances(in_progress: InProgressResults) -> SanityCheckResult:
     # return SanityCheckResult(
     #     name="server_account_hive_balances", is_valid=True, details="Placeholder implementation."
     # )
@@ -186,7 +192,7 @@ async def server_account_hive_balances() -> SanityCheckResult:
         tasks: dict[str, asyncio.Task] = {}
         async with asyncio.TaskGroup() as tg:
             tasks["deposits_details"] = tg.create_task(
-                one_account_balance(account=customer_deposits_account)
+                one_account_balance(account=customer_deposits_account, in_progress=in_progress)
             )
             tasks["balances"] = tg.create_task(
                 asyncio.to_thread(account_hive_balances, hive_accname=server_id)
@@ -241,7 +247,7 @@ async def server_account_hive_balances() -> SanityCheckResult:
         )
 
 
-async def balanced_balance_sheet() -> SanityCheckResult:
+async def balanced_balance_sheet(in_progress: InProgressResults) -> SanityCheckResult:
     """Asynchronously check whether the balance sheet is balanced and return a SanityCheckResult.
 
     This coroutine calls check_balance_sheet_mongodb() to obtain a tuple (is_balanced, tolerance)
@@ -282,7 +288,7 @@ async def balanced_balance_sheet() -> SanityCheckResult:
     )
 
 
-all_sanity_checks: List[Callable[[], Coroutine[Any, Any, SanityCheckResult]]] = [
+all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, SanityCheckResult]]] = [
     server_account_balances,
     balanced_balance_sheet,
     server_account_hive_balances,
@@ -309,11 +315,14 @@ async def run_all_sanity_checks() -> SanityCheckResults:
         `results` lists of tuples (check_name, SanityCheckResult).
     """
     # Collect coroutines for checks so we can create TaskGroup tasks from coroutines
+    all_held_result = await all_held_msats()
+    in_progress = InProgressResults(results=all_held_result)
+
     try:
         coros: List[Tuple[str, Coroutine[Any, Any, SanityCheckResult]]] = []
         for check in all_sanity_checks:
             check_name = check.__name__
-            coros.append((check_name, check()))
+            coros.append((check_name, check(in_progress)))
 
         # Will hold (check_name, Task) pairs created inside the TaskGroup
         task_list: List[Tuple[str, asyncio.Task]] = []

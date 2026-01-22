@@ -6,7 +6,6 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
     list_all_ledger_types_pipeline,
-    net_held_msats_balance_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
@@ -14,6 +13,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LedgerAccountDetails,
     LedgerConvSummary,
 )
+from v4vapp_backend_v2.accounting.in_progress_results_class import InProgressResults, all_held_msats
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -65,6 +65,8 @@ async def all_account_balances(
     clean_results = convert_datetime_fields(results)
 
     account_balances = AccountBalances.model_validate(clean_results)
+    all_held_result = await all_held_msats()
+    in_progress = InProgressResults(results=all_held_result)
 
     # Find the most recent transaction date
     for account in account_balances.root:
@@ -74,7 +76,7 @@ async def all_account_balances(
                 if items:
                     last_item = items[-1]
                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
-        account.in_progress_msats = await in_progress(account.sub)
+        account.in_progress_msats = in_progress.get(account.sub).net_held
         account.last_transaction_date = max_timestamp
 
     return account_balances
@@ -84,6 +86,7 @@ async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
+    in_progress: InProgressResults | None = None,
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
@@ -99,7 +102,6 @@ async def one_account_balance(
         - If `account` is provided as a string, it is converted to a LiabilityAccount.
         - If no balance data is found, returns a default LedgerAccountDetails instance.
     """
-
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
@@ -164,7 +166,10 @@ async def one_account_balance(
                     max_timestamp = line.timestamp
         ledger_details.last_transaction_date = max_timestamp
 
-    ledger_details.in_progress_msats = await in_progress(account.sub)
+    if in_progress is None:
+        all_held_result = await all_held_msats()
+        in_progress = InProgressResults(results=all_held_result)
+    ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
 
     return ledger_details
 
@@ -989,30 +994,38 @@ async def keepsats_balance_printout(
 
     return net_msats, account_balance
 
-@async_time_decorator
-async def in_progress(cust_id: CustIDType) -> Decimal:
-    """
-    Calculate the in-progress balance for a given customer ID.
 
-    This asynchronous function aggregates ledger entries using a predefined pipeline
-    to compute the net held balance in millisatoshis, converts it to satoshis,
-    quantizes to whole satoshis, and returns the result as a Decimal.
+# @async_time_decorator
+# async def in_progress(cust_id: CustIDType) -> Decimal:
+#     """
+#     Calculate the in-progress balance for a given customer ID.
 
-    Args:
-        cust_id (CustIDType): The customer ID for which to calculate the balance.
+#     This asynchronous function aggregates ledger entries using a predefined pipeline
+#     to compute the net held balance in millisatoshis, converts it to satoshis,
+#     quantizes to whole satoshis, and returns the result as a Decimal.
 
-    Returns:
-        Decimal: The in-progress balance in satoshis, quantized to whole units.
-                 Returns 0 if no results are found.
-    """
-    in_progress_pipeline = net_held_msats_balance_pipeline(cust_id=cust_id)
-    cursor = await LedgerEntry.collection().aggregate(in_progress_pipeline)
-    results = await cursor.to_list(length=None)
-    if results and len(results) > 0:
-        in_progress_sats = Decimal(results[0].get("net_held", 0) / Decimal(1000)).quantize(
-            Decimal("1.")
-        )
-    else:
-        in_progress_sats = Decimal(0)
+#     Args:
+#         cust_id (CustIDType): The customer ID for which to calculate the balance.
 
-    return in_progress_sats
+#     Returns:
+#         Decimal: The in-progress balance in satoshis, quantized to whole units.
+#                  Returns 0 if no results are found.
+#     """
+#     results = await all_held_msats()
+#     in_progress = _get_in_progress_sats(cust_id, results)
+#     return in_progress["net_held"]
+
+
+# def _get_in_progress_sats(cust_id, results_list) -> dict[str, Decimal]:
+#     for doc in results_list:
+#         if doc["cust_id"] == cust_id:
+#             return {
+#                 "hold_total": Decimal(doc["hold_total"]),
+#                 "release_total": Decimal(doc["release_total"]),
+#                 "net_held": Decimal(doc["net_held"]),
+#             }
+#     return {
+#         "hold_total": Decimal(0),
+#         "release_total": Decimal(0),
+#         "net_held": Decimal(0),
+#     }
