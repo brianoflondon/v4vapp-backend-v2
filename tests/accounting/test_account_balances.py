@@ -8,6 +8,7 @@ from bson import json_util
 from v4vapp_backend_v2.accounting.account_balance_pipelines import all_account_balances_pipeline
 from v4vapp_backend_v2.accounting.account_balances import (
     account_balance_printout,
+    account_balance_printout_grouped_by_customer,
     all_account_balances,
     keepsats_balance,
     list_all_accounts,
@@ -232,6 +233,14 @@ async def test_account_balance_printout_ksats_positive_and_negative():
     )
 
     assert "Unit: KSATS" in result_neg
+
+    # --- New: grouped_by_customer version ---
+    result_grouped, _ = await account_balance_printout_grouped_by_customer(
+        LiabilityAccount(name="VSC Liability", sub="custA"),
+        line_items=False,
+        ledger_account_details=ledger_details,
+    )
+    assert "Unit: KSATS" in result_grouped
 
 
 async def test_account_balance_printout_keeps_sats_when_below_threshold():

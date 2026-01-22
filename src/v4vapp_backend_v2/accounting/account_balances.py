@@ -178,6 +178,97 @@ def _add_notes() -> str:
     )
 
 
+# Helpers to centralize KSATS logic and formatting for reuse in printouts
+def _compute_ksats_settings(ledger_account_details: LedgerAccountDetails, unit: str):
+    """Determine conversion factor, whether to display in KSATS, and the display unit string."""
+    conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+    final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
+    display_balance_total = (
+        (final_bal_for_unit / conversion_factor) if unit.upper() == "MSATS" else final_bal_for_unit
+    )
+    use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
+    display_unit = "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
+    return conversion_factor, use_ksats, display_unit
+
+
+def _format_converted_line(conversion, use_ksats: bool) -> str:
+    """Return the formatted Converted line for a conversion object."""
+    if use_ksats:
+        sats_str = f"{(conversion.sats / Decimal(1000)):>12,.1f} KSATS "
+    else:
+        sats_str = f"{conversion.sats:>12,.0f} SATS "
+    return (
+        f"{'Converted':<10} "
+        f"{conversion.hive:>15,.3f} HIVE "
+        f"{conversion.hbd:>12,.3f} HBD "
+        f"{conversion.usd:>12,.3f} USD "
+        f"{sats_str}"
+        f"{conversion.msats:>16,.0f} msats"
+    )
+
+
+def _format_final_balance_line(
+    display_unit: str, display_balance: Decimal, unit: str, use_ksats: bool
+) -> str:
+    """Return the Final Balance line text based on unit display preferences."""
+    if unit.upper() == "MSATS":
+        if use_ksats:
+            balance_fmt = f"{(display_balance / Decimal(1000)):,.1f}"
+            balance_unit = "KSATS"
+        else:
+            balance_fmt = f"{display_balance:,.0f}"
+            balance_unit = "SATS"
+    else:
+        balance_fmt = f"{display_balance:,.3f}"
+        balance_unit = unit.upper()
+    return f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {balance_unit:<5}"
+
+
+def _format_amounts_for_display(
+    unit: str,
+    debit_val: Decimal,
+    credit_val: Decimal,
+    balance_val: Decimal,
+    conversion_factor: int,
+    use_ksats: bool,
+    msats_nonks_format: str = "one_decimal",
+) -> tuple[str, str, str]:
+    """Convert numeric msats values and return formatted strings for debit, credit and balance.
+
+    msats_nonks_format: 'one_decimal' or 'integer' determines how non-KSATS SATS are formatted.
+    """
+    if unit.upper() == "MSATS":
+        # Convert from msats to sats first
+        debit_val /= conversion_factor
+        credit_val /= conversion_factor
+        balance_val /= conversion_factor
+        # Optionally convert sats to ksats for display
+        if use_ksats:
+            debit_val /= Decimal(1000)
+            credit_val /= Decimal(1000)
+            balance_val /= Decimal(1000)
+
+        if use_ksats:
+            debit_fmt = f"{debit_val:,.1f}"
+            credit_fmt = f"{credit_val:,.1f}"
+            balance_fmt = f"{balance_val:,.1f}"
+        else:
+            if msats_nonks_format == "one_decimal":
+                debit_fmt = f"{debit_val:,.1f}"
+                credit_fmt = f"{credit_val:,.1f}"
+                balance_fmt = f"{balance_val:,.1f}"
+            else:
+                debit_fmt = f"{debit_val:,.0f}"
+                credit_fmt = f"{credit_val:,.0f}"
+                balance_fmt = f"{balance_val:,.0f}"
+    else:
+        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
+        balance_fmt = f"{balance_val:,.3f}"
+
+    return debit_fmt, credit_fmt, balance_fmt
+
+
 async def account_balance_printout(
     account: LedgerAccount | str,
     line_items: bool = True,
@@ -246,17 +337,9 @@ async def account_balance_printout(
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
             continue
-        conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
-        # Decide whether to display MSATS as KSATS for the whole unit section based on absolute total
-        final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
-        display_balance_total = (
-            (final_bal_for_unit / conversion_factor)
-            if unit.upper() == "MSATS"
-            else final_bal_for_unit
-        )
-        use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
-        display_unit = (
-            "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
+        # Compute common KSATS display settings for this unit
+        conversion_factor, use_ksats, display_unit = _compute_ksats_settings(
+            ledger_account_details, unit
         )
 
         # Headings on same line as Unit
@@ -302,28 +385,17 @@ async def account_balance_printout(
                         row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
                     )
                     balance_val = row.amount_running_total
-                    if unit.upper() == "MSATS":
-                        # Convert from msats to sats first
-                        debit_val /= conversion_factor
-                        credit_val /= conversion_factor
-                        balance_val /= conversion_factor
-                        # If the overall section is KSATS, show per-row values in KSATS
-                        if use_ksats:
-                            debit_val /= Decimal(1000)
-                            credit_val /= Decimal(1000)
-                            balance_val /= Decimal(1000)
 
-                    # Number formats
-                    if unit.upper() == "MSATS":
-                        # Use one decimal place for sats or ksats views
-                        debit_fmt = f"{debit_val:,.1f}"
-                        credit_fmt = f"{credit_val:,.1f}"
-                        balance_fmt = f"{balance_val:,.1f}"
-                    else:
-                        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
-                        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
-                        balance_fmt = f"{balance_val:,.3f}"
-
+                    # Format values consistently using helper (use one_decimal style for non-KSATS msats in this view)
+                    debit_fmt, credit_fmt, balance_fmt = _format_amounts_for_display(
+                        unit,
+                        debit_val,
+                        credit_val,
+                        balance_val,
+                        conversion_factor,
+                        use_ksats,
+                        msats_nonks_format="one_decimal",
+                    )
                     line = (
                         f"{timestamp:<{COL_TS}} "
                         f"{description:<{COL_DESC}} "
@@ -344,19 +416,7 @@ async def account_balance_printout(
         final_balance = Decimal(ledger_account_details.balances_net.get(unit, 0))
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
-        # Format SATS display consistent with section (KSATS if use_ksats)
-        if use_ksats:
-            sats_str = f"{(conversion.sats / Decimal(1000)):>12,.1f} KSATS "
-        else:
-            sats_str = f"{conversion.sats:>12,.0f} SATS "
-        output.append(
-            f"{'Converted':<10} "
-            f"{conversion.hive:>15,.3f} HIVE "
-            f"{conversion.hbd:>12,.3f} HBD "
-            f"{conversion.usd:>12,.3f} USD "
-            f"{sats_str}"
-            f"{conversion.msats:>16,.0f} msats"
-        )
+        output.append(_format_converted_line(conversion, use_ksats))
         total_usd += conversion.usd
         total_msats += conversion.msats
 
@@ -364,18 +424,7 @@ async def account_balance_printout(
         display_balance = (
             final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
         )
-        if unit.upper() == "MSATS":
-            # If very large, show as KSATS (thousands of sats) with 1 decimal place
-            if abs(display_balance) >= Decimal(1_000_000):
-                balance_fmt = f"{(display_balance / Decimal(1000)):,.1f}"
-                balance_unit = "KSATS"
-            else:
-                balance_fmt = f"{display_balance:,.0f}"
-                balance_unit = "SATS"
-        else:
-            balance_fmt = f"{display_balance:,.3f}"
-            balance_unit = unit.upper()
-        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {balance_unit:<5}")
+        output.append(_format_final_balance_line(display_unit, display_balance, unit, use_ksats))
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
@@ -660,19 +709,7 @@ async def account_balance_printout_grouped_by_customer(
 
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
-        # Format SATS display consistent with section (KSATS if use_ksats)
-        if use_ksats:
-            sats_str = f"{(conversion.sats / Decimal(1000)):>12,.1f} KSATS "
-        else:
-            sats_str = f"{conversion.sats:>12,.0f} SATS "
-        output.append(
-            f"{'Converted':<10} "
-            f"{conversion.hive:>15,.3f} HIVE "
-            f"{conversion.hbd:>12,.3f} HBD "
-            f"{conversion.usd:>12,.3f} USD "
-            f"{sats_str}"
-            f"{conversion.msats:>16,.0f} msats"
-        )
+        output.append(_format_converted_line(conversion, use_ksats))
         total_usd += conversion.usd
         total_msats += conversion.msats
 
@@ -680,18 +717,7 @@ async def account_balance_printout_grouped_by_customer(
         display_balance = (
             final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
         )
-        if unit.upper() == "MSATS":
-            # If very large, show as KSATS (thousands of sats) with 1 decimal place
-            if abs(display_balance) >= Decimal(1_000_000):
-                balance_fmt = f"{(display_balance / Decimal(1000)):,.1f}"
-                balance_unit = "KSATS"
-            else:
-                balance_fmt = f"{display_balance:,.0f}"
-                balance_unit = "SATS"
-        else:
-            balance_fmt = f"{display_balance:,.3f}"
-            balance_unit = unit.upper()
-        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {balance_unit:<5}")
+        output.append(_format_final_balance_line(display_unit, display_balance, unit, use_ksats))
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
