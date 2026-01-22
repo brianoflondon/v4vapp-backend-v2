@@ -83,6 +83,7 @@ def all_account_balances_pipeline(
     account: LedgerAccount | None = None,
     as_of_date: datetime = datetime.now(tz=timezone.utc),
     age: timedelta | None = None,
+    filter: Mapping[str, Any] | None = None,
 ) -> Sequence[Mapping[str, Any]]:
     """
     Generates a MongoDB aggregation pipeline to retrieve the balances of all accounts in the ledger.
@@ -106,6 +107,7 @@ def all_account_balances_pipeline(
         The pipeline is intended for use with MongoDB aggregation queries and assumes the presence of specific fields in the transaction documents.
 
     """
+    filter = filter or {}
     if account:
         facet_debit_match = {
             "$match": {
@@ -133,6 +135,7 @@ def all_account_balances_pipeline(
 
     pipeline: Sequence[Mapping[str, Any]] = [
         {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+        {"$match": filter},
         {
             "$facet": {
                 "debits_view": [

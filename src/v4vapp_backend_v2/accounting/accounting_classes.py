@@ -235,6 +235,13 @@ class LedgerAccountDetails(LedgerAccount):
     model_config = ConfigDict(populate_by_name=True)
 
     @property
+    def has_transactions(self) -> bool:
+        """Returns True if there are any transactions in the combined balance other than an opening balance"""
+        if self.sats > Decimal(0) and len(self.combined_balance) > 1:
+            return True
+        return False
+
+    @property
     def hive_amount(self) -> Amount:
         """Returns the HIVE balance as an Amount object."""
         return Amount(f"{self.hive:.3f} HIVE")

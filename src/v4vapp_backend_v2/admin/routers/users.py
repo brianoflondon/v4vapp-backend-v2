@@ -130,8 +130,7 @@ async def users_data_api():
                     "balance_sats_fmt": balance_sats_fmt,
                     "balance_usd": balance_usd,
                     "balance_usd_fmt": balance_usd_fmt,
-                    "has_transactions": (balance_sats is not None and balance_sats != 0)
-                    or len(account.balances) > 0,
+                    "has_transactions": account.has_transactions,
                     "last_transaction_date": account.last_transaction_date.isoformat()
                     if account.last_transaction_date
                     else None,

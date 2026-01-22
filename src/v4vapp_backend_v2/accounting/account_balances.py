@@ -44,7 +44,7 @@ UNIT_TOLERANCE = {
 
 # @async_time_stats_decorator()
 async def all_account_balances(
-    as_of_date: datetime | None = None, age: timedelta | None = None
+    as_of_date: datetime | None = None, age: timedelta | None = None, filter: Mapping[str, Any] | None = None
 ) -> AccountBalances:
     """
     Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
@@ -59,7 +59,7 @@ async def all_account_balances(
 
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
-    pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age)
+    pipeline = all_account_balances_pipeline(as_of_date=as_of_date, age=age, filter=filter)
     cursor = await LedgerEntry.collection().aggregate(pipeline=pipeline)
     results = await cursor.to_list()
     clean_results = convert_datetime_fields(results)
