@@ -207,7 +207,7 @@ async def owners_loan_account(amount_sats: Decimal) -> LedgerEntry:
 
 
 def ignore_user(cust_id: str) -> bool:
-    IGNORE_USERS = ["v4vapp.dhf", "v4vapp.tre", "brianoflondon"]
+    IGNORE_USERS = ["v4vapp.dhf", "v4vapp.tre", "brianoflondon", "v4vapp-test"]
     if cust_id in IGNORE_USERS:
         return True
     if "v4vapp" in cust_id:

@@ -989,7 +989,7 @@ async def keepsats_balance_printout(
 
     return net_msats, account_balance
 
-
+@async_time_decorator
 async def in_progress(cust_id: CustIDType) -> Decimal:
     """
     Calculate the in-progress balance for a given customer ID.
