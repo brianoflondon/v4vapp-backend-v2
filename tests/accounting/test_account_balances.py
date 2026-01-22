@@ -14,7 +14,7 @@ from v4vapp_backend_v2.accounting.account_balances import (
     one_account_balance,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import AccountBalances, LedgerAccountDetails
-from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import AccountType, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
@@ -156,3 +156,125 @@ async def test_get_keepsats_balance():
     net_sats, details = await keepsats_balance(cust_id=cust_id)
     pprint(details.model_dump())
     print(f"Net Sats for {cust_id}: {net_sats}")
+
+
+async def test_account_balance_printout_ksats_positive_and_negative():
+    """Verify the printout switches entire MSATS section to KSATS when abs(total) >= 1,000,000 sats."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    from v4vapp_backend_v2.accounting.account_balances import account_balance_printout
+    from v4vapp_backend_v2.accounting.accounting_classes import (
+        AccountBalanceLine,
+        LedgerAccountDetails,
+    )
+    from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+    from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+    from v4vapp_backend_v2.helpers.currency_class import Currency
+
+    # Positive large total (msats -> 1_500_000 sats => 1_500 KSATS threshold test requires 1,000,000 sats so use larger)
+    big_msats = Decimal(1_500_000_000)  # 1,500,000 sats
+    line = AccountBalanceLine(
+        short_id="0000-test",
+        ledger_type="open_bal",
+        timestamp=datetime.now(tz=timezone.utc),
+        description="Big positive balance",
+        cust_id="custA",
+        amount=Decimal(0),
+        amount_signed=Decimal(0),
+        unit=Currency.MSATS,
+        side="debit",
+        amount_running_total=big_msats,
+    )
+    ledger_details = LedgerAccountDetails(
+        name="VSC Liability",
+        account_type=AccountType.LIABILITY,
+        sub="custA",
+        balances={Currency.MSATS: [line]},
+    )
+
+    result, _ = await account_balance_printout(
+        LiabilityAccount(name="VSC Liability", sub="custA"),
+        line_items=False,
+        ledger_account_details=ledger_details,
+        quote=QuoteResponse(),
+    )
+
+    assert "Unit: KSATS" in result
+    assert "KSATS" in result.splitlines()[2] or "KSATS" in result  # ensure KSATS appears
+
+    # Negative large total should also switch (abs check)
+    neg_msats = Decimal(-2_000_000_000)  # -2,000,000 sats
+    line_neg = AccountBalanceLine(
+        short_id="0000-test",
+        ledger_type="open_bal",
+        timestamp=datetime.now(tz=timezone.utc),
+        description="Big negative balance",
+        cust_id="custB",
+        amount=Decimal(0),
+        amount_signed=Decimal(0),
+        unit=Currency.MSATS,
+        side="debit",
+        amount_running_total=neg_msats,
+    )
+    ledger_details_neg = LedgerAccountDetails(
+        name="VSC Liability",
+        account_type=AccountType.LIABILITY,
+        sub="custB",
+        balances={Currency.MSATS: [line_neg]},
+    )
+
+    result_neg, _ = await account_balance_printout(
+        LiabilityAccount(name="VSC Liability", sub="custB"),
+        line_items=False,
+        ledger_account_details=ledger_details_neg,
+        quote=QuoteResponse(),
+    )
+
+    assert "Unit: KSATS" in result_neg
+
+
+async def test_account_balance_printout_keeps_sats_when_below_threshold():
+    """Verify printout remains in SATS when total is below the KSATS threshold."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    from v4vapp_backend_v2.accounting.account_balances import account_balance_printout
+    from v4vapp_backend_v2.accounting.accounting_classes import (
+        AccountBalanceLine,
+        LedgerAccountDetails,
+    )
+    from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
+    from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
+    from v4vapp_backend_v2.helpers.currency_class import Currency
+
+    small_msats = Decimal(500_000_000)  # 500,000 sats < 1,000,000 threshold
+    line = AccountBalanceLine(
+        short_id="0000-test2",
+        ledger_type="open_bal",
+        timestamp=datetime.now(tz=timezone.utc),
+        description="Small balance",
+        cust_id="custC",
+        amount=Decimal(0),
+        amount_signed=Decimal(0),
+        unit=Currency.MSATS,
+        side="debit",
+        amount_running_total=small_msats,
+    )
+    ledger_details = LedgerAccountDetails(
+        name="VSC Liability",
+        account_type=AccountType.LIABILITY,
+        sub="custC",
+        balances={Currency.MSATS: [line]},
+    )
+
+    result, _ = await account_balance_printout(
+        LiabilityAccount(name="VSC Liability", sub="custC"),
+        line_items=False,
+        ledger_account_details=ledger_details,
+        quote=QuoteResponse(),
+    )
+
+    # Should display SATS, not KSATS
+    assert "Unit: SATS" in result
+    assert "KSATS" not in result
