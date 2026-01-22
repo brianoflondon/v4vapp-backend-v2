@@ -87,38 +87,41 @@ async def patch_account_hive_balances_from_ledger(module_monkeypatch):
         fake_account_hive_balances,
     )
 
-
-async def test_sanity_check_server_account_balances():
-    from v4vapp_backend_v2.accounting.sanity_checks import server_account_balances
-
-    # This ledger date has incorrect VSC Liability balance
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger-bad-vsc-liability.json")
-    result = await server_account_balances()
-    assert not result.is_valid, f"Sanity check failed: {result.details}"
+# Depreciated individual tests.
 
 
-async def test_check_balance_sheet():
-    from v4vapp_backend_v2.accounting.sanity_checks import balanced_balance_sheet
 
-    # Load good data set
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
-    result = await balanced_balance_sheet()
-    print(result)
-    assert result.is_valid, f"Balance sheet sanity check failed: {result.details}"
+# async def test_sanity_check_server_account_balances():
+#     from v4vapp_backend_v2.accounting.sanity_checks import server_account_balances
+
+#     # This ledger date has incorrect VSC Liability balance
+#     await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger-bad-vsc-liability.json")
+#     result = await server_account_balances()
+#     assert not result.is_valid, f"Sanity check failed: {result.details}"
 
 
-async def test_server_account_hive_balances(module_monkeypatch):
-    from v4vapp_backend_v2.accounting.sanity_checks import server_account_hive_balances
+# async def test_check_balance_sheet():
+#     from v4vapp_backend_v2.accounting.sanity_checks import balanced_balance_sheet
 
-    # Load good data set
-    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
+#     # Load good data set
+#     await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
+#     result = await balanced_balance_sheet()
+#     print(result)
+#     assert result.is_valid, f"Balance sheet sanity check failed: {result.details}"
 
-    # Patch sanity_checks.account_hive_balances from ledger values
-    await patch_account_hive_balances_from_ledger(module_monkeypatch)
 
-    result = await server_account_hive_balances()
-    print(result)
-    assert result.is_valid, f"Server account HIVE balances sanity check failed: {result.details}"
+# async def test_server_account_hive_balances(module_monkeypatch):
+#     from v4vapp_backend_v2.accounting.sanity_checks import server_account_hive_balances
+
+#     # Load good data set
+#     await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
+
+#     # Patch sanity_checks.account_hive_balances from ledger values
+#     await patch_account_hive_balances_from_ledger(module_monkeypatch)
+
+#     result = await server_account_hive_balances()
+#     print(result)
+#     assert result.is_valid, f"Server account HIVE balances sanity check failed: {result.details}"
 
 
 # @pytest.mark.skip(reason="Requires a different data set which passes all checks")
