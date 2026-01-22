@@ -1,11 +1,14 @@
-from datetime import datetime
+from asyncio import TaskGroup
+from datetime import datetime, timezone
+from decimal import Decimal
 from hashlib import sha256
+from pathlib import Path
 from typing import List
 
 import aiofiles
 from bson import json_util
 from mongomock import DuplicateKeyError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
@@ -34,6 +37,31 @@ class KeepsatsBalance(BaseModel):
     net_sats: int = Field(..., description="Net satoshis balance")
     rate_usd_btc: float = Field(..., description="USD to BTC exchange rate")
 
+    @validator("last_timestamp", pre=True, always=True)
+    def ensure_timestamp_tz_aware(cls, v):
+        """
+        Ensure the timestamp is timezone-aware and normalized to UTC.
+
+        Accepts either a datetime or an ISO-format string. If the datetime is naive,
+        it will be set to UTC. If it has a timezone, it will be converted to UTC.
+        """
+        if isinstance(v, str):
+            try:
+                dt = datetime.fromisoformat(v)
+            except Exception:
+                raise ValueError("Invalid datetime string for last_timestamp")
+        elif isinstance(v, datetime):
+            dt = v
+        else:
+            raise ValueError("last_timestamp must be a datetime or ISO-format string")
+
+        # If naive, assume UTC. Otherwise, convert to UTC.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
+
 
 def generate_hive_trx_id(balance: KeepsatsBalance) -> str:
     """
@@ -54,7 +82,7 @@ def generate_hive_trx_id(balance: KeepsatsBalance) -> str:
     return hash_object.hexdigest()
 
 
-async def load_keepsats_balances(file_path: str) -> List[KeepsatsBalance]:
+async def load_keepsats_balances(file_path: Path) -> List[KeepsatsBalance]:
     """
     Asynchronously loads and parses the Keepsats balances data from a MongoDB export JSON file.
 
@@ -64,7 +92,7 @@ async def load_keepsats_balances(file_path: str) -> List[KeepsatsBalance]:
     KeepsatsBalance Pydantic model.
 
     Args:
-        file_path (str): The path to the JSON file containing the balances data.
+        file_path (Path): The path to the JSON file containing the balances data.
 
     Returns:
         List[KeepsatsBalance]: A list of KeepsatsBalance models representing the loaded balances data.
@@ -102,6 +130,8 @@ async def create_ledger_entry(balance: KeepsatsBalance, from_account: str = "") 
 
     to_account = balance.id
 
+    # This doesn't seem to make a material difference for opening balances
+    # quote = await TrackedBaseModel.nearest_quote(balance.last_timestamp)
     quote = TrackedBaseModel.last_quote
 
     conv = CryptoConversion(
@@ -112,7 +142,7 @@ async def create_ledger_entry(balance: KeepsatsBalance, from_account: str = "") 
     group_id = generate_hive_trx_id(balance)
     short_id = f"0000-{group_id[:6]}"
 
-    ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+    ledger_type = LedgerType.OPENING_BALANCE
     transfer_ledger_entry = LedgerEntry(
         cust_id=to_account,
         short_id=short_id,
@@ -141,6 +171,58 @@ async def create_ledger_entry(balance: KeepsatsBalance, from_account: str = "") 
     return transfer_ledger_entry
 
 
+async def owners_loan_account(amount_sats: Decimal) -> LedgerEntry:
+    """
+    Returns the LiabilityAccount instance for the Owner's Loan account.
+
+    This function provides a standardized way to reference the Owner's Loan account
+    in ledger entries and other accounting operations.
+
+    Returns:
+        LiabilityAccount: The LiabilityAccount instance for the Owner's Loan account.
+    """
+    ledger_type = LedgerType.OPENING_BALANCE
+    quote = TrackedBaseModel.last_quote
+    conv = CryptoConversion(conv_from=Currency.SATS, value=amount_sats, quote=quote).conversion
+    owner_loan_entry = LedgerEntry(
+        cust_id="OpeningBalance",
+        short_id="0000-OWNLOAN",
+        ledger_type=ledger_type,
+        group_id=f"OWNLOAN_{ledger_type.value}",
+        user_memo="Owner's Loan Account",
+        timestamp=datetime.now(tz=timezone.utc),
+        description="Owner's Loan Account Entry",
+        op_type="custom_json",
+        debit=LiabilityAccount(name="VSC Liability", sub="OpeningBalance"),
+        debit_conv=conv,
+        debit_amount=conv.msats,
+        debit_unit=Currency.MSATS,
+        credit=LiabilityAccount(name="Owner Loan Payable", sub="OpeningBalance"),
+        credit_conv=conv,
+        credit_unit=Currency.MSATS,
+        credit_amount=conv.msats,
+    )
+    await owner_loan_entry.save()
+    return owner_loan_entry
+
+
+def ignore_user(cust_id: str) -> bool:
+    IGNORE_USERS = ["v4vapp.dhf", "v4vapp.tre", "brianoflondon", "v4vapp-test"]
+    if cust_id in IGNORE_USERS:
+        return True
+    if "v4vapp" in cust_id:
+        return True
+    return False
+
+
+async def wipe_opening_balances():
+    from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+
+    collection = LedgerEntry.collection()
+    result = await collection.delete_many({"ledger_type": LedgerType.OPENING_BALANCE.value})
+    print(f"Deleted {result.deleted_count} opening balance ledger entries.")
+
+
 if __name__ == "__main__":
     import asyncio
 
@@ -149,23 +231,49 @@ if __name__ == "__main__":
     async def main():
         db_conn = DBConn()
         await db_conn.setup_database()
-        file_path = "src/jupyter/data/v4vapp_voltage.keepsats_with_in_progress.json"
+
+        await wipe_opening_balances()
+        # Make the file path relative to this script's location so it works
+        # regardless of the current working directory when the script is run.
+        script_dir = Path(__file__).resolve().parent
+        file_path = (
+            script_dir / "keepsats_data" / "v4vapp_voltage.keepsats_with_in_progress.json"
+        ).resolve()
         bad_accounts = await get_bad_hive_accounts()
         try:
             balances = await load_keepsats_balances(file_path)
             print(f"Loaded {len(balances)} balance records.")
             await TrackedBaseModel.update_quote()
-            for balance in balances:
-                bad_account = balance.id in bad_accounts
-                if balance.net_sats >= 2 and not bad_account:
-                    ledger_entry = await create_ledger_entry(balance)
+            total_sats = Decimal(0)
+            tasks = []  # store (Task, balance) tuples so we can report after TaskGroup completes
+
+            async with TaskGroup() as tg:
+                for balance in balances:
+                    bad_account = balance.id in bad_accounts
+                    if balance.net_sats >= 2 and not bad_account and not ignore_user(balance.id):
+                        task = tg.create_task(create_ledger_entry(balance))
+                        tasks.append((task, balance))
+                        total_sats += Decimal(balance.net_sats)
+                    else:
+                        print(
+                            f"Skipping account {balance.id[:16]:<18} with low balance: {balance.net_sats:>14,.0f} sats"
+                        )
+
+            # All tasks have completed successfully here (or an exception was raised)
+            processed_count = 0
+            for task, balance in tasks:
+                try:
+                    ledger_entry = task.result()
                     print(
                         f"Created ledger entry for account {balance.id[:16]:<18}: {balance.net_sats:>14,.0f} {ledger_entry.short_id}"
                     )
-                else:
-                    print(
-                        f"Skipping account {balance.id[:16]:<18} with low balance: {balance.net_sats:>14,.0f} sats"
-                    )
+                    processed_count += 1
+                except Exception as e:
+                    print(f"Task failed for account {balance.id}: {e}")
+
+            print(f"Total sats processed: {total_sats:,} across {processed_count} accounts")
+            await owners_loan_account(total_sats)
+
         except Exception as e:
             print(f"Error loading balances: {e}")
 

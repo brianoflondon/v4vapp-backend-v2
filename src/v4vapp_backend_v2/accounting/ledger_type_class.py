@@ -13,6 +13,8 @@ class LedgerType(StrEnum):
 
     UNSET = "unset"  # Default value for unset ledger type
 
+    OPENING_BALANCE = "open_bal"  # Opening balance entry
+
     FUNDING = "funding"  # Funding from Owner to Treasury
 
     ROUTING_FEE = "r_fee"  # Routing fee earned on HTLC forwards
@@ -122,6 +124,7 @@ LedgerTypeIcon: Dict[LedgerType, str] = {
     LedgerType.CONV_CUSTOMER: "🔄",  # Conversion from Keepsats to Hive
     LedgerType.RECLASSIFY_VSC_HIVE: "🔄",  # Reclassify VSC Liability (server) balance
     LedgerType.RECLASSIFY_VSC_SATS: "🔄",  # Reclassify VSC Sats (server) balance
+    LedgerType.OPENING_BALANCE: "📂",  # Opening balance entry
 }
 
 LedgerTypeStr: Dict[LedgerType, str] = {

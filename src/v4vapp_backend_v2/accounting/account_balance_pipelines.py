@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount
-from v4vapp_backend_v2.config.decorators import async_time_stats_decorator
 
 
 def list_all_accounts_pipeline() -> Sequence[Mapping[str, Any]]:
@@ -542,12 +541,15 @@ def net_held_msats_balance_pipeline(cust_id: str) -> Sequence[Mapping[str, Any]]
     minus the sum of debit_amount for 'release_k' ledger types. This represents the
     customer's net held amount (e.g., positive means more held, negative means over-released).
 
+    This is a by customer pipeline and quite expensive.
+
     Args:
         cust_id (str): The customer ID to calculate the net held balance for.
 
     Returns:
         List[Mapping[str, Any]]: The aggregation pipeline as a list of stages.
     """
+
     pipeline: Sequence[Mapping[str, Any]] = [
         {"$match": {"cust_id": cust_id, "ledger_type": {"$in": ["hold_k", "release_k"]}}},
         {"$group": {"_id": "$ledger_type", "total": {"$sum": "$debit_amount"}}},
@@ -572,5 +574,52 @@ def net_held_msats_balance_pipeline(cust_id: str) -> Sequence[Mapping[str, Any]]
         },
         {"$project": {"net_held": {"$subtract": ["$hold_total", "$release_total"]}}},
         {"$project": {"_id": 0, "cust_id": cust_id, "net_held": "$net_held"}},
+    ]
+    return pipeline
+
+
+def all_held_msats_balance_pipeline(cust_id: str = "") -> Sequence[Mapping[str, Any]]:
+    """
+    Generates a MongoDB aggregation pipeline to calculate the net held balances for all customers.
+
+    The net held balance for each customer is computed as the sum of debit_amount for 'hold_k' ledger types
+    minus the sum of debit_amount for 'release_k' ledger types. This represents each customer's
+    net held amount (e.g., positive means more held, negative means over-released).
+
+    This is an all customers pipeline and quite expensive.
+
+    Returns:
+        List[Mapping[str, Any]]: The aggregation pipeline as a list of stages.
+    """
+    if cust_id:
+        match_stage = {
+            "$match": {"cust_id": cust_id, "ledger_type": {"$in": ["hold_k", "release_k"]}}
+        }
+    else:
+        match_stage = {"$match": {"ledger_type": {"$in": ["hold_k", "release_k"]}}}
+
+    pipeline: Sequence[Mapping[str, Any]] = [
+        match_stage,
+        {
+            "$group": {
+                "_id": "$cust_id",
+                "hold_total": {
+                    "$sum": {"$cond": [{"$eq": ["$ledger_type", "hold_k"]}, "$debit_amount", 0]}
+                },
+                "release_total": {
+                    "$sum": {"$cond": [{"$eq": ["$ledger_type", "release_k"]}, "$debit_amount", 0]}
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "cust_id": "$_id",
+                "hold_total": 1,
+                "release_total": 1,
+                "net_held": {"$subtract": ["$hold_total", "$release_total"]},
+            }
+        },
+        {"$sort": {"net_held": -1}},
     ]
     return pipeline

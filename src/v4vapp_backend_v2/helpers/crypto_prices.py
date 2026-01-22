@@ -483,6 +483,7 @@ class AllQuotes(BaseModel):
             }
             logger.error(
                 f"{ICON} Quote fetching exceeded timeout of {timeout} seconds",
+                exc_info=True,
                 extra={"timeout": timeout, "error": e},
             )
 

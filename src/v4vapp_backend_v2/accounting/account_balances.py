@@ -6,7 +6,6 @@ from v4vapp_backend_v2.accounting.account_balance_pipelines import (
     all_account_balances_pipeline,
     list_all_accounts_pipeline,
     list_all_ledger_types_pipeline,
-    net_held_msats_balance_pipeline,
 )
 from v4vapp_backend_v2.accounting.accounting_classes import (
     AccountBalances,
@@ -14,6 +13,7 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LedgerAccountDetails,
     LedgerConvSummary,
 )
+from v4vapp_backend_v2.accounting.in_progress_results_class import InProgressResults, all_held_msats
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -65,6 +65,8 @@ async def all_account_balances(
     clean_results = convert_datetime_fields(results)
 
     account_balances = AccountBalances.model_validate(clean_results)
+    all_held_result = await all_held_msats()
+    in_progress = InProgressResults(results=all_held_result)
 
     # Find the most recent transaction date
     for account in account_balances.root:
@@ -74,7 +76,7 @@ async def all_account_balances(
                 if items:
                     last_item = items[-1]
                     max_timestamp = max(max_timestamp, last_item.timestamp or max_timestamp)
-        account.in_progress_msats = await in_progress(account.sub)
+        account.in_progress_msats = in_progress.get(account.sub).net_held
         account.last_transaction_date = max_timestamp
 
     return account_balances
@@ -84,6 +86,7 @@ async def one_account_balance(
     account: LedgerAccount | str,
     as_of_date: datetime | None = None,
     age: timedelta | None = None,
+    in_progress: InProgressResults | None = None,
 ) -> LedgerAccountDetails:
     """
     Retrieve the balance details for a single ledger account as of a specified date.
@@ -99,7 +102,6 @@ async def one_account_balance(
         - If `account` is provided as a string, it is converted to a LiabilityAccount.
         - If no balance data is found, returns a default LedgerAccountDetails instance.
     """
-
     if as_of_date is None:
         as_of_date = datetime.now(tz=timezone.utc)
     if isinstance(account, str):
@@ -164,7 +166,10 @@ async def one_account_balance(
                     max_timestamp = line.timestamp
         ledger_details.last_transaction_date = max_timestamp
 
-    ledger_details.in_progress_msats = await in_progress(account.sub)
+    if in_progress is None:
+        all_held_result = await all_held_msats()
+        in_progress = InProgressResults(results=all_held_result)
+    ledger_details.in_progress_msats = in_progress.get_net_held(account.sub)
 
     return ledger_details
 
@@ -176,6 +181,97 @@ def _add_notes() -> str:
         "1.Unit sections are separate views and are NOT additive.\n"
         "2.Transactions may appear in multiple unit sections (gross) and net in account totals.\n"
     )
+
+
+# Helpers to centralize KSATS logic and formatting for reuse in printouts
+def _compute_ksats_settings(ledger_account_details: LedgerAccountDetails, unit: str):
+    """Determine conversion factor, whether to display in KSATS, and the display unit string."""
+    conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+    final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
+    display_balance_total = (
+        (final_bal_for_unit / conversion_factor) if unit.upper() == "MSATS" else final_bal_for_unit
+    )
+    use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
+    display_unit = "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
+    return conversion_factor, use_ksats, display_unit
+
+
+def _format_converted_line(conversion, use_ksats: bool) -> str:
+    """Return the formatted Converted line for a conversion object."""
+    if use_ksats:
+        sats_str = f"{(conversion.sats / Decimal(1000)):>12,.1f} KSATS "
+    else:
+        sats_str = f"{conversion.sats:>12,.0f} SATS "
+    return (
+        f"{'Converted':<10} "
+        f"{conversion.hive:>15,.3f} HIVE "
+        f"{conversion.hbd:>12,.3f} HBD "
+        f"{conversion.usd:>12,.3f} USD "
+        f"{sats_str}"
+        f"{conversion.msats:>16,.0f} msats"
+    )
+
+
+def _format_final_balance_line(
+    display_unit: str, display_balance: Decimal, unit: str, use_ksats: bool
+) -> str:
+    """Return the Final Balance line text based on unit display preferences."""
+    if unit.upper() == "MSATS":
+        if use_ksats:
+            balance_fmt = f"{(display_balance / Decimal(1000)):,.1f}"
+            balance_unit = "KSATS"
+        else:
+            balance_fmt = f"{display_balance:,.0f}"
+            balance_unit = "SATS"
+    else:
+        balance_fmt = f"{display_balance:,.3f}"
+        balance_unit = unit.upper()
+    return f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {balance_unit:<5}"
+
+
+def _format_amounts_for_display(
+    unit: str,
+    debit_val: Decimal,
+    credit_val: Decimal,
+    balance_val: Decimal,
+    conversion_factor: int,
+    use_ksats: bool,
+    msats_nonks_format: str = "one_decimal",
+) -> tuple[str, str, str]:
+    """Convert numeric msats values and return formatted strings for debit, credit and balance.
+
+    msats_nonks_format: 'one_decimal' or 'integer' determines how non-KSATS SATS are formatted.
+    """
+    if unit.upper() == "MSATS":
+        # Convert from msats to sats first
+        debit_val /= conversion_factor
+        credit_val /= conversion_factor
+        balance_val /= conversion_factor
+        # Optionally convert sats to ksats for display
+        if use_ksats:
+            debit_val /= Decimal(1000)
+            credit_val /= Decimal(1000)
+            balance_val /= Decimal(1000)
+
+        if use_ksats:
+            debit_fmt = f"{debit_val:,.1f}"
+            credit_fmt = f"{credit_val:,.1f}"
+            balance_fmt = f"{balance_val:,.1f}"
+        else:
+            if msats_nonks_format == "one_decimal":
+                debit_fmt = f"{debit_val:,.1f}"
+                credit_fmt = f"{credit_val:,.1f}"
+                balance_fmt = f"{balance_val:,.1f}"
+            else:
+                debit_fmt = f"{debit_val:,.0f}"
+                credit_fmt = f"{credit_val:,.0f}"
+                balance_fmt = f"{balance_val:,.0f}"
+    else:
+        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
+        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
+        balance_fmt = f"{balance_val:,.3f}"
+
+    return debit_fmt, credit_fmt, balance_fmt
 
 
 async def account_balance_printout(
@@ -246,8 +342,10 @@ async def account_balance_printout(
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
             continue
-        display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
-        conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+        # Compute common KSATS display settings for this unit
+        conversion_factor, use_ksats, display_unit = _compute_ksats_settings(
+            ledger_account_details, unit
+        )
 
         # Headings on same line as Unit
         left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
@@ -292,21 +390,17 @@ async def account_balance_printout(
                         row.amount if row.side == "credit" and row.unit == unit else Decimal(0)
                     )
                     balance_val = row.amount_running_total
-                    if unit.upper() == "MSATS":
-                        debit_val /= conversion_factor
-                        credit_val /= conversion_factor
-                        balance_val /= conversion_factor
 
-                    # Number formats
-                    if unit.upper() == "MSATS":
-                        debit_fmt = f"{debit_val:,.1f}"
-                        credit_fmt = f"{credit_val:,.1f}"
-                        balance_fmt = f"{balance_val:,.1f}"
-                    else:
-                        debit_fmt = f"{debit_val:,.3f}" if debit_val != 0 else "0"
-                        credit_fmt = f"{credit_val:,.3f}" if credit_val != 0 else "0"
-                        balance_fmt = f"{balance_val:,.3f}"
-
+                    # Format values consistently using helper (use one_decimal style for non-KSATS msats in this view)
+                    debit_fmt, credit_fmt, balance_fmt = _format_amounts_for_display(
+                        unit,
+                        debit_val,
+                        credit_val,
+                        balance_val,
+                        conversion_factor,
+                        use_ksats,
+                        msats_nonks_format="one_decimal",
+                    )
                     line = (
                         f"{timestamp:<{COL_TS}} "
                         f"{description:<{COL_DESC}} "
@@ -327,14 +421,7 @@ async def account_balance_printout(
         final_balance = Decimal(ledger_account_details.balances_net.get(unit, 0))
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
-        output.append(
-            f"{'Converted':<10} "
-            f"{conversion.hive:>15,.3f} HIVE "
-            f"{conversion.hbd:>12,.3f} HBD "
-            f"{conversion.usd:>12,.3f} USD "
-            f"{conversion.sats:>12,.0f} SATS "
-            f"{conversion.msats:>16,.0f} msats"
-        )
+        output.append(_format_converted_line(conversion, use_ksats))
         total_usd += conversion.usd
         total_msats += conversion.msats
 
@@ -342,15 +429,15 @@ async def account_balance_printout(
         display_balance = (
             final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
         )
-        if unit.upper() == "MSATS":
-            balance_fmt = f"{display_balance:,.0f}"
-        else:
-            balance_fmt = f"{display_balance:,.3f}"
-        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
+        output.append(_format_final_balance_line(display_unit, display_balance, unit, use_ksats))
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
-    output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
+    total_sats = total_msats / Decimal(1000)
+    if abs(total_sats) >= Decimal(1_000_000):
+        output.append(f"Total SATS: {(total_sats / Decimal(1000)):>17,.1f} KSATS")
+    else:
+        output.append(f"Total SATS: {total_sats:>17,.3f} SATS")
     output.append(_add_notes())
 
     output.append(title_line)
@@ -432,8 +519,17 @@ async def account_balance_printout_grouped_by_customer(
     for unit in [Currency.HIVE, Currency.HBD, Currency.MSATS]:
         if unit not in units:
             continue
-        display_unit = "SATS" if unit.upper() == "MSATS" else unit.upper()
         conversion_factor = 1_000 if unit.upper() == "MSATS" else 1
+        final_bal_for_unit = Decimal(ledger_account_details.balances_net.get(unit, 0))
+        display_balance_total = (
+            (final_bal_for_unit / conversion_factor)
+            if unit.upper() == "MSATS"
+            else final_bal_for_unit
+        )
+        use_ksats = unit.upper() == "MSATS" and abs(display_balance_total) >= Decimal(1_000_000)
+        display_unit = (
+            "KSATS" if use_ksats else ("SATS" if unit.upper() == "MSATS" else unit.upper())
+        )
 
         # Headings on same line as Unit
         left_pad = COL_TS + 1 + COL_DESC + 1 + 4  # Space covering TS, desc, contra and separators
@@ -507,9 +603,15 @@ async def account_balance_printout_grouped_by_customer(
                             balance_val = running_total
 
                             if unit.upper() == "MSATS":
+                                # Convert from msats to sats first
                                 debit_val /= conversion_factor
                                 credit_val /= conversion_factor
                                 balance_val /= conversion_factor
+                                # If section is KSATS, convert sats to ksats for display
+                                if use_ksats:
+                                    debit_val /= Decimal(1000)
+                                    credit_val /= Decimal(1000)
+                                    balance_val /= Decimal(1000)
 
                             # Number formats
                             if unit.upper() == "MSATS":
@@ -569,12 +671,23 @@ async def account_balance_printout_grouped_by_customer(
                             debit_val /= conversion_factor
                             credit_val /= conversion_factor
                             balance_val /= conversion_factor
+                            # If section is KSATS, convert sats to ksats for display and use 1 decimal
+                            if use_ksats:
+                                debit_val /= Decimal(1000)
+                                credit_val /= Decimal(1000)
+                                balance_val /= Decimal(1000)
 
                         # Number formats
                         if unit.upper() == "MSATS":
-                            debit_fmt = f"{debit_val:,.0f}"
-                            credit_fmt = f"{credit_val:,.0f}"
-                            balance_fmt = f"{balance_val:,.0f}"
+                            # Use 1 decimal for KSATS view, otherwise integer sats
+                            if use_ksats:
+                                debit_fmt = f"{debit_val:,.1f}"
+                                credit_fmt = f"{credit_val:,.1f}"
+                                balance_fmt = f"{balance_val:,.1f}"
+                            else:
+                                debit_fmt = f"{debit_val:,.0f}"
+                                credit_fmt = f"{credit_val:,.0f}"
+                                balance_fmt = f"{balance_val:,.0f}"
                         else:
                             debit_fmt = f"{debit_val:,.3f}"
                             credit_fmt = f"{credit_val:,.3f}"
@@ -601,14 +714,7 @@ async def account_balance_printout_grouped_by_customer(
 
         conversion = CryptoConversion(conv_from=unit, value=final_balance, quote=quote).conversion
         output.append("-" * max_width)
-        output.append(
-            f"{'Converted':<10} "
-            f"{conversion.hive:>15,.3f} HIVE "
-            f"{conversion.hbd:>12,.3f} HBD "
-            f"{conversion.usd:>12,.3f} USD "
-            f"{conversion.sats:>12,.0f} SATS "
-            f"{conversion.msats:>16,.0f} msats"
-        )
+        output.append(_format_converted_line(conversion, use_ksats))
         total_usd += conversion.usd
         total_msats += conversion.msats
 
@@ -616,15 +722,15 @@ async def account_balance_printout_grouped_by_customer(
         display_balance = (
             final_balance / conversion_factor if unit.upper() == "MSATS" else final_balance
         )
-        if unit.upper() == "MSATS":
-            balance_fmt = f"{display_balance:,.0f}"
-        else:
-            balance_fmt = f"{display_balance:,.3f}"
-        output.append(f"{'Final Balance ' + display_unit:<18} {balance_fmt:>10} {display_unit:<5}")
+        output.append(_format_final_balance_line(display_unit, display_balance, unit, use_ksats))
 
     output.append("-" * max_width)
     output.append(f"Total USD: {total_usd:>18,.3f} USD")
-    output.append(f"Total SATS: {total_msats / 1000:>17,.3f} SATS")
+    total_sats = total_msats / Decimal(1000)
+    if abs(total_sats) >= Decimal(1_000_000):
+        output.append(f"Total SATS: {(total_sats / Decimal(1000)):>17,.1f} KSATS")
+    else:
+        output.append(f"Total SATS: {total_sats:>17,.3f} SATS")
     output.append(_add_notes())
 
     output.append(title_line)
@@ -889,29 +995,37 @@ async def keepsats_balance_printout(
     return net_msats, account_balance
 
 
-async def in_progress(cust_id: CustIDType) -> Decimal:
-    """
-    Calculate the in-progress balance for a given customer ID.
+# @async_time_decorator
+# async def in_progress(cust_id: CustIDType) -> Decimal:
+#     """
+#     Calculate the in-progress balance for a given customer ID.
 
-    This asynchronous function aggregates ledger entries using a predefined pipeline
-    to compute the net held balance in millisatoshis, converts it to satoshis,
-    quantizes to whole satoshis, and returns the result as a Decimal.
+#     This asynchronous function aggregates ledger entries using a predefined pipeline
+#     to compute the net held balance in millisatoshis, converts it to satoshis,
+#     quantizes to whole satoshis, and returns the result as a Decimal.
 
-    Args:
-        cust_id (CustIDType): The customer ID for which to calculate the balance.
+#     Args:
+#         cust_id (CustIDType): The customer ID for which to calculate the balance.
 
-    Returns:
-        Decimal: The in-progress balance in satoshis, quantized to whole units.
-                 Returns 0 if no results are found.
-    """
-    in_progress_pipeline = net_held_msats_balance_pipeline(cust_id=cust_id)
-    cursor = await LedgerEntry.collection().aggregate(in_progress_pipeline)
-    results = await cursor.to_list(length=None)
-    if results and len(results) > 0:
-        in_progress_sats = Decimal(results[0].get("net_held", 0) / Decimal(1000)).quantize(
-            Decimal("1.")
-        )
-    else:
-        in_progress_sats = Decimal(0)
+#     Returns:
+#         Decimal: The in-progress balance in satoshis, quantized to whole units.
+#                  Returns 0 if no results are found.
+#     """
+#     results = await all_held_msats()
+#     in_progress = _get_in_progress_sats(cust_id, results)
+#     return in_progress["net_held"]
 
-    return in_progress_sats
+
+# def _get_in_progress_sats(cust_id, results_list) -> dict[str, Decimal]:
+#     for doc in results_list:
+#         if doc["cust_id"] == cust_id:
+#             return {
+#                 "hold_total": Decimal(doc["hold_total"]),
+#                 "release_total": Decimal(doc["release_total"]),
+#                 "net_held": Decimal(doc["net_held"]),
+#             }
+#     return {
+#         "hold_total": Decimal(0),
+#         "release_total": Decimal(0),
+#         "net_held": Decimal(0),
+#     }
