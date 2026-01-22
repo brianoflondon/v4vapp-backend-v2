@@ -18,6 +18,36 @@ class InProgressResult:
 
 @dataclass
 class InProgressResults:
+    """
+    Container for in-progress hold/release aggregates keyed by customer ID.
+    This class builds a mapping from cust_id to InProgressResult objects from an
+    iterable of document-like mappings. Each input document is expected to include
+    the keys 'cust_id', 'hold_total', 'release_total', and 'net_held'. Numeric
+    values for the totals are converted to Decimal when constructing the
+    InProgressResult instances.
+    Args:
+        results (List[Mapping[str, Any]]): Sequence of documents used to populate
+            the internal mapping. Each mapping must contain the required keys
+            described above.
+    Attributes:
+        results (Dict[CustIDType, InProgressResult]): Mapping from customer IDs to
+            their corresponding InProgressResult objects.
+    Methods:
+        get(cust_id: CustIDType) -> InProgressResult:
+            Return the InProgressResult for the given cust_id. If the customer ID
+            is not present in the internal mapping, a new InProgressResult with
+            zeroed Decimal totals is returned.
+        get_net_held(cust_id: CustIDType) -> Decimal:
+            Convenience accessor that returns the net_held Decimal for the given
+            cust_id; returns Decimal(0) when the customer is not present.
+    Example:
+        docs = [
+            {'cust_id': 'cust-1', 'hold_total': '100.00', 'release_total': '40.00', 'net_held': '60.00'},
+        ]
+        ipr = InProgressResults(docs)
+        ipr.get('cust-1').net_held  # Decimal('60.00')
+    """
+
     def __init__(self, results: List[Mapping[str, Any]]):
         self.results = {
             doc["cust_id"]: InProgressResult(
@@ -30,6 +60,22 @@ class InProgressResults:
         }
 
     def get(self, cust_id: CustIDType) -> InProgressResult:
+        """Return the InProgressResult for the given customer ID.
+        Looks up `cust_id` in `self.results` and returns the associated InProgressResult. If no entry exists,
+        returns a new InProgressResult initialized with the provided `cust_id` and zero monetary totals
+        (`hold_total`, `release_total`, `net_held` all set to Decimal(0)).
+        Args:
+            cust_id (CustIDType): The customer identifier to look up.
+        Returns:
+            InProgressResult: The existing InProgressResult for `cust_id`, or a newly created one with
+            zeroed totals when absent.
+        Notes:
+            - The default InProgressResult returned when the key is missing is not inserted into `self.results`.
+            - Monetary fields use Decimal(0) for precise zero initialization.
+            - May raise exceptions propagated from the underlying mapping lookup (e.g., AttributeError if
+              `self.results` is not present or not a mapping).
+        """
+
         return self.results.get(
             cust_id,
             InProgressResult(
