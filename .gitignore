@@ -182,3 +182,4 @@ config/*config.json
 config/mongo-keyfile
 
 src/jupyter/data/*
+scripts/keepsats_data/*
