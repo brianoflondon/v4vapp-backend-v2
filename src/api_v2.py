@@ -56,6 +56,56 @@ app = None
 crypto_v2_router = APIRouter(prefix="/v2/crypto")
 crypto_v1_router = APIRouter(prefix="/cryptoprices")
 lightning_v1_router = APIRouter(prefix="/lightning")
+notifications_router = APIRouter(prefix="/send_notification")
+
+
+@notifications_router.get("/")
+async def send_notification(
+    notify: str = Query(..., description="Notification message to send"),
+    alert_level: int = Query(1, description="Alert level of the notification"),
+):
+    """
+    Send a notification via the API v2 logging endpoint.
+
+    Parameters
+    ----------
+    notify : str
+        Notification message to send.
+    alert_level : int, optional
+        Alert level of the notification. Mapped as:
+          - 1 -> 'info' (default)
+          - 2 -> 'warning'
+          - 3 -> 'error'
+        Any other value defaults to 'info'.
+
+    Returns
+    -------
+    dict
+        A simple acknowledgement dictionary: {"message": "Notification sent"}.
+
+    Side effects
+    ------------
+    Logs the notification using the appropriate logger method (logger.info, logger.warning, logger.error)
+    with extra={"notification": True}. The logged message is formatted as:
+        "<notify> (Alert Level: <alert_str> | From API v2)".
+
+    Notes
+    -----
+    This is an async helper intended for use by API v2 request handlers. It does not raise on
+    unknown alert_level values; they are treated as 'info'.
+    """
+    # map alter level 1 to 'info', 2 to 'warning', 3 to 'error'
+    alert_map = {1: "info", 2: "warning", 3: "error"}
+    alert_str = alert_map.get(alert_level, "info")
+    # call logger with alert level
+    notify_text = f"{notify} (Alert Level: {alert_str} | From API v2)"
+    if alert_str == "info":
+        logger.info(notify_text, extra={"notification": True})
+    elif alert_str == "warning":
+        logger.warning(notify_text, extra={"notification": True})
+    elif alert_str == "error":
+        logger.error(notify_text, extra={"notification": True})
+    return {"message": "Notification sent"}
 
 
 @crypto_v2_router.get("/")
@@ -65,7 +115,23 @@ async def root():
 
 @crypto_v2_router.post("/quotes/")
 async def cryptoprices() -> AllQuotes:
-    """Returns the prices of Hive/HBD and BTC/Sats vs USD"""
+    """Asynchronously fetch and return cryptocurrency prices.
+
+    This coroutine constructs an AllQuotes object, invokes its asynchronous
+    get_all_quotes() method to populate price data, and returns the populated
+    AllQuotes instance. The quotes include Hive/HBD and Bitcoin (USD and Satoshis)
+    price information.
+
+    The function asserts that the returned AllQuotes instance contains a truthy
+    quote attribute; an AssertionError is raised if no quotes were retrieved.
+    Any exceptions raised by AllQuotes.get_all_quotes() are propagated.
+
+    Returns:
+        AllQuotes: An AllQuotes instance with populated quote data.
+
+    Raises:
+        AssertionError: If no quote data was retrieved.
+    """
     all_quotes = AllQuotes()
     await all_quotes.get_all_quotes()
     assert all_quotes.quote
@@ -373,6 +439,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
     app.include_router(crypto_v2_router, tags=["crypto"])
     app.include_router(crypto_v1_router, tags=["legacy"])
     app.include_router(lightning_v1_router, tags=["lightning"])
+    app.include_router(notifications_router, tags=["notifications"])
 
     return app
 
