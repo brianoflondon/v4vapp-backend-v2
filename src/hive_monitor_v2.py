@@ -131,6 +131,14 @@ async def health_check() -> Dict[str, Any]:
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
     if exceptions:
+        logger.error(
+            f"{ICON} Health check failed: {', '.join(exceptions)}",
+            extra={
+                "notification": True,
+                "error_code": "hive_monitor_task_failure",
+            },
+        )
+        sys.exit(1)
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
     logger.debug(
         f"{ICON} Health check passed",
