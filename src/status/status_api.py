@@ -85,15 +85,15 @@ class StatusAPI:
         @self.app.get("/status")
         async def status() -> Dict[str, Any]:
             try:
-                ans = await self.health_check_func()
+                check_answer = await self.health_check_func()
                 error_codes_dict = InternalConfig().error_codes_to_dict()
                 if error_codes_dict:
-                    ans["error_codes"] = error_codes_dict
+                    check_answer["error_codes"] = error_codes_dict
                 logger.debug(
-                    f"Status API health check passed: {ans}",
-                    extra={"error_codes": error_codes_dict},
+                    f"Status API health check passed {'no error' if not error_codes_dict else 'with errors'}",
+                    extra={"check_answer": check_answer},
                 )
-                return {"status": "OK", **ans}
+                return {"status": "OK", **check_answer}
             except Exception as e:
                 # Use your imported logger for consistent logging
                 logger.error(f"Health check failed: {str(e)}", extra={**getattr(e, "extra", {})})
