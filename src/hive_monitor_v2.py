@@ -127,6 +127,7 @@ async def health_check() -> Dict[str, Any]:
                 extra={"notification": True, "error_code": "hive_monitor_task_failure"},
             )
             # Exit the code to allow docker to restart the container
+            shutdown_event.set()
             sys.exit(1)
 
     STATUS_OBJ.time_diff_str = format_time_delta(STATUS_OBJ.time_diff)
@@ -138,6 +139,7 @@ async def health_check() -> Dict[str, Any]:
                 "error_code": "hive_monitor_task_failure",
             },
         )
+        shutdown_event.set()
         sys.exit(1)
         raise StatusAPIException(", ".join(exceptions), extra=STATUS_OBJ.__dict__)
     logger.debug(
