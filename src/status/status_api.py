@@ -89,6 +89,10 @@ class StatusAPI:
                 error_codes_dict = InternalConfig().error_codes_to_dict()
                 if error_codes_dict:
                     ans["error_codes"] = error_codes_dict
+                logger.debug(
+                    f"Status API health check passed: {ans}",
+                    extra={"error_codes": error_codes_dict},
+                )
                 return {"status": "OK", **ans}
             except Exception as e:
                 # Use your imported logger for consistent logging
