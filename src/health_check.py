@@ -17,8 +17,8 @@ Or in Docker Compose:
 import json
 import sys
 import time
-import urllib.request
 
+import httpx
 import typer
 
 app = typer.Typer()
@@ -29,11 +29,11 @@ def healthcheck(
     host: str = typer.Option("localhost", "--host", help="Host to check (e.g., localhost)"),
     port: int = typer.Option(6001, "--port", help="Port to check (e.g., 6001)"),
     timeout: int = typer.Option(
-        5, "--timeout", help="Timeout in seconds for the health check request"
+        10, "--timeout", help="Timeout in seconds for the health check request"
     ),
     retries: int = typer.Option(3, "--retries", help="Number of retry attempts"),
     retry_delay: float = typer.Option(
-        1.0, "--retry-delay", help="Delay in seconds between retries"
+        5.0, "--retry-delay", help="Delay in seconds between retries"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print the response body"),
     pretty: bool = typer.Option(False, "--pretty", "-p", help="Pretty print JSON output"),
@@ -47,28 +47,23 @@ def healthcheck(
 
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:
-                if response.status == 200:
-                    if verbose or pretty:
-                        body = response.read().decode()
-                        if pretty:
-                            try:
-                                data = json.loads(body)
-                                typer.echo(json.dumps(data, indent=2))
-                            except json.JSONDecodeError:
-                                typer.echo(body)
-                        else:
-                            typer.echo(body)
-                    sys.exit(0)
+            response = httpx.get(url, timeout=timeout)
+            response.raise_for_status()
+            if verbose or pretty:
+                if pretty:
+                    try:
+                        data = response.json()
+                        typer.echo(json.dumps(data, indent=2))
+                    except Exception:
+                        typer.echo(response.text)
                 else:
-                    typer.echo(f"Health check failed: HTTP {response.status}")
-                    if response.headers.get("Content-Type") == "application/json":
-                        typer.echo(response.json())
-                    elif response.headers.get("Content-Type") == "text/plain":
-                        typer.echo(response.read().decode())
-                    elif response.headers.get("Content-Type") == "text/html":
-                        typer.echo(response.read().decode())
-                    sys.exit(1)
+                    typer.echo(response.text)
+            sys.exit(0)
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            typer.echo(f"Health check failed: HTTP {e.response.status_code}")
+            if attempt < retries - 1:
+                time.sleep(retry_delay)
         except Exception as e:
             last_error = e
             if attempt < retries - 1:
