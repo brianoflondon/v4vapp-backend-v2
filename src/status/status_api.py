@@ -94,14 +94,19 @@ class StatusAPI:
                     log_func = logger.warning
                     error_log_dict = {"error_code": f"{process_name}_health_check_error"}
                 log_func(
-                    f"Status API health check passed {'no error' if not error_codes_dict else 'with errors'}",
+                    f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
                     extra={"check_answer": check_answer, **error_log_dict},
                 )
                 return {"status": "OK", **check_answer}
             except Exception as e:
                 # Use your imported logger for consistent logging
-                logger.error(f"Health check failed: {str(e)}", extra={**getattr(e, "extra", {})})
-                raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+                logger.error(
+                    f"Health check failed {process_name}: {str(e)}",
+                    extra={**getattr(e, "extra", {})},
+                )
+                raise HTTPException(
+                    status_code=500, detail=f"Health check failed {process_name}: {str(e)}"
+                )
 
     def _is_port_available(self, port: int) -> bool:
         """Check if the port is available by attempting to bind a socket."""
