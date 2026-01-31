@@ -9,6 +9,7 @@ services:
       - ./config:/app/config
 
   umbrel-node-monitor:
+    name: umbrel-node-monitor
     depends_on:
       - v4vapp-backend-v2-base
     image: v4vapp-backend-v2-base:latest
@@ -29,6 +30,7 @@ services:
       start_period: 30s
 
   hive-monitor:
+    name: hive-monitor
     depends_on:
       - v4vapp-backend-v2-base
     image: v4vapp-backend-v2-base:latest
@@ -54,6 +56,7 @@ services:
       start_period: 30s
 
   db-monitor:
+    name: db-monitor
     depends_on:
       - v4vapp-backend-v2-base
     image: v4vapp-backend-v2-base:latest
@@ -73,6 +76,7 @@ services:
       - .env
 
   api-v2:
+    name: api-v2
     depends_on:
       - mongo-pytest-local
       - redis-pytest-local
@@ -94,6 +98,7 @@ services:
       - .env
 
   admin-interface:
+    name: admin-interface
     build:
       context: .
       dockerfile: Dockerfile
@@ -130,6 +135,7 @@ services:
     # externally on the host. This allows the same 127.0.0.1:37017 address to work both within the
     # docker container and externally on the host.
     image: mongo:8.0
+    name: mongo-pytest-local
     command: >
       bash -c "
         mongod --replSet rsPytest --bind_ip_all --port 37017 &
@@ -171,6 +177,7 @@ services:
 
   redis-pytest-local:
     image: redis:latest
+    name: redis-pytest-local
     ports:
       - "127.0.0.1:6379:6379"
       - "${LOCAL_TAILSCALE_IP}:6379:6379"   # Needed on home-imac
