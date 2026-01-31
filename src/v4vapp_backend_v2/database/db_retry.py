@@ -58,9 +58,11 @@ async def mongo_call(
     while True:
         try:
             result = await op()
+            summarized_result = summarize_write_result(result)
+            raw_result = getattr(result, "__raw_result__", summarized_result)
             logger.debug(
-                f"{DATABASE_ICON} {context} {summarize_write_result(result)}",
-                extra={"db_result": result},
+                f"{DATABASE_ICON} {context} {summarized_result}",
+                extra={"db_result": raw_result},
             )
             if error_count > 0:
                 logger.info(
@@ -105,8 +107,30 @@ async def mongo_call(
 
 def summarize_write_result(result) -> str:
     """
-    Return a human-readable summary for common PyMongo write result objects.
-    Supports: UpdateResult, InsertOneResult, InsertManyResult, DeleteResult, BulkWriteResult.
+    This function recognizes instances of the following PyMongo result types:
+    UpdateResult, InsertOneResult, InsertManyResult, DeleteResult, and BulkWriteResult.
+    It produces a comma-separated summary that includes the result type name and
+    the most relevant counters/identifiers for that type (for example, matched_count,
+    modified_count, upserted_id, inserted_id(s), deleted_count, etc.). The summary
+    always includes the acknowledged flag when present.
+
+    Behavior details:
+    - UpdateResult: includes matched, modified, upserted_id (or "-" if None),
+        and updatedExisting when present.
+    - InsertOneResult: includes inserted_id.
+    - InsertManyResult: reports inserted_count (length of inserted_ids).
+    - DeleteResult: includes deleted_count.
+    - BulkWriteResult: reports inserted, matched, modified, deleted, upserts counts.
+    - Fallback: if an unrecognized object has a raw_result attribute, the raw_result
+        is included in the summary; otherwise the summary contains only the type name
+        and acknowledged flag.
+
+    Parameters:
+    - result: A PyMongo write result object (or similar object exposing the above
+        attributes).
+
+    Returns:
+    - A string containing a concise, human-readable summary of the write result.
     """
     kind = type(result).__name__
     ack = getattr(result, "acknowledged", None)
