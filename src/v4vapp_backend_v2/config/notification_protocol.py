@@ -71,9 +71,9 @@ class NotificationProtocol(Protocol):
 
     async def _run_with_resilience(self, message: str, record: LogRecord, bot_name: str = ""):
         try:
-            logger.debug(
-                f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
-            )
+            # logger.debug(
+            #     f"📩 Notification Thread: {threading.get_ident()} sending: {message[:30]}"
+            # )
             await self._send_notification(
                 message,
                 record,
