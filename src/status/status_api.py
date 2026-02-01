@@ -92,10 +92,9 @@ class StatusAPI:
                 if error_codes_dict:
                     check_answer["error_codes"] = error_codes_dict
                     log_func = logger.warning
-                    error_log_dict = {"error_code": f"{process_name}_health_check_error"}
                 log_func(
                     f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
-                    extra={"check_answer": check_answer, **error_log_dict},
+                    extra={"check_answer": check_answer},
                 )
                 return {"status": "OK", **check_answer}
             except Exception as e:

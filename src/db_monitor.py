@@ -1,10 +1,11 @@
 import asyncio
+import os
 import signal
 import sys
 from contextlib import suppress
 from datetime import datetime, timezone
 from pprint import pprint
-from typing import Annotated, Any, Mapping, Sequence
+from typing import Annotated, Any, Dict, Mapping, Sequence
 
 import bson
 import typer
@@ -17,6 +18,7 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
+from status.status_api import StatusAPI
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
@@ -31,6 +33,33 @@ from v4vapp_backend_v2.process.process_tracked_events import process_tracked_eve
 
 ICON = "🏆"
 app = typer.Typer()
+
+
+async def health_check() -> Dict[str, Any]:
+    """
+    Health check function for the StatusAPI.
+
+    Returns:
+        dict: A dictionary containing the health status.
+    """
+    exceptions = []
+    db_pipelines = db_monitor_pipelines()
+    for task, pipeline in db_pipelines.items():
+        if not any(t.get_name() == task and not t.done() for t in asyncio.all_tasks()):
+            exceptions.append(f"{task} task is not running")
+            logger.warning(
+                f"{ICON} {task} DB Monitor task is not running",
+                extra={"notification": True, "error_code": "db_monitor_task_failure"},
+            )
+            # Exit the code to allow docker to restart the container
+            shutdown_event.set()
+            sys.exit(1)
+    logger.debug(
+        f"{ICON} DB Monitor Health check passed",
+        extra={"notification": False, "error_code_clear": "db_monitor_task_failure"},
+    )
+    return {"status": "ok"}
+
 
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
@@ -456,6 +485,17 @@ async def main_async_start(use_resume: bool = True):
         f"🔗 Database Monitor connection: {CONFIG.dbs_config.default_connection} "
         f"🔗 Database Monitor name: {CONFIG.dbs_config.default_name} "
     )
+
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6002")
+    status_api = StatusAPI(
+        port=int(health_check_port),
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__,
+    )  # Use a port from config if needed
+
     db_conn = DBConn()
     await db_conn.setup_database()
     # await LockStr.clear_all_locks()  # Clear any existing locks before starting
@@ -471,13 +511,15 @@ async def main_async_start(use_resume: bool = True):
         logger.info(f"{ICON} Database Monitor App started.")
         # Start streams once and wait for shutdown_event; then cancel streams
         tasks = []
+        tasks.append(asyncio.create_task(status_api.start(), name="status_api"))
         for name, pipeline in db_pipelines.items():
             task = asyncio.create_task(
                 subscribe_stream(
                     collection_name=name,
                     pipeline=pipeline,
                     use_resume=use_resume,
-                )
+                ),
+                name=name,
             )
             tasks.append(task)
 
