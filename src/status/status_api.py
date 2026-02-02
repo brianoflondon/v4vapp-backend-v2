@@ -85,16 +85,16 @@ class StatusAPI:
         @self.app.get("/status")
         async def status() -> Dict[str, Any]:
             log_func = logger.debug
-            error_log_dict = {"error_code_clear": f"{process_name}_health_check_error"}
             try:
                 check_answer = await self.health_check_func()
                 error_codes_dict = InternalConfig().error_codes_to_dict()
                 if error_codes_dict:
                     check_answer["error_codes"] = error_codes_dict
                     log_func = logger.warning
+                # We don't need to notify because the underlying issues are already being notified elsewhere
                 log_func(
                     f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
-                    extra={"check_answer": check_answer},
+                    extra={"notification": False, "check_answer": check_answer},
                 )
                 return {"status": "OK", **check_answer}
             except Exception as e:
