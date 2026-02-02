@@ -929,12 +929,13 @@ class Binance(QuoteService):
         Notes:
             - If a cached quote is available and `use_cache` is True, it will be returned.
             - If no cached quote is available or `use_cache` is False, a new quote will be fetched
-              synchronously and stored in the cache for future use.
+              synchronously (in a thread pool to avoid blocking) and stored in the cache.
         """
         cached_quote = await self.check_cache(use_cache=use_cache)
         if cached_quote:
             return cached_quote
-        quote = self.get_quote_sync(use_cache=use_cache)
+        # Run the synchronous Binance SDK call in a thread pool to avoid blocking the event loop
+        quote = await asyncio.to_thread(self.get_quote_sync, use_cache=use_cache)
         await self.set_cache(quote)
         return quote
 
