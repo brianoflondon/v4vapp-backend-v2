@@ -954,7 +954,7 @@ class InternalConfig:
 
     def setup_redis(self) -> None:
         try:
-            logger.info(f"Setting up redis: {self.config.redis.host}")
+            logger.info(f"{ICON} Setting up redis: {self.config.redis.host}")
             InternalConfig.redis = Redis(
                 host=self.config.redis.host,
                 port=self.config.redis.port,

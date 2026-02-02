@@ -206,7 +206,7 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
         None: The function does not return any value.
     """
     CONFIG = InternalConfig().config
-    logger.info("Waiting for 60 seconds to re-balance HBD level")
+    logger.info(f"{ICON} Waiting for 60 seconds to re-balance HBD level")
     await asyncio.sleep(60)  # Sleeps to make sure we only balance HBD after time for a return
     use_account = None
     try:
@@ -229,7 +229,9 @@ async def balance_server_hbd_level(transfer: Transfer | None = None) -> None:
                 hive_acc=hive_acc, set_amount_to=set_amount_to, nobroadcast=nobroadcast
             )
             if trx:
-                logger.info(f"Transaction broadcast: {trx.get('trx_id')}", extra={"trx": trx})
+                logger.info(
+                    f"{ICON} Transaction broadcast: {trx.get('trx_id')}", extra={"trx": trx}
+                )
     except ValueError as ve:
         logger.error(
             f"{ICON} ValueError in {__name__}: {ve} Maybe misconfigured account? No hbd_balance set?",
@@ -277,12 +279,12 @@ async def get_last_good_block(collection: str = HIVE_OPS_COLLECTION) -> int:
                 else:
                     last_good_block = global_properties["head_block_number"]
             except Exception as e:
-                logger.error(e)
-                last_good_block = 93692232
+                logger.exception(f"{ICON} {e}", extra={"notification": True, "exc_info": True})
+                last_good_block = 103468945
         return last_good_block
 
     except Exception as e:
-        logger.error(e)
+        logger.exception(f"{ICON} {e}", extra={"notification": True, "exc_info": True})
         raise e
     return 0
 
@@ -431,7 +433,7 @@ async def witness_check_heartbeat_loop(witness_name: str) -> None:
         # Exit loop on cancellation
         return
     except Exception as e:
-        logger.exception(f"{ICON} {e}", extra={"notification": False})
+        logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
         raise e
     finally:
         logger.info(
@@ -456,7 +458,8 @@ async def witness_check_startup() -> None:
             asyncio.create_task(witness_check_heartbeat_loop(witness_name=witness_name))
     except Exception as e:
         logger.exception(
-            f"{ICON} Error in Witness Check startup {e}", extra={"notification": False}
+            f"{ICON} Error in Witness Check startup {e}",
+            extra={"notification": False, "exc_info": True},
         )
         raise e
 
@@ -621,7 +624,7 @@ async def all_ops_loop(
             # Exit loop on cancellation
             return
         except Exception as e:
-            logger.exception(f"{ICON} {e}", extra={"notification": False})
+            logger.exception(f"{ICON} {e}", extra={"notification": False, "exc_info": True})
             # Removing a RAISE here to allow automatic restart of the loop
             # raise e
         finally:
