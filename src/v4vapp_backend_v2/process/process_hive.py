@@ -227,10 +227,10 @@ async def process_transfer_op(
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
         # MARK: Payments to special expense accounts if
     elif (
-        hive_transfer.from_account == server_account
+        hive_transfer.from_account == treasury_account
         and hive_transfer.to_account in expense_accounts
     ):
-        # TODO: #110 Implement the system for expense accounts
+        # TODO: #249 Implement the system for expense accounts
         raise NotImplementedError("External expense accounts not implemented yet")
     # MARK: Server to customer account withdrawal
     elif hive_transfer.from_account == server_account:
