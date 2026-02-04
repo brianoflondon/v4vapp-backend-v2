@@ -206,7 +206,6 @@ async def admin_data_helper() -> AdminDataHelper:
                         lnd_info.get("external_msat", 0) + lnd_info.get("treasury_msat", 0)
                     )
                     # Also compute integer sats using Decimal rounding (half up)
-                    logger.info(f"Delta msat: {lnd_info['delta_msat']}")
                     lnd_info["delta"] = f"{lnd_info['delta_msat'] / Decimal(1000):,.3f}"
             except Exception:
                 lnd_info["delta_msat"] = None
