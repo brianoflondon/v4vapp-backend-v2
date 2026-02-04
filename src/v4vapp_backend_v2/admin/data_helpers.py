@@ -1,5 +1,6 @@
 from asyncio import TaskGroup
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -108,8 +109,12 @@ async def admin_data_helper() -> AdminDataHelper:
         pending_transactions_task = tg.create_task(PendingTransaction.list_all_str())
         # Attempt to read latest stored node balances first (fast) using safe wrappers
         fetch_balances_task = tg.create_task(_safe_fetch_balances(nb))
+        # Fetch the External Lightning Payments asset balance for the ledger details section
         asset = AssetAccount(name="External Lightning Payments", sub=node_name)
         ledger_details_task = tg.create_task(_safe_ledger_details(asset))
+        # Fetch the Treasury Lightning for the node (this will hold lightning fees)
+        treasury_asset = AssetAccount(name="Treasury Lightning", sub=node_name)
+        treasury_ledger_details_task = tg.create_task(_safe_ledger_details(treasury_asset))
         balance_tasks = {}
         for acc in InternalConfig().config.admin_config.highlight_users:
             balance_tasks[acc] = tg.create_task(_safe_account_balance(acc))
@@ -117,6 +122,7 @@ async def admin_data_helper() -> AdminDataHelper:
     sanity_results = await sanity_task
     pending_transactions = await pending_transactions_task
     ledger_details = await ledger_details_task
+    treasury_ledger_details = await treasury_ledger_details_task
     await fetch_balances_task
 
     hive_balances = {}
@@ -126,13 +132,23 @@ async def admin_data_helper() -> AdminDataHelper:
         except Exception as e:
             logger.error(f"Failed to fetch balance for {acc}: {e}")
 
-    # LND / External balances for System Information
+    # LND / External balances for System Information (store both msat and sat values; convert/format using Decimal)
     lnd_info = {
         "node": None,
+        # node balance (both msat and sat)
+        "node_balance_msat": None,
         "node_balance": None,
         "node_balance_fmt": "N/A",
+        # external ledger balances (msat and sat)
+        "external_msat": None,
         "external_sats": None,
         "external_sats_fmt": "N/A",
+        # treasury ledger balances (msat and sat)
+        "treasury_msat": None,
+        "treasury_sats": None,
+        "treasury_sats_fmt": "N/A",
+        # delta (msat and sat)
+        "delta_msat": None,
         "delta": None,
         "delta_fmt": "N/A",
     }
@@ -144,49 +160,99 @@ async def admin_data_helper() -> AdminDataHelper:
             # Attempt to read latest stored node balances first (fast)
             try:
                 if nb.channel and nb.channel.local_balance:
-                    lnd_info["node_balance"] = int(nb.channel.local_balance.sat)
-
+                    node_sats = int(nb.channel.local_balance.sat)
+                    lnd_info["node_balance"] = node_sats
+                    lnd_info["node_balance_msat"] = node_sats * 1000
             except Exception:
-                # Non-fatal: leave node_balance as None
+                # Non-fatal: leave node balances as None
                 lnd_info["node_balance"] = None
+                lnd_info["node_balance_msat"] = None
 
-            # External Lightning Payments asset balance (sats)
+            # External Lightning Payments asset balance (msats)
             try:
-                lnd_info["external_sats"] = (
-                    int(ledger_details.sats)
-                    if ledger_details and ledger_details.sats is not None
+                lnd_info["external_msat"] = (
+                    int(ledger_details.msats)
+                    if ledger_details and ledger_details.msats is not None
+                    else None
+                )
+                lnd_info["treasury_msat"] = (
+                    int(treasury_ledger_details.msats)
+                    if treasury_ledger_details and treasury_ledger_details.msats is not None
                     else None
                 )
             except Exception:
-                lnd_info["external_sats"] = None
+                lnd_info["external_msat"] = None
+                lnd_info["treasury_msat"] = None
 
-            # Compute delta if possible
+            # Helper to convert msat -> sats (int) using Decimal rounding half-up
+            def msat_to_sats_int(msat_val):
+                try:
+                    return int(
+                        (Decimal(msat_val) / Decimal(1000)).quantize(
+                            Decimal("1"), rounding=ROUND_HALF_UP
+                        )
+                    )
+                except Exception:
+                    return None
+
+            # Compute delta in msats if possible
             try:
-                if lnd_info["node_balance"] is not None and lnd_info["external_sats"] is not None:
-                    lnd_info["delta"] = int(lnd_info["node_balance"] - lnd_info["external_sats"])
+                if (
+                    lnd_info["node_balance_msat"] is not None
+                    and lnd_info["external_msat"] is not None
+                    and lnd_info["treasury_msat"] is not None
+                ):
+                    lnd_info["delta_msat"] = lnd_info.get("node_balance_msat", 0) - (
+                        lnd_info.get("external_msat", 0) + lnd_info.get("treasury_msat", 0)
+                    )
+                    # Also compute integer sats using Decimal rounding (half up)
+                    logger.info(f"Delta msat: {lnd_info['delta_msat']}")
+                    lnd_info["delta"] = f"{lnd_info['delta_msat'] / Decimal(1000):,.3f}"
             except Exception:
+                lnd_info["delta_msat"] = None
                 lnd_info["delta"] = None
 
-            # Formatting helpers
-            def fmt_sats(x):
+            # Convert msat -> sats for external and treasury using Decimal rounding
+            try:
+                if lnd_info.get("external_msat") is not None:
+                    lnd_info["external_sats"] = msat_to_sats_int(lnd_info["external_msat"])
+                if lnd_info.get("treasury_msat") is not None:
+                    lnd_info["treasury_sats"] = msat_to_sats_int(lnd_info["treasury_msat"])
+                if (
+                    lnd_info.get("node_balance_msat") is not None
+                    and lnd_info.get("node_balance") is None
+                ):
+                    # Ensure node_balance sats field exists
+                    lnd_info["node_balance"] = msat_to_sats_int(lnd_info["node_balance_msat"])
+            except Exception:
+                lnd_info["external_sats"] = None
+                lnd_info["treasury_sats"] = None
+                lnd_info["node_balance"] = lnd_info.get("node_balance", None)
+
+            # Formatting helpers: format sats ints with thousands separator
+            def fmt_sats_from_int(n):
                 try:
-                    return f"{int(x):,}"
+                    return f"{int(n):,}"
                 except Exception:
                     return "N/A"
 
             lnd_info["node_balance_fmt"] = (
-                fmt_sats(lnd_info["node_balance"])
+                fmt_sats_from_int(lnd_info["node_balance"])
                 if lnd_info["node_balance"] is not None
                 else "N/A"
             )
             lnd_info["external_sats_fmt"] = (
-                fmt_sats(lnd_info["external_sats"])
+                fmt_sats_from_int(lnd_info["external_sats"])
                 if lnd_info["external_sats"] is not None
                 else "N/A"
             )
-            lnd_info["delta_fmt"] = (
-                fmt_sats(lnd_info["delta"]) if lnd_info["delta"] is not None else "N/A"
+            lnd_info["treasury_sats_fmt"] = (
+                fmt_sats_from_int(lnd_info["treasury_sats"])
+                if lnd_info["treasury_sats"] is not None
+                else "N/A"
             )
+            lnd_info["delta_fmt"] = lnd_info["delta"] if lnd_info["delta"] is not None else "N/A"
+
     except Exception as e:
         logger.warning(
             f"Failed to fetch LND/external balances for admin dashboard: {e}",

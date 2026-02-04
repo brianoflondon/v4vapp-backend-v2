@@ -61,7 +61,7 @@ class StatusAPI:
         health_check_func: Callable[[], Awaitable[Dict[str, Any]]],
         shutdown_event: asyncio.Event,
         process_name: str = "status_api",
-        version: str = "1.0.0",
+        version: str = "1.1.0",
     ):
         """
         Initialize the StatusAPI.

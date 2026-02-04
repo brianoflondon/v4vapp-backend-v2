@@ -117,6 +117,10 @@
                                 <div class="fs-5">{{ lnd_info.external_sats_fmt or 'N/A' }} sats</div>
                             </div>
                             <div class="mt-3">
+                                <div class="small text-muted">Treasury Lightning (sats)</div>
+                                <div class="fs-5">{{ lnd_info.treasury_sats_fmt or 'N/A' }} sats</div>
+                            </div>
+                            <div class="mt-3">
                                 <strong>Delta:</strong> {{ lnd_info.delta_fmt or 'N/A' }} sats
                             </div>
                         </div>

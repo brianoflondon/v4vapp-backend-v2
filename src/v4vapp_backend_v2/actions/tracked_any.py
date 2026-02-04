@@ -108,6 +108,7 @@ TrackedAny = Annotated[
     # LND Invoices, Payments and HTLC Events
     Annotated[Invoice, Tag("invoice")]
     | Annotated[Payment, Tag("payment")]
+    # Forward Events
     | Annotated[TrackedForwardEvent, Tag("htlc_event")]
     # Hive Operations
     | Annotated[Transfer, Tag("transfer")]
@@ -123,6 +124,7 @@ TrackedAny = Annotated[
     | Annotated[AccountWitnessVote, Tag("account_witness_vote")],
     Discriminator(get_tracked_any_type),
 ]
+
 
 TrackedProducer = Annotated[
     Annotated[AccountWitnessVote, Tag("account_witness_vote")]

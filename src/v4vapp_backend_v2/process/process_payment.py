@@ -25,6 +25,7 @@ from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
 from v4vapp_backend_v2.models.payment_models import Payment
+from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive
 from v4vapp_backend_v2.process.hold_release_keepsats import release_keepsats
 from v4vapp_backend_v2.process.process_errors import HiveToLightningError
@@ -72,6 +73,13 @@ async def process_payment_success(
         message = f"Payment {payment.group_id} already processed with existing {len(existing_ledger_entries)} ledger entries."
         logger.warning(message)
         raise LedgerEntryDuplicateException(message)
+
+    if isinstance(initiating_op, TrackedForwardEvent):
+        raise HiveToLightningError(
+            f"Cannot process payment for forwarding event: {initiating_op.short_id}"
+        )
+
+    # TODO: #249 Implement the system for expense accounts
 
     cust_id = payment.cust_id or ""
     ledger_entries_list: list[LedgerEntry] = []
