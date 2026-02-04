@@ -1,15 +1,21 @@
 import asyncio
+from pathlib import Path
 import socket
 from typing import Any, Awaitable, Callable, Dict
 
 import uvicorn
 from colorama import Fore, Style
 from fastapi import FastAPI, HTTPException
+from single_source import get_version
 
 # Import your logger and config paths from setup.py
 from v4vapp_backend_v2.config.setup import (
     InternalConfig,
     logger,  # Use this logger for any custom logging in this file
+)
+
+STATUS_API_VERSION = (
+    get_version(__name__, Path(__file__).parent, default_return="1.0.0") or "1.0.0"
 )
 
 
@@ -61,7 +67,7 @@ class StatusAPI:
         health_check_func: Callable[[], Awaitable[Dict[str, Any]]],
         shutdown_event: asyncio.Event,
         process_name: str = "status_api",
-        version: str = "1.1.0",
+        version: str = STATUS_API_VERSION,
     ):
         """
         Initialize the StatusAPI.
