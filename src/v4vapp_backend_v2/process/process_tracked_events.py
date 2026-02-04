@@ -70,28 +70,31 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 extra={"notification": False},
             )
             return [existing_entry]
+
+        ledger_entries: List[LedgerEntry] = []
+
         existing_op = await load_tracked_object(tracked_obj=tracked_op.group_id_p)
         if existing_op and existing_op.process_time:
             logger.warning(
                 f"Process time already set for {tracked_op.short_id} already processed.",
                 extra={"notification": False},
             )
-            return []
+            return ledger_entries
 
         if isinstance(tracked_op, AccountUpdate2):
             v4vconfig = V4VConfig()
             if v4vconfig.server_accname == tracked_op.account:
                 v4vconfig.fetch()
-            return []
+            return ledger_entries
 
         if isinstance(tracked_op, AccountWitnessVote):
             # Do nothing with Account witness votes for now
-            return []
+            return ledger_entries
 
         if isinstance(tracked_op, ProducerReward) or isinstance(tracked_op, ProducerMissed):
             # No ledger entry necessary for producer rewards or missed blocks
             asyncio.create_task(process_witness_event(tracked_op=tracked_op))
-            return []
+            return ledger_entries
 
         if isinstance(tracked_op, BlockMarker):
             # This shouldn't be arrived at.
@@ -99,12 +102,12 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 "BlockMarker is not a valid operation.",
                 extra={"notification": False, **tracked_op.log_extra},
             )
-            return []
+            return ledger_entries
 
         if isinstance(tracked_op, CustomJson) and "notification" in tracked_op.cj_id:
             # CustomJson notification is a special case.
             logger.debug(f"Notification CustomJson: {tracked_op.log_str}")
-            return []
+            return ledger_entries
 
         unknown_cust_id = f"unknown_cust_id_{uuid4()}"
         cust_id = getattr(tracked_op, "cust_id", str(unknown_cust_id))
@@ -151,17 +154,17 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 await asyncio.sleep(sleep_time)
                 asyncio.create_task(retry_task)
                 finalize = False
-                return []
+                return ledger_entries
             else:
                 logger.error(f"CustomJson processing failed after {e.attempts} attempts: {e}")
-                return []
+                return ledger_entries
 
         except HiveNotEnoughHiveInAccount as e:
             logger.error(
                 f"Not enough funds for {cust_id}: {e}",
                 extra={"notification": True, "error-code": f"not-enough-funds-{cust_id}"},
             )
-            return []
+            return ledger_entries
 
         except LedgerEntryDuplicateException as e:
             raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
@@ -183,9 +186,17 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 await tracked_op.save()
                 logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
                 logger.debug(tracked_op.log_str)
+                ledger_entries_log_extra = []
+                for entry in ledger_entries:
+                    ledger_log_extra = entry.log_extra.copy()
+                    ledger_entries_log_extra.append(ledger_log_extra)
                 logger.info(
                     f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}",
-                    extra={"notification": False, **sanity_results.log_extra},
+                    extra={
+                        "notification": False,
+                        "ledger_items": ledger_entries_log_extra,
+                        **sanity_results.log_extra,
+                    },
                 )
                 logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
                 # DEBUG section

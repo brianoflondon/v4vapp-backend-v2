@@ -587,7 +587,10 @@ class LedgerEntry(BaseModel):
                     extra={"notification": False, "db_ans": ans},
                 )
             logger.debug(f"Ledger Entry saved: {self.group_id}")
-            logger.debug(f"\n{self}", extra={"notification": False, "db_ans": ans})
+            logger.debug(
+                f"\n{self}",
+                extra={"notification": False, "db_ans": ans, **self.log_extra},
+            )
 
             return ans
         except DuplicateKeyError as e:
