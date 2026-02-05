@@ -1033,11 +1033,13 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 read_payment = await Payment.collection().find_one(
                     filter=query,
                 )
+                # The invoice_description "Not set" is used in pub_key_alias.py if there is no description.
                 if (
                     read_payment
                     and read_payment.get("route_str", None)
                     and read_payment.get("invoice_description", None)
                     and not read_payment.get("route_str") == "Unknown"
+                    and not read_payment.get("invoice_description") == "Not set"
                 ):
                     continue
                 await update_payment_route_with_alias(
