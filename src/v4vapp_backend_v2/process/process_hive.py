@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
 from typing import List
 
-from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_account_classes import (
+    AssetAccount,
+    ExpenseAccount,
+    LiabilityAccount,
+)
 from v4vapp_backend_v2.accounting.ledger_entry_class import (
     LedgerEntry,
     LedgerEntryCreationException,
@@ -151,13 +155,13 @@ async def process_transfer_op(
         timestamp=datetime.now(tz=timezone.utc),
         link=hive_transfer.link,
     )
-    expense_accounts = ["privex"]
     processed_d_memo = lightning_memo(hive_transfer.d_memo)
     base_description = f"{hive_transfer.amount_str} from {hive_transfer.from_account} to {hive_transfer.to_account} {processed_d_memo}"
     hive_config = InternalConfig().config.hive
     server_account, treasury_account, funding_account, exchange_account = (
         hive_config.all_account_names
     )
+    expense_accounts = InternalConfig().config.hive.expense_account_names
     if not server_account or not treasury_account or not funding_account or not exchange_account:
         raise LedgerEntryCreationException(
             "Server account, treasury account, funding account, or exchange account not configured."
@@ -224,14 +228,29 @@ async def process_transfer_op(
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Exchange Deposits Hive", sub=treasury_account)
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
+        ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
         # MARK: Payments to special expense accounts if
-    elif (
-        hive_transfer.from_account == treasury_account
-        and hive_transfer.to_account in expense_accounts
-    ):
-        # TODO: #249 Implement the system for expense accounts
-        raise NotImplementedError("External expense accounts not implemented yet")
+    # TODO: #249 Implement the system for expense accounts
+    elif hive_transfer.to_account in expense_accounts:
+        expense_account = hive_config.hive_accs.get(hive_transfer.to_account, None)
+        if not expense_account:
+            raise LedgerEntryCreationException(
+                f"Expense account {hive_transfer.to_account} not found in configuration."
+            )
+        if not expense_account.expense_rule:
+            raise LedgerEntryCreationException(
+                f"Expense account {hive_transfer.to_account} has no expense rule defined."
+            )
+        rule = expense_account.expense_rule
+        ledger_entry.debit = ExpenseAccount(
+            name=rule.expense_account_name, sub=expense_account.name
+        )
+        ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=hive_transfer.from_account)
+        ledger_entry.description = f"{rule.description} - {base_description}"
+        ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
+        ledger_entry.ledger_type = LedgerType(rule.ledger_type)
+
     # MARK: Server to customer account withdrawal
     elif hive_transfer.from_account == server_account:
         customer = hive_transfer.to_account

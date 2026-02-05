@@ -32,11 +32,18 @@ def ensure_event_loop() -> Generator:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def close_async_db_client() -> Generator:
+def close_async_db_client(monkeypatch: pytest.MonkeyPatch) -> Generator:
     """Close the AsyncMongoClient at the end of the test session to avoid background tasks
     trying to access a closed event loop during pytest shutdown.
     """
     yield
+    test_config_path = Path("tests/data/config")
+    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+    test_config_logging_path = Path(test_config_path, "logging/")
+    monkeypatch.setattr(
+        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+        test_config_logging_path,
+    )
     client = getattr(InternalConfig(), "db_client", None)
     if client:
         try:

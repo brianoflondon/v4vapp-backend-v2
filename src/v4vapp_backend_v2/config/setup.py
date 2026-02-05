@@ -12,7 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Protocol
 
 from dotenv import load_dotenv
 from packaging import version
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pymongo import AsyncMongoClient, MongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.database import Database
@@ -21,6 +21,7 @@ from redis import Redis, RedisError
 from redis.asyncio import Redis as AsyncRedis
 from yaml import safe_load
 
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
@@ -365,6 +366,22 @@ class HiveRoles(StrEnum):
     exchange = "exchange"
     customer = "customer"
     witness = "witness"
+    expense = "expense"
+
+
+class HiveAccountRulesConfig(BaseConfig):
+    """
+    HiveAccountRulesConfig is a configuration class for defining rules associated with a Hive account.
+
+    Attributes:
+        rule_type (str): The type of the rule (e.g., "expense", "witness").
+        parameters (Dict[str, Any]): A dictionary containing parameters specific to the rule type.
+    """
+
+    from_type: HiveRoles = Field(..., description="Account from which the expense is paid")
+    expense_account_name: str = Field(..., description="Expense account name to use")
+    description: str = Field("", description="Description to use for the expense payment")
+    ledger_type: str = Field("expense", description="Ledger type for the expense entry")
 
 
 class HiveAccountConfig(BaseConfig):
@@ -380,6 +397,7 @@ class HiveAccountConfig(BaseConfig):
 
     name: str = ""
     role: HiveRoles = HiveRoles.customer
+    expense_rule: HiveAccountRulesConfig | None = None
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
@@ -601,6 +619,16 @@ class HiveConfig(BaseConfig):
         return [acc.name for acc in self.treasury_accounts]
 
     @property
+    def expense_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the Expense accounts.
+
+        Returns:
+            List[str]: A list containing the names of all expense accounts.
+        """
+        return [acc.name for acc in self.hive_accs.values() if acc.role == HiveRoles.expense]
+
+    @property
     def all_account_names(self) -> List[str]:
         """
         Retrieve the names of all accounts. All names must be set in order to receive any.
@@ -731,6 +759,19 @@ class Config(BaseModel):
         tokens = [bot.token for bot in self.notification_bots.values()]
         if len(tokens) != len(set(tokens)):
             raise ValueError("Two notification bots have the same token")
+
+        for rule in self.hive.hive_accs.values():
+            if rule.role == HiveRoles.expense and not rule.expense_rule:
+                raise ValueError(
+                    f"Hive account {rule.name} has role 'expense' but no expense_rule defined"
+                )
+            if rule.expense_rule is not None:
+                try:
+                    LedgerType(rule.expense_rule.ledger_type)
+                except Exception:
+                    raise ValueError(
+                        f"Hive account {rule.name} has invalid ledger_type in expense_rule: {rule.expense_rule.ledger_type}"
+                    )
 
         return self
 

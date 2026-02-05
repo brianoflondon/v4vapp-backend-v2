@@ -52,6 +52,8 @@ class LedgerType(StrEnum):
     FEE_INCOME = "fee_inc"  # Fee income from Hive transactions
     FEE_EXPENSE = "fee_exp"  # Fee expense from Lightning transactions
 
+    EXPENSE = "expense"  # General expense entry (non-fee)
+
     CUSTOMER_HIVE_IN = "cust_h_in"  # Customer deposit into Hive account
     CUSTOMER_HIVE_OUT = "cust_h_out"  # Customer withdrawal from Hive account
 

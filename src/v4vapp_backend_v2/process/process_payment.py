@@ -180,6 +180,8 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
 
     """
 
+    # TODO: #249 Implement the system for expense accounts
+
     ledger_entries_list = []
     node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
