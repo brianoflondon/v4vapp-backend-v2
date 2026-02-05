@@ -115,6 +115,7 @@ class AssetAccount(LedgerAccount):
         "Converted Keepsats Offset",
         "External Lightning Payments",
         "Keepsats Lightning Movements",
+        "Treasury Paid",
         "Unset",
     ] = Field(..., description="Specific asset account name")
     account_type: Literal[AccountType.ASSET] = Field(
@@ -234,6 +235,7 @@ class ExpenseAccount(LedgerAccount):
         "Fee Expenses Hive",
         "Exchange Fees Paid",
         "Testing Expenses",
+        "Testing Expenses LND Payment",
     ] = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"

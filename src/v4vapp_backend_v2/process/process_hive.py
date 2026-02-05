@@ -241,8 +241,8 @@ async def process_transfer_op(
         ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
 
-    # TODO: #249 Implement the system for expense accounts
-    # MARK: Payments to special expense accounts if
+
+    # MARK: Expense Payments
     elif hive_transfer.to_account in expense_accounts:
         expense_account = hive_config.hive_accs.get(hive_transfer.to_account, None)
         if not expense_account:

@@ -485,7 +485,7 @@ def process_clean_memo(
 
     return message
 
-
+#TODO: #252 Combine this with the lightning memo class
 def lightning_memo(memo: str) -> str:
     """
     Removes and shortens a lightning invoice from a memo for output.

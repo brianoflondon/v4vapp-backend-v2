@@ -14,7 +14,6 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     all_held_msats,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -297,7 +296,7 @@ all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, Sanity
 # MARK: Runner for all sanity checks
 
 
-@async_time_decorator
+# @async_time_decorator
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as

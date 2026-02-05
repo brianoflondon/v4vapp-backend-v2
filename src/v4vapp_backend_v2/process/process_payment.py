@@ -187,10 +187,6 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
 
-    
-
-
-    # MARK: 1 Withdraw Lightning
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     cost_of_payment_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
     outgoing_conv = payment.conv
@@ -214,9 +210,40 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
         link=payment.link,
+        user_memo=payment.invoice_description or "",
     )
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
+
+
+    # Still unsure if this is how we want to do this.
+    # Also need to set special characteristics for Expense payments based on destination or other
+    # factors
+    if cust_id in InternalConfig().config.hive.treasury_account_names:
+        logger.info(f"Processing payment for treasury account: {cust_id}")
+        description = f"Expense Account Payment of {payment.value_sat_rounded} sats to Node {payment.destination} (fee: {payment.fee_sat_rounded})"
+        ledger_type = LedgerType.EXPENSE
+        expense_ledger_entry = LedgerEntry(
+            cust_id=cust_id,
+            short_id=payment.short_id,
+            ledger_type=ledger_type,
+            group_id=f"{payment.group_id}_{ledger_type.value}",
+            op_type=payment.op_type,
+            timestamp=datetime.now(tz=timezone.utc),
+            description=description,
+            debit=ExpenseAccount(name="Testing Expenses", sub=node_name, contra=False),
+            debit_unit=Currency.MSATS,
+            debit_amount=cost_of_payment_msat,
+            debit_conv=outgoing_conv,
+            credit=AssetAccount(name="Treasury Hive", sub=node_name, contra=False),
+            credit_unit=Currency.MSATS,
+            credit_amount=cost_of_payment_msat,
+            credit_conv=payment.conv,
+            link=payment.link,
+            user_memo=payment.invoice_description or "",
+        )
+        await expense_ledger_entry.save()
+        ledger_entries_list.append(expense_ledger_entry)
 
     # MARK: 2: Lightning Network Fee
     # Only record the Lightning fee if it is greater than 0 msats
