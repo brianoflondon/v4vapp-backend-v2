@@ -1008,8 +1008,6 @@ class CoinMarketCap(QuoteService):
         if cached_quote:
             return cached_quote
 
-        internal_config = InternalConfig()
-        api_keys_config = internal_config.config.api_keys
         url = ALL_PRICES_COINMARKETCAP
         cmc_ids = {
             "BTC_USD": "1",
@@ -1019,11 +1017,12 @@ class CoinMarketCap(QuoteService):
         ids_str = [str(id) for _, id in cmc_ids.items()]
         call_ids = ",".join(ids_str)
         params = {"id": call_ids, "convert": "USD"}
-        headers = {
-            "Accepts": "application/json",
-            "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
-        }
         try:
+            api_keys_config = InternalConfig().config.api_keys
+            headers = {
+                "Accepts": "application/json",
+                "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
+            }
             # raise Exception("debug")
             async with httpx.AsyncClient() as client:
                 response = await client.get(

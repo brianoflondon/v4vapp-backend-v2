@@ -32,25 +32,33 @@ def ensure_event_loop() -> Generator:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def close_async_db_client(monkeypatch: pytest.MonkeyPatch) -> Generator:
+def close_async_db_client() -> Generator:
     """Close the AsyncMongoClient at the end of the test session to avoid background tasks
     trying to access a closed event loop during pytest shutdown.
+
+    This fixture must not rely on the function-scoped `monkeypatch` fixture, so use an
+    explicit `pytest.MonkeyPatch()` instance for any attribute changes required during
+    teardown. Using an internal MonkeyPatch avoids pytest scope mismatch errors.
     """
     yield
     test_config_path = Path("tests/data/config")
-    monkeypatch.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
-    test_config_logging_path = Path(test_config_path, "logging/")
-    monkeypatch.setattr(
-        "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
-        test_config_logging_path,
-    )
-    client = getattr(InternalConfig(), "db_client", None)
-    if client:
-        try:
-            asyncio.run(client.close())
-        except Exception:
-            # swallow errors during shutdown to avoid test-time noise
-            pass
+    mp = pytest.MonkeyPatch()
+    try:
+        mp.setattr("v4vapp_backend_v2.config.setup.BASE_CONFIG_PATH", test_config_path)
+        test_config_logging_path = Path(test_config_path, "logging/")
+        mp.setattr(
+            "v4vapp_backend_v2.config.setup.BASE_LOGGING_CONFIG_PATH",
+            test_config_logging_path,
+        )
+        client = getattr(InternalConfig(), "db_client", None)
+        if client:
+            try:
+                asyncio.run(client.close())
+            except Exception:
+                # swallow errors during shutdown to avoid test-time noise
+                pass
+    finally:
+        mp.undo()
 
 
 """

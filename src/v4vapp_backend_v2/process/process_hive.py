@@ -18,6 +18,7 @@ from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import check_not_development_accounts
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
@@ -194,6 +195,15 @@ async def process_transfer_op(
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Server transfer: {base_description}"
         ledger_entry.ledger_type = LedgerType.TREASURY_TO_SERVER
+        # different treatment if a payment to an expense account is involved
+        if hive_transfer.user_memo:
+            lm = LightningMemo(memo=hive_transfer.user_memo)
+            if lm.invoice:
+                ledger_entry.user_memo = lm.short_memo
+                follow_on_task = follow_on_transfer(
+                    tracked_op=hive_transfer, nobroadcast=nobroadcast
+                )
+
     # MARK: Funding to Treasury
     elif (
         hive_transfer.from_account == funding_account
@@ -220,7 +230,7 @@ async def process_transfer_op(
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
         ledger_entry.ledger_type = LedgerType.TREASURY_TO_EXCHANGE
-        # MARK: Exchange to Treasury
+    # MARK: Exchange to Treasury
     elif (
         hive_transfer.from_account == exchange_account
         and hive_transfer.to_account == treasury_account
@@ -230,8 +240,9 @@ async def process_transfer_op(
         ledger_entry.description = f"Exchange to Treasury transfer: {base_description}"
         ledger_entry.user_memo = lightning_memo(hive_transfer.user_memo)
         ledger_entry.ledger_type = LedgerType.EXCHANGE_TO_TREASURY
-        # MARK: Payments to special expense accounts if
+
     # TODO: #249 Implement the system for expense accounts
+    # MARK: Payments to special expense accounts if
     elif hive_transfer.to_account in expense_accounts:
         expense_account = hive_config.hive_accs.get(hive_transfer.to_account, None)
         if not expense_account:
@@ -259,7 +270,6 @@ async def process_transfer_op(
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server)
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
-        # TODO: There is an argument to say that this hive_transfer should be noted as being connected to the prior event.
 
     # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:
