@@ -1,3 +1,6 @@
+from google.protobuf.json_format import MessageToDict
+
+import v4vapp_backend_v2.lnd_grpc.lightning_pb2 as lnrpc
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import get_node_info
@@ -95,3 +98,33 @@ async def update_payment_route_with_alias(
         if not payment.route:
             payment.route = []
         payment.route.append(hop_alias)
+
+
+async def decode_payment_request_and_attach(lnd_client: LNDClient, payment: Payment) -> None:
+    """
+    Decode a BOLT-11 payment request and attach its `description` field
+    to the provided `Payment` object as `invoice_description`.
+
+    This function is safe to call repeatedly and will silently log failures
+    without raising so callers can continue normal processing.
+
+    Args:
+        lnd_client (LNDClient): Client used to call DecodePayReq
+        payment (Payment): Payment model instance to mutate
+    """
+    try:
+        if payment.payment_request:
+            decode_request = lnrpc.PayReqString(pay_req=payment.payment_request)
+            decode_response: lnrpc.PayReq = await lnd_client.call(
+                lnd_client.lightning_stub.DecodePayReq, decode_request
+            )
+            decoded = MessageToDict(decode_response, preserving_proto_field_name=True)
+            # Keep None if missing; callers may set defaults when storing
+            payment.invoice_description = decoded.get("description")
+    except Exception as e:
+        # Use warning to make issues visible but don't fail the caller
+        logger.warning(
+            f"{getattr(lnd_client, 'icon', '')} Could not decode payment_request for {payment.payment_hash}: {e}",
+            extra={"notification": False},
+        )
+        return
