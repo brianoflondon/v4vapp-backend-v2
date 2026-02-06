@@ -8,7 +8,7 @@ import sys
 import time
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Protocol
+from typing import Any, ClassVar, Dict, List, Optional, Protocol, Set
 
 from dotenv import load_dotenv
 from packaging import version
@@ -366,22 +366,6 @@ class HiveRoles(StrEnum):
     exchange = "exchange"
     customer = "customer"
     witness = "witness"
-    expense = "expense"
-
-
-class HiveAccountRulesConfig(BaseConfig):
-    """
-    HiveAccountRulesConfig is a configuration class for defining rules associated with a Hive account.
-
-    Attributes:
-        rule_type (str): The type of the rule (e.g., "expense", "witness").
-        parameters (Dict[str, Any]): A dictionary containing parameters specific to the rule type.
-    """
-
-    from_type: HiveRoles = Field(..., description="Account from which the expense is paid")
-    expense_account_name: str = Field(..., description="Expense account name to use")
-    description: str = Field("", description="Description to use for the expense payment")
-    ledger_type: str = Field("expense", description="Ledger type for the expense entry")
 
 
 class HiveAccountConfig(BaseConfig):
@@ -397,7 +381,6 @@ class HiveAccountConfig(BaseConfig):
 
     name: str = ""
     role: HiveRoles = HiveRoles.customer
-    expense_rule: HiveAccountRulesConfig | None = None
     posting_key: str = ""
     active_key: str = ""
     memo_key: str = ""
@@ -619,16 +602,6 @@ class HiveConfig(BaseConfig):
         return [acc.name for acc in self.treasury_accounts]
 
     @property
-    def expense_account_names(self) -> List[str]:
-        """
-        Retrieve the names of the Expense accounts.
-
-        Returns:
-            List[str]: A list containing the names of all expense accounts.
-        """
-        return [acc.name for acc in self.hive_accs.values() if acc.role == HiveRoles.expense]
-
-    @property
     def all_account_names(self) -> List[str]:
         """
         Retrieve the names of all accounts. All names must be set in order to receive any.
@@ -649,6 +622,99 @@ class HiveConfig(BaseConfig):
                 self.exchange_account.name,
             ]
         return []
+
+    def get_account_names_by_role(self, role: HiveRoles) -> List[str]:
+        """
+        Retrieve all accounts that match a specific role.
+
+        Args:
+            role (HiveRoles): The role to filter accounts by.
+
+        Returns:
+            List[str]: A list of account names that match the specified role.
+        """
+        return [acc.name for acc in self.hive_accs.values() if acc.role == role]
+
+
+class ExpenseRuleConfig(BaseConfig):
+    from_role: HiveRoles = Field(..., description="Account from which the expense is paid")
+    expense_account_name: str = Field(..., description="Expense account name to use")
+    description: str = Field("", description="Description to use for the expense payment")
+    ledger_type: LedgerType = Field(
+        LedgerType.EXPENSE, description="Ledger type for the expense entry"
+    )
+
+
+class ExpenseConfig(BaseConfig):
+    """
+    ExpenseConfig is a configuration class for expense-related settings.
+
+    Attributes:
+        default_expense_account_name (str): The default name of the expense account to use for payments. Default is "Testing Expenses".
+    """
+
+    default_expense_account_name: str = "Testing Expenses"
+    default_ledger_type: LedgerType = Field(
+        LedgerType.EXPENSE, description="Default ledger type for expense entries"
+    )
+    lnd_expense_rules: Dict[str, ExpenseRuleConfig] = {}
+    hive_expense_rules: Dict[str, ExpenseRuleConfig] = {}
+
+    @property
+    def all_expense_rules(self) -> Dict[str, ExpenseRuleConfig]:
+        """
+        Retrieve a combined list of all expense rules from both Hive and LND configurations.
+
+        Returns:
+            List[expense_rule_config]: A list containing all expense rules defined in the configuration.
+        """
+        return {**self.hive_expense_rules, **self.lnd_expense_rules}
+
+    @property
+    def hive_expense_accounts(self) -> List[str]:
+        """
+        Retrieve the list of Hive expense account names defined in the hive_expense_rules.
+
+        Returns:
+            List[str]: A list containing the names of Hive expense accounts.
+        """
+        return list({rule.expense_account_name for rule in self.hive_expense_rules.values()})
+
+    @property
+    def lnd_expense_accounts(self) -> List[str]:
+        """
+        Retrieve the list of LND expense account names defined in the lnd_expense_rules.
+
+        Returns:
+            List[str]: A list containing the names of LND expense accounts.
+        """
+        return list({rule.expense_account_name for rule in self.lnd_expense_rules.values()})
+
+    @property
+    def lnd_expense_roles(self) -> List[HiveRoles]:
+        """
+        Retrieve the list of unique HiveRoles that are defined as from_role in the LND expense rules.
+
+        Returns:
+            List[HiveRoles]: A list containing the unique HiveRoles that are defined as from_role in the LND expense rules.
+        """
+        return list({rule.from_role for rule in self.lnd_expense_rules.values()})
+
+    def all_lnd_rule_hive_accounts(self, hive_config: HiveConfig) -> Set[str]:
+        """
+        Retrieve a list of all Hive account names that are associated with the from_role in the LND expense rules.
+
+        Args:
+            hive_config (HiveConfig): The HiveConfig instance containing the Hive account configurations.
+
+        Returns:
+            Set[str]: A set containing the names of all Hive accounts that are associated with the from_role in the LND expense rules.
+        """
+        accounts = []
+        for rule in self.lnd_expense_rules.values():
+            role_accounts = hive_config.get_account_names_by_role(rule.from_role)
+            accounts.extend(role_accounts)
+        return set(accounts)  # Return unique account names
 
 
 class DevelopmentConfig(BaseModel):
@@ -694,7 +760,7 @@ class Config(BaseModel):
         Raises ValueError if the token is not found.
     """
 
-    version: str = "0.2.1"
+    version: str = "0.3.0"
     logging: LoggingConfig = LoggingConfig()
     development: DevelopmentConfig = DevelopmentConfig()
 
@@ -709,12 +775,13 @@ class Config(BaseModel):
 
     api_keys: ApiKeys = ApiKeys()
     hive: HiveConfig = HiveConfig()
+    expense_config: ExpenseConfig = ExpenseConfig(default_ledger_type=LedgerType.EXPENSE)
 
     admin_config: AdminConfig = AdminConfig()
 
     exchange_config: ExchangeConfig = ExchangeConfig()
 
-    min_config_version: ClassVar[str] = "0.2.1"
+    min_config_version: ClassVar[str] = "0.3.0"
 
     @model_validator(mode="after")
     def check_all_defaults(self) -> "Config":
@@ -760,18 +827,16 @@ class Config(BaseModel):
         if len(tokens) != len(set(tokens)):
             raise ValueError("Two notification bots have the same token")
 
-        for rule in self.hive.hive_accs.values():
-            if rule.role == HiveRoles.expense and not rule.expense_rule:
+        # Validate expense_account_name against the ExpenseAccount name literal
+        from v4vapp_backend_v2.accounting.ledger_account_classes import ExpenseAccount
+
+        allowed_expense_names = ExpenseAccount.allowed_names()
+
+        for rule_name, rule in self.expense_config.all_expense_rules.items():
+            if rule.expense_account_name not in allowed_expense_names:
                 raise ValueError(
-                    f"Hive account {rule.name} has role 'expense' but no expense_rule defined"
+                    f"Expense rule for {rule_name} has invalid expense account name: {rule.expense_account_name}"
                 )
-            if rule.expense_rule is not None:
-                try:
-                    LedgerType(rule.expense_rule.ledger_type)
-                except Exception:
-                    raise ValueError(
-                        f"Hive account {rule.name} has invalid ledger_type in expense_rule: {rule.expense_rule.ledger_type}"
-                    )
 
         return self
 
