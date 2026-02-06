@@ -1,5 +1,6 @@
 import argparse
 import socket
+import sys
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -15,7 +16,7 @@ from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsTransferExternal,
     KeepsatsTransferResponse,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
@@ -37,7 +38,6 @@ def create_lifespan(config_filename: str):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        InternalConfig(config_filename=config_filename)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")
@@ -462,9 +462,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    try:
+        InternalConfig(config_filename=config_filename)
+    except StartupFailure as e:
+        logger.error(f"Failed to load config: {e}")
+        sys.exit(1)
+
     # Create the app with the specified config file
     app = create_app(config_file=args.config)
-
     uvicorn.run(app, host=args.host, port=args.port, workers=args.workers)
 else:
     # Create app with default config for module imports
