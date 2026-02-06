@@ -408,9 +408,21 @@ class AllQuotes(BaseModel):
                             hive_usd_val = Decimal(str(quote_dict.get("hive_usd")))
                             if hive_hbd_val and hive_usd_val:
                                 quote_dict["hbd_usd"] = hive_usd_val / hive_hbd_val
-                                logger.info(
-                                    f"Derived hbd_usd from hive_usd and hive_hbd {quote_dict['hbd_usd']}",
-                                    extra={"notification": False},
+                            if quote_dict["hbd_usd"] < Decimal("0.99"):
+                                logger.warning(
+                                    f"Calculated HBD/USD price is low: {quote_dict['hbd_usd']:.3f}",
+                                    extra={
+                                        "quote_dict": quote_dict,
+                                        "error_code": "Low HBD USD Price",
+                                    },
+                                )
+                            else:
+                                logger.debug(
+                                    f"Calculated HBD/USD price: {quote_dict['hbd_usd']:.3f}",
+                                    extra={
+                                        "quote_dict": quote_dict,
+                                        "error_code_clear": "Low HBD USD Price",
+                                    },
                                 )
                         except Exception:
                             # Fall back to leaving hbd_usd as-is if any conversion fails
@@ -1103,11 +1115,7 @@ class HiveInternalMarket(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
-            # await self.set_cache(quote_response)
-
-            logger.info(
-                f"HiveInternalMarket quote: hive_hbd={hive_hbd}", extra={"notification": False}
-            )
+            await self.set_cache(quote_response)
             return quote_response
         except Exception as ex:
             message = f"Problem calling {self.__class__.__name__} API {ex}"

@@ -215,35 +215,48 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)
 
-
     # Still unsure if this is how we want to do this.
     # Also need to set special characteristics for Expense payments based on destination or other
     # factors
-    if cust_id in InternalConfig().config.hive.treasury_account_names:
-        logger.info(f"Processing payment for treasury account: {cust_id}")
-        description = f"Expense Account Payment of {payment.value_sat_rounded} sats to Node {payment.destination} (fee: {payment.fee_sat_rounded})"
-        ledger_type = LedgerType.EXPENSE
-        expense_ledger_entry = LedgerEntry(
-            cust_id=cust_id,
-            short_id=payment.short_id,
-            ledger_type=ledger_type,
-            group_id=f"{payment.group_id}_{ledger_type.value}",
-            op_type=payment.op_type,
-            timestamp=datetime.now(tz=timezone.utc),
-            description=description,
-            debit=ExpenseAccount(name="Testing Expenses", sub=node_name, contra=False),
-            debit_unit=Currency.MSATS,
-            debit_amount=cost_of_payment_msat,
-            debit_conv=outgoing_conv,
-            credit=AssetAccount(name="Treasury Hive", sub=node_name, contra=False),
-            credit_unit=Currency.MSATS,
-            credit_amount=cost_of_payment_msat,
-            credit_conv=payment.conv,
-            link=payment.link,
-            user_memo=payment.invoice_description or "",
+
+    if cust_id in InternalConfig().config.expense_config.all_lnd_rule_hive_accounts(
+        InternalConfig().config.hive
+    ):
+        expense_rule = InternalConfig().config.expense_config.lnd_expense_rules.get(
+            payment.destination_p
         )
-        await expense_ledger_entry.save()
-        ledger_entries_list.append(expense_ledger_entry)
+        if not expense_rule:
+            logger.warning(
+                f"No expense rule found for payment {payment.destination_p} despite being in expense accounts list."
+            )
+        else:
+            logger.info(f"Processing expense payment for account: {cust_id}")
+            pay_dest = payment.destination_p or "Unknown Destination"
+            description = f"{expense_rule.description} {payment.value_sat_rounded} sats to Node {pay_dest} (fee: {payment.fee_sat_rounded})"
+            ledger_type = expense_rule.ledger_type
+            expense_ledger_entry = LedgerEntry(
+                cust_id=cust_id,
+                short_id=payment.short_id,
+                ledger_type=ledger_type,
+                group_id=f"{payment.group_id}_{ledger_type.value}",
+                op_type=payment.op_type,
+                timestamp=datetime.now(tz=timezone.utc),
+                description=description,
+                debit=ExpenseAccount(
+                    name=expense_rule.expense_account_name, sub=pay_dest, contra=False
+                ),
+                debit_unit=Currency.MSATS,
+                debit_amount=cost_of_payment_msat,
+                debit_conv=outgoing_conv,
+                credit=AssetAccount(name="Treasury Hive", sub=node_name, contra=False),
+                credit_unit=Currency.MSATS,
+                credit_amount=cost_of_payment_msat,
+                credit_conv=payment.conv,
+                link=payment.link,
+                user_memo=payment.invoice_description or "",
+            )
+            await expense_ledger_entry.save()
+            ledger_entries_list.append(expense_ledger_entry)
 
     # MARK: 2: Lightning Network Fee
     # Only record the Lightning fee if it is greater than 0 msats

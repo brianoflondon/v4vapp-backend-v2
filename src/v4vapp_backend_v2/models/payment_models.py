@@ -219,7 +219,21 @@ class Payment(TrackedBaseModel):
     @computed_field
     def destination(self) -> str:
         """
+        Computed field version of the destination method, which can be used in queries.
         Determines the destination based on the route.
+        Returns:
+            str: The alias of the destination node, or "Unknown" if the route is not available or does not contain valid information.
+        """
+        return self.destination_p
+
+    @property
+    def destination_p(self) -> str:
+        """
+        Property version of the destination method, which can be used in queries.
+        Determines the destination based on the route.
+
+        Returns:
+            str: The alias of the destination node, or "Unknown" if the route is not available or does not contain valid information.
         """
         if not self.route:
             return "Unknown"

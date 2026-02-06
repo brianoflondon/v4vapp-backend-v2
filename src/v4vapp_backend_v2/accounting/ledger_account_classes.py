@@ -58,7 +58,7 @@ class LedgerAccount(BaseModel):
     def from_string(cls, s: str):
         """
         Parse a string like 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp'
-        or 'Customer Deposits Hive (Asset) - Sub: devser.v4vapp (Contra)'
+        or 'Customer Depos Hive (Asset) - Sub: devser.v4vapp (Contra)'
         and return an Account (or subclass) instance.
         """
         # Allow optional (Contra) at the end
@@ -85,6 +85,25 @@ class LedgerAccount(BaseModel):
                 return subclass(name=name.strip(), sub=sub.strip(), contra=contra)
         # Fallback to base class if no subclass matches
         return cls(name=name.strip(), account_type=account_type, sub=sub.strip(), contra=contra)
+
+    @classmethod
+    def allowed_names(cls) -> set[str]:
+        """Return allowed literal values for the `name` annotation if present.
+
+        This inspects the subclass's `name` annotation (which is typically a
+        typing.Literal of allowed strings) and returns the set of those strings.
+        If no Literal or no `name` annotation is present, an empty set is
+        returned.
+        """
+        try:
+            from typing import get_args
+        except Exception:
+            return set()
+        ann = cls.__annotations__.get("name")
+        if ann is None:
+            return set()
+        args = get_args(ann)
+        return {a for a in args if isinstance(a, str)}
 
 
 # MARK: Asset Accounts
@@ -228,15 +247,17 @@ class RevenueAccount(LedgerAccount):
         self.contra = contra
 
 
+ExpenseAccounts = Literal[
+    "Fee Expenses Lightning",
+    "Fee Expenses Hive",
+    "Exchange Fees Paid",
+    "Testing Expenses",
+    "Testing Expenses LND Payment",
+    "LND Hosting",
+]
 # MARK: Expense Accounts
 class ExpenseAccount(LedgerAccount):
-    name: Literal[
-        "Fee Expenses Lightning",
-        "Fee Expenses Hive",
-        "Exchange Fees Paid",
-        "Testing Expenses",
-        "Testing Expenses LND Payment",
-    ] = Field(..., description="Specific expense account name")
+    name: ExpenseAccounts = Field(..., description="Specific expense account name")
     account_type: Literal[AccountType.EXPENSE] = Field(
         AccountType.EXPENSE, description="Type of account"
     )
