@@ -38,7 +38,7 @@ TESTING_CACHE_TIMES = {
     "CoinGecko": 360,
     "Binance": 360,
     "CoinMarketCap": 1800,
-    "HiveInternalMarket": 360,
+    "HiveInternalMarket": 10,
     "Global": 180,
 }
 
@@ -46,7 +46,7 @@ CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
     "CoinMarketCap": 1800,
-    "HiveInternalMarket": 60,
+    "HiveInternalMarket": 10,
     "Global": 60,
 }
 
@@ -391,14 +391,30 @@ class AllQuotes(BaseModel):
         if self.quotes:
             if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
                 quote = self.quotes[Binance.__name__]
-                # If HiveInternalMarket is available, use its hive_hbd value
+                # If HiveInternalMarket is available, use its hive_hbd value and
+                # derive a more accurate HBD/USD price from hive_usd / hive_hbd.
                 if (
                     HiveInternalMarket.__name__ in self.quotes
                     and not self.quotes[HiveInternalMarket.__name__].error
                     and self.quotes[HiveInternalMarket.__name__].hive_hbd > 0
                 ):
                     quote_dict = quote.model_dump()
-                    quote_dict["hive_hbd"] = self.quotes[HiveInternalMarket.__name__].hive_hbd
+                    # Use the authoritative Hive HBD from HiveInternalMarket
+                    hive_hbd_val = Decimal(str(self.quotes[HiveInternalMarket.__name__].hive_hbd))
+                    quote_dict["hive_hbd"] = hive_hbd_val
+                    # If we have hive_usd, compute hbd_usd = hive_usd / hive_hbd
+                    if quote_dict.get("hive_usd"):
+                        try:
+                            hive_usd_val = Decimal(str(quote_dict.get("hive_usd")))
+                            if hive_hbd_val and hive_usd_val:
+                                quote_dict["hbd_usd"] = hive_usd_val / hive_hbd_val
+                                logger.info(
+                                    f"Derived hbd_usd from hive_usd and hive_hbd {quote_dict['hbd_usd']}",
+                                    extra={"notification": False},
+                                )
+                        except Exception:
+                            # Fall back to leaving hbd_usd as-is if any conversion fails
+                            pass
                     quote = QuoteResponse.model_validate(quote_dict)
                 self.quote = quote
                 self.source = Binance.__name__
@@ -1089,6 +1105,9 @@ class HiveInternalMarket(QuoteService):
             )
             # await self.set_cache(quote_response)
 
+            logger.info(
+                f"HiveInternalMarket quote: hive_hbd={hive_hbd}", extra={"notification": False}
+            )
             return quote_response
         except Exception as ex:
             message = f"Problem calling {self.__class__.__name__} API {ex}"
