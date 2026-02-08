@@ -897,14 +897,20 @@ class QuoteService(ABC):
         return None
 
     async def set_cache(self, quote: QuoteResponse) -> None:
-        key = f"{self.__class__.__name__}:get_quote"
-        if InternalConfig().config.development.enabled:
-            cache_times = TESTING_CACHE_TIMES
-        else:
-            cache_times = CACHE_TIMES
-        expiry = cache_times[self.__class__.__name__]
-        redis_client = InternalConfig.redis
-        redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+        try:
+            key = f"{self.__class__.__name__}:get_quote"
+            if InternalConfig().config.development.enabled:
+                cache_times = TESTING_CACHE_TIMES
+            else:
+                cache_times = CACHE_TIMES
+            expiry = cache_times[self.__class__.__name__]
+            redis_client = InternalConfig.redis
+            redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to set cache for {key}: {e}",
+                extra={"notification": False},
+            )
 
 
 class CoinGecko(QuoteService):
@@ -1095,9 +1101,10 @@ class CoinMarketCap(QuoteService):
 class HiveInternalMarket(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         self.source = "HiveInternalMarket"
-        cached_quote = await self.check_cache(use_cache=use_cache)
-        if cached_quote:
-            return cached_quote
+        # Caching doesn't work for HiveInternalMarket
+        # cached_quote = await self.check_cache(use_cache=use_cache)
+        # if cached_quote:
+        #     return cached_quote
         try:
             hive_quote = await call_hive_internal_market()
             if hive_quote.error:
@@ -1115,7 +1122,7 @@ class HiveInternalMarket(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
-            await self.set_cache(quote_response)
+            # await self.set_cache(quote_response)  # Do not cache HiveInternalMarket quote as it is only used for hive_hbd and we want to ensure it is always fresh
             return quote_response
         except Exception as ex:
             message = f"Problem calling {self.__class__.__name__} API {ex}"
