@@ -970,6 +970,9 @@ class InternalConfig:
     redis: ClassVar[Redis] = Redis()
     redis_decoded: ClassVar[Redis] = Redis(decode_responses=True)
     redis_async: ClassVar[AsyncRedis] = AsyncRedis()
+    # When False, NotificationProtocol will skip sending messages. Set to False on
+    # critical startup failures (e.g., Redis unavailable) to avoid cascading errors.
+    notifications_enabled: ClassVar[bool] = True
 
     # Error code manager - singleton that handles in-memory tracking + MongoDB persistence
     error_code_manager: ClassVar[ErrorCodeManager] = ErrorCodeManager(db_enabled=False)
@@ -1087,7 +1090,13 @@ class InternalConfig:
             InternalConfig.redis_decoded.ping()
             logger.info(f"{ICON} Redis clients initialized successfully")
         except RedisError as ex:
-            logger.error(f"{ICON} Failed to connect to {self.config.redis.host} Redis: {ex}")
+            # Disable notifications since Redis is unavailable and notification
+            # infrastructure may be unstable during startup.
+            InternalConfig.notifications_enabled = False
+            logger.error(
+                f"{ICON} Failed to connect to {self.config.redis.host} Redis: {ex}",
+                extra={"notification": False},
+            )
             raise StartupFailure(f"Redis connection failure: {ex}")
 
     def setup_logging(self, log_filename: str = "app.log") -> None:

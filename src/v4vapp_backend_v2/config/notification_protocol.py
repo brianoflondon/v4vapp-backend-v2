@@ -29,6 +29,12 @@ from v4vapp_backend_v2.helpers.notification_bot import NotificationBot, Notifica
 
 class NotificationProtocol(Protocol):
     def send_notification(self, message: str, record: LogRecord, bot_name: str = "") -> None:
+        # If notifications have been disabled globally (e.g., Redis unreachable during
+        # startup), skip sending to avoid cascading failures.
+        if not getattr(InternalConfig, "notifications_enabled", True):
+            logger.warning("Notifications disabled; skipping sending notification.", extra={"notification": False})
+            return
+
         InternalConfig.notification_lock = True
         internal_config = InternalConfig()
         loop = internal_config.notification_loop

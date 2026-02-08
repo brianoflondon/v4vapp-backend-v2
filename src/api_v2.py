@@ -462,7 +462,9 @@ if __name__ == "__main__":
     try:
         InternalConfig(config_filename=args.config)
     except StartupFailure as e:
-        logger.error(f"Failed to load config: {e}")
+        # Do not try to send notifications about a failure to load config since
+        # notification infra may itself be unstable during startup (e.g., Redis down)
+        logger.error(f"Failed to load config: {e}", extra={"notification": False})
         sys.exit(1)
 
     # Create the app with the specified config file
