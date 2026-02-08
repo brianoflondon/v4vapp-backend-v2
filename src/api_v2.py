@@ -29,9 +29,6 @@ from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_jso
 
 ICON = "🤖"
 
-# Global variable to store config filename
-config_filename = "devhive.config.yaml"
-
 
 def create_lifespan(config_filename: str):
     """Factory function to create lifespan with the correct config filename"""
@@ -449,8 +446,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="devhive.config.yaml",
-        help="Configuration filename (default: devhive.config.yaml)",
+        default="config.yaml",
+        help="Configuration filename (default: config.yaml)",
     )
     parser.add_argument(
         "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
@@ -463,7 +460,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        InternalConfig(config_filename=config_filename)
+        InternalConfig(config_filename=args.config)
     except StartupFailure as e:
         logger.error(f"Failed to load config: {e}")
         sys.exit(1)
