@@ -487,7 +487,7 @@ async def main_async_start(use_resume: bool = True):
     )
 
     process_name = os.path.splitext(os.path.basename(__file__))[0]
-    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6002")
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
     status_api = StatusAPI(
         port=int(health_check_port),
         health_check_func=health_check,

@@ -105,11 +105,6 @@ async def send_notification(
     return {"message": "Notification sent"}
 
 
-@crypto_v2_router.get("/")
-async def root():
-    return {"message": "Hello World 2"}
-
-
 @crypto_v2_router.post("/quotes/")
 async def cryptoprices() -> AllQuotes:
     """Asynchronously fetch and return cryptocurrency prices.
@@ -135,7 +130,7 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
-@crypto_v2_router.post("")
+# @crypto_v2_router.post("")
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -422,11 +417,12 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
     # Add root endpoint here
     @app.get("/")
     @app.get("/health")
+    @app.get("/status")
     async def root():
         return {
             "message": "Welcome to V4VApp API v2",
             "version": __version__,
-            "status": "running",
+            "status": "ok",
             "server_id": InternalConfig().server_id,
             "dns_name": socket.getfqdn(),
             "local_machine_name": InternalConfig().local_machine_name,

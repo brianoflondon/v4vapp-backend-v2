@@ -27,6 +27,7 @@ app = typer.Typer()
 @app.command()
 def healthcheck(
     host: str = typer.Option("localhost", "--host", help="Host to check (e.g., localhost)"),
+    path: str = typer.Option("/status", "--path", help="Path to check (e.g., /status)"),
     port: int = typer.Option(6001, "--port", help="Port to check (e.g., 6001)"),
     timeout: int = typer.Option(
         10, "--timeout", help="Timeout in seconds for the health check request"
@@ -42,7 +43,7 @@ def healthcheck(
     Perform a health check by attempting to open the /status endpoint.
     Exits with 0 on success, 1 on failure.
     """
-    url = f"http://{host}:{port}/status"
+    url = f"http://{host}:{port}{path}"
     last_error = None
 
     for attempt in range(retries):

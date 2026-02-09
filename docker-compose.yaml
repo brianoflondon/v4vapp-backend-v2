@@ -23,7 +23,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -49,7 +49,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -74,6 +74,12 @@ services:
       - v4vapp-backend
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   api-v2:
     container_name: api-v2
@@ -87,7 +93,7 @@ services:
     volumes:
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["python", "src/api_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["uv", "run", "src/api_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
     networks:
@@ -96,6 +102,12 @@ services:
       - PYTHONPATH=/app/src
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "8000" , "--pretty"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   admin-interface:
     container_name: admin-interface
@@ -110,7 +122,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "python", "src/v4vapp_backend_v2/admin/run_admin.py",
+      "uv","run", "src/v4vapp_backend_v2/admin/run_admin.py",
       "--host", "0.0.0.0",
       "--port", "8080",
       "--config", "devdocker.config.yaml",

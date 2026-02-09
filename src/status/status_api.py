@@ -96,7 +96,7 @@ class StatusAPI:
                 error_codes_dict = InternalConfig().error_codes_to_dict()
                 if error_codes_dict:
                     check_answer["error_codes"] = error_codes_dict
-                    log_func = logger.warning
+                    log_func = logger.info
                     # We don't need to notify because the underlying issues are already being notified elsewhere
                     log_func(
                         f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
