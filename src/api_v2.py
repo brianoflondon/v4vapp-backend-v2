@@ -422,7 +422,7 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
         return {
             "message": "Welcome to V4VApp API v2",
             "version": __version__,
-            "status": "ok",
+            "status": "OK",
             "server_id": InternalConfig().server_id,
             "dns_name": socket.getfqdn(),
             "local_machine_name": InternalConfig().local_machine_name,

@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from timeit import default_timer as timer
 
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from single_source import get_version
@@ -228,31 +229,29 @@ class AdminApp:
             """Redirect root to admin"""
             return RedirectResponse(url="/admin", status_code=302)
 
+        @self.app.get("/status/")
         @self.app.get("/admin/health")
-        async def health_check():
+        async def health_check() -> JSONResponse:
             """Health check endpoint"""
             start = timer()
             sanity_results = await run_all_sanity_checks()
-            return {
-                "status": "healthy",
+            if sanity_results.failed:
+                response_status = status.HTTP_503_SERVICE_UNAVAILABLE
+            else:
+                response_status = status.HTTP_200_OK
+
+            payload = {
+                "status": "FAIL" if sanity_results.failed else "OK",
                 "admin_version": ADMIN_VERSION,
                 "project_version": project_version,
                 "config": self.config.config_filename,
                 "local_machine_name": InternalConfig().local_machine_name,
                 "server_id": InternalConfig().server_id,
-                "sanity_checks": sanity_results,
+                # encode the sanity object into JSON-serializable data
+                "sanity_checks": jsonable_encoder(sanity_results.model_dump()),
                 "load_time": timer() - start,
             }
-
-        @self.app.get("/favicon.ico", include_in_schema=False)
-        async def favicon():
-            """Serve favicon"""
-            favicon_path = self.static_dir / "favicon.ico"
-            if favicon_path.exists():
-                return FileResponse(favicon_path)
-            else:
-                # Return a default favicon or 404
-                return FileResponse(self.static_dir / "favicon.ico", status_code=404)
+            return JSONResponse(content=payload, status_code=response_status)
 
 
 def create_admin_app(config_filename: str = "devhive.config.yaml") -> FastAPI:
@@ -267,5 +266,3 @@ if __name__ == "__main__":
 
     app = create_admin_app()
     uvicorn.run(app, host="127.0.0.1", port=8080, reload=True)
-
-# Last line of the file

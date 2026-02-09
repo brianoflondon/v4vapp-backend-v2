@@ -58,7 +58,7 @@ async def health_check() -> Dict[str, Any]:
         f"{ICON} DB Monitor Health check passed",
         extra={"notification": False, "error_code_clear": "db_monitor_task_failure"},
     )
-    return {"status": "ok"}
+    return {"status": "OK", "name": __name__, "version": __version__}
 
 
 # Define a global flag to track shutdown

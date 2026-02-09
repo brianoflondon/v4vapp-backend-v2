@@ -139,6 +139,12 @@ services:
       - PYTHONPATH=/app/src
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "8080" , "--pretty"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   mongo-pytest-local:
     # Huge issues setting this up: Mongodb replica sets require the internal and EXTERNAL names

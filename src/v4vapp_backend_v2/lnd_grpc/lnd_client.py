@@ -60,7 +60,7 @@ class LNDClient:
         self.setup()
 
     async def __aenter__(self):
-        if os.getenv("TESTING") == "True" or self.get_info is not None:
+        if os.getenv("TESTING") == "True" or getattr(self, "get_info", None) is not None:
             return self
         try:
             self.get_info = await self.node_get_info
