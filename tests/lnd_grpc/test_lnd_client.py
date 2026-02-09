@@ -189,7 +189,7 @@ async def test_node_get_info(set_base_config_path: None):
 async def test_node_get_info_fail(set_base_config_path: None):
     lnd_client = LNDClient(connection_name="example")
     with pytest.raises(LNDConnectionError):
-        node_info = await lnd_client.node_get_info
+        _ = await lnd_client.node_get_info
 
 
 @pytest.mark.asyncio
