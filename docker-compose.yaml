@@ -17,7 +17,7 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["uv", "run", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
     restart: unless-stopped
     stop_grace_period: 20s
     env_file:
@@ -39,7 +39,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "python", "src/hive_monitor_v2.py",
+      "uv", "run", "src/hive_monitor_v2.py",
       "--config", "devdocker.config.yaml",
     ]
     restart: unless-stopped
@@ -65,7 +65,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "python", "src/db_monitor.py",
+      "uv", "run", "src/db_monitor.py",
       "--config", "devdocker.config.yaml",
     ]
     restart: unless-stopped
@@ -215,7 +215,7 @@ services:
   #     - ./.certs:/app/.certs
   #     - ./config:/app/config
   #     - ./logs_docker/voltage:/app/logs
-  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
+  #   command: ["uv", "run", "src/lnd_monitor_v2.py", "--config", "voltage"]
   #   restart: unless-stopped
   #   stop_grace_period: 20s
 
@@ -231,7 +231,7 @@ services:
   #     - ./logs_docker/binance:/app/logs
   #   restart: unless-stopped
   #   stop_grace_period: 20s
-  #   command: ["python", "src/binance_monitor.py"]
+  #   command: ["uv", "run", "src/binance_monitor.py"]
 
 
 volumes:
