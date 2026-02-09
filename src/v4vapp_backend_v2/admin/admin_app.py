@@ -229,7 +229,7 @@ class AdminApp:
             """Redirect root to admin"""
             return RedirectResponse(url="/admin", status_code=302)
 
-        @self.app.get("/status/")
+        @self.app.get("/status")
         @self.app.get("/admin/health")
         async def health_check() -> JSONResponse:
             """Health check endpoint"""

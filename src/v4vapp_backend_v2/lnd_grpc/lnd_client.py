@@ -146,7 +146,7 @@ class LNDClient:
             if getattr(self, "get_info", None) is not None:
                 return self.get_info
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
-                lnrpc.GetInfoRequest()
+                lnrpc.GetInfoRequest(), timeout=5.0
             )
             # always_print_fields_with_no_presence=True: forces serialization of fields that lack
             # presence (repeated, maps, scalars) so missing lists become [] instead of absent
