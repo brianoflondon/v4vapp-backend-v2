@@ -25,6 +25,8 @@ WORKDIR /app/
 
 # Copy the entire app directory including the .venv folder
 COPY --from=builder /app /app
+# Copy the uv binary from the builder stage so it's available at runtime
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # Ensure Python uses the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
