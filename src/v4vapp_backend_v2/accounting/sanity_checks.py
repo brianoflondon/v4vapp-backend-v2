@@ -219,8 +219,8 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=True,
                 details=(
-                    f"Server Hive balances match: HIVE deposits {hive_deposits}, "
-                    f"HBD deposits {hbd_deposits}."
+                    f"Server Hive balances match: HIVE deposits {hive_deposits:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f}."
                 ),
             )
         else:
@@ -228,9 +228,9 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=False,
                 details=(
-                    f"Server Hive Mismatch: {hive_delta:.3f} HIVE, {hbd_delta:.3f} HBD; "
-                    f"balances mismatch: HIVE deposits {hive_deposits:.3f} vs actual {hive_actual}, "
-                    f"HBD deposits {hbd_deposits:.3f} vs actual {hbd_actual}."
+                    f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; "
+                    f"balances mismatch: HIVE deposits {hive_deposits:,.3f} vs actual {hive_actual:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual:,.3f}."
                 ),
             )
 
