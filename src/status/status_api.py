@@ -18,6 +18,8 @@ STATUS_API_VERSION = (
     get_version(__name__, Path(__file__).parent, default_return="1.0.0") or "1.0.0"
 )
 
+DISABLE_ROUTINE_LOGGING = True  # Set to True to disable routine logs from the status API
+
 
 class StatusAPIException(Exception):
     """
@@ -104,10 +106,11 @@ class StatusAPI:
                     check_answer["error_codes"] = error_codes_dict
                     log_func = logger.info
                     # We don't need to notify because the underlying issues are already being notified elsewhere
-                    log_func(
-                        f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
-                        extra={"notification": False, "check_answer": check_answer},
-                    )
+                    if not DISABLE_ROUTINE_LOGGING:
+                        log_func(
+                            f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
+                            extra={"notification": False, "check_answer": check_answer},
+                        )
                 return {"status": "OK", **check_answer}
             except Exception as e:
                 # Use your imported logger for consistent logging
