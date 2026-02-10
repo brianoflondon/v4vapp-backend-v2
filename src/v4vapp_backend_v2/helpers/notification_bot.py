@@ -200,6 +200,7 @@ class NotificationBot:
         text = text + f" {InternalConfig().local_machine_name}"
         attempt = 0
         while attempt < retries:
+            ans = None
             try:
                 ans = await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
                 return
@@ -208,19 +209,37 @@ class NotificationBot:
                 if attempt >= retries:
                     logger.error(
                         f"Error sending [ {text} ] after {retries} retries: {e}",
-                        extra={"notification": False, "error": e},
+                        extra={
+                            "notification": False,
+                            "error": e,
+                            "attempt": attempt,
+                            "retries": retries,
+                        },
                     )
                     return
                 logger.warning(
                     f"Timed out while sending message {text}. Retrying {attempt}/{retries}...",
-                    extra={"notification": False},
+                    exc_info=e,
+                    extra={
+                        "notification": False,
+                        "error": e,
+                        "attempt": attempt,
+                        "retries": retries,
+                    },
                 )
                 await asyncio.sleep(2**attempt + random.random())
             except RetryAfter as e:
-                retry_after = int(e.retry_after)
+                retry_after = getattr(
+                    e, "retry_after", 30
+                )  # Default to 30 seconds if not provided
                 logger.warning(
                     f"Flood control exceeded. Retrying in {retry_after} seconds...",
-                    extra={"notification": False},
+                    extra={
+                        "notification": False,
+                        "error": e,
+                        "attempt": attempt,
+                        "retries": retries,
+                    },
                 )
                 await asyncio.sleep(retry_after)
             except BadRequest:
