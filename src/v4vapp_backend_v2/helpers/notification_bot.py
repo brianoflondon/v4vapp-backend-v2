@@ -9,6 +9,7 @@ from typing import Any
 
 from telegram import Bot
 from telegram.error import BadRequest, InvalidToken, RetryAfter, TimedOut
+from telegram.request import HTTPXRequest
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -43,14 +44,15 @@ class NotificationBot:
         token: str = "",
         name: str = "",
     ):
+        request = HTTPXRequest(connect_timeout=10, read_timeout=30)
         if token:
             self.config = NotificationBotConfig(token=token)
-            self.bot = Bot(token=token)
+            self.bot = Bot(token=token, request=request)
             return
         if name:
             self.name = name
             self.load_config()
-            self.bot = Bot(token=self.config.token)
+            self.bot = Bot(token=self.config.token, request=request)
             return
         if self.names_list():
             if InternalConfig().config.logging.default_notification_bot_name:
@@ -58,7 +60,7 @@ class NotificationBot:
             else:
                 self.name = self.names_list()[0]
             self.load_config()
-            self.bot = Bot(token=self.config.token)
+            self.bot = Bot(token=self.config.token, request=request)
             return
         raise NotificationNotSetupError(f"No token or name set for bot. {name} not found")
 
@@ -200,6 +202,7 @@ class NotificationBot:
         text = text + f" {InternalConfig().local_machine_name}"
         attempt = 0
         while attempt < retries:
+            ans = None
             try:
                 ans = await self.bot.send_message(chat_id=self.config.chat_id, text=text, **kwargs)
                 return
@@ -208,19 +211,36 @@ class NotificationBot:
                 if attempt >= retries:
                     logger.error(
                         f"Error sending [ {text} ] after {retries} retries: {e}",
-                        extra={"notification": False, "error": e},
+                        extra={
+                            "notification": False,
+                            "error": e,
+                            "attempt": attempt,
+                            "retries": retries,
+                        },
                     )
                     return
                 logger.warning(
                     f"Timed out while sending message {text}. Retrying {attempt}/{retries}...",
-                    extra={"notification": False},
+                    extra={
+                        "notification": False,
+                        "error": e,
+                        "attempt": attempt,
+                        "retries": retries,
+                    },
                 )
                 await asyncio.sleep(2**attempt + random.random())
             except RetryAfter as e:
-                retry_after = int(e.retry_after)
+                retry_after = getattr(
+                    e, "retry_after", 30
+                )  # Default to 30 seconds if not provided
                 logger.warning(
                     f"Flood control exceeded. Retrying in {retry_after} seconds...",
-                    extra={"notification": False},
+                    extra={
+                        "notification": False,
+                        "error": e,
+                        "attempt": attempt,
+                        "retries": retries,
+                    },
                 )
                 await asyncio.sleep(retry_after)
             except BadRequest:
