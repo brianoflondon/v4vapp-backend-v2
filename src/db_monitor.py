@@ -24,7 +24,12 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntryException
 from v4vapp_backend_v2.accounting.pipelines.simple_pipelines import db_monitor_pipelines
 from v4vapp_backend_v2.accounting.sanity_checks import log_all_sanity_checks
 from v4vapp_backend_v2.actions.tracked_any import tracked_any_filter
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import (
+    DEFAULT_CONFIG_FILENAME,
+    InternalConfig,
+    StartupFailure,
+    logger,
+)
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import truncate_text
 from v4vapp_backend_v2.process.lock_str_class import CustIDLockException, LockStr
@@ -616,6 +621,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("👋 Goodbye!")
         sys.exit(0)
+
+    except StartupFailure as e:
+        print(f"{ICON} Startup failure: {e}")
+        sys.exit(1)
 
     except Exception as e:
         logger.exception(e)

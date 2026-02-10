@@ -19,7 +19,7 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, StartupFailure, logger
 from v4vapp_backend_v2.database.db_pymongo import DATABASE_ICON, DBConn
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -1441,6 +1441,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("👋 Goodbye!")
         sys.exit(0)
+
+    except StartupFailure as e:
+        print(f"{ICON} Startup failure: {e}")
+        sys.exit(1)
 
     except Exception as e:
         print(e)

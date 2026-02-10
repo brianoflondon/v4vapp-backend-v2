@@ -19,7 +19,7 @@ from pymongo.results import UpdateResult
 from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, logger
+from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, StartupFailure, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     check_time_diff,
@@ -932,6 +932,10 @@ if __name__ == "__main__":
         print("👋 Goodbye!")
     except (KeyboardInterrupt, asyncio.CancelledError):
         sys.exit(0)
+
+    except StartupFailure as e:
+        print(f"{ICON} Startup failure: {e}")
+        sys.exit(1)
 
     except Exception as e:
         print(e)
