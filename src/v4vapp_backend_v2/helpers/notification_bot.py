@@ -9,6 +9,7 @@ from typing import Any
 
 from telegram import Bot
 from telegram.error import BadRequest, InvalidToken, RetryAfter, TimedOut
+from telegram.request import HTTPXRequest
 
 from v4vapp_backend_v2.config.setup import InternalConfig, NotificationBotConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
@@ -43,14 +44,15 @@ class NotificationBot:
         token: str = "",
         name: str = "",
     ):
+        request = HTTPXRequest(connect_timeout=10, read_timeout=30)
         if token:
             self.config = NotificationBotConfig(token=token)
-            self.bot = Bot(token=token)
+            self.bot = Bot(token=token, request=request)
             return
         if name:
             self.name = name
             self.load_config()
-            self.bot = Bot(token=self.config.token)
+            self.bot = Bot(token=self.config.token, request=request)
             return
         if self.names_list():
             if InternalConfig().config.logging.default_notification_bot_name:
@@ -58,7 +60,7 @@ class NotificationBot:
             else:
                 self.name = self.names_list()[0]
             self.load_config()
-            self.bot = Bot(token=self.config.token)
+            self.bot = Bot(token=self.config.token, request=request)
             return
         raise NotificationNotSetupError(f"No token or name set for bot. {name} not found")
 
@@ -219,7 +221,6 @@ class NotificationBot:
                     return
                 logger.warning(
                     f"Timed out while sending message {text}. Retrying {attempt}/{retries}...",
-                    exc_info=e,
                     extra={
                         "notification": False,
                         "error": e,
