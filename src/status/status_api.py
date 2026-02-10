@@ -170,6 +170,7 @@ class StatusAPI:
                 port=self.port,
                 log_level="critical",  # Only log critical errors (effectively disables most logs)
                 access_log=False,
+                # log_config=None,  # Disable Uvicorn's default logging configuration
             )
             server = uvicorn.Server(config)
             # Run the server in a task, but allow shutdown
