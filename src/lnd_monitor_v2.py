@@ -1453,10 +1453,13 @@ if __name__ == "__main__":
         print("👋 Goodbye!")
         sys.exit(0)
 
+    #TODO: change this on all the other monitors
     except StartupFailure as e:
         print(f"{ICON} Startup failure: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     except Exception as e:
+        logger.error("🔴 Unhandled exception in lnd_monitor_v2", exc_info=e, stack_info=True)
+        logger.exception(e, extra={"error": e, "notification": True})
         print(e)
         sys.exit(1)

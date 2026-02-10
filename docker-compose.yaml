@@ -18,7 +18,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: ["uv", "run", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
-    restart: unless-stopped
+    restart: on-failure:3
     stop_grace_period: 20s
     env_file:
       - .env
