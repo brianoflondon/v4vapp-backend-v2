@@ -9,7 +9,12 @@ import typer
 from urllib3.exceptions import NameResolutionError
 
 from v4vapp_backend_v2 import __version__
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, StartupFailure, logger
+from v4vapp_backend_v2.config.setup import (
+    DEFAULT_CONFIG_FILENAME,
+    InternalConfig,
+    StartupFailure,
+    logger,
+)
 from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
@@ -351,8 +356,10 @@ if __name__ == "__main__":
 
     except StartupFailure as e:
         print(f"{ICON} Startup failure: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     except Exception as e:
-        logger.exception(e)
+        logger.error("🔴 Unhandled exception in binance_monitor", exc_info=e, stack_info=True)
+        logger.exception(e, extra={"error": e, "notification": True})
+        print(e)
         sys.exit(1)

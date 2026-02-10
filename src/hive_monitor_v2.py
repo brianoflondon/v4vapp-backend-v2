@@ -935,8 +935,10 @@ if __name__ == "__main__":
 
     except StartupFailure as e:
         print(f"{ICON} Startup failure: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     except Exception as e:
+        logger.error("🔴 Unhandled exception in hive_monitor_v2", exc_info=e, stack_info=True)
+        logger.exception(e, extra={"error": e, "notification": True})
         print(e)
         sys.exit(1)
