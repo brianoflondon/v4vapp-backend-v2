@@ -122,13 +122,13 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "uv","run", "src/v4vapp_backend_v2/admin/run_admin.py",
+      "python", "src/v4vapp_backend_v2/admin/run_admin.py",
       "--host", "0.0.0.0",
       "--port", "8080",
       "--config", "devdocker.config.yaml",
       "--log-level", "debug"
     ]
-    restart: unless-stopped
+    restart: on-failure:3
     stop_grace_period: 20s
     networks:
       - v4vapp-backend
