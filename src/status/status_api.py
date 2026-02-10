@@ -1,6 +1,6 @@
 import asyncio
-from pathlib import Path
 import socket
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict
 
 import uvicorn
@@ -17,6 +17,8 @@ from v4vapp_backend_v2.config.setup import (
 STATUS_API_VERSION = (
     get_version(__name__, Path(__file__).parent, default_return="1.0.0") or "1.0.0"
 )
+
+DISABLE_ROUTINE_LOGGING = True  # Set to True to disable routine logs from the status API
 
 
 class StatusAPIException(Exception):
@@ -35,6 +37,12 @@ class StatusAPIException(Exception):
 
 
 class StatusAPIPortInUseException(Exception):
+    pass
+
+
+class StatusAPIStartupException(StatusAPIException):
+    """Raised when the Status API fails to start."""
+
     pass
 
 
@@ -96,12 +104,13 @@ class StatusAPI:
                 error_codes_dict = InternalConfig().error_codes_to_dict()
                 if error_codes_dict:
                     check_answer["error_codes"] = error_codes_dict
-                    log_func = logger.warning
+                    log_func = logger.info
                     # We don't need to notify because the underlying issues are already being notified elsewhere
-                    log_func(
-                        f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
-                        extra={"notification": False, "check_answer": check_answer},
-                    )
+                    if not DISABLE_ROUTINE_LOGGING:
+                        log_func(
+                            f"Status API health check passed {process_name} {'no error' if not error_codes_dict else 'with errors'}",
+                            extra={"notification": False, "check_answer": check_answer},
+                        )
                 return {"status": "OK", **check_answer}
             except Exception as e:
                 # Use your imported logger for consistent logging
@@ -166,14 +175,31 @@ class StatusAPI:
             # Run the server in a task, but allow shutdown
             server_task = asyncio.create_task(server.serve())
 
+            # Give the server a moment to start and surface immediate failures
+            await asyncio.sleep(0)  # yield to event loop
+            done, _ = await asyncio.wait({server_task}, timeout=0.1)
+            if done:
+                exc = server_task.exception()
+                # If the task completed immediately (with or without exception), treat as startup failure
+                logger.error(
+                    f"Status API server task finished immediately during startup: {exc or 'no exception'}"
+                )
+                raise StatusAPIStartupException(
+                    f"Status API failed to start on port {self.port}"
+                ) from exc
+
             await self.shutdown_event.wait()
         except asyncio.CancelledError:
             pass
         except (OSError, SystemExit, StatusAPIPortInUseException) as e:
-            # Trap binding errors (e.g., address already in use)
+            # Trap binding errors (e.g., address already in use) and propagate as startup failure
             logger.error(f"Failed to start Status API on port {self.port}: {str(e)}")
+            raise StatusAPIStartupException(
+                f"Failed to start Status API on port {self.port}"
+            ) from e
         except Exception as e:
             logger.error(f"Error while running Status API: {str(e)}")
+            raise StatusAPIStartupException("Error while running Status API") from e
         finally:
             logger.info(
                 f"{Fore.WHITE}Shutting down Status API for {self.app.title} on port {self.port}{Style.RESET_ALL}"

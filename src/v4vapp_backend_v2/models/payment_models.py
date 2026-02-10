@@ -125,6 +125,10 @@ class Payment(TrackedBaseModel):
     value_sat: BSONInt64 = BSONInt64(0)
     value_msat: BSONInt64 = BSONInt64(0)
     payment_request: str = ""
+    invoice_description: str | None = Field(
+        default=None,
+        description="Decoded invoice description (memo) from the BOLT-11 payment_request",
+    )
     status: PaymentStatus | None = None
     fee_sat: BSONInt64 = BSONInt64(0)
     fee_msat: BSONInt64 = BSONInt64(0)
@@ -215,7 +219,21 @@ class Payment(TrackedBaseModel):
     @computed_field
     def destination(self) -> str:
         """
+        Computed field version of the destination method, which can be used in queries.
         Determines the destination based on the route.
+        Returns:
+            str: The alias of the destination node, or "Unknown" if the route is not available or does not contain valid information.
+        """
+        return self.destination_p
+
+    @property
+    def destination_p(self) -> str:
+        """
+        Property version of the destination method, which can be used in queries.
+        Determines the destination based on the route.
+
+        Returns:
+            str: The alias of the destination node, or "Unknown" if the route is not available or does not contain valid information.
         """
         if not self.route:
             return "Unknown"
@@ -384,7 +402,7 @@ class Payment(TrackedBaseModel):
         """
         Returns a string representation of the payment log.
         """
-        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.creation_date} {self.short_id}"
+        return f"Payment {self.payment_hash[:6]} ({self.status}) - {self.value_sat} sat - {self.fee_sat} sat fee - {self.invoice_description} {self.creation_date} {self.short_id}"
 
     @property
     def log_extra(self) -> dict[str, Any]:

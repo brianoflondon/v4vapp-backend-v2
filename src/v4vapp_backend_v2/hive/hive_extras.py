@@ -518,7 +518,7 @@ async def call_hive_internal_market() -> HiveInternalQuote:
         return HiveInternalQuote(error=message)
 
 
-@time_decorator
+# @time_decorator
 def account_hive_balances(hive_accname: str = "") -> Dict[str, Amount | str]:
     """
     Retrieves the current HIVE and HBD balances for the given account.

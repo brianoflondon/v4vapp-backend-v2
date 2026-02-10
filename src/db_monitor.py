@@ -58,7 +58,7 @@ async def health_check() -> Dict[str, Any]:
         f"{ICON} DB Monitor Health check passed",
         extra={"notification": False, "error_code_clear": "db_monitor_task_failure"},
     )
-    return {"status": "ok"}
+    return {"status": "OK", "name": __name__, "version": __version__}
 
 
 # Define a global flag to track shutdown
@@ -487,7 +487,7 @@ async def main_async_start(use_resume: bool = True):
     )
 
     process_name = os.path.splitext(os.path.basename(__file__))[0]
-    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6002")
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
     status_api = StatusAPI(
         port=int(health_check_port),
         health_check_func=health_check,

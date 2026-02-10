@@ -1,5 +1,6 @@
 import argparse
 import socket
+import sys
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -15,7 +16,7 @@ from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsTransferExternal,
     KeepsatsTransferResponse,
 )
-from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
 from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
@@ -28,16 +29,12 @@ from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_jso
 
 ICON = "🤖"
 
-# Global variable to store config filename
-config_filename = "devhive.config.yaml"
-
 
 def create_lifespan(config_filename: str):
     """Factory function to create lifespan with the correct config filename"""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        InternalConfig(config_filename=config_filename)
         v4v_config = V4VConfig(server_accname=InternalConfig().server_id)
         if not v4v_config.fetch():
             logger.warning("Failed to fetch V4V config")
@@ -108,11 +105,6 @@ async def send_notification(
     return {"message": "Notification sent"}
 
 
-@crypto_v2_router.get("/")
-async def root():
-    return {"message": "Hello World 2"}
-
-
 @crypto_v2_router.post("/quotes/")
 async def cryptoprices() -> AllQuotes:
     """Asynchronously fetch and return cryptocurrency prices.
@@ -138,7 +130,7 @@ async def cryptoprices() -> AllQuotes:
     return all_quotes
 
 
-@crypto_v2_router.post("")
+# @crypto_v2_router.post("")
 # MARK: Legacy v1 Cryptoprices calls
 
 
@@ -425,11 +417,12 @@ def create_app(config_file: str = "devhive.config.yaml") -> FastAPI:
     # Add root endpoint here
     @app.get("/")
     @app.get("/health")
+    @app.get("/status")
     async def root():
         return {
             "message": "Welcome to V4VApp API v2",
             "version": __version__,
-            "status": "running",
+            "status": "OK",
             "server_id": InternalConfig().server_id,
             "dns_name": socket.getfqdn(),
             "local_machine_name": InternalConfig().local_machine_name,
@@ -449,8 +442,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="devhive.config.yaml",
-        help="Configuration filename (default: devhive.config.yaml)",
+        default="config.yaml",
+        help="Configuration filename (default: config.yaml)",
     )
     parser.add_argument(
         "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
@@ -462,9 +455,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    try:
+        InternalConfig(config_filename=args.config)
+    except StartupFailure as e:
+        # Do not try to send notifications about a failure to load config since
+        # notification infra may itself be unstable during startup (e.g., Redis down)
+        logger.error(f"Failed to load config: {e}", extra={"notification": False})
+        sys.exit(1)
+
     # Create the app with the specified config file
     app = create_app(config_file=args.config)
-
     uvicorn.run(app, host=args.host, port=args.port, workers=args.workers)
 else:
     # Create app with default config for module imports

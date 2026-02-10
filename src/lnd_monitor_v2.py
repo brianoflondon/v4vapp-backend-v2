@@ -29,7 +29,10 @@ from v4vapp_backend_v2.grpc_models.lnd_events_group import (
     LndEventsGroup,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, get_in_flight_time
-from v4vapp_backend_v2.helpers.pub_key_alias import update_payment_route_with_alias
+from v4vapp_backend_v2.helpers.pub_key_alias import (
+    decode_payment_request_and_attach,
+    update_payment_route_with_alias,
+)
 from v4vapp_backend_v2.lnd_grpc.lnd_client import LNDClient
 from v4vapp_backend_v2.lnd_grpc.lnd_errors import LNDConnectionError, LNDSubscriptionError
 from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
@@ -343,6 +346,8 @@ async def db_store_payment(
     """
     try:
         payment_pyd = Payment(htlc_event)
+        # Attach invoice description (decoded from payment_request) if available
+        await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment_pyd)
         await update_payment_route_with_alias(
             lnd_client=lnd_client,
             payment=payment_pyd,
@@ -350,6 +355,7 @@ async def db_store_payment(
             col_pub_keys="pub_keys",
         )
         await payment_pyd.update_conv()
+
         ans = await payment_pyd.save()
         logger.info(
             f"{lnd_client.icon}{DATABASE_ICON} "
@@ -1027,21 +1033,23 @@ async def read_all_payments(lnd_client: LNDClient) -> None:
                 read_payment = await Payment.collection().find_one(
                     filter=query,
                 )
-                if read_payment and read_payment.get("route_str"):
+                # The invoice_description "Not set" is used in pub_key_alias.py if there is no description.
+                if (
+                    read_payment
+                    and read_payment.get("route_str", None)
+                    and read_payment.get("invoice_description", None)
+                    and not read_payment.get("route_str") == "Unknown"
+                    and not read_payment.get("invoice_description") == "Not set"
+                ):
                     continue
-                    try:
-                        db_payment = Payment.model_validate(read_payment)
-                        if db_payment == payment:
-                            continue
-                    except Exception as e:
-                        logger.warning(e, extra={"notification": False, "payment": read_payment})
-                        pass
                 await update_payment_route_with_alias(
                     lnd_client=lnd_client,
                     payment=payment,
                     fill_cache=True,
                     col_pub_keys="pub_keys",
                 )
+                await decode_payment_request_and_attach(lnd_client=lnd_client, payment=payment)
+
                 insert_one = payment.model_dump(
                     exclude_none=True, exclude_unset=True, exclude={"conv", "conv_fee"}
                 )
@@ -1301,7 +1309,6 @@ async def main_async_start(connection_name: str) -> None:
                     name="channel_events_loop",
                 ),
             ]
-            startup_complete_event.set()
             lnd_node = InternalConfig().config.lnd_config.default
             icon = InternalConfig().config.lnd_config.connections[lnd_node].icon
             logger.info(
@@ -1309,6 +1316,7 @@ async def main_async_start(connection_name: str) -> None:
                 f"Monitoring node: {lnd_node} {icon}. Version: {__version__} on {InternalConfig().local_machine_name}{Style.RESET_ALL}",
                 extra={"notification": True},
             )
+            startup_complete_event.set()
             # Wait for shutdown signal, then cancel streams immediately
             await shutdown_event.wait()
             for t in running_tasks:

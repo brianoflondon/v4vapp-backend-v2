@@ -206,6 +206,7 @@ IGNORED_UPDATE_FIELDS = [
     "features",  # LN invoice feature bits
     "is_amp",
     "is_keysend",
+    "invoice_description",
 ]
 
 

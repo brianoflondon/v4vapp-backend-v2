@@ -38,7 +38,7 @@ TESTING_CACHE_TIMES = {
     "CoinGecko": 360,
     "Binance": 360,
     "CoinMarketCap": 1800,
-    "HiveInternalMarket": 360,
+    "HiveInternalMarket": 10,
     "Global": 180,
 }
 
@@ -46,7 +46,7 @@ CACHE_TIMES = {
     "CoinGecko": 180,
     "Binance": 120,
     "CoinMarketCap": 1800,
-    "HiveInternalMarket": 60,
+    "HiveInternalMarket": 10,
     "Global": 60,
 }
 
@@ -391,14 +391,42 @@ class AllQuotes(BaseModel):
         if self.quotes:
             if Binance.__name__ in self.quotes and not self.quotes[Binance.__name__].error:
                 quote = self.quotes[Binance.__name__]
-                # If HiveInternalMarket is available, use its hive_hbd value
+                # If HiveInternalMarket is available, use its hive_hbd value and
+                # derive a more accurate HBD/USD price from hive_usd / hive_hbd.
                 if (
                     HiveInternalMarket.__name__ in self.quotes
                     and not self.quotes[HiveInternalMarket.__name__].error
                     and self.quotes[HiveInternalMarket.__name__].hive_hbd > 0
                 ):
                     quote_dict = quote.model_dump()
-                    quote_dict["hive_hbd"] = self.quotes[HiveInternalMarket.__name__].hive_hbd
+                    # Use the authoritative Hive HBD from HiveInternalMarket
+                    hive_hbd_val = Decimal(str(self.quotes[HiveInternalMarket.__name__].hive_hbd))
+                    quote_dict["hive_hbd"] = hive_hbd_val
+                    # If we have hive_usd, compute hbd_usd = hive_usd / hive_hbd
+                    if quote_dict.get("hive_usd"):
+                        try:
+                            hive_usd_val = Decimal(str(quote_dict.get("hive_usd")))
+                            if hive_hbd_val and hive_usd_val:
+                                quote_dict["hbd_usd"] = hive_usd_val / hive_hbd_val
+                            if quote_dict["hbd_usd"] < Decimal("0.99"):
+                                logger.warning(
+                                    f"Calculated HBD/USD price is low: {quote_dict['hbd_usd']:.3f}",
+                                    extra={
+                                        "quote_dict": quote_dict,
+                                        "error_code": "Low HBD USD Price",
+                                    },
+                                )
+                            else:
+                                logger.debug(
+                                    f"Calculated HBD/USD price: {quote_dict['hbd_usd']:.3f}",
+                                    extra={
+                                        "quote_dict": quote_dict,
+                                        "error_code_clear": "Low HBD USD Price",
+                                    },
+                                )
+                        except Exception:
+                            # Fall back to leaving hbd_usd as-is if any conversion fails
+                            pass
                     quote = QuoteResponse.model_validate(quote_dict)
                 self.quote = quote
                 self.source = Binance.__name__
@@ -869,14 +897,20 @@ class QuoteService(ABC):
         return None
 
     async def set_cache(self, quote: QuoteResponse) -> None:
-        key = f"{self.__class__.__name__}:get_quote"
-        if InternalConfig().config.development.enabled:
-            cache_times = TESTING_CACHE_TIMES
-        else:
-            cache_times = CACHE_TIMES
-        expiry = cache_times[self.__class__.__name__]
-        redis_client = InternalConfig.redis
-        redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+        try:
+            key = f"{self.__class__.__name__}:get_quote"
+            if InternalConfig().config.development.enabled:
+                cache_times = TESTING_CACHE_TIMES
+            else:
+                cache_times = CACHE_TIMES
+            expiry = cache_times[self.__class__.__name__]
+            redis_client = InternalConfig.redis
+            redis_client.setex(key, time=expiry, value=pickle.dumps(quote))
+        except Exception as e:
+            logger.warning(
+                f"{ICON} Failed to set cache for {key}: {e}",
+                extra={"notification": False},
+            )
 
 
 class CoinGecko(QuoteService):
@@ -1008,8 +1042,6 @@ class CoinMarketCap(QuoteService):
         if cached_quote:
             return cached_quote
 
-        internal_config = InternalConfig()
-        api_keys_config = internal_config.config.api_keys
         url = ALL_PRICES_COINMARKETCAP
         cmc_ids = {
             "BTC_USD": "1",
@@ -1019,11 +1051,12 @@ class CoinMarketCap(QuoteService):
         ids_str = [str(id) for _, id in cmc_ids.items()]
         call_ids = ",".join(ids_str)
         params = {"id": call_ids, "convert": "USD"}
-        headers = {
-            "Accepts": "application/json",
-            "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
-        }
         try:
+            api_keys_config = InternalConfig().config.api_keys
+            headers = {
+                "Accepts": "application/json",
+                "X-CMC_PRO_API_KEY": api_keys_config.coinmarketcap,
+            }
             # raise Exception("debug")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -1068,9 +1101,10 @@ class CoinMarketCap(QuoteService):
 class HiveInternalMarket(QuoteService):
     async def get_quote(self, use_cache: bool = True) -> QuoteResponse:
         self.source = "HiveInternalMarket"
-        cached_quote = await self.check_cache(use_cache=use_cache)
-        if cached_quote:
-            return cached_quote
+        # Caching doesn't work for HiveInternalMarket
+        # cached_quote = await self.check_cache(use_cache=use_cache)
+        # if cached_quote:
+        #     return cached_quote
         try:
             hive_quote = await call_hive_internal_market()
             if hive_quote.error:
@@ -1088,8 +1122,7 @@ class HiveInternalMarket(QuoteService):
                 source=self.__class__.__name__,
                 fetch_date=datetime.now(tz=timezone.utc),
             )
-            # await self.set_cache(quote_response)
-
+            # await self.set_cache(quote_response)  # Do not cache HiveInternalMarket quote as it is only used for hive_hbd and we want to ensure it is always fresh
             return quote_response
         except Exception as ex:
             message = f"Problem calling {self.__class__.__name__} API {ex}"

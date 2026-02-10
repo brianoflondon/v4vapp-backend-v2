@@ -1,5 +1,5 @@
 ########### TEST CONFIG NO SECRETS #################
-version: "0.2.1"
+version: "0.3.0"
 
 logging:
   log_config_file: 2-stderr-json-file.json
@@ -292,3 +292,23 @@ exchange_config:
       api_url: http://vsc-exchange:8000
       api_key: dev-vsc-api-key
       api_secret: dev-vsc
+
+
+########### TEST CONFIG NO SECRETS #################
+
+
+expense_config:
+  default_expense_account_name: "Testing Expenses"
+  default_ledger_type: expense
+  lnd_expense_rules:
+    V4VAPP Hive Bridge:
+      from_role: treasury
+      expense_account_name: "LND Hosting"
+      description: "LND expense development purposes."
+      ledger_type: expense
+  hive_expense_rules:
+    v4vapp.bol:
+      from_role: treasury
+      expense_account_name: "Testing Expenses"
+      description: "Hive expense development purposes."
+      ledger_type: expense

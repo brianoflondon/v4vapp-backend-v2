@@ -91,7 +91,7 @@ class InProgressResults:
         return result.net_held
 
 
-@async_time_decorator
+# @async_time_decorator
 async def all_held_msats() -> List[Mapping[str, Any]]:
     """
     Execute the aggregation pipeline that computes "held" balances in millisatoshis (msats)

@@ -14,7 +14,6 @@ from v4vapp_backend_v2.accounting.in_progress_results_class import (
     all_held_msats,
 )
 from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
-from v4vapp_backend_v2.config.decorators import async_time_decorator
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -220,8 +219,8 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=True,
                 details=(
-                    f"Server Hive balances match: HIVE deposits {hive_deposits}, "
-                    f"HBD deposits {hbd_deposits}."
+                    f"Server Hive balances match: HIVE deposits {hive_deposits:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f}."
                 ),
             )
         else:
@@ -229,9 +228,9 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 name="server_account_hive_balances",
                 is_valid=False,
                 details=(
-                    f"Server Hive Mismatch: {hive_delta:.3f} HIVE, {hbd_delta:.3f} HBD; "
-                    f"balances mismatch: HIVE deposits {hive_deposits:.3f} vs actual {hive_actual}, "
-                    f"HBD deposits {hbd_deposits:.3f} vs actual {hbd_actual}."
+                    f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; "
+                    f"balances mismatch: HIVE deposits {hive_deposits:,.3f} vs actual {hive_actual:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual:,.3f}."
                 ),
             )
 
@@ -297,7 +296,7 @@ all_sanity_checks: List[Callable[[InProgressResults], Coroutine[Any, Any, Sanity
 # MARK: Runner for all sanity checks
 
 
-@async_time_decorator
+# @async_time_decorator
 async def run_all_sanity_checks() -> SanityCheckResults:
     """
     Run all registered sanity checks concurrently and return their results as

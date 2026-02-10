@@ -56,11 +56,11 @@ class LNDClient:
         self.error_state: bool = False
         self.error_code: str | None = None
         self.connection_check_task: asyncio.Task[Any] | None = None
-        self.get_info: lnrpc.GetInfoResponse | None = None
+        # self.get_info: lnrpc.GetInfoResponse | None = None
         self.setup()
 
     async def __aenter__(self):
-        if os.getenv("TESTING") == "True" or self.get_info is not None:
+        if os.getenv("TESTING") == "True" or getattr(self, "get_info", None) is not None:
             return self
         try:
             self.get_info = await self.node_get_info
@@ -83,7 +83,10 @@ class LNDClient:
 
     def setup(self):
         try:
-            logger.info(f"{ICON} Connecting to LND", extra={"connection": self.connection.name, "address": self.connection.address})
+            logger.info(
+                f"{ICON} Connecting to LND",
+                extra={"connection": self.connection.name, "address": self.connection.address},
+            )
 
             # Try to load system root certificates
             ca_bundle_path = get_ca_bundle_path()
@@ -92,7 +95,7 @@ class LNDClient:
                     with open(ca_bundle_path, "rb") as f:
                         root_certificates = f.read()
                     # Combine system root certificates with the server's certificate
-                    combined_cert = root_certificates + b'\n' + self.connection.cert
+                    combined_cert = root_certificates + b"\n" + self.connection.cert
                     cert_creds = ssl_channel_credentials(combined_cert)
                 except (FileNotFoundError, PermissionError):
                     # Fallback to original method
@@ -140,10 +143,10 @@ class LNDClient:
             lnrpc.GetInfoResponse: The response from the `GetInfo` method.
         """
         try:
-            if self.get_info is not None:
+            if getattr(self, "get_info", None) is not None:
                 return self.get_info
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
-                lnrpc.GetInfoRequest()
+                lnrpc.GetInfoRequest(), timeout=5.0
             )
             # always_print_fields_with_no_presence=True: forces serialization of fields that lack
             # presence (repeated, maps, scalars) so missing lists become [] instead of absent
