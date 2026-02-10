@@ -17,13 +17,13 @@ services:
       - ./.certs:/app/.certs
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["uv", "run", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["python", "src/lnd_monitor_v2.py", "--config", "devdocker.config.yaml"]
     restart: on-failure:3
     stop_grace_period: 20s
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -39,7 +39,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "uv", "run", "src/hive_monitor_v2.py",
+      "python", "src/hive_monitor_v2.py",
       "--config", "devdocker.config.yaml",
     ]
     restart: on-failure:3
@@ -49,7 +49,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,7 +65,7 @@ services:
       - ./config:/app/config
       - ./logs_docker:/app/logs
     command: [
-      "uv", "run", "src/db_monitor.py",
+      "python", "src/db_monitor.py",
       "--config", "devdocker.config.yaml",
     ]
     restart: on-failure:3
@@ -75,7 +75,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "6001" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -93,7 +93,7 @@ services:
     volumes:
       - ./config:/app/config
       - ./logs_docker:/app/logs
-    command: ["uv", "run", "src/api_v2.py", "--config", "devdocker.config.yaml"]
+    command: ["python", "src/api_v2.py", "--config", "devdocker.config.yaml"]
     restart: on-failure:3
     stop_grace_period: 20s
     networks:
@@ -103,7 +103,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "8000" , "--pretty"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "8000" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -140,7 +140,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "uv", "run", "src/health_check.py", "--host", "localhost", "--port", "8080" , "--pretty"]
+      test: ["CMD", "python", "src/health_check.py", "--host", "localhost", "--port", "8080" , "--pretty"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -221,7 +221,7 @@ services:
   #     - ./.certs:/app/.certs
   #     - ./config:/app/config
   #     - ./logs_docker/voltage:/app/logs
-  #   command: ["uv", "run", "src/lnd_monitor_v2.py", "--config", "voltage"]
+  #   command: ["python", "src/lnd_monitor_v2.py", "--config", "voltage"]
   #   restart: unless-stopped
   #   stop_grace_period: 20s
 
@@ -237,7 +237,7 @@ services:
   #     - ./logs_docker/binance:/app/logs
   #   restart: unless-stopped
   #   stop_grace_period: 20s
-  #   command: ["uv", "run", "src/binance_monitor.py"]
+  #   command: ["python", "src/binance_monitor.py"]
 
 
 volumes:
