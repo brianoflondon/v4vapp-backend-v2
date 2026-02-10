@@ -19,7 +19,12 @@ import v4vapp_backend_v2.lnd_grpc.router_pb2 as routerrpc
 from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, StartupFailure, logger
+from v4vapp_backend_v2.config.setup import (
+    DEFAULT_CONFIG_FILENAME,
+    InternalConfig,
+    StartupFailure,
+    logger,
+)
 from v4vapp_backend_v2.database.db_pymongo import DATABASE_ICON, DBConn
 from v4vapp_backend_v2.events.async_event import async_publish, async_subscribe
 from v4vapp_backend_v2.events.event_models import Events
@@ -1122,8 +1127,7 @@ async def get_most_recent_invoice() -> Invoice | None:
     query = {}
     sort = [("add_index", -1)]
     collection = Invoice.collection()
-    cursor = collection.find(query)
-    cursor.sort(sort)
+    cursor = collection.find(query).sort(sort).limit(1)
     invoice = None
     try:
         async for ans in cursor:
@@ -1162,8 +1166,7 @@ async def get_most_recent_payment() -> Payment | None:
     query = {}
     sort = [("creation_date", -1)]
     collection = Payment.collection()
-    cursor = collection.find(query)
-    cursor.sort(sort)
+    cursor = collection.find(query).sort(sort).limit(1)
     payment = None
     try:
         async for ans in cursor:
@@ -1364,8 +1367,16 @@ async def main_async_start(connection_name: str) -> None:
 
 
 async def pause_for_database_sync() -> bool:
-    recent_invoice = await get_most_recent_invoice()
-    recent_payment = await get_most_recent_payment()
+    try:
+        recent_invoice = await asyncio.wait_for(get_most_recent_invoice(), timeout=30)
+        recent_payment = await asyncio.wait_for(get_most_recent_payment(), timeout=30)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Timed out querying DB for recent invoice/payment during startup. "
+            "Skipping database sync check.",
+            extra={"notification": False},
+        )
+        return False
     if (
         recent_invoice
         and recent_payment

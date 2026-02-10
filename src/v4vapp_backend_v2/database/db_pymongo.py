@@ -57,8 +57,8 @@ class DBConn:
         client: AsyncMongoClient[Dict[str, Any]] = AsyncMongoClient(
             self.uri,  # Ensure URI is properly formatted (e.g., "mongodb://host:port")
             tz_aware=True,  # Enables timezone-aware datetime objects
-            connectTimeoutMS=480_000,  # Timeout for establishing a connection (120 seconds)
-            serverSelectionTimeoutMS=480_000,  # Timeout for selecting a server (120 seconds)
+            connectTimeoutMS=480_000,  # Timeout for establishing a connection (480 seconds)
+            serverSelectionTimeoutMS=480_000,  # Timeout for selecting a server (480 seconds)
             retryWrites=True,  # Automatically retry write operations on failure
             retryReads=True,  # Automatically retry read operations on failure
             readPreference="primaryPreferred",  # Prefer primary for reads
