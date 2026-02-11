@@ -87,8 +87,8 @@ async def patch_account_hive_balances_from_ledger(module_monkeypatch):
         fake_account_hive_balances,
     )
 
-# Depreciated individual tests.
 
+# Depreciated individual tests.
 
 
 # async def test_sanity_check_server_account_balances():
@@ -152,3 +152,45 @@ async def test_run_all_sanity_checks(module_monkeypatch):
     results = await run_all_sanity_checks()
     pprint(results.model_dump())
     assert results.failed, "Expected failure not found"
+
+
+async def test_server_account_hive_balances_formatting_handles_amount(module_monkeypatch):
+    """Ensure formatting a mismatched Amount doesn't raise a formatting error and produces a mismatch message."""
+    from decimal import Decimal
+
+    from nectar.amount import Amount
+
+    from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+    from v4vapp_backend_v2.accounting.in_progress_results_class import InProgressResults
+    from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount
+    from v4vapp_backend_v2.accounting.sanity_checks import server_account_hive_balances
+    from v4vapp_backend_v2.config.setup import InternalConfig
+    from v4vapp_backend_v2.helpers.currency_class import Currency
+
+    # Load good data set
+    await load_ledger_events("tests/accounting/test_data/v4vapp-dev.ledger.json")
+
+    server_id = InternalConfig().server_id
+    customer_deposits_account = AssetAccount(name="Customer Deposits Hive", sub=server_id)
+    deposits_details = await one_account_balance(customer_deposits_account)
+
+    hive_deposits = deposits_details.balances_net.get(Currency.HIVE, Decimal(0.0))
+    hbd_deposits = deposits_details.balances_net.get(Currency.HBD, Decimal(0.0))
+
+    def fake_account_hive_balances(hive_accname: str = ""):
+        # Create an intentional mismatch so the code formats Amount values in the failure string
+        return {
+            "HIVE": Amount(f"{hive_deposits + Decimal('1.0')} HIVE"),
+            "HBD": Amount(f"{hbd_deposits + Decimal('1.0')} HBD"),
+        }
+
+    module_monkeypatch.setattr(
+        "v4vapp_backend_v2.accounting.sanity_checks.account_hive_balances",
+        fake_account_hive_balances,
+    )
+
+    result = await server_account_hive_balances(InProgressResults([]))
+    assert not result.is_valid
+    # Ensure it's the mismatch message and not an internal formatting failure
+    assert "balances mismatch" in result.details
+    assert "Failed to check customer deposits" not in result.details
