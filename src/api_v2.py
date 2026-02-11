@@ -465,7 +465,14 @@ if __name__ == "__main__":
 
     # Create the app with the specified config file
     app = create_app(config_file=args.config)
-    uvicorn.run(app, host=args.host, port=args.port, workers=args.workers, )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        workers=args.workers,
+        log_config=None,
+        # access_log=False,
+    )
 else:
     # Create app with default config for module imports
     app = create_app()
