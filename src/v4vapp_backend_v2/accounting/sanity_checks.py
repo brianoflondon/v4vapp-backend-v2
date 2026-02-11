@@ -235,7 +235,7 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
             )
 
     except Exception as e:
-        logger.warning(
+        logger.exception(
             f"Failed to check customer deposits balance: {e}",
             extra={"notification": False},
         )
