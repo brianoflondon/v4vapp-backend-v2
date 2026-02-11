@@ -192,9 +192,17 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             notification=True,
         )
         if details.msats and details.msats > 0:
-            custom_json_id = "v4vapp_dev_transfer"
+            custom_json_id = (
+                "v4vapp_dev_transfer"
+                if InternalConfig().config.development.enabled
+                else "v4vapp_transfer"
+            )
         else:
-            custom_json_id = "v4vapp_dev_notification"
+            custom_json_id = (
+                "v4vapp_dev_notification"
+                if InternalConfig().config.development.enabled
+                else "v4vapp_notification"
+            )
         try:
             trx = await send_custom_json(
                 json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
