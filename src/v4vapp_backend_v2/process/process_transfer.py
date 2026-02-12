@@ -274,13 +274,19 @@ async def follow_on_transfer(
     except HiveAccountNameOnExchangesList as e:
         return_details.action = ReturnAction.REFUND
         return_details.pay_to_cust_id = "v4vapp.sus"
-        return_details.amount = getattr(
-            tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
-        )
+        if tracked_op.op_type == "custom_json" and (
+            json_data := getattr(tracked_op, "json_data", None)
+        ):
+            return_details.msats = json_data.msats
+        else:
+            original_amount = getattr(tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE")))
+            return_details.amount = original_amount
         return_details.reason_str = f"Suspicious account transaction: {e}"
         logger.warning(
             return_details.reason_str, extra={"notification": True, **tracked_op.log_extra}
         )
+        # We now want to correct the ledger to move the liability from the cust_id to the v4vapp.sus account.
+        # This will be done in the #process_hive.py file when we process the server to v4vapp.sus transfer
 
     except (LNDPaymentError, LNDPaymentExpired, HiveTransferError) as e:
         return_details.action = ReturnAction.REFUND

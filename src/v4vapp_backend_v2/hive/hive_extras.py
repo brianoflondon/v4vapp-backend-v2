@@ -23,8 +23,8 @@ from pydantic import BaseModel
 
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
-    check_bad_hive_accounts,
     check_not_development_accounts,
+    get_bad_hive_accounts,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -756,10 +756,13 @@ async def perform_transfer_checks(
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
         )
-    if await check_bad_hive_accounts([from_account, to_account]):
-        raise HiveAccountNameOnExchangesList(
-            f"{from_account} or {to_account} is on bad accounts list"
-        )
+    bad_accounts_set = await get_bad_hive_accounts()
+    message = ""
+    for account in [from_account, to_account]:
+        if account in bad_accounts_set:
+            message += f"{account} is on the bad accounts list "
+    if message:
+        raise HiveAccountNameOnExchangesList(message)
     return True
 
 
