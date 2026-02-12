@@ -1,0 +1,127 @@
+from datetime import datetime, timezone
+
+from v4vapp_backend_v2.accounting.account_balances import one_account_balance
+from v4vapp_backend_v2.accounting.ledger_account_classes import AssetAccount, LiabilityAccount
+from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
+from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
+from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
+from v4vapp_backend_v2.helpers.crypto_prices import Currency
+from v4vapp_backend_v2.models.lnd_balance_models import fetch_balances
+
+
+async def reset_lightning_opening_balance():
+    """
+    Reset the Lightning node's opening balance for testing purposes.
+
+    This function retrieves the current Lightning node channel balance and creates a ledger entry
+    to record the opening balance. It performs the following operations:
+
+    1. Fetches the current channel balance from the default LND node configuration
+    2. If channel balance exists:
+        - Logs the current channel balance in sats
+        - Updates the crypto conversion quote
+        - Creates a CryptoConversion from msat to other currencies using the latest quote
+        - Creates and saves a LedgerEntry that records the opening balance as a funding operation
+        - Performs a diagnostic check to verify the ledger entry was saved and is queryable
+    3. If no channel balance is available, logs a warning
+
+    The ledger entry uses:
+    - Asset Account: "External Lightning Payments" (for debit)
+    - Liability Account: "Owner Loan Payable" (for credit)
+    - Both sides record the full local msat balance with appropriate conversions
+
+    Raises:
+         Any exceptions from database operations or balance fetching are logged but not re-raised.
+
+    Note:
+         Diagnostic checks log warnings or debug messages if the ledger entry retrieval fails.
+         This function is intended for testing purposes only.
+    """
+    node = InternalConfig().config.lnd_config.default
+    balances = await fetch_balances()
+    if balances.channel is None:
+        logger.warning(
+            "No channel balance found for the default LND node. Cannot reset opening balance."
+        )
+        return
+
+    check_account = AssetAccount(name="External Lightning Payments", sub=node)
+    account_ledger_balance = await one_account_balance(check_account)
+    if account_ledger_balance.msats == balances.channel.local_msat:
+        logger.info(
+            f"Ledger balance for {check_account.name} (Sub: {check_account.sub}) is {account_ledger_balance.sats:,.0f} sats, "
+            f"which does matches the channel local balance of {balances.channel.local_sats:,.0f} sats. "
+            "No action needed."
+        )
+        return
+
+    if account_ledger_balance.has_transactions:
+        logger.warning(
+            f"Ledger balance for {check_account.name} (Sub: {check_account.sub}) is {account_ledger_balance.sats:,.0f} sats, "
+            f"which does not match the channel local balance of {balances.channel.local_sats:,.0f} sats. "
+            "However, there are existing transactions in the ledger for this account. "
+            "Resetting the opening balance may lead to discrepancies. Please review the ledger entries before proceeding."
+        )
+        reason = f"Balance adjustment required for {node}"
+        adjustment_msats = balances.channel.local_msat - account_ledger_balance.msats
+        short_id = "adjustment"
+    else:
+        reason = f"Initial opening balance for {node}"
+        adjustment_msats = balances.channel.local_msat
+        short_id = "open"
+
+    logger.info(f"Current Channel balance: {balances.channel.local_sats:,.0f} sats")
+    await TrackedBaseModel.update_quote()
+    quote = TrackedBaseModel.last_quote
+
+    opening_conv = CryptoConversion(
+        conv_from=Currency.MSATS,
+        value=adjustment_msats,
+        quote=quote,
+    ).conversion
+
+    opening_balance = LedgerEntry(
+        cust_id="",
+        short_id=short_id,
+        op_type="funding",
+        ledger_type=LedgerType.FUNDING,
+        group_id=f"{short_id}-{datetime.now(tz=timezone.utc).isoformat()}-{LedgerType.FUNDING.value}",
+        timestamp=datetime.now(tz=timezone.utc),
+        description=reason,
+        debit=AssetAccount(name="External Lightning Payments", sub=node),
+        debit_unit=Currency.MSATS,
+        debit_amount=adjustment_msats,
+        debit_conv=opening_conv,
+        credit=LiabilityAccount(name="Owner Loan Payable", sub=node),
+        credit_unit=Currency.MSATS,
+        credit_amount=adjustment_msats,
+        credit_conv=opening_conv,
+    )
+    await opening_balance.save()
+    # Diagnostic check: confirm the opening balance was saved and is visible for the node
+    try:
+        found = (
+            await LedgerEntry.collection()
+            .find(
+                {
+                    "$or": [
+                        {"debit.name": "External Lightning Payments", "debit.sub": node},
+                        {"credit.name": "External Lightning Payments", "credit.sub": node},
+                    ]
+                }
+            )
+            .to_list()
+        )
+        logger.info(
+            f"Diagnostic: Found {len(found)} ledger entries for External Lightning Payments - Sub: {node}",
+            extra={"notification": False},
+        )
+        # Log timestamp and description for quick inspection
+        for doc in found:
+            ts = doc.get("timestamp")
+            desc = doc.get("description")
+            logger.debug(f"Entry: {ts} - {desc}", extra={"notification": False})
+    except Exception as e:
+        logger.warning(f"Diagnostic check failed: {e}", extra={"notification": False})
