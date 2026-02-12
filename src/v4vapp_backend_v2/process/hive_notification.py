@@ -124,7 +124,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
         amount = Amount(str(details.amount))
 
     if getattr(details.tracked_op, "change_memo", None):
-        memo = details.tracked_op.change_memo
+        memo = str(details.tracked_op.change_memo)
     else:
         memo = details.reason_str if details.reason_str else "No reason provided"
 

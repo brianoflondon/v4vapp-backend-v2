@@ -732,7 +732,7 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    from_account: str, to_account: str, amount: Amount, nobroadcast: bool = False
+    from_account: str, to_account: str, amount: Amount = None, nobroadcast: bool = False
 ) -> bool:
     """
     Perform full validations, raise errors if a failure

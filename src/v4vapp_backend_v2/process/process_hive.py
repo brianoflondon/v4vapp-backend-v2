@@ -20,7 +20,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import check_not_development_accounts
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
-from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
+from v4vapp_backend_v2.hive.hive_extras import HiveAccountNameOnExchangesList, HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -111,6 +111,13 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
     except HiveNotHiveAccount as e:
         logger.info(
             f"Not sending to a non-Hive Account: {e}", extra={"notification": True, **op.log_extra}
+        )
+        return []
+
+    except HiveAccountNameOnExchangesList as e:
+        logger.warning(
+            f"Not sending to an exchange account: {e}",
+            extra={"notification": True, **op.log_extra},
         )
         return []
 
