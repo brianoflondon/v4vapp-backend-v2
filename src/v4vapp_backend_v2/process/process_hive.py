@@ -379,3 +379,7 @@ async def suspicious_account_transfer_accounting(hive_transfer: TrackedTransfer)
             debit_conv=hive_transfer.conv,
         )
         await ledger_entry_2.save()
+        logger.warning(
+            f"Suspicious account transfer detected and recorded: {ledger_entry_2.description}",
+            extra={"notification": True, **hive_transfer.log_extra},
+        )
