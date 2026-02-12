@@ -175,6 +175,7 @@ async def clear_and_reset():
     await reset_lightning_node_balance()
 
 
+# TODO: #263 Add a call to something like this on startup of db_monitor if they Ledger is empty.
 async def reset_lightning_node_balance():
     node = InternalConfig().config.lnd_config.default
     balances = await fetch_balances()
