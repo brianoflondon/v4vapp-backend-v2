@@ -267,9 +267,16 @@ async def follow_on_transfer(
         for pending in pending_list:
             logger.warning(pending)
 
+    # Special case: treat as a refund and send to the special v4vapp.sus account
+    # if the sender is on the Hive account name on exchanges list.
+    # This is to prevent abuse from stolen accounts on exchanges.
+    # This error is a sub-class of HiveTransferError so it needs to be before the general HiveTransferError exception.
     except HiveAccountNameOnExchangesList as e:
         return_details.action = ReturnAction.REFUND
         return_details.pay_to_cust_id = "v4vapp.sus"
+        return_details.amount = getattr(
+            tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE"))
+        )
         return_details.reason_str = f"Suspicious account transaction: {e}"
         logger.warning(
             return_details.reason_str, extra={"notification": True, **tracked_op.log_extra}

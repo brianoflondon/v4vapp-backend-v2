@@ -6,6 +6,7 @@ from typing import Any, AsyncGenerator, Callable
 import backoff
 from google.protobuf.json_format import MessageToDict
 from grpc import (
+    StatusCode,
     composite_channel_credentials,  # type: ignore
     metadata_call_credentials,
     ssl_channel_credentials,
@@ -161,6 +162,14 @@ class LNDClient:
                 extra={"get_info": get_info_dict},
             )
             return self.get_info
+
+        except AioRpcError as e:
+            if e.code() == StatusCode.DEADLINE_EXCEEDED:
+                logger.warning(f"{ICON} Node info deadline exceeded (LND busy/unreachable)", exc_info=True)
+            else:
+                logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
+            raise LNDConnectionError(f"Error getting node info {e}")
+
         except Exception as e:
             logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
             raise LNDConnectionError(f"Error getting node info {e}")
