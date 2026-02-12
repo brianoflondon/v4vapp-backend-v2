@@ -1,7 +1,6 @@
 import json
 import logging
 import tempfile
-from os.path import exists
 from pathlib import Path
 from typing import List, Set
 
@@ -63,9 +62,17 @@ async def get_bad_hive_accounts() -> Set[str]:
     bad_actors = await fetch_bad_actor_list()
     bad_accounts: Set[str] = set()
     try:
-        if exists("data/bad_hive_accounts.json"):
-            with open("data/bad_hive_accounts.json", "r") as f:
-                bad_accounts = set(json.load(f))
+        local_bad = Path(__file__).parent / "bad_actors_local_list.txt"
+        if local_bad.exists():
+            with open(local_bad, "r") as f:
+                # load as text with one account per line, ignoring empty lines and stripping whitespace
+                # supports optional inline notes after a "|" separator
+                bad_accounts = {
+                    line.split("|", 1)[0].strip()
+                    for line in f
+                    if line.strip() and line.split("|", 1)[0].strip()
+                }
+
     except Exception as e:
         logging.warning(f"Error loading bad accounts: {e}")
         bad_accounts = set()
@@ -130,7 +137,9 @@ async def fetch_bad_actor_list() -> Set[str]:
                     if isinstance(payload, (list, tuple)):
                         return set(payload)
                 except Exception as e:
-                    logger.warning(f"Failed to parse cached bad actors from Redis: {e}", exc_info=True)
+                    logger.warning(
+                        f"Failed to parse cached bad actors from Redis: {e}", exc_info=True
+                    )
         except Exception as e:
             logger.warning(f"Redis unavailable when loading bad actors backup: {e}", exc_info=True)
 
@@ -154,13 +163,13 @@ async def fetch_bad_actor_list() -> Set[str]:
                     end = content.rfind("`")
                     if start != 0 and end != -1:
                         list_content = content[start:end]
-                        lines = {ln.strip() for ln in list_content.splitlines() if ln.strip()}
+                        lines = [ln.strip() for ln in list_content.splitlines() if ln.strip()]
                         if lines:
-                            return lines
+                            return set(lines)
                 # fallback: plain lines
-                lines = {ln.strip() for ln in content.splitlines() if ln.strip()}
+                lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
                 if lines:
-                    return lines
+                    return set(lines)
         except Exception as e:
             logger.warning(f"Failed to read bundled fallback bad actors file: {e}", exc_info=True)
 

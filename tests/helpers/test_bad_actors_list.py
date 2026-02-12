@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
-from v4vapp_backend_v2.helpers.bad_actors_list import fetch_bad_actor_list
+from v4vapp_backend_v2.helpers.bad_actors_list import (
+    fetch_bad_actor_list,
+    get_bad_hive_accounts,
+)
 
 
 @pytest.mark.asyncio
@@ -107,3 +110,16 @@ async def test_fetch_failure_uses_bundled_file(mocker):
         assert result == {"one", "two", "three"}
     finally:
         module_bundle.write_text(original, encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_local_bad_accounts_include_tre(mocker):
+    mocker.patch(
+        "v4vapp_backend_v2.helpers.bad_actors_list.fetch_bad_actor_list",
+        new=AsyncMock(return_value=set()),
+    )
+
+    result = await get_bad_hive_accounts()
+    assert "tre" in result
+
+

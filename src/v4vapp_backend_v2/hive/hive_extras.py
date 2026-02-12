@@ -21,7 +21,6 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
     check_bad_hive_accounts,
@@ -953,12 +952,19 @@ async def send_transfer(
     account: Account = Account(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
-    await perform_transfer_checks(
-        from_account=from_account,
-        to_account=to_account,
-        amount=amount,
-        nobroadcast=nobroadcast,
-    )
+    try:
+        await perform_transfer_checks(
+            from_account=from_account,
+            to_account=to_account,
+            amount=amount,
+            nobroadcast=nobroadcast,
+        )
+    except HiveDevelopmentAccountError as e:
+        logger.error(f"HiveDevelopmentAccountError: {e}")
+        raise
+    except HiveAccountNameOnExchangesList:
+        # This will be switched to a new account
+        to_account = "v4vapp.sus"
     if is_private:
         memo = f"#{memo}"
     retries = 0
