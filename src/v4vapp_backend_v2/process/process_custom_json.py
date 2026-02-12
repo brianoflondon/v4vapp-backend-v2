@@ -78,7 +78,10 @@ async def process_custom_json_func(
                     to_account=keepsats_transfer.to_account,
                 )
             except Exception as e:
-                logger.error(f"Error performing transfer checks: {e}", extra={"notification": False})
+                logger.error(
+                    f"Error performing transfer checks: {e} {custom_json.short_id}",
+                    extra={"notification": False, **custom_json.log_extra},
+                )
                 raise
             if not custom_json.conv or custom_json.conv.is_unset():
                 quote = await TrackedBaseModel.nearest_quote(timestamp=custom_json.timestamp)
