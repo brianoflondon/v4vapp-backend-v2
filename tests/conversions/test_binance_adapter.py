@@ -148,7 +148,7 @@ class TestBinanceAdapterGetCurrentPrice:
         adapter = BinanceAdapter()
         price = adapter.get_current_price("HIVE", "BTC")
 
-        assert price == Decimal("0.00001234")  # Uses bid price
+        assert price == Decimal("0.00001237")  # Uses current price
 
     @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
     def test_get_current_price_connection_error(self, mock_get_price):
