@@ -136,21 +136,17 @@ class TestBinanceAdapterGetBalance:
 class TestBinanceAdapterGetCurrentPrice:
     """Tests for get_current_price method."""
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_get_current_price_success(self, mock_get_price):
         """Test successful price retrieval."""
-        mock_get_price.return_value = {
-            "bid_price": "0.00001234",
-            "ask_price": "0.00001240",
-            "current_price": "0.00001237",
-        }
+        mock_get_price.return_value = Decimal("0.00001237")
 
         adapter = BinanceAdapter()
         price = adapter.get_current_price("HIVE", "BTC")
 
         assert price == Decimal("0.00001237")  # Uses current price
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_get_current_price_connection_error(self, mock_get_price):
         """Test handling connection error."""
         mock_get_price.side_effect = BinanceErrorBadConnection("Connection failed")
@@ -164,11 +160,11 @@ class TestBinanceAdapterGetCurrentPrice:
 class TestBinanceAdapterMarketSell:
     """Tests for market_sell method."""
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_sell")
     def test_market_sell_success(self, mock_sell, mock_get_price):
         """Test successful market sell with BNB commission (mainnet behavior)."""
-        mock_get_price.return_value = {"bid_price": "0.002"}
+        mock_get_price.return_value = Decimal("0.002")
         mock_sell.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=12345,
@@ -233,11 +229,11 @@ class TestBinanceAdapterMarketSell:
 class TestBinanceAdapterMarketBuy:
     """Tests for market_buy method."""
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     @patch("v4vapp_backend_v2.conversion.binance_adapter.market_buy")
     def test_market_buy_success(self, mock_buy, mock_get_price):
         """Test successful market buy with BNB commission (mainnet behavior)."""
-        mock_get_price.return_value = {"bid_price": "0.002"}
+        mock_get_price.return_value = Decimal("0.002")
         mock_buy.return_value = MarketOrderResult(
             symbol="HIVEBTC",
             order_id=54321,
@@ -302,10 +298,10 @@ class TestBinanceAdapterMarketBuy:
 class TestBinanceAdapterConvertResult:
     """Tests for _convert_result method."""
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_convert_result_extracts_fees(self, mock_get_price):
         """Test that fees are correctly extracted from fills with BNB commission."""
-        mock_get_price.return_value = {"bid_price": "0.002"}
+        mock_get_price.return_value = Decimal("0.002")
         adapter = BinanceAdapter()
 
         binance_result = MarketOrderResult(
@@ -346,14 +342,14 @@ class TestBinanceAdapterConvertResult:
         assert result.trade_quote is not None
         assert result.trade_quote.source == "binance_trade"
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_convert_result_multi_fill_mainnet_style(self, mock_get_price):
         """Test conversion with multiple fills matching real mainnet response.
 
         This tests a scenario based on actual mainnet data where an order
         was filled across 4 separate trades, each with its own BNB commission.
         """
-        mock_get_price.return_value = {"bid_price": "0.002"}
+        mock_get_price.return_value = Decimal("0.002")
         adapter = BinanceAdapter()
 
         # This matches the structure from mainnet: 1084 HIVE sold across 4 fills
@@ -450,15 +446,11 @@ class TestBinanceAdapterConvertResult:
 class TestBinanceAdapterFeeConversion:
     """Tests for fee conversion to CryptoConv (msats tracking)."""
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_fee_conversion_bnb_to_msats(self, mock_get_price):
         """Test that BNB fees are correctly converted to msats via BTC."""
-        # Mock BNBBTC price: 1 BNB = 0.01 BTC (for easy calculation)
-        mock_get_price.return_value = {
-            "bid_price": "0.01",
-            "ask_price": "0.0101",
-            "current_price": "0.01005",
-        }
+        # Mock BNBBTC mid-price: 1 BNB = 0.01 BTC (for easy calculation)
+        mock_get_price.return_value = Decimal("0.01")
 
         adapter = BinanceAdapter()
         fee_bnb = Decimal("0.00009073")  # Real mainnet fee example
@@ -487,15 +479,11 @@ class TestBinanceAdapterFeeConversion:
 
         assert fee_msats == Decimal("0")
 
-    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_current_price")
+    @patch("v4vapp_backend_v2.conversion.binance_adapter.get_mid_price")
     def test_convert_result_includes_fee_conv(self, mock_get_price):
         """Test that _convert_result includes fee_conv in result."""
-        # Mock BNBBTC price
-        mock_get_price.return_value = {
-            "bid_price": "0.01",
-            "ask_price": "0.0101",
-            "current_price": "0.01005",
-        }
+        # Mock BNBBTC mid-price
+        mock_get_price.return_value = Decimal("0.01")
 
         adapter = BinanceAdapter()
         binance_result = MarketOrderResult(

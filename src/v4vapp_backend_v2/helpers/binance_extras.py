@@ -170,6 +170,40 @@ def get_current_price(symbol: str, testnet: bool = False) -> dict:
     return price
 
 
+def get_mid_price(symbol: str, testnet: bool = False) -> Decimal:
+    """
+    Get a safe mid-price for a trading pair.
+
+    Computes the average of bid and ask prices if both are non-zero,
+    otherwise falls back to the ticker current_price.
+    Raises BinanceErrorBadConnection if all prices are zero.
+
+    Args:
+        symbol: The trading pair symbol (e.g., 'HIVEBTC')
+        testnet: Whether to use the Binance testnet
+
+    Returns:
+        Decimal: The mid-price (or best available non-zero price)
+
+    Raises:
+        BinanceErrorBadConnection: If all returned prices are zero
+    """
+    price_info = get_current_price(symbol, testnet)
+    bid = Decimal(price_info.get("bid_price", "0"))
+    ask = Decimal(price_info.get("ask_price", "0"))
+    if bid > 0 and ask > 0:
+        return (bid + ask) / Decimal("2")
+    # Fall back to whichever is non-zero, or current_price
+    if bid > 0:
+        return bid
+    if ask > 0:
+        return ask
+    current = Decimal(price_info.get("current_price", "0"))
+    if current > 0:
+        return current
+    raise BinanceErrorBadConnection(f"Price for {symbol} is zero \u2014 order book may be empty")
+
+
 class MarketOrderResult(BaseModel):
     """
     Model to store the result of a market order (buy or sell).
@@ -322,11 +356,7 @@ def market_order(
             )
 
         # Estimate notional value (quantity * approximate price)
-        # Get current price to estimate notional
-        price_info = get_current_price(symbol, testnet)
-        # Use bid price for SELL, ask price for BUY
-        price_key = "bid_price" if side == "SELL" else "ask_price"
-        price = Decimal(price_info[price_key])
+        price = get_mid_price(symbol, testnet)
         estimated_notional = quantity * price
 
         if min_notional > Decimal("0") and estimated_notional < min_notional:
