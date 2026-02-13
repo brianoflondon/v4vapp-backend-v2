@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -59,6 +59,18 @@ async def setup_db(module_monkeypatch):
 # ---------------------------------------------------------------------------
 def _setup_quote():
     TrackedBaseModel.last_quote = last_quote()
+
+
+def _make_mock_adapter(
+    btc: Decimal = Decimal(0),
+    hive: Decimal = Decimal(0),
+    name: str = "binance_testnet",
+) -> MagicMock:
+    """Create a mock exchange adapter with the given balances and name."""
+    adapter = MagicMock()
+    type(adapter).exchange_name = PropertyMock(return_value=name)
+    adapter.get_balance = lambda asset: {"BTC": btc, "HIVE": hive}.get(asset, Decimal(0))
+    return adapter
 
 
 # ---------------------------------------------------------------------------
@@ -253,13 +265,21 @@ class TestResetExchangeOpeningBalance:
         _setup_quote()
         await InternalConfig.db["ledger"].drop()
 
-        balances = {"BTC": Decimal(0), "HIVE": Decimal(0), "SATS": Decimal(0)}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal(0), hive=Decimal(0), name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         count = await LedgerEntry.collection().count_documents({})
         assert count == 0
@@ -271,13 +291,21 @@ class TestResetExchangeOpeningBalance:
         await InternalConfig.db["ledger"].drop()
 
         sats_value = Decimal(100_462_981)
-        balances = {"BTC": Decimal("1.00462981"), "HIVE": Decimal(0), "SATS": sats_value}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("1.00462981"), hive=Decimal(0), name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         entries = await LedgerEntry.collection().find({}).to_list()
         assert len(entries) == 1
@@ -300,13 +328,21 @@ class TestResetExchangeOpeningBalance:
         await InternalConfig.db["ledger"].drop()
 
         hive_value = Decimal("1875.000")
-        balances = {"BTC": Decimal(0), "HIVE": hive_value, "SATS": Decimal(0)}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal(0), hive=hive_value, name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         entries = await LedgerEntry.collection().find({}).to_list()
         assert len(entries) == 1
@@ -326,13 +362,21 @@ class TestResetExchangeOpeningBalance:
 
         sats_value = Decimal(100_462_981)
         hive_value = Decimal("1875.000")
-        balances = {"BTC": Decimal("1.00462981"), "HIVE": hive_value, "SATS": sats_value}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("1.00462981"), hive=hive_value, name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         entries = await LedgerEntry.collection().find({}).to_list()
         assert len(entries) == 2
@@ -355,13 +399,21 @@ class TestResetExchangeOpeningBalance:
 
         sats_value = Decimal(100_462_981)
         hive_value = Decimal("1875.000")
-        balances = {"BTC": Decimal("1.00462981"), "HIVE": hive_value, "SATS": sats_value}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("1.00462981"), hive=hive_value, name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         count_after = await LedgerEntry.collection().count_documents({})
         assert count_after == count_before  # No new entries
@@ -373,15 +425,23 @@ class TestResetExchangeOpeningBalance:
         # Current ledger has previous sats balance — now it changed
         new_sats = Decimal(110_000_000)  # Changed from 100_462_981
         hive_value = Decimal("1875.000")  # Same HIVE
-        balances = {"BTC": Decimal("1.10000000"), "HIVE": hive_value, "SATS": new_sats}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("1.10000000"), hive=hive_value, name="binance_testnet"
+        )
 
         count_before = await LedgerEntry.collection().count_documents({})
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         count_after = await LedgerEntry.collection().count_documents({})
         # Should add 1 adjustment for sats (hive is still matching)
@@ -394,17 +454,25 @@ class TestResetExchangeOpeningBalance:
 
     @pytest.mark.asyncio
     async def test_custom_exchange_sub(self):
-        """Should use the provided exchange_sub as the sub-account."""
+        """Should use the adapter's exchange_name as the sub-account."""
         _setup_quote()
         await InternalConfig.db["ledger"].drop()
 
-        balances = {"BTC": Decimal("0.5"), "HIVE": Decimal(0), "SATS": Decimal(50_000_000)}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("0.5"), hive=Decimal(0), name="binance_mainnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_mainnet")
+            await reset_exchange_opening_balance()
 
         entries = await LedgerEntry.collection().find({}).to_list()
         assert len(entries) == 1
@@ -420,13 +488,21 @@ class TestResetExchangeOpeningBalance:
         await InternalConfig.db["ledger"].drop()
 
         sats_value = Decimal(50_000_000)
-        balances = {"BTC": Decimal("0.5"), "HIVE": Decimal(0), "SATS": sats_value}
+        mock_adapter = _make_mock_adapter(
+            btc=Decimal("0.5"), hive=Decimal(0), name="binance_testnet"
+        )
 
-        with patch(
-            "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.TrackedBaseModel.update_quote",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "v4vapp_backend_v2.helpers.opening_balances.get_exchange_adapter",
+                return_value=mock_adapter,
+            ),
         ):
-            await reset_exchange_opening_balance(balances, exchange_sub="binance_testnet")
+            await reset_exchange_opening_balance()
 
         entries = await LedgerEntry.collection().find({}).to_list()
         assert len(entries) == 1
