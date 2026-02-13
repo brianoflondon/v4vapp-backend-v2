@@ -44,6 +44,9 @@ async def check_for_outstanding_hive_balance(cust_id: CustIDType, amount: Amount
     _, account_balance = await keepsats_balance(cust_id)
     # looking for a positive hive or hbd balance.
 
+    # Override checks for sending to the app's own account, we want to allow sending the full amount back to the app even if it looks like they have a negative balance, because this is likely just them paying back a previous transfer.
+    if cust_id == "v4vapp.sus":
+        return amount
     to_send = amount
     if amount.symbol == "HIVE":
         net = account_balance.hive_amount - amount
@@ -109,7 +112,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     if details.action in [ReturnAction.REFUND, ReturnAction.CHANGE]:
         if details.amount:
             amount = Amount(str(details.amount)) or Amount("0.001 HIVE")
-        if details.tracked_op.change_amount:
+        if details.tracked_op and getattr(details.tracked_op, "change_amount", None):
             amount = details.tracked_op.change_amount.beam or Amount("0.001 HIVE")
         else:
             logger.debug(
@@ -120,8 +123,8 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
     if details.action == ReturnAction.CONVERSION:
         amount = Amount(str(details.amount))
 
-    if details.tracked_op.change_memo:
-        memo = details.tracked_op.change_memo
+    if getattr(details.tracked_op, "change_memo", None):
+        memo = str(details.tracked_op.change_memo)
     else:
         memo = details.reason_str if details.reason_str else "No reason provided"
 
@@ -192,9 +195,17 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             notification=True,
         )
         if details.msats and details.msats > 0:
-            custom_json_id = "v4vapp_dev_transfer"
+            custom_json_id = (
+                "v4vapp_dev_transfer"
+                if InternalConfig().config.development.enabled
+                else "v4vapp_transfer"
+            )
         else:
-            custom_json_id = "v4vapp_dev_notification"
+            custom_json_id = (
+                "v4vapp_dev_notification"
+                if InternalConfig().config.development.enabled
+                else "v4vapp_notification"
+            )
         try:
             trx = await send_custom_json(
                 json_data=notification.model_dump(exclude_none=True, exclude_unset=True),

@@ -229,13 +229,13 @@ async def server_account_hive_balances(in_progress: InProgressResults) -> Sanity
                 is_valid=False,
                 details=(
                     f"Server Hive Mismatch: {hive_delta:,.3f} HIVE, {hbd_delta:,.3f} HBD; "
-                    f"balances mismatch: HIVE deposits {hive_deposits:,.3f} vs actual {hive_actual:,.3f}, "
-                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual:,.3f}."
+                    f"balances mismatch: HIVE deposits {hive_deposits:,.3f} vs actual {hive_actual.amount_decimal:,.3f}, "
+                    f"HBD deposits {hbd_deposits:,.3f} vs actual {hbd_actual.amount_decimal:,.3f}."
                 ),
             )
 
     except Exception as e:
-        logger.warning(
+        logger.exception(
             f"Failed to check customer deposits balance: {e}",
             extra={"notification": False},
         )

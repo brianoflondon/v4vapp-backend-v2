@@ -175,7 +175,35 @@ async def clear_and_reset():
     await reset_lightning_node_balance()
 
 
+# TODO: #263 Add a call to something like this on startup of db_monitor if they Ledger is empty.
 async def reset_lightning_node_balance():
+    """
+    Reset the Lightning node's opening balance for testing purposes.
+
+    This function retrieves the current Lightning node channel balance and creates a ledger entry
+    to record the opening balance. It performs the following operations:
+
+    1. Fetches the current channel balance from the default LND node configuration
+    2. If channel balance exists:
+        - Logs the current channel balance in sats
+        - Updates the crypto conversion quote
+        - Creates a CryptoConversion from msat to other currencies using the latest quote
+        - Creates and saves a LedgerEntry that records the opening balance as a funding operation
+        - Performs a diagnostic check to verify the ledger entry was saved and is queryable
+    3. If no channel balance is available, logs a warning
+
+    The ledger entry uses:
+    - Asset Account: "External Lightning Payments" (for debit)
+    - Liability Account: "Owner Loan Payable" (for credit)
+    - Both sides record the full local msat balance with appropriate conversions
+
+    Raises:
+         Any exceptions from database operations or balance fetching are logged but not re-raised.
+
+    Note:
+         Diagnostic checks log warnings or debug messages if the ledger entry retrieval fails.
+         This function is intended for testing purposes only.
+    """
     node = InternalConfig().config.lnd_config.default
     balances = await fetch_balances()
     if balances.channel:

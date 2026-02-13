@@ -17,9 +17,12 @@ from v4vapp_backend_v2.api.v1_legacy.api_classes import (
     KeepsatsTransferResponse,
 )
 from v4vapp_backend_v2.config.setup import InternalConfig, StartupFailure, logger
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    ExchangeConnectionError,
+    get_exchange_adapter,
+)
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.fixed_quote.fixed_quote_class import FixedHiveQuote
-from v4vapp_backend_v2.helpers.binance_extras import BinanceErrorBadConnection, get_balances
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import AllQuotes
 from v4vapp_backend_v2.helpers.currency_class import Currency
@@ -190,14 +193,11 @@ async def fixed_quote(
 
 @crypto_v1_router.get("/binance/")
 async def binance() -> Dict[str, str | int | float]:
-    if InternalConfig().config.development.enabled:
-        testnet = True
-    else:
-        testnet = False
     try:
-        balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=testnet)
+        adapter = get_exchange_adapter()
+        balances = adapter.get_balances(["BTC", "HIVE", "USDT"])
         logger.debug(f"{ICON} Binance balances: {balances}")
-    except BinanceErrorBadConnection:
+    except ExchangeConnectionError:
         return {"error": "Bad connection"}
     return {
         "BTC": float(balances.get("BTC", 0.0)),
@@ -465,7 +465,14 @@ if __name__ == "__main__":
 
     # Create the app with the specified config file
     app = create_app(config_file=args.config)
-    uvicorn.run(app, host=args.host, port=args.port, workers=args.workers, )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        workers=args.workers,
+        log_config=None,
+        # access_log=False,
+    )
 else:
     # Create app with default config for module imports
     app = create_app()

@@ -7,6 +7,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
+from v4vapp_backend_v2.helpers.bad_actors_list import check_bad_hive_accounts
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import received_lightning_message
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
@@ -79,6 +80,27 @@ async def process_lightning_receipt(
     # Now we send it to the customer (if there is one) and the custom_json receiver needs to process.
 
     if invoice.cust_id and invoice.is_lndtohive:
+        # check if cust_id is on the bad accounts list and if so, send to the v4vapp.sus account instead of the customer
+        try:
+            bad_account = await check_bad_hive_accounts([invoice.cust_id])
+            if bad_account:
+                raise ValueError(f"Customer ID {invoice.cust_id} is on the bad accounts list.")
+        except Exception:
+            incoming_ledger_entry.user_memo += (
+                f"Suspicious account transaction: {invoice.cust_id} is on the bad accounts list"
+            )
+            incoming_ledger_entry.description += (
+                f" | Suspicious account transaction: {invoice.cust_id} is on the bad accounts list"
+            )
+            await incoming_ledger_entry.save(upsert=True)
+            logger.warning(
+                f"Customer ID {invoice.cust_id} is on the bad accounts taking no further action {invoice.log_str}",
+                extra={"notification": True, **invoice.log_extra},
+            )
+            invoice.cust_id = "v4vapp.sus"
+            invoice.memo = f"v4vapp.sus account transaction: {invoice.cust_id} is on the bad accounts list #sats | {invoice.memo}"
+            await invoice.save()
+
         # For now we will treat any inbound amount as Keepsats.
         # MARK: Sats in to Keepsats
         transfer = KeepsatsTransfer(
@@ -140,6 +162,12 @@ async def process_lightning_receipt_stage_2(invoice: Invoice, nobroadcast: bool 
                 f"Lightning to Keepsats deposit transfer for customer ID: {invoice.cust_id}",
                 extra={"notification": False},
             )
+            if invoice.cust_id == "v4vapp.sus":
+                logger.info(
+                    f"Received Lightning invoice from v4vapp.sus account, no further action will be taken. {invoice.log_str}",
+                    extra={"notification": False, **invoice.log_extra},
+                )
+                return
             details = HiveReturnDetails(
                 tracked_op=invoice,
                 original_memo=invoice.memo,

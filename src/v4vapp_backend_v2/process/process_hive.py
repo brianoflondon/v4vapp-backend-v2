@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from typing import List
 
@@ -19,7 +20,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import check_not_development_accounts
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
-from v4vapp_backend_v2.hive.hive_extras import HiveNotHiveAccount
+from v4vapp_backend_v2.hive.hive_extras import HiveAccountNameOnExchangesList, HiveNotHiveAccount
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.op_fill_order import FillOrder
 from v4vapp_backend_v2.hive_models.op_limit_order_create import LimitOrderCreate
@@ -110,6 +111,13 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
     except HiveNotHiveAccount as e:
         logger.info(
             f"Not sending to a non-Hive Account: {e}", extra={"notification": True, **op.log_extra}
+        )
+        return []
+
+    except HiveAccountNameOnExchangesList as e:
+        logger.warning(
+            f"Not sending to an exchange account: {e}",
+            extra={"notification": True, **op.log_extra},
         )
         return []
 
@@ -272,6 +280,11 @@ async def process_transfer_op(
         ledger_entry.description = f"Withdrawal: {base_description}"
         ledger_entry.ledger_type = LedgerType.CUSTOMER_HIVE_OUT
 
+        # MARK: Server to suspicious account holding v4vapp.sus
+        if hive_transfer.to_account == "v4vapp.sus":
+            # This is the balancing transaction for the suspicious account hold
+            follow_on_task = suspicious_account_transfer_accounting(hive_transfer=hive_transfer)
+
     # MARK: Customer account to server account deposit
     elif hive_transfer.to_account == server_account:
         customer = hive_transfer.from_account
@@ -323,3 +336,57 @@ async def process_transfer_op(
             logger.exception(f"Follow-on task failed: {e}", extra={"notification": False})
 
     return ledger_entry
+
+
+async def suspicious_account_transfer_accounting(hive_transfer: TrackedTransfer) -> None:
+    """
+    Process accounting entries for suspicious account transfers.
+
+    This function handles transactions involving accounts flagged on the bad accounts list.
+    It extracts customer ID and original transaction ID from the transfer memo using regex pattern matching,
+    then creates and saves a ledger entry to track the suspicious transaction in the liability accounts.
+
+    Args:
+        hive_transfer (TrackedTransfer): The transfer object containing transaction details including
+            memo, group_id, short_id, operation type, user memo, link, unit, amount, and conversion data.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: Any exceptions raised by ledger_entry.save() operation.
+
+    Note:
+        - The function only processes transfers with memos matching the suspicious account pattern.
+        - Creates a LedgerType.SUSPICIOUS entry linking the suspicious account to VSC Liability accounts.
+        - The memo pattern expects format: "Suspicious account transaction: {cust_id} is on the bad accounts list | § {original_trans_id} |"
+    """
+
+    pattern = r"Suspicious\s+account\s+transaction:\s+(?P<cust_id>\S+)\s+is\s+on\s+the\s+bad\s+accounts\s+list\s+\|\s+§\s+(?P<original_trans_id>\S+)\s+\|"
+    m = re.search(pattern, hive_transfer.d_memo)
+    if m:
+        ledger_type = LedgerType.SUSPICIOUS
+        ledger_entry_2 = LedgerEntry(
+            cust_id=m.group("cust_id"),
+            ledger_type=ledger_type,
+            group_id=f"{hive_transfer.group_id}_{ledger_type}",
+            short_id=hive_transfer.short_id,
+            op_type=hive_transfer.op_type,
+            user_memo=hive_transfer.user_memo,
+            timestamp=datetime.now(tz=timezone.utc),
+            link=hive_transfer.link,
+            description=f"{hive_transfer.d_memo}",
+            credit=LiabilityAccount(name="VSC Liability", sub="v4vapp.sus"),
+            debit=LiabilityAccount(name="VSC Liability", sub=m.group("cust_id")),
+            credit_unit=hive_transfer.unit,
+            debit_unit=hive_transfer.unit,
+            credit_amount=hive_transfer.amount_decimal,
+            debit_amount=hive_transfer.amount_decimal,
+            credit_conv=hive_transfer.conv,
+            debit_conv=hive_transfer.conv,
+        )
+        await ledger_entry_2.save()
+        logger.warning(
+            f"Suspicious account transfer detected and recorded: {ledger_entry_2.description}",
+            extra={"notification": True, **hive_transfer.log_extra},
+        )

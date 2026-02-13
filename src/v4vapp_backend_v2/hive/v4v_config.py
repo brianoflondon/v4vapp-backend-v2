@@ -137,7 +137,7 @@ class V4VConfig:
             self.server_accname = server_accname
             self.hive = hive or get_hive_client()
             self.fetch()
-            logger.debug(
+            logger.info(
                 f"{ICON} V4VConfig initialized {self.server_accname}", extra={**self.log_extra}
             )
             return

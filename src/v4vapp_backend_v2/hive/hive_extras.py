@@ -21,11 +21,10 @@ from nectarbase.operations import Custom_json as NectarCustomJson
 from nectarbase.operations import Transfer as NectarTransfer
 from pydantic import BaseModel
 
-from v4vapp_backend_v2.config.decorators import time_decorator
 from v4vapp_backend_v2.config.setup import HiveRoles, InternalConfig, logger
 from v4vapp_backend_v2.helpers.bad_actors_list import (
-    check_bad_hive_accounts,
     check_not_development_accounts,
+    get_bad_hive_accounts,
 )
 from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_to_float_or_int
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -733,7 +732,7 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    from_account: str, to_account: str, amount: Amount, nobroadcast: bool = False
+    from_account: str, to_account: str, amount: Amount = None, nobroadcast: bool = False
 ) -> bool:
     """
     Perform full validations, raise errors if a failure
@@ -757,10 +756,13 @@ async def perform_transfer_checks(
         raise HiveDevelopmentAccountError(
             f"{from_account} or {to_account} is not in allowed hive accounts for development mode"
         )
-    if await check_bad_hive_accounts([from_account, to_account]):
-        raise HiveAccountNameOnExchangesList(
-            f"{from_account} or {to_account} is on bad accounts list"
-        )
+    bad_accounts_set = await get_bad_hive_accounts()
+    message = ""
+    for account in [from_account, to_account]:
+        if account in bad_accounts_set:
+            message += f"{account} is on the bad accounts list "
+    if message:
+        raise HiveAccountNameOnExchangesList(message)
     return True
 
 
@@ -953,12 +955,19 @@ async def send_transfer(
     account: Account = Account(from_account, blockchain_instance=hive_client)
     if not account:
         raise ValueError("Invalid account")
-    await perform_transfer_checks(
-        from_account=from_account,
-        to_account=to_account,
-        amount=amount,
-        nobroadcast=nobroadcast,
-    )
+    try:
+        await perform_transfer_checks(
+            from_account=from_account,
+            to_account=to_account,
+            amount=amount,
+            nobroadcast=nobroadcast,
+        )
+    except HiveDevelopmentAccountError as e:
+        logger.error(f"HiveDevelopmentAccountError: {e}")
+        raise
+    except HiveAccountNameOnExchangesList:
+        # This will be switched to a new account
+        to_account = "v4vapp.sus"
     if is_private:
         memo = f"#{memo}"
     retries = 0

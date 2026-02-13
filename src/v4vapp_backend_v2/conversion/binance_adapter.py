@@ -139,6 +139,24 @@ class BinanceAdapter(BaseExchangeAdapter):
         except BinanceErrorBadConnection as e:
             raise ExchangeConnectionError(f"Failed to get Binance balance: {e}")
 
+    def get_balances(self, assets: list[str]) -> dict[str, Decimal]:
+        """
+        Get available balances for multiple assets from Binance in a single API call.
+
+        Args:
+            assets: List of asset symbols (e.g., ['BTC', 'HIVE', 'USDT'])
+
+        Returns:
+            Dict mapping asset symbols to balances as Decimal.
+            Includes a 'SATS' key if 'BTC' is requested.
+        """
+        try:
+            raw = get_balances(assets, testnet=self.testnet)
+            result = {k: Decimal(str(v)) for k, v in raw.items()}
+            return result
+        except BinanceErrorBadConnection as e:
+            raise ExchangeConnectionError(f"Failed to get Binance balances: {e}")
+
     def get_current_price(self, base_asset: str, quote_asset: str) -> Decimal:
         """
         Get current market price from Binance.

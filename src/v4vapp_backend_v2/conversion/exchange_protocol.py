@@ -201,6 +201,19 @@ class ExchangeProtocol(Protocol):
         """
         ...
 
+    def get_balances(self, assets: list[str]) -> Dict[str, Decimal]:
+        """
+        Get available balances for multiple assets in a single call.
+
+        Args:
+            assets: List of asset symbols (e.g., ['BTC', 'HIVE', 'USDT'])
+
+        Returns:
+            Dict mapping asset symbols to their available balances as Decimal.
+            Includes a 'SATS' key if 'BTC' is requested (BTC balance * 1e8).
+        """
+        ...
+
     def get_current_price(self, base_asset: str, quote_asset: str) -> Decimal:
         """
         Get the current market price for a trading pair.
@@ -291,6 +304,27 @@ class BaseExchangeAdapter(ABC):
     def get_balance(self, asset: str) -> Decimal:
         """Get the available balance for an asset."""
         pass
+
+    def get_balances(self, assets: list[str]) -> Dict[str, Decimal]:
+        """
+        Get available balances for multiple assets in a single call.
+
+        Default implementation calls get_balance per asset.
+        Subclasses may override for more efficient batch retrieval.
+
+        Args:
+            assets: List of asset symbols (e.g., ['BTC', 'HIVE', 'USDT'])
+
+        Returns:
+            Dict mapping asset symbols to their available balances.
+            Includes a 'SATS' key if 'BTC' is requested (BTC * 1e8).
+        """
+        result: Dict[str, Decimal] = {}
+        for asset in assets:
+            result[asset] = self.get_balance(asset)
+        if "BTC" in result:
+            result["SATS"] = int(result["BTC"] * SATS_PER_BTC)
+        return result
 
     @abstractmethod
     def get_current_price(self, base_asset: str, quote_asset: str) -> Decimal:

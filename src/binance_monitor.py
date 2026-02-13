@@ -15,17 +15,15 @@ from v4vapp_backend_v2.config.setup import (
     StartupFailure,
     logger,
 )
-from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
+from v4vapp_backend_v2.conversion.exchange_protocol import (
+    ExchangeConnectionError,
+    get_exchange_adapter,
+)
 from v4vapp_backend_v2.conversion.exchange_rebalance import (
     RebalanceDirection,
     add_pending_rebalance,
 )
 from v4vapp_backend_v2.database.db_pymongo import DBConn, DBConnConnectionException
-from v4vapp_backend_v2.helpers.binance_extras import (
-    BinanceErrorBadConnection,
-    get_balances,
-    get_current_price,
-)
 from v4vapp_backend_v2.helpers.general_purpose_funcs import draw_percentage_meter
 
 ICON = "🅑"
@@ -122,7 +120,7 @@ async def check_binance_balances():
             )
             send_message = True
 
-        except BinanceErrorBadConnection as ex:
+        except ExchangeConnectionError as ex:
             logger.warning(
                 f"{ICON} Problem with Binance API. {ex}",
                 # extra={"error_code": "binance_api_error", "notification": True},
@@ -175,10 +173,8 @@ def generate_message(saved_balances: dict):
     """
     delta_message = ""
     delta_balances = {}
-    try:
-        balances = get_balances(["BTC", "HIVE"])
-    except BinanceErrorBadConnection:
-        raise
+    adapter = get_exchange_adapter()
+    balances = adapter.get_balances(["BTC", "HIVE"])
     hive_balance = Decimal(balances.get("HIVE", 0))
     sats_balance = Decimal(balances.get("SATS", 0))
     if saved_balances and balances != saved_balances:
@@ -192,10 +188,10 @@ def generate_message(saved_balances: dict):
                 f"{hive_direction} {delta_balances.get('HIVE', 0):.3f} HIVE "
                 f"({sats_direction} {int(delta_balances.get('SATS', 0)):,} sats)"
             )
-    current_price = get_current_price("HIVEBTC")
+    current_price_decimal = adapter.get_current_price("HIVE", "BTC")
     saved_balances = balances
 
-    current_price_sats = Decimal(str(current_price["current_price"])) * Decimal("1e8")
+    current_price_sats = current_price_decimal * Decimal("1e8")
     hive_target = Decimal(str(BINANCE_HIVE_ALERT_LEVEL_SATS)) / current_price_sats
     percentage = hive_balance / hive_target * 100
     percentage_meter = draw_percentage_meter(percentage=percentage, max_percent=300, width=9)

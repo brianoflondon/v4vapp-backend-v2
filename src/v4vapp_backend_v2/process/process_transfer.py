@@ -16,10 +16,12 @@ from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive.hive_extras import (
+    HiveAccountNameOnExchangesList,
     HiveConversionLimits,
     HiveNotEnoughHiveInAccount,
     HiveTransferError,
     account_hive_balances,
+    perform_transfer_checks,
 )
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
@@ -125,6 +127,7 @@ async def follow_on_transfer(
         )
         return
     cust_id = tracked_op.cust_id
+
     amount = Amount("0.001 HIVE")
 
     return_details = HiveReturnDetails(
@@ -141,6 +144,14 @@ async def follow_on_transfer(
     lnd_config = InternalConfig().config.lnd_config
     lnd_client = LNDClient(connection_name=lnd_config.default)
     try:
+        # Check if the customer is on the bad accounts list
+        await perform_transfer_checks(
+            from_account=tracked_op.cust_id,
+            to_account=tracked_op.to_account,
+            amount=amount,
+            nobroadcast=nobroadcast,
+        )
+
         # MARK: Conversion Hive/HBD to Keepsats
         if tracked_op.keepsats and not isinstance(tracked_op, CustomJson):
             # This is a conversion of Hive/HBD and deposit Lightning Keepsats
@@ -256,6 +267,27 @@ async def follow_on_transfer(
         for pending in pending_list:
             logger.warning(pending)
 
+    # Special case: treat as a refund and send to the special v4vapp.sus account
+    # if the sender is on the Hive account name on exchanges list.
+    # This is to prevent abuse from stolen accounts on exchanges.
+    # This error is a sub-class of HiveTransferError so it needs to be before the general HiveTransferError exception.
+    except HiveAccountNameOnExchangesList as e:
+        return_details.action = ReturnAction.REFUND
+        return_details.pay_to_cust_id = "v4vapp.sus"
+        if tracked_op.op_type == "custom_json" and (
+            json_data := getattr(tracked_op, "json_data", None)
+        ):
+            return_details.msats = json_data.msats
+        else:
+            original_amount = getattr(tracked_op, "amount", AmountPyd(amount=Amount("0.001 HIVE")))
+            return_details.amount = original_amount
+        return_details.reason_str = f"Suspicious account transaction: {e}"
+        logger.warning(
+            return_details.reason_str, extra={"notification": True, **tracked_op.log_extra}
+        )
+        # We now want to correct the ledger to move the liability from the cust_id to the v4vapp.sus account.
+        # This will be done in the #process_hive.py file when we process the server to v4vapp.sus transfer
+
     except (LNDPaymentError, LNDPaymentExpired, HiveTransferError) as e:
         return_details.action = ReturnAction.REFUND
         if tracked_op.op_type == "custom_json" and (
@@ -279,7 +311,7 @@ async def follow_on_transfer(
         logger.exception(
             return_details.reason_str,
             extra={
-                "notification": False,
+                "notification": True,
                 **tracked_op.log_extra,
                 **return_details.log_extra,
             },
