@@ -3,6 +3,13 @@ Binance exchange adapter implementing the ExchangeProtocol.
 
 This adapter wraps the binance_extras functions to provide a standardized
 interface for the rebalancing system.
+
+2026-02-13 - Binance removed  BTC/HIVE pair so this adapter is depreciated in favor of
+BinanceSwapAdapter which uses the new swap endpoints and supports the new swap pairs.
+The old BinanceAdapter code is left here for reference and potential future use if needed.
+
+BinanceSwapAdapter cannot be used on Testnet however.
+
 """
 
 from decimal import ROUND_DOWN, Decimal

@@ -420,7 +420,11 @@ def get_exchange_adapter(exchange_name: str | None = None) -> BaseExchangeAdapte
     testnet = provider.use_testnet
 
     # Return the appropriate adapter
-    if provider_name == "binance":
+    if provider_name == "binance" and not testnet:
+        from v4vapp_backend_v2.conversion.binance_swap_adapter import BinanceSwapAdapter
+
+        return BinanceSwapAdapter(testnet=testnet)
+    elif provider_name == "binance" and testnet:
         from v4vapp_backend_v2.conversion.binance_adapter import BinanceAdapter
 
         return BinanceAdapter(testnet=testnet)
