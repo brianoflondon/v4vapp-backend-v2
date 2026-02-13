@@ -11,7 +11,7 @@ NOTE: The Convert API does NOT support testnet. All operations are live.
 """
 
 import time
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import ClassVar
 
 import backoff
@@ -199,6 +199,9 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
     def exchange_name(self) -> str:
         return "binance_convert"
 
+    # Maximum decimal places accepted by the Binance Convert API
+    MAX_CONVERT_DECIMALS: ClassVar[int] = 8
+
     def _get_client(self) -> Client:
         """
         Get a Binance Spot client for Convert API calls.
@@ -206,6 +209,29 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
         Always uses mainnet since Convert API doesn't support testnet.
         """
         return get_client(testnet=False)
+
+    @classmethod
+    def _format_amount(cls, amount: Decimal) -> str:
+        """
+        Format a Decimal amount for the Convert API.
+
+        Binance Convert API rejects amounts with more than 8 decimal places.
+        This method truncates (rounds down) to 8 decimals and strips trailing
+        zeros to produce a clean string.
+
+        Args:
+            amount: The Decimal amount to format
+
+        Returns:
+            String representation with at most 8 decimal places
+        """
+        quantizer = Decimal(10) ** -cls.MAX_CONVERT_DECIMALS
+        truncated = amount.quantize(quantizer, rounding=ROUND_DOWN)
+        # Use fixed-point notation and strip trailing zeros
+        fixed = f"{truncated:f}"
+        if "." in fixed:
+            fixed = fixed.rstrip("0").rstrip(".")
+        return fixed
 
     def get_min_order_requirements(self, base_asset: str, quote_asset: str) -> ExchangeMinimums:
         """
@@ -355,9 +381,9 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
                 "walletType": wallet_type,
             }
             if from_amount is not None:
-                kwargs["fromAmount"] = str(from_amount)
+                kwargs["fromAmount"] = self._format_amount(from_amount)
             if to_amount is not None:
-                kwargs["toAmount"] = str(to_amount)
+                kwargs["toAmount"] = self._format_amount(to_amount)
 
             response = client.send_quote_request(
                 fromAsset=from_asset,
