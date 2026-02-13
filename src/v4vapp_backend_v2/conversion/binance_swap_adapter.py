@@ -22,19 +22,10 @@ from requests.exceptions import RequestException
 
 from v4vapp_backend_v2.config.setup import logger
 from v4vapp_backend_v2.conversion.exchange_protocol import (
-    BaseExchangeAdapter,
-    ExchangeBelowMinimumError,
-    ExchangeConnectionError,
-    ExchangeError,
-    ExchangeMinimums,
-    ExchangeOrderResult,
-)
+    BaseExchangeAdapter, ExchangeBelowMinimumError, ExchangeConnectionError,
+    ExchangeError, ExchangeMinimums, ExchangeOrderResult)
 from v4vapp_backend_v2.helpers.binance_extras import (
-    BinanceErrorBadConnection,
-    get_balances,
-    get_client,
-    get_mid_price,
-)
+    BinanceErrorBadConnection, get_balances, get_client, get_mid_price)
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 
 
