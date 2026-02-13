@@ -256,7 +256,7 @@ ExpenseAccounts = Literal[
     "Exchange Fees Paid",
     "Testing Expenses",
     "Testing Expenses LND Payment",
-    "LND Hosting",
+    "Hosting",
 ]
 
 
