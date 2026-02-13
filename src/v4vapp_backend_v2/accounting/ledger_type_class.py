@@ -31,6 +31,8 @@ class LedgerType(StrEnum):
     WITHDRAW_HIVE = "withdraw_h"  # Withdrawal to a customer's liability account
     DEPOSIT_HIVE = "deposit_h"  # Deposit into a customer's liability account
 
+    SUSPICIOUS = "susp"  # Marking a transaction as suspicious (used for transfers to v4vapp.sus)
+
     HOLD_KEEPSATS = "hold_k"  # Holding Keepsats in the account
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 

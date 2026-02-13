@@ -206,9 +206,12 @@ class EquityAccount(LedgerAccount):
             Overrides the account_type to `AccountType.EQUITY`.
     """
 
-    name: Literal["Owner's Capital", "Retained Earnings", "Dividends/Distributions"] = Field(
-        ..., description="Specific equity account name"
-    )
+    name: Literal[
+        "Owner's Capital",
+        "Retained Earnings",
+        "Dividends/Distributions",
+        "Suspicious Account Hold",
+    ] = Field(..., description="Specific equity account name")
     account_type: Literal[AccountType.EQUITY] = Field(
         AccountType.EQUITY, description="Type of account"
     )
@@ -253,8 +256,10 @@ ExpenseAccounts = Literal[
     "Exchange Fees Paid",
     "Testing Expenses",
     "Testing Expenses LND Payment",
-    "LND Hosting",
+    "Hosting",
 ]
+
+
 # MARK: Expense Accounts
 class ExpenseAccount(LedgerAccount):
     name: ExpenseAccounts = Field(..., description="Specific expense account name")

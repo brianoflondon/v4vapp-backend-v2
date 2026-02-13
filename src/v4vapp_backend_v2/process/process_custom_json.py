@@ -17,6 +17,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.currency_class import Currency
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
+from v4vapp_backend_v2.hive.hive_extras import perform_transfer_checks
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_custom_json import CustomJson
 from v4vapp_backend_v2.hive_models.return_details_class import HiveReturnDetails, ReturnAction
@@ -71,6 +72,17 @@ async def process_custom_json_func(
             and keepsats_transfer.msats
             and custom_json.from_account != custom_json.to_account
         ):
+            try:
+                await perform_transfer_checks(
+                    from_account=keepsats_transfer.from_account,
+                    to_account=keepsats_transfer.to_account,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error performing transfer checks: {e} {custom_json.short_id}",
+                    extra={"notification": False, **custom_json.log_extra},
+                )
+                raise
             if not custom_json.conv or custom_json.conv.is_unset():
                 quote = await TrackedBaseModel.nearest_quote(timestamp=custom_json.timestamp)
                 await custom_json.update_conv(quote=quote)

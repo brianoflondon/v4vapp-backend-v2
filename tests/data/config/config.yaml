@@ -303,7 +303,7 @@ expense_config:
   lnd_expense_rules:
     V4VAPP Hive Bridge:
       from_role: treasury
-      expense_account_name: "LND Hosting"
+      expense_account_name: "Testing Expenses"
       description: "LND expense development purposes."
       ledger_type: expense
   hive_expense_rules:

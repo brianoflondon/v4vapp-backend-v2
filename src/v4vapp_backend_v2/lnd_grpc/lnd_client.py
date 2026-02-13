@@ -6,6 +6,7 @@ from typing import Any, AsyncGenerator, Callable
 import backoff
 from google.protobuf.json_format import MessageToDict
 from grpc import (
+    StatusCode,
     composite_channel_credentials,  # type: ignore
     metadata_call_credentials,
     ssl_channel_credentials,
@@ -146,7 +147,7 @@ class LNDClient:
             if getattr(self, "get_info", None) is not None:
                 return self.get_info
             self.get_info: lnrpc.GetInfoResponse = await self.lightning_stub.GetInfo(
-                lnrpc.GetInfoRequest(), timeout=5.0
+                lnrpc.GetInfoRequest(), timeout=10.0
             )
             # always_print_fields_with_no_presence=True: forces serialization of fields that lack
             # presence (repeated, maps, scalars) so missing lists become [] instead of absent
@@ -161,6 +162,14 @@ class LNDClient:
                 extra={"get_info": get_info_dict},
             )
             return self.get_info
+
+        except AioRpcError as e:
+            if e.code() == StatusCode.DEADLINE_EXCEEDED:
+                logger.warning(f"{ICON} Node info deadline exceeded (LND busy/unreachable)", exc_info=True)
+            else:
+                logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
+            raise LNDConnectionError(f"Error getting node info {e}")
+
         except Exception as e:
             logger.error(f"{ICON} Error getting node info {e}", exc_info=True)
             raise LNDConnectionError(f"Error getting node info {e}")
