@@ -126,9 +126,9 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Binance Monitor",
+            "name": "DEV Binance Monitor",
             "type": "debugpy",
-            "consoleName": "Binance Monitor",
+            "consoleName": "DEV Binance Monitor",
             "request": "launch",
             "program": "src/binance_monitor.py",
             "args": [

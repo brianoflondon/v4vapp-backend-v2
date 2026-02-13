@@ -73,21 +73,18 @@ custom_json_ids_tracked:
 
 ---
 
-### 3. Binance API Uses Testnet
+### 3. Binance API Testnet/Mainnet Selection (Decoupled)
 
-**File:** `src/api_v2.py`
+**Note:** Binance testnet vs mainnet is **not** controlled by `development.enabled`. It is controlled solely by the `exchange_mode` setting in the `exchange_config` section of the config:
 
-The `/crypto/v1/binance/` API endpoint checks `development.enabled` to decide whether to query Binance's **testnet** or **mainnet**:
-
-```python
-if InternalConfig().config.development.enabled:
-    testnet = True
-else:
-    testnet = False
-balances = get_balances(symbols=["BTC", "HIVE", "USDT"], testnet=testnet)
+```yaml
+exchange_config:
+  default_exchange: binance
+  binance:
+    exchange_mode: testnet   # or "mainnet"
 ```
 
-**Ramification:** In dev mode, the API returns balances from Binance's testnet, which uses separate API credentials and holds fake/test funds. No real exchange operations are triggered. Note that the `exchange_config` section in the dev config also sets `exchange_mode: testnet` independently, so the Binance client itself will use testnet credentials regardless — this flag provides an additional layer at the API endpoint level.
+The `get_client()` function in `binance_extras.py` reads `exchange_mode` from the config directly. This setting is independent of development mode so you can run in development mode against mainnet, or run in production mode against testnet, as needed.
 
 ---
 
@@ -143,7 +140,7 @@ In production, the tight 10-second timeout ensures fast failure detection.
 |---|---|---|
 | **Account Access** | All valid Hive accounts | Only `allowed_hive_accounts` |
 | **Custom JSON IDs** | `v4vapp_transfer` / `v4vapp_notification` | `v4vapp_dev_transfer` / `v4vapp_dev_notification` |
-| **Binance API** | Mainnet (real funds) | Testnet (test funds) |
+| **Binance API** | Controlled by `exchange_config.binance.exchange_mode` (independent of dev mode) | Same |
 | **Price Cache TTLs** | Short (60–180s) | Long (180–360s) |
 | **MongoDB Timeouts** | 10 seconds | 10 minutes |
 | **Environment Variable** | Not set | `V4VAPP_DEV_MODE` available |
