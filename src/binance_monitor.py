@@ -192,6 +192,10 @@ def generate_message(saved_balances: dict):
     saved_balances = balances
 
     current_price_sats = current_price_decimal * Decimal("1e8")
+    if current_price_sats <= 0:
+        raise ExchangeConnectionError(
+            "HIVE/BTC price returned as zero — Binance API may be unavailable"
+        )
     hive_target = Decimal(str(BINANCE_HIVE_ALERT_LEVEL_SATS)) / current_price_sats
     percentage = hive_balance / hive_target * 100
     percentage_meter = draw_percentage_meter(percentage=percentage, max_percent=300, width=9)

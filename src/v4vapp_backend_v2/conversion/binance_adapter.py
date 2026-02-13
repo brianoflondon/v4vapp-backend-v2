@@ -171,7 +171,15 @@ class BinanceAdapter(BaseExchangeAdapter):
         symbol = self.build_symbol(base_asset, quote_asset)
         try:
             price_info = get_current_price(symbol, testnet=self.testnet)
-            return Decimal(price_info["bid_price"])
+            if price_info is None:
+                raise ExchangeConnectionError(f"No price info returned for {symbol}")
+            bid = Decimal(price_info.get("bid_price", "0"))
+            ask = Decimal(price_info.get("ask_price", "0"))
+            if bid > 0 and ask > 0:
+                answer = (bid + ask) / Decimal("2")
+            else:
+                answer = Decimal(price_info.get("current_price", "0"))
+            return answer
         except BinanceErrorBadConnection as e:
             raise ExchangeConnectionError(f"Failed to get Binance price: {e}")
 
