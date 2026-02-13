@@ -22,7 +22,7 @@ from v4vapp_backend_v2.helpers.binance_extras import (
     BinanceErrorBelowMinimum,
     MarketOrderResult,
     get_balances,
-    get_current_price,
+    get_mid_price,
     get_min_order_quantity,
     get_symbol_info,
     market_buy,
@@ -161,25 +161,19 @@ class BinanceAdapter(BaseExchangeAdapter):
         """
         Get current market price from Binance.
 
+        Returns the mid-price (average of bid and ask) when both are available,
+        otherwise falls back to the best non-zero price.
+
         Args:
             base_asset: The base asset (e.g., 'HIVE')
             quote_asset: The quote asset (e.g., 'BTC')
 
         Returns:
-            Current price as Decimal (using bid price for conservative estimate)
+            Current mid-price as Decimal
         """
         symbol = self.build_symbol(base_asset, quote_asset)
         try:
-            price_info = get_current_price(symbol, testnet=self.testnet)
-            if price_info is None:
-                raise ExchangeConnectionError(f"No price info returned for {symbol}")
-            bid = Decimal(price_info.get("bid_price", "0"))
-            ask = Decimal(price_info.get("ask_price", "0"))
-            if bid > 0 and ask > 0:
-                answer = (bid + ask) / Decimal("2")
-            else:
-                answer = Decimal(price_info.get("current_price", "0"))
-            return answer
+            return get_mid_price(symbol, testnet=self.testnet)
         except BinanceErrorBadConnection as e:
             raise ExchangeConnectionError(f"Failed to get Binance price: {e}")
 
@@ -219,15 +213,13 @@ class BinanceAdapter(BaseExchangeAdapter):
                 fee_btc = fee
             elif fee_asset == "BNB":
                 # Get BNB/BTC price and convert
-                bnb_price_info = get_current_price("BNBBTC", testnet=self.testnet)
-                bnb_btc_price = Decimal(bnb_price_info["bid_price"])
+                bnb_btc_price = get_mid_price("BNBBTC", testnet=self.testnet)
                 fee_btc = fee * bnb_btc_price
             else:
                 # For other assets, try to get price against BTC
                 try:
                     symbol = f"{fee_asset}BTC"
-                    price_info = get_current_price(symbol, testnet=self.testnet)
-                    asset_btc_price = Decimal(price_info["bid_price"])
+                    asset_btc_price = get_mid_price(symbol, testnet=self.testnet)
                     fee_btc = fee * asset_btc_price
                 except Exception:
                     logger.warning(
