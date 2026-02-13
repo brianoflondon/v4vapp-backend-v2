@@ -620,6 +620,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
         base_asset: str,
         quote_asset: str,
         valid_time: str = "10s",
+        client_order_id: str | None = None,
     ) -> ExchangeOrderResult:
         """
         Execute a Convert swap: request a quote, accept it, wait for completion.
@@ -632,6 +633,8 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             base_asset: The base asset of the logical pair (e.g., 'HIVE')
             quote_asset: The quote asset of the logical pair (e.g., 'BTC')
             valid_time: Quote validity period
+            client_order_id: Optional tracking ID (not sent to Binance, but
+                preserved in the result for accounting/audit)
 
         Returns:
             ExchangeOrderResult with execution details
@@ -682,7 +685,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             exchange=self.exchange_name,
             symbol=symbol,
             order_id=order_status.order_id,
-            client_order_id="",
+            client_order_id=client_order_id or "",
             side=side,
             status=order_status.order_status,
             requested_qty=from_amount if side == "SELL" else executed_qty,
@@ -715,14 +718,12 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             base_asset: The asset to sell (e.g., 'HIVE')
             quote_asset: The asset to receive (e.g., 'BTC')
             quantity: Amount of base asset to sell
-            client_order_id: Not used by Convert API (accepted for interface compat)
+            client_order_id: Optional tracking ID (short_id). Not sent to Binance
+                but preserved in the result for accounting/audit trail.
 
         Returns:
             ExchangeOrderResult with execution details
         """
-        if client_order_id:
-            logger.debug(f"client_order_id '{client_order_id}' ignored by Convert API")
-
         return self._execute_swap(
             from_asset=base_asset,
             to_asset=quote_asset,
@@ -730,6 +731,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             side="SELL",
             base_asset=base_asset,
             quote_asset=quote_asset,
+            client_order_id=client_order_id,
         )
 
     def market_buy(
@@ -751,14 +753,12 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             base_asset: The asset to buy (e.g., 'HIVE')
             quote_asset: The asset to spend (e.g., 'BTC')
             quantity: Amount of base asset to buy
-            client_order_id: Not used by Convert API (accepted for interface compat)
+            client_order_id: Optional tracking ID (short_id). Not sent to Binance
+                but preserved in the result for accounting/audit trail.
 
         Returns:
             ExchangeOrderResult with execution details
         """
-        if client_order_id:
-            logger.debug(f"client_order_id '{client_order_id}' ignored by Convert API")
-
         # For a buy, we want to receive `quantity` of base_asset
         # So we request a quote: from=quote_asset, to=base_asset, toAmount=quantity
         quote = self.send_quote_request(
@@ -791,7 +791,7 @@ class BinanceSwapAdapter(BaseExchangeAdapter):
             exchange=self.exchange_name,
             symbol=symbol,
             order_id=order_status.order_id,
-            client_order_id="",
+            client_order_id=client_order_id or "",
             side="BUY",
             status=order_status.order_status,
             requested_qty=quantity,
