@@ -238,8 +238,8 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
         return CUSTOM_JSON_IDS[cj_id] if isinstance(CUSTOM_JSON_IDS[cj_id], type) else None
 
     # Extra steps to combine the custom_json_prefix with the suffixes to check for valid IDs, this allows us to not have to hardcode every custom JSON ID in the config
-    if getattr(InternalConfig().config.hive, "custom_json_prefix", None):
-        prefix = InternalConfig().config.hive.custom_json_prefix
+    prefix = getattr(InternalConfig().config.hive, "custom_json_prefix", None)
+    if prefix:
         if cj_id.startswith(prefix):
             suffix = cj_id[len(prefix) :]
             if suffix in ["_transfer", "_notification"]:
