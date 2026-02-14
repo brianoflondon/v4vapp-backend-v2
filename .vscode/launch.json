@@ -39,8 +39,6 @@
                 "8080",
                 "--config",
                 "devhive.config.yaml",
-                "--log-level",
-                "debug"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,

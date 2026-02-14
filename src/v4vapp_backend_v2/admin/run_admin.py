@@ -12,6 +12,7 @@ from pathlib import Path
 import uvicorn
 
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
+from v4vapp_backend_v2.config.setup import logger
 
 # Add the src directory to the path
 src_dir = Path(__file__).parent.parent.parent
@@ -52,21 +53,21 @@ Examples:
     try:
         app = create_admin_app(config_filename=args.config)
     except Exception as e:
-        print(f"❌ Failed to create admin app: {e}")
+        logger.error(f"❌ Failed to create admin app: {e}")
         sys.exit(1)
 
     # Print startup information
-    print("🚀 Starting V4VApp Admin Interface")
-    print(f"📁 Config file: {args.config}")
-    print(f"🌐 Server: http://{args.host}:{args.port}/admin")
-    print(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")
-    print(f"❤️ Health: http://{args.host}:{args.port}/admin/health")
+    logger.info("🚀 Starting V4VApp Admin Interface")
+    logger.info(f"📁 Config file: {args.config}")
+    logger.info(f"🌐 Server: http://{args.host}:{args.port}/admin")
+    logger.info(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")
+    logger.info(f"❤️ Health: http://{args.host}:{args.port}/admin/health")
 
     if args.reload:
-        print("🔄 Auto-reload enabled (development mode)")
-
-    print("\nPress Ctrl+C to stop the server")
-    print("-" * 50)
+        logger.info("🔄 Auto-reload enabled (development mode)")
+    logger.info("-" * 50)
+    logger.info("Press Ctrl+C to stop the server")
+    logger.info("-" * 50)
 
     # Run the server
     try:
@@ -96,9 +97,9 @@ Examples:
                 access_log=True,
             )
     except KeyboardInterrupt:
-        print("\n👋 Server stopped")
+        logger.info("\n👋 Server stopped")
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"❌ Server error: {e}")
         sys.exit(1)
 
 
@@ -132,7 +133,5 @@ if __name__ != "__main__":
 
     app = get_app()
 
-
 if __name__ == "__main__":
-    main()
     main()
