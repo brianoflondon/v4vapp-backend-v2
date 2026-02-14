@@ -247,7 +247,7 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
     return None
 
 
-def custom_json_test_id(cj_id: str) -> Type[BaseModel] | None:
-    if cj_id in CUSTOM_JSON_IDS:
-        return CUSTOM_JSON_IDS[cj_id]
-    return None
+# def custom_json_test_id(cj_id: str) -> Type[BaseModel] | None:
+#     if cj_id in CUSTOM_JSON_IDS:
+#         return CUSTOM_JSON_IDS[cj_id]
+#     return None

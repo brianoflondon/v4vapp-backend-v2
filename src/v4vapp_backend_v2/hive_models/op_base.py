@@ -262,10 +262,11 @@ class OpBase(TrackedBaseModel):
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
         cj_id = getattr(self, "cj_id", None)
-        if cj_id is not None:
-            if cj_id in self.custom_json_ids_tracked:
-                if custom_json_test_id(cj_id):
-                    return True
+        if not cj_id:
+            return False
+        if cj_id in self.custom_json_ids_tracked:
+            if custom_json_test_id(cj_id):
+                return True
         return False
 
     @property
@@ -286,9 +287,9 @@ class OpBase(TrackedBaseModel):
         if not OpBase.watch_users:
             return False
         cj_id = getattr(self, "cj_id", None)
-        if cj_id is not None:
-            if not custom_json_test_id(cj_id):
-                return False
+        if cj_id is None:
+            return False
+        if cj_id in OpBase.custom_json_ids_tracked:
 
         if OpBase.watch_users:
             # Check if the transfer is to a watched user
