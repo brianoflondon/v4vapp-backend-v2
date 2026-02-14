@@ -285,11 +285,12 @@ class OpBase(TrackedBaseModel):
         """
         if not OpBase.watch_users:
             return False
-        cj_id = getattr(self, "cj_id", None)
-        if cj_id is None:
-            return False
-        if cj_id not in OpBase.custom_json_ids_tracked:
-            return False
+        if self.op_type == "custom_json":
+            cj_id = getattr(self, "cj_id", None)
+            if cj_id is None:
+                return False
+            if cj_id not in OpBase.custom_json_ids_tracked:
+                return False
 
         # Check if the transfer is to a watched user
         to_account = getattr(self, "to_account", None)
