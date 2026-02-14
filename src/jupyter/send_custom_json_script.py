@@ -91,8 +91,9 @@ async def main():
     #     5010, "v4vapp.qrc #v4vapp Sending sats to another account"
     # )
     invoice = await get_lightning_invoice(
-        2312, "brianoflondon #v4vapp Sending sats to another account"
+        2312, "Sending sats to another account", connection_name="voltage"
     )
+    print(invoice.payment_request)
     # the invoice_message has no effect if the invoice is generated and sent in the message.
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
