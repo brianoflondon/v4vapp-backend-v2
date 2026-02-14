@@ -33,6 +33,7 @@ async def main():
 
         custom_json = PendingCustomJson(
             cj_id="v4vapp_dev_transfer",
+            unique_key=f"{transfer.from_account}_{transfer.to_account}_{transfer.sats}_{transfer.memo}",
             send_account="devser.v4vapp",
             json_data=transfer.model_dump(exclude_unset=True, exclude_none=True),
         )

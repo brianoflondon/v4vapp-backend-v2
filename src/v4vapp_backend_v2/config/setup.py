@@ -424,7 +424,7 @@ class HiveConfig(BaseConfig):
     proposals_tracked: List[int] = []
     watch_witnesses: List[str] = []
     custom_json_prefix: str = Field(
-        "",
+        "v4vapp_dev",
         description="""
         Prefix for custom JSON operations to use in sending transactions, not just receiving, e.g. 'v4vapp_', will have '_transfer and '_notification'
         appended. if this is given, custom_json_ids will be added to track all operations
