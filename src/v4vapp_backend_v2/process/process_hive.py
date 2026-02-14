@@ -234,6 +234,7 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
     ):
+        #TODO: #268 Allow exchange transfers from treasury or server and Use account Exchange Holdings (Asset) sub account binance_convert (need to set in config) for the sub.
         ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
