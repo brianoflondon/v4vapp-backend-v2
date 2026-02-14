@@ -41,9 +41,9 @@ Examples:
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     parser.add_argument(
         "--log-level",
-        default="info",
+        default="warning",
         choices=["critical", "error", "warning", "info", "debug"],
-        help="Log level (default: info)",
+        help="Log level (default: warning)",
     )
 
     args = parser.parse_args()
@@ -84,6 +84,7 @@ Examples:
                 reload=args.reload,
                 log_level=args.log_level,
                 access_log=True,
+                log_config=None,
             )
         else:
             uvicorn.run(
