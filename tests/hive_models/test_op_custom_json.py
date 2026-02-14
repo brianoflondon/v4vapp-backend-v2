@@ -62,6 +62,7 @@ post2 = {
 def test_custom_json_validate():
     ic = InternalConfig()
     OpBase.watch_users = ["v4vapp.dev"]
+    OpBase.custom_json_ids_tracked = ["v4vapp_transfer"]
     TrackedBaseModel.update_quote_sync(store_db=False)
     for post in [post1, post2]:
         custom_json = CustomJson.model_validate(post)
