@@ -13,6 +13,9 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
 
+BLOCK_MARKER_NORMAL_MIN = 5
+BLOCK_MARKER_CATCHUP_MIN = 5
+
 
 @dataclass
 class OpInTrxCounter:
@@ -178,9 +181,9 @@ class BlockCounter:
                 ) / last_marker_time
 
                 self.marker_point = int(
-                    (15 * 60 / HIVE_BLOCK_TIME)
+                    (BLOCK_MARKER_CATCHUP_MIN * 60 / HIVE_BLOCK_TIME)
                     if self.is_catching_up
-                    else (5 * 60 / HIVE_BLOCK_TIME)
+                    else (BLOCK_MARKER_NORMAL_MIN * 60 / HIVE_BLOCK_TIME)
                 )
                 self.next_marker += self.marker_point
 
