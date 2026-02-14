@@ -114,12 +114,13 @@ async def exchange_accounting(
     ).conversion
 
     ledger_type = LedgerType.EXCHANGE_CONVERSION
-    group_id_base = (
-        f"{rebalance_result.order_result.exchange}_{rebalance_result.order_result.client_order_id}"
-    )
+    # Use order_id (unique per trade from exchange) as the primary key for group_id.
+    # client_order_id (short_id of the triggering op) is kept as short_id for audit.
+    group_id_base = f"{order_result.exchange}_{order_result.order_id}"
+    short_id = order_result.client_order_id or order_result.order_id
     exchange_entry = LedgerEntry(
         ledger_type=ledger_type,
-        short_id=rebalance_result.order_result.client_order_id,
+        short_id=short_id,
         op_type="exchange_trade",
         cust_id=tracked_op.cust_id,
         group_id=f"{group_id_base}_{ledger_type.value}",
@@ -142,7 +143,7 @@ async def exchange_accounting(
         ledger_type = LedgerType.EXCHANGE_FEES
         fee_entry = LedgerEntry(
             ledger_type=ledger_type,
-            short_id=rebalance_result.order_result.client_order_id,
+            short_id=short_id,
             op_type="exchange_fee",
             cust_id=tracked_op.cust_id,
             group_id=f"{group_id_base}_{ledger_type.value}",
