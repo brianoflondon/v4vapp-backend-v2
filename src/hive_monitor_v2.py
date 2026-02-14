@@ -501,9 +501,10 @@ async def all_ops_loop(
         v4v_config = V4VConfig(server_accname=server_accounts[0])
     else:
         v4v_config = V4VConfig(server_accname="")
-    async with asyncio.TaskGroup() as tg:
-        for witness in watch_witnesses:
-            tg.create_task(witness_first_run(witness))
+    # Run witness initialization in the background so it doesn't block
+    # the main stream from starting (and delay startup_complete_event).
+    for witness in watch_witnesses:
+        asyncio.create_task(witness_first_run(witness), name=f"witness_first_run_{witness}")
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
     if start_block == 0:

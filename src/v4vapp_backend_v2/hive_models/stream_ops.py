@@ -23,6 +23,11 @@ from v4vapp_backend_v2.hive_models.op_base_counters import OpInTrxCounter
 
 ICON = "🔗"
 
+# Maximum seconds to wait for a new event before assuming the RPC node is
+# unresponsive and switching to the next one.  Two minutes is generous;
+# on a healthy node an event arrives at least every 3 seconds.
+STREAM_TIMEOUT = 15
+
 
 class SwitchToLiveStream(Exception):
     """
@@ -133,21 +138,42 @@ async def stream_ops_async(
                     "opNames": opNames,
                 },
             )
-            async for hive_event in async_stream_real:
+            # Manual iteration with a per-event timeout so that a hung
+            # RPC node triggers a node switch instead of blocking forever.
+            async_iter = async_stream_real.__aiter__()
+            while True:
+                try:
+                    hive_event = await asyncio.wait_for(
+                        async_iter.__anext__(), timeout=STREAM_TIMEOUT
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"{ICON} {start_block:,} Stream timed out after {STREAM_TIMEOUT}s "
+                        f"waiting for events from {rpc_url}, switching node",
+                        extra={"notification": False, "error_code": "stream_restart"},
+                    )
+                    raise  # caught by the TimeoutError handler below
+
                 if (
                     not only_virtual_ops
                     and hive_event["block_num"] > last_block
                     and hive_event["block_num"] <= stop_block
                 ):
                     start_block = last_block
-                    for virtual_event in blockchain.stream(
-                        start=last_block - 1,
-                        stop=last_block - 1,
-                        raw_ops=False,
-                        only_virtual_ops=True,
-                        # Very subtle problem with op_in_trx counter if we filter for opNames here.
-                        # opNames=opNames,      # we must filter them after updating op_in_trx counter
-                        threading=False,
+                    # Use async iteration for virtual ops so the event loop
+                    # stays responsive during catch-up (health checks, etc.).
+                    async for virtual_event in sync_to_async_iterable(
+                        blockchain.stream(
+                            start=last_block - 1,
+                            stop=last_block - 1,
+                            raw_ops=False,
+                            only_virtual_ops=True,
+                            # Very subtle problem with op_in_trx counter if we filter for opNames here.
+                            # opNames=opNames,      # we must filter them after updating op_in_trx counter
+                            threading=False,
+                        )
                     ):
                         last_block = hive_event.get("block_num", start_block)
                         try:
@@ -189,6 +215,11 @@ async def stream_ops_async(
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.info(f"{ICON} Async streamer received signal to stop. Exiting... {e}")
             return
+        except asyncio.TimeoutError:
+            # Stream timed out waiting for the next event — the warning
+            # was already logged above.  Sleep briefly then let the
+            # finally block switch to the next RPC node.
+            await asyncio.sleep(2)
         except (NectarException, NumRetriesReached, UnhandledRPCError) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")
