@@ -25,6 +25,7 @@ from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
 from v4vapp_backend_v2.config.error_code_manager import ErrorCodeManager
 
 load_dotenv()
+MIN_CONFIG_VERSION = "0.4.0"
 logger = logging.getLogger("backend")  # __name__ is a common choice
 ICON = "⚙️"
 
@@ -422,6 +423,14 @@ class HiveConfig(BaseConfig):
     watch_users: List[str] = []
     proposals_tracked: List[int] = []
     watch_witnesses: List[str] = []
+    custom_json_prefix: str = Field(
+        "",
+        description="""
+        Prefix for custom JSON operations to use in sending transactions, not just receiving, e.g. 'v4vapp_', will have '_transfer and '_notification'
+        appended. if this is given, custom_json_ids will be added to track all operations
+        with ids that start with this prefix
+        """,
+    )
     custom_json_ids_tracked: List[str] = []
     witness_configs: Dict[str, WitnessConfig] = {}
 
@@ -429,6 +438,12 @@ class HiveConfig(BaseConfig):
         super().__init__(*args, **kwargs)
         for name, acc in self.hive_accs.items():
             acc.name = name
+        if self.custom_json_prefix:
+            self.custom_json_ids_tracked.extend(
+                [f"{self.custom_json_prefix}{suffix}" for suffix in ["_transfer", "_notification"]]
+            )
+        filter_duplicates = set(self.custom_json_ids_tracked)
+        self.custom_json_ids_tracked = list(filter_duplicates)
 
     def witness_key_to_machine_name(self, witness_name: str, signing_key: str) -> str:
         """
@@ -731,6 +746,9 @@ class DevelopmentConfig(BaseModel):
     allowed_hive_accounts: List[str] = []
 
 
+# MARK: Config class
+
+
 class Config(BaseModel):
     """
     version (str): The version of the configuration. Default is an empty string.
@@ -760,7 +778,8 @@ class Config(BaseModel):
         Raises ValueError if the token is not found.
     """
 
-    version: str = "0.3.0"
+    min_config_version: ClassVar[str] = MIN_CONFIG_VERSION
+    version: str = MIN_CONFIG_VERSION
     logging: LoggingConfig = LoggingConfig()
     development: DevelopmentConfig = DevelopmentConfig()
 
@@ -780,8 +799,6 @@ class Config(BaseModel):
     admin_config: AdminConfig = AdminConfig()
 
     exchange_config: ExchangeConfig = ExchangeConfig()
-
-    min_config_version: ClassVar[str] = "0.3.0"
 
     @model_validator(mode="after")
     def check_all_defaults(self) -> "Config":
