@@ -55,8 +55,8 @@ def format_quote_asset(value: Decimal, asset: str) -> str:
         sats = int(value * SATS_PER_BTC)
         return f"{sats:,} sats"
     if asset.upper() in ("HIVE", "HBD"):
-        return f"{value:.3f} {asset}"
-    return f"{value:.8f} {asset}"
+        return f"{value:,.3f} {asset}"
+    return f"{value:,.8f} {asset}"
 
 
 class ExchangeOrderResult(BaseModel):
