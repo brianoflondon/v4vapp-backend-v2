@@ -82,7 +82,7 @@ async def main():
     # Deposit Hive as Keepsats
 
     trx = await send_hive_customer_to_server(
-        amount=Amount("25 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
+        amount=Amount("50 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
     )
     pprint(trx)
 
