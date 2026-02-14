@@ -221,6 +221,8 @@ async def follow_on_transfer(
             return
         # MARK: We have a pay_req, we will pay it
         if pay_req and isinstance(pay_req, PayReq):
+            # At this stage we need to know if they payment came from  UI or via a custom_json/hive transfer with a memo.
+            
             if tracked_op.paywithsats:
                 await hold_keepsats(
                     amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,

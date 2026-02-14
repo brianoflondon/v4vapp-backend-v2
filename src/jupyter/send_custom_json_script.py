@@ -1,4 +1,5 @@
 import asyncio
+import getpass
 import os
 from pprint import pprint
 from typing import Any
@@ -12,6 +13,7 @@ from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import Currency
 from v4vapp_backend_v2.hive.hive_extras import (
+    get_hive_client,
     get_verified_hive_client_for_accounts,
     send_custom_json,
     send_transfer,
@@ -81,10 +83,10 @@ async def main():
     await db_conn.setup_database()
     # Deposit Hive as Keepsats
 
-    trx = await send_hive_customer_to_server(
-        amount=Amount("50 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
-    )
-    pprint(trx)
+    # trx = await send_hive_customer_to_server(
+    #     amount=Amount("50 HIVE"), memo="Deposit and more #sats", customer="v4vapp-test"
+    # )
+    # pprint(trx)
 
     # Send Sats back to this node.
     # invoice = await get_lightning_invoice(
@@ -98,10 +100,32 @@ async def main():
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
+        from_account="v4vapp.bol",
+        to_account="devser.v4vapp",
+        sats=0,
+        memo=invoice.payment_request,
+        invoice_message="brianoflondon #v4vapp Sending sats to another account",
+    )
+    # hive_config = InternalConfig().config.hive
+    active_key = await asyncio.to_thread(
+        getpass.getpass, "Enter the active key for the sending account (v4vapp.bol): "
+    )
+    hive_client = get_hive_client(keys=[active_key])
+    # hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+    trx = await send_custom_json(
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=transfer.from_account,
+        active=True,
+        id="v4vapp_dev_transfer",
+        hive_client=hive_client,
+    )
+    pprint(trx)
+
+    transfer = KeepsatsTransfer(
         from_account="v4vapp-test",
         to_account="devser.v4vapp",
-        sats=2312,
-        memo=invoice.payment_request,
+        sats=4455,
+        memo="brianoflondon@walletofsatoshi.com #paywithsats",
         invoice_message="brianoflondon #v4vapp Sending sats to another account",
     )
     # hive_config = InternalConfig().config.hive

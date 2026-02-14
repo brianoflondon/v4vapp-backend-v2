@@ -371,6 +371,20 @@ async def convert_keepsats(convert: KeepsatsConvertExternal) -> KeepsatsTransfer
 async def pay_invoice(
     invoice: KeepsatsInvoice,
 ) -> KeepsatsTransferResponse:
+    """
+    Process a payment invoice by creating a transfer transaction on the Hive blockchain.
+
+    Args:
+        invoice (KeepsatsInvoice): The invoice containing transfer details including
+            source account, destination account, amount in satoshis, and memo.
+
+    Returns:
+        KeepsatsTransferResponse: Response object containing transfer status, success message,
+            and transaction ID.
+
+    Raises:
+        HTTPException: Raised with 500 status code if the transfer transaction fails.
+    """
     transfer_internal = KeepsatsTransfer(
         hive_accname_from=invoice.hive_accname_from,
         hive_accname_to=InternalConfig().server_id,

@@ -258,9 +258,9 @@ async def custom_json_internal_transfer(
         )
     else:
         ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
-
+        lightning_strip_memo = lightning_memo(keepsats_transfer.user_memo)
         user_memo = (
-            keepsats_transfer.user_memo
+            lightning_strip_memo
             + f" | {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
             or f"{keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
         )
