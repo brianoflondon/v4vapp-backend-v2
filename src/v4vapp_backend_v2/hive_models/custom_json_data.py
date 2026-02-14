@@ -182,7 +182,8 @@ class KeepsatsTransfer(BaseModel):
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
 # This dictionary maps custom JSON operation IDs to their corresponding Pydantic models.
-# Whilst the v4vapp_dev ones could be generated from the custom_json_prefix, we hardcode them here for better clarity and to avoid potential issues with dynamic generation, such as if
+# Whilst the v4vapp_dev ones could be generated from the custom_json_prefix, we hardcode them here for better clarity
+# and to avoid potential issues with dynamic generation, such as if
 # the suffixes change in the future or if there are other custom JSON IDs that don't follow the prefix pattern
 CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
     "v4vapp_dev_transfer": KeepsatsTransfer,
