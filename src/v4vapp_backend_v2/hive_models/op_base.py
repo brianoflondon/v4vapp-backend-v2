@@ -9,7 +9,7 @@ from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
 from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, snake_case
-from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids, custom_json_test_id
+from v4vapp_backend_v2.hive_models.custom_json_data import all_custom_json_ids
 from v4vapp_backend_v2.hive_models.op_base_extras import (
     OP_TRACKED,
     HiveExp,
@@ -262,10 +262,10 @@ class OpBase(TrackedBaseModel):
             bool: True if the operation is a special custom JSON operation, False otherwise.
         """
         cj_id = getattr(self, "cj_id", None)
-        if cj_id is not None:
-            if cj_id in self.custom_json_ids_tracked:
-                if custom_json_test_id(cj_id):
-                    return True
+        if not cj_id:
+            return False
+        if cj_id in self.custom_json_ids_tracked:
+            return True
         return False
 
     @property
@@ -285,21 +285,22 @@ class OpBase(TrackedBaseModel):
         """
         if not OpBase.watch_users:
             return False
-        cj_id = getattr(self, "cj_id", None)
-        if cj_id is not None:
-            if not custom_json_test_id(cj_id):
+        if self.op_type == "custom_json":
+            cj_id = getattr(self, "cj_id", None)
+            if cj_id is None:
+                return False
+            if cj_id not in OpBase.custom_json_ids_tracked:
                 return False
 
-        if OpBase.watch_users:
-            # Check if the transfer is to a watched user
-            to_account = getattr(self, "to_account", None)
-            if to_account is not None and to_account in OpBase.watch_users:
-                return True
+        # Check if the transfer is to a watched user
+        to_account = getattr(self, "to_account", None)
+        if to_account is not None and to_account in OpBase.watch_users:
+            return True
 
-            # Check if the transfer is from a watched user
-            from_account = getattr(self, "from_account", None)
-            if from_account is not None and from_account in OpBase.watch_users:
-                return True
+        # Check if the transfer is from a watched user
+        from_account = getattr(self, "from_account", None)
+        if from_account is not None and from_account in OpBase.watch_users:
+            return True
         return False
 
     @property

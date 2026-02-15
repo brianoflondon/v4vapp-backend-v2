@@ -16,11 +16,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     paywithsats_amount,
 )
 from v4vapp_backend_v2.hive.hive_extras import get_transfer_cust_id, process_user_memo
-from v4vapp_backend_v2.hive_models.custom_json_data import (
-    CustomJsonData,
-    custom_json_test_data,
-    custom_json_test_id,
-)
+from v4vapp_backend_v2.hive_models.custom_json_data import CustomJsonData, custom_json_test_data
 from v4vapp_backend_v2.hive_models.op_base import OpBase
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
 
@@ -143,7 +139,9 @@ class CustomJson(OpBase):
         ):
             return True
         if OpBase.watch_users:
-            if custom_json_test_id(self.cj_id):
+            if self.cj_id is None:
+                return False
+            if self.cj_id in OpBase.custom_json_ids_tracked:
                 # Check if the transfer is to a watched user
                 if self.json_data.to_account in OpBase.watch_users:
                     return True

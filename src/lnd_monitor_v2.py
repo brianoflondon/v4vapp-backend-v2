@@ -1287,22 +1287,6 @@ async def main_async_start(connection_name: str) -> None:
                     name="payments_loop",
                 ),
                 asyncio.create_task(status_api.start(), name="status_api"),
-            ]
-
-            # If we haven't synced for a long time, do the sync first to avoid massive DB load
-            pause_for_sync = await pause_for_database_sync()
-            if pause_for_sync:
-                # Run sync now (blocking) before starting the rest
-                await synchronize_db(lnd_client, delay=0)
-            else:
-                # Schedule sync as a cancellable task
-                running_tasks.append(
-                    asyncio.create_task(
-                        synchronize_db(lnd_client, delay=10),
-                        name="synchronize_db",
-                    )
-                )
-            running_tasks += [
                 asyncio.create_task(
                     htlc_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                     name="htlc_events_loop",
@@ -1310,6 +1294,11 @@ async def main_async_start(connection_name: str) -> None:
                 asyncio.create_task(
                     channel_events_loop(lnd_client=lnd_client, lnd_events_group=lnd_events_group),
                     name="channel_events_loop",
+                ),
+                # Schedule database sync as a non-blocking background task
+                asyncio.create_task(
+                    _background_sync(lnd_client),
+                    name="synchronize_db",
                 ),
             ]
             lnd_node = InternalConfig().config.lnd_config.default
@@ -1364,6 +1353,26 @@ async def main_async_start(connection_name: str) -> None:
         # Let notifications flush before tearing down logging/redis
         await asyncio.sleep(1)
         InternalConfig().shutdown()
+
+
+async def _background_sync(lnd_client: LNDClient) -> None:
+    """Run database synchronization in the background without blocking startup.
+
+    Determines whether an immediate sync is needed (stale DB) and runs it with
+    the appropriate delay. This replaces the previous blocking sync that
+    prevented subscription loops from starting.
+    """
+    try:
+        pause_for_sync = await pause_for_database_sync()
+        delay = 0 if pause_for_sync else 10
+        await synchronize_db(lnd_client, delay=delay)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("Background sync cancelled during shutdown.")
+    except Exception as e:
+        logger.warning(
+            f"Background sync failed: {e}",
+            extra={"notification": False},
+        )
 
 
 async def pause_for_database_sync() -> bool:
@@ -1453,7 +1462,7 @@ if __name__ == "__main__":
         print("👋 Goodbye!")
         sys.exit(0)
 
-    #TODO: change this on all the other monitors
+    # TODO: change this on all the other monitors
     except StartupFailure as e:
         print(f"{ICON} Startup failure: {e}")
         sys.exit(0)

@@ -732,15 +732,18 @@ async def send_custom_json(
 
 
 async def perform_transfer_checks(
-    from_account: str, to_account: str, amount: Amount = None, nobroadcast: bool = False
+    from_account: str,
+    to_account: str,
+    amount: Amount = Amount(amount="0.000 HIVE"),
+    nobroadcast: bool = False,
 ) -> bool:
     """
     Perform full validations, raise errors if a failure
 
     Args:
-        acc_name (str): The account name to perform transfer checks on.
-        amount (float): The amount of the transfer.
-        symbol (str): The symbol of the transfer.
+        from_account (str): The account name to perform transfer checks on.
+        to_account (str): The account name to perform transfer checks on.
+        amount (Amount, optional): The amount of the transfer. Defaults to Amount(0).
         nobroadcast (bool, optional): Flag indicating whether to broadcast the transfer. Defaults to False.
 
     Returns:

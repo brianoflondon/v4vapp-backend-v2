@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, validator
 from v4vapp_backend_v2.accounting.ledger_account_classes import LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry, LedgerType
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.bad_actors_list import get_bad_hive_accounts
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
@@ -223,62 +222,76 @@ async def wipe_opening_balances():
     print(f"Deleted {result.deleted_count} opening balance ledger entries.")
 
 
+async def main():
+    db_conn = DBConn()
+    await db_conn.setup_database()
+
+    await wipe_opening_balances()
+    # Make the file path relative to this script's location so it works
+    # regardless of the current working directory when the script is run.
+    script_dir = Path(__file__).resolve().parent
+    file_path = (
+        script_dir / "keepsats_data" / "v4vapp_voltage.keepsats_with_in_progress.json"
+    ).resolve()
+    bad_accounts = await get_bad_hive_accounts()
+    try:
+        balances = await load_keepsats_balances(file_path)
+        print(f"Loaded {len(balances)} balance records.")
+        await TrackedBaseModel.update_quote()
+        total_sats = Decimal(0)
+        tasks = []  # store (Task, balance) tuples so we can report after TaskGroup completes
+
+        async with TaskGroup() as tg:
+            for balance in balances:
+                bad_account = balance.id in bad_accounts
+                if balance.net_sats >= 2 and not bad_account and not ignore_user(balance.id):
+                    task = tg.create_task(create_ledger_entry(balance))
+                    tasks.append((task, balance))
+                    total_sats += Decimal(balance.net_sats)
+                else:
+                    print(
+                        f"Skipping account {balance.id[:16]:<18} with low balance: {balance.net_sats:>14,.0f} sats"
+                    )
+
+        # All tasks have completed successfully here (or an exception was raised)
+        processed_count = 0
+        for task, balance in tasks:
+            try:
+                ledger_entry = task.result()
+                print(
+                    f"Created ledger entry for account {balance.id[:16]:<18}: {balance.net_sats:>14,.0f} {ledger_entry.short_id}"
+                )
+                processed_count += 1
+            except Exception as e:
+                print(f"Task failed for account {balance.id}: {e}")
+
+        print(f"Total sats processed: {total_sats:,} across {processed_count} accounts")
+        await owners_loan_account(total_sats)
+
+    except Exception as e:
+        print(f"Error loading balances: {e}")
+
+
 if __name__ == "__main__":
+    import argparse
     import asyncio
 
-    InternalConfig(config_filename="config/devhive.config.yaml")
+    from v4vapp_backend_v2.config.setup import InternalConfig
 
-    async def main():
-        db_conn = DBConn()
-        await db_conn.setup_database()
+    parser = argparse.ArgumentParser(
+        description="Load prior Keepsats balances as opening balance ledger entries"
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        default="production.fromhome.config.yaml",
+        help="Config filename (relative to config/ folder). Default: production.fromhome.config.yaml",
+    )
+    args = parser.parse_args()
 
-        await wipe_opening_balances()
-        # Make the file path relative to this script's location so it works
-        # regardless of the current working directory when the script is run.
-        script_dir = Path(__file__).resolve().parent
-        file_path = (
-            script_dir / "keepsats_data" / "v4vapp_voltage.keepsats_with_in_progress.json"
-        ).resolve()
-        bad_accounts = await get_bad_hive_accounts()
-        try:
-            balances = await load_keepsats_balances(file_path)
-            print(f"Loaded {len(balances)} balance records.")
-            await TrackedBaseModel.update_quote()
-            total_sats = Decimal(0)
-            tasks = []  # store (Task, balance) tuples so we can report after TaskGroup completes
-
-            async with TaskGroup() as tg:
-                for balance in balances:
-                    bad_account = balance.id in bad_accounts
-                    if balance.net_sats >= 2 and not bad_account and not ignore_user(balance.id):
-                        task = tg.create_task(create_ledger_entry(balance))
-                        tasks.append((task, balance))
-                        total_sats += Decimal(balance.net_sats)
-                    else:
-                        print(
-                            f"Skipping account {balance.id[:16]:<18} with low balance: {balance.net_sats:>14,.0f} sats"
-                        )
-
-            # All tasks have completed successfully here (or an exception was raised)
-            processed_count = 0
-            for task, balance in tasks:
-                try:
-                    ledger_entry = task.result()
-                    print(
-                        f"Created ledger entry for account {balance.id[:16]:<18}: {balance.net_sats:>14,.0f} {ledger_entry.short_id}"
-                    )
-                    processed_count += 1
-                except Exception as e:
-                    print(f"Task failed for account {balance.id}: {e}")
-
-            print(f"Total sats processed: {total_sats:,} across {processed_count} accounts")
-            await owners_loan_account(total_sats)
-
-        except Exception as e:
-            print(f"Error loading balances: {e}")
+    # InternalConfig is a singleton — the FIRST call with a config_filename wins.
+    # None of the top-level imports trigger InternalConfig(), so this is guaranteed
+    # to be the first call.
+    InternalConfig(config_filename=args.config)
 
     asyncio.run(main())
-
-
-# last line
-# last line

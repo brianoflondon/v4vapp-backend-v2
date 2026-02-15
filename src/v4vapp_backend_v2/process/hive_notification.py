@@ -195,17 +195,9 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
             notification=True,
         )
         if details.msats and details.msats > 0:
-            custom_json_id = (
-                "v4vapp_dev_transfer"
-                if InternalConfig().config.development.enabled
-                else "v4vapp_transfer"
-            )
+            custom_json_id = InternalConfig().config.hive.custom_json_prefix + "_transfer"
         else:
-            custom_json_id = (
-                "v4vapp_dev_notification"
-                if InternalConfig().config.development.enabled
-                else "v4vapp_notification"
-            )
+            custom_json_id = InternalConfig().config.hive.custom_json_prefix + "_notification"
         try:
             trx = await send_custom_json(
                 json_data=notification.model_dump(exclude_none=True, exclude_unset=True),
@@ -332,17 +324,18 @@ async def send_transfer_custom_json(
         # TODO: #169 add pending for custom_json
         json_data = transfer.model_dump(exclude_none=True, exclude_unset=True)
         json_data_converted = convert_decimals_for_mongodb(json_data)
+        id = InternalConfig().config.hive.custom_json_prefix + "_transfer"
         trx = await send_custom_json(
             json_data=json_data_converted,
             send_account=send_from,
             active=True,
-            id="v4vapp_dev_transfer",
+            id=id,
             hive_client=hive_client,
             nobroadcast=nobroadcast,
         )
         logger.debug(
             f"Sent custom_json transfer: {transfer.log_str} {trx.get('trx_id', '')}",
-            extra={"notification": True, **transfer.log_extra},
+            extra={"notification": False, **transfer.log_extra},
         )
         return trx
     # TODO: #151 Important: this Hive transfer needs to be stored and reprocessed later if it fails for balance or network issues

@@ -39,8 +39,6 @@
                 "8080",
                 "--config",
                 "devhive.config.yaml",
-                "--log-level",
-                "debug"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -57,11 +55,11 @@
             "args": [
                 "--config-filename",
                 "devhive.config.yaml",
+                // "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                // "-1" // -1 will start from the current head block,
                 // "--time-delay",
                 // "2",
-                "--start-block", // The block number to start from. Default or 0 will start from the last good block,
-                "-1" // -1 will start from the current head block
-                // "101170560"
+                // "103814300"
             ],
             "justMyCode": true
         },

@@ -236,7 +236,7 @@ class AdminApp:
             start = timer()
             sanity_results = await run_all_sanity_checks()
             if sanity_results.failed:
-                response_status = status.HTTP_503_SERVICE_UNAVAILABLE
+                response_status = status.HTTP_202_ACCEPTED
             else:
                 response_status = status.HTTP_200_OK
 
@@ -265,4 +265,4 @@ if __name__ == "__main__":
     import uvicorn
 
     app = create_admin_app()
-    uvicorn.run(app, host="127.0.0.1", port=8080, reload=True, log_config=None, access_log=False)
+    uvicorn.run(app, host="127.0.0.1", port=8080, reload=True, log_config=None)

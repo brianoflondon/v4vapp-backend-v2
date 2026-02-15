@@ -19,7 +19,12 @@ from pymongo.results import UpdateResult
 from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.actions.tracked_models import TrackedBaseModel
-from v4vapp_backend_v2.config.setup import DEFAULT_CONFIG_FILENAME, InternalConfig, StartupFailure, logger
+from v4vapp_backend_v2.config.setup import (
+    DEFAULT_CONFIG_FILENAME,
+    InternalConfig,
+    StartupFailure,
+    logger,
+)
 from v4vapp_backend_v2.database.db_pymongo import DBConn
 from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     check_time_diff,
@@ -496,9 +501,10 @@ async def all_ops_loop(
         v4v_config = V4VConfig(server_accname=server_accounts[0])
     else:
         v4v_config = V4VConfig(server_accname="")
-    async with asyncio.TaskGroup() as tg:
-        for witness in watch_witnesses:
-            tg.create_task(witness_first_run(witness))
+    # Run witness initialization in the background so it doesn't block
+    # the main stream from starting (and delay startup_complete_event).
+    for witness in watch_witnesses:
+        asyncio.create_task(witness_first_run(witness), name=f"witness_first_run_{witness}")
 
     hive_client = get_hive_client(keys=InternalConfig().config.hive.memo_keys)
     if start_block == 0:

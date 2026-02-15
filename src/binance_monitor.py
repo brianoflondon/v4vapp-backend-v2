@@ -1,4 +1,5 @@
 import asyncio
+import os
 import signal
 import sys
 from decimal import Decimal
@@ -8,6 +9,7 @@ from typing import Annotated
 import typer
 from urllib3.exceptions import NameResolutionError
 
+from status.status_api import StatusAPI, StatusAPIException
 from v4vapp_backend_v2 import __version__
 from v4vapp_backend_v2.config.setup import (
     DEFAULT_CONFIG_FILENAME,
@@ -32,8 +34,26 @@ app = typer.Typer()
 BINANCE_HIVE_ALERT_LEVEL_SATS = 300_000
 BINANCE_BTC_ALERT_LEVEL = 0.02
 
+STATUS_MESSAGE_TIME_MIN = 60
+
 # Define a global flag to track shutdown
 shutdown_event = asyncio.Event()
+
+
+async def health_check():
+    """
+    A simple health check function that can be used to verify that the application is running.
+    It can be expanded to include more comprehensive checks as needed.
+    """
+    tasks = ["binance_monitor.sleep_with_shutdown_check", "binance_monitor.check_balances"]
+    exceptions = []
+    running_tasks = [t.get_name() for t in asyncio.all_tasks()]
+    for task in tasks:
+        if task not in running_tasks:
+            exceptions.append(f"{ICON} Health check warning: Task '{task}' is not running. ")
+    if exceptions:
+        raise StatusAPIException(", ".join(exceptions))
+    return {"status": "OK", "message": "Binance Monitor is running"}
 
 
 def handle_shutdown_signal():
@@ -89,6 +109,17 @@ async def check_binance_balances():
     saved_balances = {}
     send_message = True
     start = timer()
+
+    process_name = os.path.splitext(os.path.basename(__file__))[0]
+    health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
+    status_api = StatusAPI(
+        port=int(health_check_port),
+        health_check_func=health_check,
+        shutdown_event=shutdown_event,
+        process_name=process_name,
+        version=__version__,
+    )  # Use a port from config if needed
+    asyncio.create_task(status_api.start(), name="status_api")
     while not shutdown_event.is_set():
         try:
             if shutdown_event.is_set():
@@ -146,9 +177,13 @@ async def check_binance_balances():
             raise e
 
         finally:
-            await sleep_with_shutdown_check(60, 1)
+            task = asyncio.create_task(
+                sleep_with_shutdown_check(60, 1),
+                name="binance_monitor.sleep_with_shutdown_check",
+            )
+            await task
             elapsed = timer() - start
-            if elapsed > 3600:  # or 1 hour
+            if elapsed > STATUS_MESSAGE_TIME_MIN * 60:
                 send_message = True
                 start = timer()
 
@@ -275,7 +310,8 @@ async def main_async_start():
         loop.add_signal_handler(signal.SIGTERM, handle_shutdown_signal)
         loop.add_signal_handler(signal.SIGINT, handle_shutdown_signal)
 
-        await check_binance_balances()
+        task = asyncio.create_task(check_binance_balances(), name="binance_monitor.check_balances")
+        await task
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info(f"{ICON} 👋 Received signal to stop. Exiting...")

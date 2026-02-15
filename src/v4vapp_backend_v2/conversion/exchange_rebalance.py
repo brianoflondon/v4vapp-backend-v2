@@ -427,12 +427,15 @@ class RebalanceResult(BaseModel):
         if self.executed and self.order_result:
             base, quote = self.order_result._get_assets()
             qty_str = format_base_asset(self.order_result.executed_qty, base)
-            fee_str = format_quote_asset(
-                self.order_result.fee_original, self.order_result.fee_asset
+            quote_str = format_quote_asset(self.order_result.quote_qty, quote)
+            fee_str = (
+                format_quote_asset(self.order_result.fee_original, self.order_result.fee_asset)
+                if self.order_result.fee_original and self.order_result.fee_asset
+                else "0"
             )
             return (
-                f"{self.order_result.side} "
-                f"{qty_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
+                f"{self.order_result.side:>4} "
+                f"{qty_str} for {quote_str} @ {self.order_result.avg_price:.8f}, fee: {fee_str}"
             )
         return "Rebalance not executed"
 

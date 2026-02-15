@@ -174,10 +174,12 @@ async def follow_on_transfer(
             )
             return
 
+        # MARK: Attempt to decode and pay a Lightning invoice if present
         pay_req = await decode_incoming_and_checks(tracked_op=tracked_op, lnd_client=lnd_client)
         # Important: we ignore Keepsats status for now, first we check amounts and try to pay a lightning invoice.
         # If there is no invoice we will skip to just depositing all the Hive.
 
+        # MARK: No invoice, custom json with keepsats transfer to server, convert to Hive/HBD (looking in memo for #HBD)
         if not pay_req and (
             isinstance(tracked_op, CustomJson)
             and isinstance(tracked_op.json_data, KeepsatsTransfer)
@@ -194,6 +196,7 @@ async def follow_on_transfer(
             )
             release_hold = False  #   There is no hold to release
             return
+        # MARK: No invoice, if this is an OpAllTransfers with paywithsats_amount and paywithsats_to, this is a transfer instruction, so we send the transfer and skip the conversion.
         if not pay_req and isinstance(tracked_op, OpAllTransfers):
             # Check if we're giving a transfer instruction
             if tracked_op.paywithsats_amount and tracked_op.paywithsats_to:
@@ -216,18 +219,17 @@ async def follow_on_transfer(
                 msats=Decimal(0),  # Use all the funds sent
             )
             return
-        else:
-            assert pay_req and isinstance(pay_req, PayReq), (
-                "PayReq should be an instance of PayReq"
-            )
-
+        # MARK: We have a pay_req, we will pay it
+        if pay_req and isinstance(pay_req, PayReq):
+            # At this stage we need to know if they payment came from  UI or via a custom_json/hive transfer with a memo.
+            
             if tracked_op.paywithsats:
                 await hold_keepsats(
                     amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,
                     cust_id=cust_id,
                     tracked_op=tracked_op,
                 )
-            chat_message = f"Sending sats from v4v.app | § {tracked_op.short_id} |"
+            chat_message = f"Sending sats from v4v.app | via server | § {tracked_op.short_id} |"
             payment = await send_lightning_to_pay_req(
                 pay_req=pay_req,
                 lnd_client=lnd_client,

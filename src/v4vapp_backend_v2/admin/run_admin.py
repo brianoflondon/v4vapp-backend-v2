@@ -12,6 +12,7 @@ from pathlib import Path
 import uvicorn
 
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 # Add the src directory to the path
 src_dir = Path(__file__).parent.parent.parent
@@ -41,9 +42,9 @@ Examples:
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     parser.add_argument(
         "--log-level",
-        default="info",
+        default="warning",
         choices=["critical", "error", "warning", "info", "debug"],
-        help="Log level (default: info)",
+        help="Log level (default: warning)",
     )
 
     args = parser.parse_args()
@@ -52,21 +53,21 @@ Examples:
     try:
         app = create_admin_app(config_filename=args.config)
     except Exception as e:
-        print(f"❌ Failed to create admin app: {e}")
+        logger.error(f"❌ Failed to create admin app: {e}")
         sys.exit(1)
 
     # Print startup information
-    print("🚀 Starting V4VApp Admin Interface")
-    print(f"📁 Config file: {args.config}")
-    print(f"🌐 Server: http://{args.host}:{args.port}/admin")
-    print(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")
-    print(f"❤️ Health: http://{args.host}:{args.port}/admin/health")
+    logger.info("🚀 Starting V4VApp Admin Interface")
+    logger.info(f"📁 Config file: {args.config}")
+    logger.info(f"🌐 Server: http://{args.host}:{args.port}/admin")
+    logger.info(f"📊 API Docs: http://{args.host}:{args.port}/admin/docs")
+    logger.info(f"❤️ Health: http://{args.host}:{args.port}/admin/health")
 
     if args.reload:
-        print("🔄 Auto-reload enabled (development mode)")
-
-    print("\nPress Ctrl+C to stop the server")
-    print("-" * 50)
+        logger.info("🔄 Auto-reload enabled (development mode)")
+    logger.info("-" * 50)
+    logger.info("Press Ctrl+C to stop the server")
+    logger.info("-" * 50)
 
     # Run the server
     try:
@@ -83,7 +84,8 @@ Examples:
                 port=args.port,
                 reload=args.reload,
                 log_level=args.log_level,
-                access_log=True,
+                log_config=None,
+                access_log=False,
             )
         else:
             uvicorn.run(
@@ -92,12 +94,13 @@ Examples:
                 port=args.port,
                 reload=False,
                 log_level=args.log_level,
-                access_log=True,
+                access_log=False,
+                log_config=None,
             )
     except KeyboardInterrupt:
-        print("\n👋 Server stopped")
+        logger.info("\n👋 Server stopped")
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        logger.error(f"❌ Server error: {e}")
         sys.exit(1)
 
 
@@ -108,10 +111,15 @@ app = None
 def get_app():
     """Get or create the app instance"""
     global app
+
     if app is None:
         import os
 
         config_filename = os.environ.get("V4VAPP_ADMIN_CONFIG", "devdocker.config.yaml")
+        ic = InternalConfig(
+            config_filename=config_filename,
+            log_filename="admin_app",
+        )
         app = create_admin_app(config_filename=config_filename)
     return app
 
@@ -129,9 +137,11 @@ if __name__ != "__main__":
         args, _ = parser.parse_known_args()
         os.environ["V4VAPP_ADMIN_CONFIG"] = args.config
 
+    ic = InternalConfig(
+        config_filename=os.environ.get("V4VAPP_ADMIN_CONFIG", "devdocker.config.yaml"),
+        log_filename="admin_app",
+    )
     app = get_app()
 
-
 if __name__ == "__main__":
-    main()
     main()

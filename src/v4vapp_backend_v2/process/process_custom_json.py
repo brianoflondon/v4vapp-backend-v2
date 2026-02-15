@@ -49,7 +49,7 @@ async def process_custom_json_func(
         LedgerEntry: The created or existing ledger entry, or None if no entry is created.
     """
     server_id = InternalConfig().server_id
-    if custom_json.cj_id in ["v4vapp_notification", "v4vapp_dev_notification"]:
+    if custom_json.cj_id == InternalConfig().config.hive.custom_json_prefix + "_notification":
         logger.debug(f"Notification CustomJson: {custom_json.json_data.memo}")
         return []
 
@@ -58,7 +58,7 @@ async def process_custom_json_func(
         logger.warning(message, extra={"notification": False, **custom_json.log_extra})
         raise CustomJsonAuthorizationError(message)
 
-    if custom_json.cj_id in ["v4vapp_dev_transfer", "v4vapp_transfer"]:
+    if custom_json.cj_id == InternalConfig().config.hive.custom_json_prefix + "_transfer":
         keepsats_transfer = KeepsatsTransfer.model_validate(custom_json.json_data)
         keepsats_transfer.msats = (
             Decimal(keepsats_transfer.sats * 1000)
@@ -258,9 +258,9 @@ async def custom_json_internal_transfer(
         )
     else:
         ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
-
+        lightning_strip_memo = lightning_memo(keepsats_transfer.user_memo)
         user_memo = (
-            keepsats_transfer.user_memo
+            lightning_strip_memo
             + f" | {keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
             or f"{keepsats_transfer.sats:,} sats from {keepsats_transfer.from_account} -> {keepsats_transfer.to_account}"
         )

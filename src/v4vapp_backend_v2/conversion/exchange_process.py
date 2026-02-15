@@ -67,6 +67,16 @@ async def exchange_accounting(
 
     order_result = rebalance_result.order_result
 
+    if order_result.executed_qty < Decimal("0.0"):
+        # Binance testnet no longer supports test trades.
+        logger.warning(
+            "Executed quantity is zero or negative, likely due to Binance testnet limitations. Skipping accounting entries.",
+            extra={
+                "notification": False,
+            },
+        )
+        return
+
     # Use trade_quote from order_result - it now contains complete market rates
     # with the actual trade execution rate for sats_hive
     # Fall back to fetching current quote if trade_quote is not available

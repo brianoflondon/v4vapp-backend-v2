@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from v4vapp_backend_v2.config.setup import InternalConfig
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
@@ -180,7 +181,11 @@ class KeepsatsTransfer(BaseModel):
 
 CustomJsonData = Union[Any, KeepsatsTransfer, VSCTransfer]
 
-CUSTOM_JSON_IDS = {
+# This dictionary maps custom JSON operation IDs to their corresponding Pydantic models.
+# Whilst the v4vapp_dev ones could be generated from the custom_json_prefix, we hardcode them here for better clarity
+# and to avoid potential issues with dynamic generation, such as if
+# the suffixes change in the future or if there are other custom JSON IDs that don't follow the prefix pattern
+CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
     "v4vapp_dev_transfer": KeepsatsTransfer,
     "v4vapp_dev_notification": KeepsatsTransfer,
     "v4vapp_transfer": KeepsatsTransfer,
@@ -206,7 +211,9 @@ def all_custom_json_ids() -> List[str]:
     Returns:
         List[str]: A list of custom JSON IDs.
     """
-    return list(CUSTOM_JSON_IDS.keys())
+    extra_ids = InternalConfig().config.hive.custom_json_ids_tracked
+    duplicates_removed = set(list(CUSTOM_JSON_IDS.keys()) + extra_ids)
+    return list(duplicates_removed)
 
 
 def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
@@ -225,14 +232,23 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
             or None if the operation ID is not recognized.
 
     """
-    if data.get("id", "") in CUSTOM_JSON_IDS.keys():
-        return (
-            CUSTOM_JSON_IDS[data["id"]] if isinstance(CUSTOM_JSON_IDS[data["id"]], type) else None
-        )
+    cj_id = data.get("id", None)
+    if cj_id is None:
+        return None
+    if cj_id in CUSTOM_JSON_IDS.keys():
+        return CUSTOM_JSON_IDS[cj_id] if isinstance(CUSTOM_JSON_IDS[cj_id], type) else None
+
+    # Extra steps to combine the custom_json_prefix with the suffixes to check for valid IDs, this allows us to not have to hardcode every custom JSON ID in the config
+    prefix = getattr(InternalConfig().config.hive, "custom_json_prefix", None)
+    if prefix:
+        if cj_id.startswith(prefix):
+            suffix = cj_id[len(prefix) :]
+            if suffix in ["_transfer", "_notification"]:
+                return KeepsatsTransfer
     return None
 
 
-def custom_json_test_id(cj_id: str) -> Type[BaseModel] | None:
-    if cj_id in CUSTOM_JSON_IDS:
-        return CUSTOM_JSON_IDS[cj_id]
-    return None
+# def custom_json_test_id(cj_id: str) -> Type[BaseModel] | None:
+#     if cj_id in CUSTOM_JSON_IDS:
+#         return CUSTOM_JSON_IDS[cj_id]
+#     return None
