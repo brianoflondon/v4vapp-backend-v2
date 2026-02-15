@@ -12,7 +12,7 @@ from pathlib import Path
 import uvicorn
 
 from v4vapp_backend_v2.admin.admin_app import create_admin_app
-from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 
 # Add the src directory to the path
 src_dir = Path(__file__).parent.parent.parent
@@ -84,8 +84,8 @@ Examples:
                 port=args.port,
                 reload=args.reload,
                 log_level=args.log_level,
-                access_log=True,
                 log_config=None,
+                access_log=False,
             )
         else:
             uvicorn.run(
@@ -94,7 +94,8 @@ Examples:
                 port=args.port,
                 reload=False,
                 log_level=args.log_level,
-                access_log=True,
+                access_log=False,
+                log_config=None,
             )
     except KeyboardInterrupt:
         logger.info("\n👋 Server stopped")
@@ -110,10 +111,15 @@ app = None
 def get_app():
     """Get or create the app instance"""
     global app
+
     if app is None:
         import os
 
         config_filename = os.environ.get("V4VAPP_ADMIN_CONFIG", "devdocker.config.yaml")
+        ic = InternalConfig(
+            config_filename=config_filename,
+            log_filename="admin_app",
+        )
         app = create_admin_app(config_filename=config_filename)
     return app
 
@@ -131,6 +137,10 @@ if __name__ != "__main__":
         args, _ = parser.parse_known_args()
         os.environ["V4VAPP_ADMIN_CONFIG"] = args.config
 
+    ic = InternalConfig(
+        config_filename=os.environ.get("V4VAPP_ADMIN_CONFIG", "devdocker.config.yaml"),
+        log_filename="admin_app",
+    )
     app = get_app()
 
 if __name__ == "__main__":
