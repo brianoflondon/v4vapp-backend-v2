@@ -485,7 +485,8 @@ if __name__ == "__main__":
         port=args.port,
         workers=args.workers,
         log_config=None,
-        # access_log=False,
+        log_level="warning",
+        access_log=False,
     )
 else:
     # Create app with default config for module imports

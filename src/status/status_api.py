@@ -168,7 +168,7 @@ class StatusAPI:
                 self.app,
                 host="0.0.0.0",
                 port=self.port,
-                log_level="critical",  # Only log critical errors (effectively disables most logs)
+                log_level="warning",  # Only log critical errors (effectively disables most logs)
                 access_log=False,
                 # log_config=None,  # Disable Uvicorn's default logging configuration
             )
