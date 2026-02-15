@@ -248,8 +248,9 @@ class PendingRebalance(BaseModel):
         self.last_executed_at = datetime.now(tz=timezone.utc)
 
         # Reset pending amounts (keep any remainder if partial fill)
+        # Treat dust remainders (< 1e-3) as zero to avoid accumulating tiny amounts
         remainder = self.pending_qty - executed_qty
-        if remainder > Decimal("0"):
+        if remainder >= Decimal("0.001"):
             self.pending_qty = remainder
             # Estimate remaining quote value proportionally
             if executed_qty > Decimal("0"):
