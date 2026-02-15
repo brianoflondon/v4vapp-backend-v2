@@ -1028,27 +1028,37 @@ class InternalConfig:
 
             self.local_machine_name = os.getenv("LOCAL_MACHINE_NAME", "unknown")
             print(f"Starting initialization... {config_filename} {log_filename}")
+            # Set _initialized early to prevent re-entrant calls during setup,
+            # but reset it if initialization fails so the singleton can be retried.
             self._initialized = True
-            super().__init__()
-            InternalConfig.notification_loop = None
-            InternalConfig.notification_lock = False
-            self.setup_config(config_filename)
-            self.setup_logging(log_filename)
-            self.setup_redis()
-            # Configure error code manager with server/node info and enable DB persistence
-            InternalConfig.error_code_manager.configure(
-                server_id=self.server_id,
-                node_name=self.node_name,
-                local_machine_name=self.local_machine_name,
-                db_enabled=True,
-            )
-            logger.info(f"{ICON} Config filename: {config_filename}")
-            logger.info(f"{ICON} Log filename: {log_filename}")
-            if self.config.dbs_config.default_db_connection:
-                logger.info(
-                    f"{ICON} Database URI: {self.config.dbs_config.default_db_connection.hosts_str}"
+            try:
+                super().__init__()
+                InternalConfig.notification_loop = None
+                InternalConfig.notification_lock = False
+                self.setup_config(config_filename)
+                self.setup_logging(log_filename)
+                self.setup_redis()
+                # Configure error code manager with server/node info and enable DB persistence
+                InternalConfig.error_code_manager.configure(
+                    server_id=self.server_id,
+                    node_name=self.node_name,
+                    local_machine_name=self.local_machine_name,
+                    db_enabled=True,
                 )
-            atexit.register(self.shutdown)
+                logger.info(f"{ICON} Config filename: {config_filename}")
+                logger.info(f"{ICON} Log filename: {log_filename}")
+                if self.config.dbs_config.default_db_connection:
+                    logger.info(
+                        f"{ICON} Database URI: {self.config.dbs_config.default_db_connection.hosts_str}"
+                    )
+                atexit.register(self.shutdown)
+            except Exception:
+                # Reset singleton state so a subsequent call can retry
+                # with correct parameters instead of being stuck with a
+                # half-initialized instance.
+                del self._initialized
+                InternalConfig._instance = None
+                raise
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.shutdown()
