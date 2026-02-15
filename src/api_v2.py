@@ -240,7 +240,7 @@ async def keepsats(
         else:
             account_balance = account_balance.remove_balances()
 
-    return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items)
+    return account_balance.to_api_response(hive_accname=hive_accname, line_items=line_items, admin=admin)
 
 
 @lightning_v1_router.post("/keepsats/transfer")

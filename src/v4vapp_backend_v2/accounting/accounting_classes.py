@@ -393,7 +393,7 @@ class LedgerAccountDetails(LedgerAccount):
 
         return copy_balance
 
-    def to_api_response(self, hive_accname: str, line_items: bool = False) -> dict:
+    def to_api_response(self, hive_accname: str, line_items: bool = False, admin: bool = False) -> dict:
         """
         Returns a dictionary representation of the account balance details, with numeric values
         rounded to 3 decimal places (half up) where applicable, formatted for API responses.
