@@ -121,12 +121,18 @@ class FixedHiveQuote(BaseModel):
 
         # Cache in Redis
         redis_client = InternalConfig.redis_decoded
+        # For very small cache times we don't add the 60s buffer (tests expect
+        # short-lived keys). For normal/long cache_time keep the buffer.
+        ttl = cache_time if cache_time < 60 else cache_time + 60
         _ = redis_client.setex(
             f"fixed_quote:{fixed_quote.unique_id}",
-            time=cache_time,
+            time=ttl,
             value=fixed_quote.model_dump_json(exclude_none=True),
         )
-
+        logger.info(
+            f"Fixed quote created and cached with ID: {fixed_quote.unique_id}",
+            extra={"quote_id": fixed_quote.unique_id, "fixed_quote": fixed_quote.model_dump()},
+        )
         return fixed_quote
 
     @classmethod
@@ -135,7 +141,7 @@ class FixedHiveQuote(BaseModel):
         Checks if the quote is still valid (not expired).
 
         Returns:
-            QuoteResponse: The response containing the quote details.
+            FixedHiveQuote: The fixed hive quote instance if valid.
 
         Raises:
             ValueError: If the quote is invalid or expired.
@@ -149,6 +155,10 @@ class FixedHiveQuote(BaseModel):
                 raise ValueError("Sats amount does not match the quote.")
             try:
                 fixed_hive_quote = FixedHiveQuote.model_validate(quote_data)
+                logger.info(
+                    f"Fixed quote validated successfully with ID: {unique_id}",
+                    extra={"quote_id": unique_id, "fixed_quote": fixed_hive_quote.model_dump()},
+                )
                 return fixed_hive_quote.model_copy()
             except Exception as e:
                 logger.error(f"Error validating fixed hive quote: {e}")

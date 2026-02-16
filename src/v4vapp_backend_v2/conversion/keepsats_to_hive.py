@@ -121,7 +121,14 @@ async def conversion_keepsats_to_hive(
         fixed_hive_quote = tracked_op.fixed_quote
         if fixed_hive_quote:
             quote = fixed_hive_quote.quote_response
-            conv_result = fixed_hive_quote.conversion_result
+            # Need to recalc the conversion based on the stored quote, this keeps the Hive/HBD currency to receive correct.
+            conv_result = await calc_keepsats_to_hive(
+                timestamp=tracked_op.timestamp,
+                msats=msats,
+                amount=amount,
+                quote=quote,
+                to_currency=to_currency,
+            )
 
     try:
         if not conv_result:
