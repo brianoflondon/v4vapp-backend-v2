@@ -161,7 +161,12 @@ async def reset_exchange_opening_balance(
         Diagnostic checks log warnings or debug messages if the ledger entry
         retrieval fails.  This function is intended for operational/testing purposes.
     """
-    binance_adaptor = get_exchange_adapter()
+    try:
+        binance_adaptor = get_exchange_adapter()
+    except Exception as e:
+        logger.error(f"Failed to initialize exchange adapter: {e}", extra={"error": str(e)})
+        return
+
     exchange_sub = binance_adaptor.exchange_name
 
     btc_balance = binance_adaptor.get_balance("BTC")
