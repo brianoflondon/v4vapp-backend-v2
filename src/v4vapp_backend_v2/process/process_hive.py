@@ -220,6 +220,7 @@ async def process_transfer_op(
         ledger_entry.debit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.credit = LiabilityAccount(name="Owner Loan Payable", sub=funding_account)
         ledger_entry.description = f"Funding to Treasury transfer: {base_description}"
+        ledger_entry.ledger_type = LedgerType.FUNDING
     # MARK: Treasury to Funding
     elif (
         hive_transfer.from_account == treasury_account
