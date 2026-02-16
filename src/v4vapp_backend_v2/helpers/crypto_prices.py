@@ -464,6 +464,7 @@ class AllQuotes(BaseModel):
                                 logger.warning(
                                     f"Calculated HBD/USD price is low: {quote_dict['hbd_usd']:.3f}",
                                     extra={
+                                        "notification": False,
                                         "quote_dict": quote_dict,
                                         "error_code": "Low HBD USD Price",
                                     },
