@@ -412,6 +412,19 @@ def test_quote_response_fetch_date():
     assert quote.age_p > 1742126888  # 55 years in seconds back to Jan 1 1970
 
 
+def test_quote_response_parses_iso_string_fetch_date():
+    """Ensure QuoteResponse accepts ISO string fetch_date (from JSON/cache) and
+    that `age`/`age_p` work without raising TypeError.
+    """
+    now = datetime.now(tz=timezone.utc)
+    iso = now.isoformat()
+    q = QuoteResponse.model_validate({"fetch_date": iso})
+    assert isinstance(q.fetch_date, datetime)
+    assert q.fetch_date.tzinfo is not None
+    # age should be non-negative (very recent)
+    assert q.age_p >= 0
+
+
 async def fetch_all_quote_json_files():
     """
     Fetches all quote data and writes them to JSON files.
