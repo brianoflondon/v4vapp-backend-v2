@@ -119,6 +119,14 @@ class KeepsatsTransfer(BaseModel):
         if data.get("memo", None) is None:
             data["memo"] = ""
 
+        """
+        This test is vital for the process_custom_json function if we are passing a
+        lightning invoice in the memo, we don't want to have the msats and sats set
+        as that would be confusing, as the amount to pay is actually determined by
+        the lightning invoice, not the msats/sats fields. This allows us to still
+        pass the lightning invoice in the memo for processing, without having
+        conflicting information in the msats/sats fields.
+        """
         if data["msats"] > Decimal(0) and data["memo"] != "":
             lightning_memo = LightningMemo(data["memo"])
             if lightning_memo.is_lightning_invoice:
