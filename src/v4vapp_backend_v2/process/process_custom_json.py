@@ -83,8 +83,10 @@ async def process_custom_json_func(
                 )
                 data["msats"] = Decimal(0)
                 data["sats"] = Decimal(0)
-        """
 
+        This test ensures that a transfer with a lightning memo is handled by the CustomJson to pay a lightning invoice
+        logic (below) rather than the transfer logic, which would attempt to process this as a normal transfer.
+        """
         if (
             custom_json.from_account
             and custom_json.to_account
