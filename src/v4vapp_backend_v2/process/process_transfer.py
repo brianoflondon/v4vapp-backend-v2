@@ -14,6 +14,7 @@ from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.conversion.hive_to_keepsats import conversion_hive_to_keepsats
 from v4vapp_backend_v2.conversion.keepsats_to_hive import conversion_keepsats_to_hive
 from v4vapp_backend_v2.helpers.currency_class import Currency
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.helpers.service_fees import V4VMaximumInvoice, V4VMinimumInvoice
 from v4vapp_backend_v2.hive.hive_extras import (
     HiveAccountNameOnExchangesList,
@@ -38,6 +39,7 @@ from v4vapp_backend_v2.lnd_grpc.lnd_functions import (
 from v4vapp_backend_v2.models.pay_req import PayReq
 from v4vapp_backend_v2.process.hive_notification import reply_with_hive, send_transfer_custom_json
 from v4vapp_backend_v2.process.hold_release_keepsats import hold_keepsats, release_keepsats
+from v4vapp_backend_v2.process.process_errors import CustomJsonToLightningError
 
 
 async def follow_on_transfer(
@@ -184,7 +186,17 @@ async def follow_on_transfer(
             isinstance(tracked_op, CustomJson)
             and isinstance(tracked_op.json_data, KeepsatsTransfer)
         ):
-            # This is a keepsats to Hive conversion.
+            # if we arrived here because of a network failure processing the pay_req,
+            # check if it really was a lightning address or LNURL that failed, if it was,
+            # Just return do not convert.
+            if tracked_op.json_data.lightning_memo.is_lightning:
+                release_hold = True
+                raise CustomJsonToLightningError(
+                    "Failed to process Lightning invoice in custom_json, likely due to a network error. No invoice found on retry, skipping conversion."
+                )
+                # We also need to reverse the original ledger entry to send sats back to the customer.
+
+            # This is a keepsats to Hive conversion
             to_currency = Currency.HBD if tracked_op.detect_hbd else Currency.HIVE
             await conversion_keepsats_to_hive(
                 server_id=server_id,
@@ -222,14 +234,22 @@ async def follow_on_transfer(
         # MARK: We have a pay_req, we will pay it
         if pay_req and isinstance(pay_req, PayReq):
             # At this stage we need to know if they payment came from  UI or via a custom_json/hive transfer with a memo.
-            
             if tracked_op.paywithsats:
                 await hold_keepsats(
                     amount_msats=Decimal(pay_req.value_msat) + pay_req.fee_estimate,
                     cust_id=cust_id,
                     tracked_op=tracked_op,
                 )
-            chat_message = f"Sending sats from v4v.app | via server | § {tracked_op.short_id} |"
+            chat_message = f"Sending sats from v4v.app § {tracked_op.short_id} | "
+            if invoice_message := getattr(tracked_op, "invoice_message", None):
+                chat_message += invoice_message
+            if memo := getattr(tracked_op, "memo", None):
+                lightning_memo = LightningMemo(memo)
+                if lightning_memo.short_memo:
+                    chat_message += lightning_memo.short_memo + " | "
+                if lightning_memo.after_text:
+                    chat_message += lightning_memo.after_text
+            chat_message = chat_message.strip(" |")
             payment = await send_lightning_to_pay_req(
                 pay_req=pay_req,
                 lnd_client=lnd_client,
@@ -305,6 +325,9 @@ async def follow_on_transfer(
             return_details.reason_str,
             extra={"notification": False, **tracked_op.log_extra},
         )
+
+    except CustomJsonToLightningError:
+        raise
 
     except Exception as e:
         # Unexpected error, log it but will not return Hive.
@@ -441,12 +464,14 @@ async def decode_incoming_and_checks(
             pass
 
         message = f"Lightning decode error: {e}"
-        logger.debug(
+        logger.warning(
             f"{message}",
             extra={"notification": False, **tracked_op.log_extra},
         )
         # Here we process as a keepsats to Hive/HBD conversion
-        logger.debug("Lightning Invoice not found, processing as a Keepsats withdrawal")
+        logger.warning(
+            "Lightning Invoice not found or error, processing as a Keepsats withdrawal or rejecting"
+        )
         return None
 
     except Exception as e:

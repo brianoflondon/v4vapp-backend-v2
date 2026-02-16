@@ -43,7 +43,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = True
+turn_off_these_tests = False
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -55,10 +55,7 @@ as background processes and then running tests against them.
 It includes fixtures for setup and teardown, as well as tests for various payment scenarios.
 
 This must be run after the three watchers are running, as it relies on the watchers to generate the ledgers.
-
-
 """
-
 
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():

@@ -80,6 +80,7 @@ class LightningMemo:
     short_memo: str = ""
     is_lightning_invoice: bool = False
     is_ln_address: bool = False
+    is_lightning: bool = False
 
     def __init__(self, memo: str):
         match = LND_INVOICE_PATTERN.match(memo)
@@ -106,3 +107,5 @@ class LightningMemo:
             self.short_memo = _lightning_memo(memo)
             self.is_lightning_invoice = False
         self.memo = memo
+        self.is_lightning = self.is_lightning_invoice or self.is_ln_address
+        

@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import List
@@ -139,9 +140,29 @@ async def process_custom_json_func(
 
             if custom_json.to_account == server_id:
                 # Process this as if it were an inbound Hive transfer with a memo.
-                await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
+                try:
+                    await follow_on_transfer(tracked_op=custom_json, nobroadcast=nobroadcast)
+                except CustomJsonToLightningError:
+                    # here is where we reverse the original transfer to the server if we failed to pay a lightning invoice
+                    # or process a lightning address.
+                    reverse_transfer = deepcopy(keepsats_transfer)
+                    reverse_transfer.to_account = keepsats_transfer.from_account
+                    reverse_transfer.from_account = keepsats_transfer.to_account
+                    reverse_transfer.memo = f"Reversal of transfer to server due to failure to process lightning invoice or address | Original memo: {keepsats_transfer.memo}"
+                    reverse_ledger = await custom_json_internal_transfer(
+                        custom_json=custom_json, keepsats_transfer=reverse_transfer, reverse=True
+                    )
+                    ledger_entries.extend(reverse_ledger)
+                    logger.warning(
+                        f"Reversed transfer to server due to failure to process lightning invoice or address {custom_json.short_id}",
+                        extra={
+                            "notification": False,
+                            "reverse_transfer": reverse_transfer.dict(),
+                            **custom_json.log_extra,
+                        },
+                    )
 
-            return []
+            return ledger_entries
 
         # MARK: CustomJson to pay a lightning invoice
         # If this has a memo that should contain the invoice and the instructions like "#clean"
@@ -172,6 +193,7 @@ async def custom_json_internal_transfer(
     custom_json: CustomJson,
     keepsats_transfer: KeepsatsTransfer,
     nobroadcast: bool = False,
+    reverse: bool = False,
 ) -> List[LedgerEntry]:
     """
     Must perform balance check before processing the transfer.
@@ -186,6 +208,7 @@ async def custom_json_internal_transfer(
         custom_json (CustomJson): The custom JSON object containing operation details.
         keepsats_transfer (KeepsatsTransfer): The transfer details including source, destination, amount, and memo.
         nobroadcast (bool, optional): If True, suppresses broadcasting the notification. Defaults to False.
+        reverse (bool, optional): If True, indicates that this is a reverse transfer. Defaults to False.
     Returns:
         LedgerEntry: The ledger entry representing the transfer transaction.
     Notes:
@@ -278,7 +301,9 @@ async def custom_json_internal_transfer(
             or f"Received {keepsats_transfer.sats:,} sats from Lightning"
         )
     else:
-        ledger_type = LedgerType.CUSTOM_JSON_TRANSFER
+        ledger_type = (
+            LedgerType.CUSTOM_JSON_TRANSFER if not reverse else LedgerType.CUSTOM_JSON_REVERSAL
+        )
         lightning_strip_memo = lightning_memo(keepsats_transfer.user_memo)
         user_memo = (
             lightning_strip_memo

@@ -180,6 +180,18 @@ class KeepsatsTransfer(BaseModel):
         return snake_case(cls.__name__)
 
     @property
+    def lightning_memo(self) -> LightningMemo:
+        """
+        If the memo contains a lightning address, this property returns a LightningMemo object representing it.
+        Otherwise, it returns None.
+
+        Returns:
+            LightningMemo | None: A LightningMemo object if a lightning address is found in the memo, or None if not.
+        """
+        lightning_memo = LightningMemo(self.memo)
+        return lightning_memo
+
+    @property
     def log_extra(self) -> Dict[str, Any]:
         """
         Returns a dictionary of extra log information for the Keepsats transfer.
