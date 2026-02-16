@@ -87,6 +87,38 @@ def currency_to_receive(memo: str) -> Currency:
     return Currency.HIVE  # Default to HIVE if no specific currency is detected
 
 
+def _parse_iso_datetime(value: str | datetime | None) -> datetime:
+    """Parse an ISO-8601 string (or pass-through a datetime) and return a
+    timezone-aware datetime (UTC if missing). This centralises the handling of
+    inputs like '2026-02-16T16:26:12.316449Z' and avoids fragile global string
+    replacements.
+
+    - Accepts datetime, str or None
+    - Treats naive datetimes as UTC
+    - Returns epoch (1970-01-01 UTC) for invalid/None inputs
+    """
+    if value is None:
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        s = str(value).strip()
+        # Only convert a trailing 'Z' -> '+00:00' (don't replace all 'Z' chars)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(s)
+        except Exception:
+            # Fallback to epoch on parse failure
+            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    # Ensure timezone-aware (treat naive as UTC)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class CurrencyPair(StrEnum):
     HIVE_USD = "hive_usd"
     HBD_USD = "hbd_usd"
@@ -188,6 +220,24 @@ class QuoteResponse(BaseModel):
             return Decimal(str(v))
         return v
 
+    @field_validator("fetch_date", mode="before")
+    @classmethod
+    def parse_fetch_date(cls, v):
+        """Accept datetimes or ISO strings (from cache/JSON) and return a tz-aware datetime.
+
+        This ensures model validation always yields a proper datetime for `fetch_date` so
+        computed fields (like `age`) never run into string subtraction errors.
+        """
+        if v is None:
+            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+        if isinstance(v, str):
+            try:
+                return _parse_iso_datetime(v)
+            except Exception:
+                # fallback to epoch on parse failure to keep behavior safe/consistent
+                return datetime(1970, 1, 1, tzinfo=timezone.utc)
+        return _parse_iso_datetime(v)
+
     def __init__(
         self,
         hive_usd: Decimal | float | str = Decimal(0),
@@ -208,7 +258,8 @@ class QuoteResponse(BaseModel):
         self.hive_hbd = Decimal(str(hive_hbd)) if hive_hbd != Decimal(0) else Decimal(0)
         self.raw_response = raw_response
         self.source = source
-        self.fetch_date = fetch_date
+        # Normalize fetch_date (accept ISO strings and naive datetimes)
+        self.fetch_date = _parse_iso_datetime(fetch_date)
         self.error = error
         self.error_details = error_details
 
@@ -308,17 +359,18 @@ class QuoteResponse(BaseModel):
 
     @computed_field
     def age(self) -> float:
-        """Calculate the age of the quote in seconds."""
-        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
+        """Calculate the age of the quote in seconds. Accept ISO-string `fetch_date` too."""
+        return self.get_age()
 
     @property
     def age_p(self) -> float:
-        """Calculate the age of the quote in seconds."""
-        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
+        """Calculate the age of the quote in seconds. Defensive against string dates."""
+        return self.get_age()
 
     def get_age(self) -> float:
-        """Calculate the age of the quote in seconds. Function version."""
-        return (datetime.now(tz=timezone.utc) - self.fetch_date).total_seconds()
+        """Calculate the age of the quote in seconds. Function version (defensive)."""
+        fd = _parse_iso_datetime(self.fetch_date)
+        return (datetime.now(tz=timezone.utc) - fd).total_seconds()
 
     @property
     def log_data(self) -> Dict[str, Any]:
@@ -594,9 +646,7 @@ class AllQuotes(BaseModel):
         for service_name, quote_data in cache_data.get("quotes", {}).items():
             # Convert ISO string back to datetime if needed
             if "fetch_date" in quote_data and isinstance(quote_data["fetch_date"], str):
-                quote_data["fetch_date"] = datetime.fromisoformat(
-                    quote_data["fetch_date"].replace("Z", "+00:00")
-                )
+                quote_data["fetch_date"] = _parse_iso_datetime(quote_data["fetch_date"])
             quotes[service_name] = QuoteResponse.model_validate(quote_data)
         return quotes
 
@@ -613,12 +663,8 @@ class AllQuotes(BaseModel):
             cache_data = pickle.loads(cache_data_pickle)
             # Handle fetch_date conversion
             if "fetch_date" in cache_data:
-                if isinstance(cache_data["fetch_date"], str):
-                    self.fetch_date = datetime.fromisoformat(
-                        cache_data["fetch_date"].replace("Z", "+00:00")
-                    )
-                else:
-                    self.fetch_date = cache_data["fetch_date"]
+                # Normalize whatever form was stored in cache (str or datetime)
+                self.fetch_date = _parse_iso_datetime(cache_data.get("fetch_date"))
             self.quotes = self.unpack_quotes(cache_data)
             self.get_one_quote()
             self.source = cache_data["source"]
