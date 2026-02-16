@@ -286,6 +286,7 @@ class ExchangeNetworkConfig(BaseConfig):
 
     base_url: str = ""
     api_url: str = ""  # Alternative to base_url for some exchanges
+    no_trade: bool = False  # If True, the adapter should not attempt to execute trades, only fetch balances and quotes
 
     # Direct API credentials (from config file)
     api_key_name: str = ""

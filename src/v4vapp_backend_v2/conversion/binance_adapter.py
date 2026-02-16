@@ -436,6 +436,10 @@ class BinanceAdapter(BaseExchangeAdapter):
         Returns:
             ExchangeOrderResult with execution details
         """
+        # February 2026 - Binance testnet no longer supports trading, so we raise an error if market_sell is called in testnet mode.
+        if self.testnet:
+            raise ExchangeConnectionError("Binance testnet does not support trading.")
+
         symbol = self.build_symbol(base_asset, quote_asset)
         # Round quantity to asset-specific decimal places
         rounded_qty = self.round_quantity(base_asset, quantity)

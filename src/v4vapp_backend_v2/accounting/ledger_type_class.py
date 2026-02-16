@@ -37,6 +37,7 @@ class LedgerType(StrEnum):
     RELEASE_KEEPSATS = "release_k"  # Release Keepsats from the account
 
     CUSTOM_JSON_TRANSFER = "c_j_trans"  # Custom JSON transfer or notification
+    CUSTOM_JSON_REVERSAL = "c_j_rev"  # Custom JSON transfer reversal (used when reversing a failed lightning invoice transfer)
     CUSTOM_JSON_FEE = "c_j_fee"  # Custom JSON fee notification
     CUSTOM_JSON_FEE_REFUND = "c_j_fee_r"  # Custom JSON fee refund notification
     RECEIVE_LIGHTNING = "recv_l"  # Receive Custom JSON from external source

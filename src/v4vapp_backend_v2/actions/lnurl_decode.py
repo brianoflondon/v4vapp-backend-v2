@@ -192,6 +192,9 @@ async def decode_any_lightning_string(
     # Make the HTTP request with the merged parameters
     with httpx.Client() as httpx_client:
         try:
+            # raise httpx.RequestError(
+            #     "Simulated timeout for testing"
+            # )  # Simulate a timeout error for testing
             response = httpx_client.get(
                 parsed_url._replace(query="").geturl(),  # Use the base URL without the query
                 params=merged_params,  # Pass the merged parameters

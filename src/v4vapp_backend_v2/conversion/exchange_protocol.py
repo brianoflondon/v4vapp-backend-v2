@@ -323,7 +323,7 @@ class BaseExchangeAdapter(ABC):
         for asset in assets:
             result[asset] = self.get_balance(asset)
         if "BTC" in result:
-            result["SATS"] = int(result["BTC"] * SATS_PER_BTC)
+            result["SATS"] = Decimal(result["BTC"] * Decimal(SATS_PER_BTC))
         return result
 
     @abstractmethod

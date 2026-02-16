@@ -3,8 +3,9 @@ from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from v4vapp_backend_v2.config.setup import InternalConfig
+from v4vapp_backend_v2.config.setup import InternalConfig, logger
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 from v4vapp_backend_v2.hive_models.vsc_json_data import VSCActions, VSCTransfer
@@ -101,17 +102,43 @@ class KeepsatsTransfer(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **data: Any):
+        value_specified_msats = data.get("msats", None)
+
+        if not value_specified_msats:
+            value_specified_sats = data.get("sats", None)
+            if value_specified_sats is None:
+                data["sats"] = Decimal(0)
+                data["msats"] = Decimal(0)
+            else:
+                data["sats"] = Decimal(value_specified_sats)
+                data["msats"] = Decimal(value_specified_sats) * Decimal(1_000)
+        else:
+            data["msats"] = Decimal(value_specified_msats)
+            data["sats"] = Decimal(value_specified_msats) // Decimal(1_000)
+
         if data.get("memo", None) is None:
             data["memo"] = ""
-        if data.get("msats") is not None and data.get("sats") is None:
-            # If both sats and msats are provided, use msats for the amount
-            data["sats"] = int(data["msats"]) // 1_000
-        if data.get("sats") is None and data.get("msats") is None:
-            data["sats"] = 0
-            data["msats"] = 0
-        if data.get("sats") is not None and data.get("msats") is None:
-            data["sats"] = int(data["sats"])
-            data["msats"] = data["sats"] * 1_000
+
+        """
+        This test is vital for the process_custom_json function if we are passing a
+        lightning invoice in the memo, we don't want to have the msats and sats set
+        as that would be confusing, as the amount to pay is actually determined by
+        the lightning invoice, not the msats/sats fields. This allows us to still
+        pass the lightning invoice in the memo for processing, without having
+        conflicting information in the msats/sats fields.
+        """
+        if data["msats"] > Decimal(0) and data["memo"] != "":
+            lightning_memo = LightningMemo(data["memo"])
+            if lightning_memo.is_lightning_invoice:
+                logger.warning(
+                    f"KeepsatsTransfer Memo contains a lightning invoice, "
+                    f"but msats is set to {data['msats']:,.0f}. "
+                    f"Setting msats and sats to 0 to avoid confusion.",
+                    extra={"data": data},
+                )
+                data["msats"] = Decimal(0)
+                data["sats"] = Decimal(0)
+
         super().__init__(**data)
 
     @property
@@ -135,12 +162,34 @@ class KeepsatsTransfer(BaseModel):
             f"⏩️{self.from_account} sent {self.sats:,.0f} sats to {self.to_account} via KeepSats"
         )
 
+    def lightning_invoice_in_memo(self) -> bool:
+        """
+        Checks if the memo contains a lightning invoice.
+
+        Returns:
+            bool: True if a lightning invoice is found in the memo, False otherwise.
+        """
+        lightning_memo = LightningMemo(self.memo)
+        return lightning_memo.is_lightning_invoice
+
     @classmethod
     def name(cls) -> str:
         """
         Returns the name of the class in snake_case format.
         """
         return snake_case(cls.__name__)
+
+    @property
+    def lightning_memo(self) -> LightningMemo:
+        """
+        If the memo contains a lightning address, this property returns a LightningMemo object representing it.
+        Otherwise, it returns None.
+
+        Returns:
+            LightningMemo | None: A LightningMemo object if a lightning address is found in the memo, or None if not.
+        """
+        lightning_memo = LightningMemo(self.memo)
+        return lightning_memo
 
     @property
     def log_extra(self) -> Dict[str, Any]:
@@ -190,6 +239,8 @@ CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
     "v4vapp_dev_notification": KeepsatsTransfer,
     "v4vapp_transfer": KeepsatsTransfer,
     "v4vapp_notification": KeepsatsTransfer,
+    "v4vapp_staging_transfer": KeepsatsTransfer,
+    "v4vapp_staging_notification": KeepsatsTransfer,
     "vsc.transfer": VSCTransfer,
     "vsc.withdraw": VSCTransfer,
     "vsc.withdraw_hbd": VSCTransfer,

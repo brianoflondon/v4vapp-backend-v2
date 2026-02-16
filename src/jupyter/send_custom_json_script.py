@@ -92,16 +92,22 @@ async def main():
     # invoice = await get_lightning_invoice(
     #     5010, "v4vapp.qrc #v4vapp Sending sats to another account"
     # )
+
+    custom_json_prefix = InternalConfig().config.hive.custom_json_prefix
+    connection_name = "voltage"
+    send_to = "devser.v4vapp"
+
     invoice = await get_lightning_invoice(
-        2312, "Sending sats to another account", connection_name="umbrel"
+        560, "Sending sats to another account", connection_name=connection_name
     )
     print(invoice.payment_request)
     # the invoice_message has no effect if the invoice is generated and sent in the message.
     # It is only used when the invoice is generated lightning_address
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
+    # if sats amount is set for a lnbc invoice, it will be ignored.
     transfer = KeepsatsTransfer(
         from_account="v4vapp.bol",
-        to_account="v4vapp",
+        to_account=send_to,
         sats=0,
         memo=invoice.payment_request,
         invoice_message="",
@@ -112,11 +118,13 @@ async def main():
     )
     hive_client = get_hive_client(keys=[active_key])
     # hive_client = await get_verified_hive_client_for_accounts([transfer.from_account])
+
+
     trx = await send_custom_json(
         json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
         send_account=transfer.from_account,
         active=True,
-        id="v4vapp_staging_transfer",
+        id=f"{custom_json_prefix}_transfer",
         hive_client=hive_client,
     )
     pprint(trx)
@@ -124,7 +132,7 @@ async def main():
     # now try same thing with an eroneous sats amount
 
     invoice = await get_lightning_invoice(
-        1111, "Sending sats to another account", connection_name="umbrel"
+        1111, "Sending sats to another account", connection_name=connection_name
     )
     print(invoice.payment_request)
     # the invoice_message has no effect if the invoice is generated and sent in the message.
@@ -132,10 +140,10 @@ async def main():
     # Sats amount is the amount to send for a 0 value invoice OR the maximum amount to send
     transfer = KeepsatsTransfer(
         from_account="v4vapp.bol",
-        to_account="v4vapp",
-        sats=5000,
+        to_account=send_to,
+        sats=5000,  # This will be ignored
         memo=invoice.payment_request,
-        invoice_message="",
+        invoice_message="Mr Blobby is sending you 1111 sats",
     )
     # # hive_config = InternalConfig().config.hive
     # active_key = await asyncio.to_thread(
@@ -147,11 +155,29 @@ async def main():
         json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
         send_account=transfer.from_account,
         active=True,
-        id="v4vapp_staging_transfer",
+        id=f"{custom_json_prefix}_transfer",
         hive_client=hive_client,
     )
     pprint(trx)
 
+
+
+    sats = 1007
+    transfer = KeepsatsTransfer(
+        from_account="v4vapp.bol",
+        to_account=send_to,
+        sats=sats,
+        memo=f"brianoflondon@walletofsatoshi.com send to this lightning address with {sats} sats and see what happens",
+        invoice_message="",
+    )
+    trx = await send_custom_json(
+        json_data=transfer.model_dump(exclude_none=True, exclude_unset=True),
+        send_account=transfer.from_account,
+        active=True,
+        id=f"{custom_json_prefix}_transfer",
+        hive_client=hive_client,
+    )
+    pprint(trx)
 
 
 if __name__ == "__main__":

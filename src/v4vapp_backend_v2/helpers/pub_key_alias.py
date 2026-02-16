@@ -120,7 +120,13 @@ async def decode_payment_request_and_attach(lnd_client: LNDClient, payment: Paym
             )
             decoded = MessageToDict(decode_response, preserving_proto_field_name=True)
             # Keep None if missing; callers may set defaults when storing
-            payment.invoice_description = decoded.get("description", "Not set")
+            invoice_description = decoded.get("description", "")
+            user_memo = (
+                invoice_description
+                or getattr(payment.custom_records, "keysend_message", None)
+                or "Not set"
+            )
+            payment.invoice_description = user_memo
     except Exception as e:
         # Use warning to make issues visible but don't fail the caller
         logger.warning(

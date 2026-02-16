@@ -187,24 +187,17 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
     node_name = InternalConfig().node_name
     cust_id = payment.cust_id or ""
 
-    # # Special circumstance for a payment which was made following a custom_json with a memo. In this case
-    # # the keepsats will have been sent to the server's liability VSC Liability (Liability) - Sub: devser.v4vapp
-    # # and so if we debit the cust_id's Liability account there will be a double deduction and the server will
-    # # be left holding the value.
-    # paywithsats = (
-    #     getattr(payment.custom_records, "paywithsats", "") if payment.custom_records else ""
-    # )
-    # if paywithsats:
-    #     logger.info(f"Payment made via server, adjusting ledger entries for cust_id: {cust_id}")
-    #     debit_cust_id = InternalConfig().server_id
-    # else:
-    #     debit_cust_id = cust_id
-
     debit_cust_id = cust_id
 
     ledger_type = LedgerType.WITHDRAW_LIGHTNING
     cost_of_payment_msat = Decimal(payment.value_msat) + Decimal(payment.fee_msat)
     outgoing_conv = payment.conv
+    keysend_message = getattr(payment.custom_records, "keysend_message", None)
+    if payment.invoice_description == "Not set":
+        user_memo = keysend_message or ""
+    else:
+        user_memo = f"Send {payment.value_sat_rounded} sats to Node {payment.destination} (fee: {payment.fee_sat_rounded}) {keysend_message or ''}".strip()
+
     outgoing_ledger_entry = LedgerEntry(
         cust_id=cust_id,
         short_id=payment.short_id,
@@ -225,7 +218,7 @@ async def record_payment(payment: Payment, quote: QuoteResponse) -> list[LedgerE
         credit_amount=cost_of_payment_msat,
         credit_conv=payment.conv,
         link=payment.link,
-        user_memo=payment.invoice_description or "",
+        user_memo=user_memo,
     )
     await outgoing_ledger_entry.save()
     ledger_entries_list.append(outgoing_ledger_entry)

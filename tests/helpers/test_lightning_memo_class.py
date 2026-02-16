@@ -41,3 +41,55 @@ def test_lightning_memo_matches_fragment_inside_full_memo_and_uses_overall_tail(
     out = lightning_memo(memo)
     # when called on full memo the helper uses the overall memo's tail for the '...<last5>' portion
     assert out == f"⚡️{frag}...{memo[-5:]}"
+
+
+def test_lightningmemo_parses_lightning_address_plain():
+    memo = "pay me alice@zbd.gg thanks"
+    lm = LightningMemo(memo)
+
+    # new attribute `ln_address` holds internet-identifier matches; `invoice` remains empty
+    assert lm.ln_address == "alice@zbd.gg"
+    assert lm.invoice == ""
+    assert "pay me" in lm.before_text
+    assert "thanks" in lm.after_text
+    # ln_address currently uses the generic memo shortener (chat bubble)
+    assert lm.short_memo == "💬alice@zbd.gg"
+    assert lm.is_ln_address is True
+    assert lm.is_lightning_invoice is False
+
+
+def test_lightningmemo_parses_lightning_address_with_prefixes():
+    memo = "donate ⚡️user+tag@sub.domain.com now"
+    lm = LightningMemo(memo)
+
+    assert lm.ln_address == "user+tag@sub.domain.com"
+    assert lm.invoice == ""
+    # ln_address currently uses the generic memo shortener (chat bubble)
+    assert lm.short_memo == "💬user+tag@sub.domain.com"
+    assert lm.before_text.strip().startswith("donate")
+    assert lm.after_text.strip().endswith("now")
+    assert lm.is_ln_address
+    assert not lm.is_lightning_invoice
+
+
+def test_lightningmemo_parses_lightning_address_with_lightning_scheme():
+    memo = "send lightning:bob.smith@coinos.io thanks"
+    lm = LightningMemo(memo)
+
+    assert lm.ln_address == "bob.smith@coinos.io"
+    assert lm.invoice == ""
+    # ln_address currently uses the generic memo shortener (chat bubble)
+    assert lm.short_memo == "💬bob.smith@coinos.io"
+    assert lm.is_ln_address
+
+
+def test_lightningmemo_does_not_treat_local_identifier_as_lightning_address():
+    memo = "contact me at user@localhost for dev"
+    lm = LightningMemo(memo)
+
+    # 'user@localhost' is not a public internet identifier (no TLD) and should not match
+    assert lm.invoice == ""
+    assert lm.ln_address == ""
+    assert lm.short_memo.startswith("💬")
+    assert lm.is_lightning_invoice is False
+    assert lm.is_ln_address is False
