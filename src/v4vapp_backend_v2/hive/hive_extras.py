@@ -427,8 +427,8 @@ def get_transfer_cust_id(
         return f"{to_acc}->{from_acc}"
 
     server_account, treasury_account, funding_account, exchange_account = account_names
-    if expense_accounts is None:
-        expense_accounts = ["privex"]
+
+    expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts or []
 
     # Server to Treasury: cust_id = to_account (treasury)
     if from_acc == server_account and to_acc == treasury_account:

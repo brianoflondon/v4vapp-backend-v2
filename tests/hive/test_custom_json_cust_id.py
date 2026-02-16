@@ -16,6 +16,7 @@ def make_conf():
         all_account_names=["server", "treasury", "funding", "exchange"],
         server_account_names=["server"],
     )  # type: ignore
+    cfg.hive.custom_json_prefix = "test"
     return cfg
 
 
@@ -29,19 +30,27 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_treasury(monkeypat
                 hive=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
-                )
+                    custom_json_prefix="test",
+                ),
+                expense_config=SimpleNamespace(hive_expense_accounts=[]),
             )
         ),
     )
     post = {
         "type": "custom_json",
-        "id": "1",
-        "json": DummyJson(from_account="server", to_account="treasury"),
+        "id": "test_transfer",
+        "json": {
+            "hive_accname_from": "server",
+            "hive_accname_to": "treasury",
+            "sats": 0,
+            "msats": 0,
+            "memo": "",
+        },
         "required_auths": ["server"],
         "required_posting_auths": [],
         "trx_id": "tx",
-        "block_num": 1,
-        "trx_num": 0,
+        "block_num": 1089989887,
+        "trx_num": 3,
         "timestamp": "2025-01-01T00:00:00+00:00",
     }
     cj = CustomJson.model_validate(post)
@@ -50,6 +59,7 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_treasury(monkeypat
 
 
 def test_custom_json_uses_transfer_logic_authorized_server_to_customer(monkeypatch):
+    # ensure custom_json_prefix is present so the ID is treated as a KeepsatsTransfer
     monkeypatch.setattr(
         InternalConfig,
         "_instance",
@@ -58,19 +68,27 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_customer(monkeypat
                 hive=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
-                )
+                    custom_json_prefix="test",
+                ),
+                expense_config=SimpleNamespace(hive_expense_accounts=[]),
             )
         ),
     )
     post = {
         "type": "custom_json",
-        "id": "1",
-        "json": DummyJson(from_account="server", to_account="alice"),
+        "id": "test_transfer",
+        "json": {
+            "hive_accname_from": "server",
+            "hive_accname_to": "alice",
+            "sats": 0,
+            "msats": 0,
+            "memo": "",
+        },
         "required_auths": ["server"],
         "required_posting_auths": [],
         "trx_id": "tx",
-        "block_num": 1,
-        "trx_num": 0,
+        "block_num": 1089989887,
+        "trx_num": 3,
         "timestamp": "2025-01-01T00:00:00+00:00",
     }
     cj = CustomJson.model_validate(post)

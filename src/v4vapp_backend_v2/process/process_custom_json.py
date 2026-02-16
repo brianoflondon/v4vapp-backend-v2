@@ -66,6 +66,25 @@ async def process_custom_json_func(
             else keepsats_transfer.msats
         )
         # MARK: CustomJson Transfer user to user
+        """
+        BEFORE THIS TEST, if this is a transfer to the server, we need to catch the case of a message to server,
+        with a lightning address, and a non zero amount of sats (i.e. out of spec)
+        This check is very important and happens in the KeepsatsTransfer model validation,
+        but we want to be sure to catch it here as well to avoid any issues with processing these kinds of ops.
+
+        if data["msats"] > Decimal(0) and data["memo"] != "":
+            lightning_memo = LightningMemo(data["memo"])
+            if lightning_memo.is_lightning_invoice:
+                logger.warning(
+                    f"KeepsatsTransfer Memo contains a lightning invoice, "
+                    f"but msats is set to {data['msats']:,.0f}. "
+                    f"Setting msats and sats to 0 to avoid confusion.",
+                    extra={"data": data},
+                )
+                data["msats"] = Decimal(0)
+                data["sats"] = Decimal(0)
+        """
+
         if (
             custom_json.from_account
             and custom_json.to_account

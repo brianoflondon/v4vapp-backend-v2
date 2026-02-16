@@ -9,6 +9,14 @@ LND_INVOICE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+LIGHTNING_ADDRESS_PATTERN = re.compile(
+    # Find a lightning address (internet identifier) anywhere in the memo and capture
+    # surrounding text in `before`/`after` and the address in `ln_address`.
+    # Accept optional `⚡`/`⚡️` or `lightning:` prefix immediately before the address.
+    r"(?s)^(?P<before>.*?)(?:\u26A1\uFE0F|\u26A1|lightning:)?(?P<ln_address>[A-Za-z0-9_+%\-]+(?:\.[A-Za-z0-9_+%\-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63})(?P<after>.*)$",
+    re.IGNORECASE,
+)
+
 
 def _lightning_memo(memo: str) -> str:
     """
@@ -45,22 +53,56 @@ def _lightning_memo(memo: str) -> str:
 
 @dataclass
 class LightningMemo:
+    """
+    Dataclass that parses and stores lightning invoice information from a memo string.
+
+    This class extracts lightning invoice details from a memo field using pattern matching.
+    If an invoice is found, it separates the memo into before, invoice, and after text components.
+    It also generates a short memo representation from the invoice or original memo.
+
+    Attributes:
+        before_text (str): Text appearing before the lightning invoice in the memo.
+        invoice (str): The extracted lightning invoice string.
+        after_text (str): Text appearing after the lightning invoice in the memo.
+        memo (str): The original memo string.
+        short_memo (str): A shortened version of the memo derived from the invoice or original memo.
+                        Defaults to an empty string.
+
+    Args:
+        memo (str): The memo string to parse for lightning invoice information.
+    """
+
     before_text: str
     invoice: str
+    ln_address: str
     after_text: str
     memo: str
     short_memo: str = ""
+    is_lightning_invoice: bool = False
+    is_ln_address: bool = False
 
     def __init__(self, memo: str):
         match = LND_INVOICE_PATTERN.match(memo)
+        match_address = LIGHTNING_ADDRESS_PATTERN.match(memo)
         if match:
             self.before_text = match.group("before")
             self.invoice = match.group("invoice")
+            self.ln_address = ""
             self.after_text = match.group("after")
             self.short_memo = _lightning_memo(self.invoice)
+            self.is_lightning_invoice = True
+        elif match_address:
+            self.before_text = match_address.group("before")
+            self.invoice = ""
+            self.ln_address = match_address.group("ln_address")
+            self.after_text = match_address.group("after")
+            self.short_memo = _lightning_memo(self.ln_address)
+            self.is_ln_address = True
         else:
             self.before_text = ""
             self.invoice = ""
+            self.ln_address = ""
             self.after_text = ""
             self.short_memo = _lightning_memo(memo)
+            self.is_lightning_invoice = False
         self.memo = memo
