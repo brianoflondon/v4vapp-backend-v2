@@ -51,6 +51,10 @@ from v4vapp_backend_v2.models.tracked_forward_models import TrackedForwardEvent
 
 ICON = "⚡"
 
+NOTIFICATION_QUITE_MODE = (
+    True  # Set to True to disable notifications if db_monitor will provide these
+)
+
 app = typer.Typer()
 
 # Define a global flag to track shutdown and startup completion
@@ -176,6 +180,8 @@ async def track_events(
         if not (" Attempted 0 " in message_str or "UNKNOWN 0 " in message_str):
             ans_dict["htlc_event_dict"] = htlc_event_dict
             ans_dict["forward_success"] = forward_success
+            if NOTIFICATION_QUITE_MODE:
+                notification = False
             logger.info(
                 f"{lnd_client.icon} {message_str}",
                 extra={
