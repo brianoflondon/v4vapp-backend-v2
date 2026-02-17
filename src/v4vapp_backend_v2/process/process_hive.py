@@ -97,6 +97,12 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
         raise e
 
     except LedgerEntryException as e:
+        if "Transfer between untracked accounts" in str(e):
+            logger.info(
+                f"Transfer between untracked accounts, no ledger entry created: {e}",
+                extra={"notification": False, **op.log_extra},
+            )
+            return []
         logger.error(
             f"Error processing transfer operation: {e}",
             extra={"notification": False, **op.log_extra},
