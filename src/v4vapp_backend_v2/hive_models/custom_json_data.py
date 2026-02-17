@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Type, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
@@ -102,6 +103,7 @@ class KeepsatsTransfer(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **data: Any):
+        data = convert_decimal128_to_decimal(data)
         value_specified_msats = data.get("msats", None)
 
         if not value_specified_msats:
@@ -132,12 +134,9 @@ class KeepsatsTransfer(BaseModel):
             if lightning_memo.is_lightning_invoice:
                 logger.warning(
                     f"KeepsatsTransfer Memo contains a lightning invoice, "
-                    f"but msats is set to {data['msats']:,.0f}. "
-                    f"Setting msats and sats to 0 to avoid confusion.",
+                    f"but msats is set to {data['msats']:,.0f}. ",
                     extra={"data": data},
                 )
-                data["msats"] = Decimal(0)
-                data["sats"] = Decimal(0)
 
         super().__init__(**data)
 

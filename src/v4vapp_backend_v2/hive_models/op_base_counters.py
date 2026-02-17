@@ -13,8 +13,8 @@ from v4vapp_backend_v2.hive_models.op_base import OpBase, OpRealm
 
 TIME_DIFFERENCE_CHECK = timedelta(seconds=120)
 
-BLOCK_MARKER_NORMAL_MIN = 5
-BLOCK_MARKER_CATCHUP_MIN = 5
+BLOCK_MARKER_NORMAL_MIN = 1
+BLOCK_MARKER_CATCHUP_MIN = 1
 
 
 @dataclass

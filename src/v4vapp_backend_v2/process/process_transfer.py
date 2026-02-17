@@ -191,6 +191,10 @@ async def follow_on_transfer(
             # Just return do not convert.
             if tracked_op.json_data.lightning_memo.is_lightning:
                 release_hold = True
+                logger.warning(
+                    "Failed to process Lightning invoice in custom_json, likely due to a network error. No invoice found on retry, skipping conversion and releasing hold.",
+                    extra={"notification": True, **tracked_op.log_extra},
+                )
                 raise CustomJsonToLightningError(
                     "Failed to process Lightning invoice in custom_json, likely due to a network error. No invoice found on retry, skipping conversion."
                 )
