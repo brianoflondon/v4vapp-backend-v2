@@ -284,8 +284,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c",
         "--config",
-        default="devhive.config.yaml",
-        # default="production.fromhome.config.yaml",
+        # default="devhive.config.yaml",
+        default="production.fromhome.config.yaml",
 
         help="Config filename (relative to config/ folder). Default: production.fromhome.config.yaml",
     )

@@ -40,6 +40,10 @@ from v4vapp_backend_v2.process.process_invoice import process_lightning_receipt
 from v4vapp_backend_v2.process.process_payment import process_payment_success
 from v4vapp_backend_v2.witness_monitor.witness_events import process_witness_event
 
+SUCCESS_ICON = "✅"
+FAILURE_ICON = "❌"
+ICON = "📊"
+
 
 async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> List[LedgerEntry]:
     """
@@ -141,14 +145,14 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
 
         except CustomJsonRetryError as e:
             attempts += 1
-            logger.warning(f"CustomJson processing retry error: {e}")
+            logger.warning(f"{ICON} CustomJson processing retry error: {e}")
             if attempts <= 3:
                 retry_task = process_tracked_event(tracked_op=tracked_op, attempts=attempts)
 
             if retry_task:
                 sleep_time = 10 * attempts
                 logger.info(
-                    f"Retrying operation {tracked_op.short_id} after {sleep_time} seconds."
+                    f"{ICON} Retrying operation {tracked_op.short_id} after {sleep_time} seconds."
                 )
                 await LockStr(tracked_op.group_id_p).release_lock(tracked_op.group_id_p)
                 await asyncio.sleep(sleep_time)
@@ -156,12 +160,14 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 finalize = False
                 return ledger_entries
             else:
-                logger.error(f"CustomJson processing failed after {e.attempts} attempts: {e}")
+                logger.error(
+                    f"{FAILURE_ICON} CustomJson processing failed after {e.attempts} attempts: {e}"
+                )
                 return ledger_entries
 
         except HiveNotEnoughHiveInAccount as e:
             logger.error(
-                f"Not enough funds for {cust_id}: {e}",
+                f"{FAILURE_ICON} Not enough funds for {cust_id}: {e}",
                 extra={"notification": True, "error-code": f"not-enough-funds-{cust_id}"},
             )
             return ledger_entries
@@ -170,11 +176,13 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
             raise LedgerEntryDuplicateException(f"Ledger entry already exists: {e}") from e
 
         except LedgerEntryException as e:
-            logger.exception(f"Error processing tracked operation: {e}")
-            raise LedgerEntryException(f"Error processing tracked operation: {e}") from e
+            logger.exception(f"{FAILURE_ICON} Error processing tracked operation: {e}")
+            raise LedgerEntryException(
+                f"{FAILURE_ICON} Error processing tracked operation: {e}"
+            ) from e
 
         except CustIDLockException as e:
-            logger.error(f"Error acquiring lock for {cust_id}: {e}")
+            logger.error(f"{FAILURE_ICON} Error acquiring lock for {cust_id}: {e}")
             await asyncio.sleep(10)
             raise CustIDLockException(f"Error acquiring lock for {cust_id}: {e}") from e
 
@@ -184,21 +192,21 @@ async def process_tracked_event(tracked_op: TrackedAny, attempts: int = 0) -> Li
                 process_time = timer() - start
                 tracked_op.process_time = process_time
                 await tracked_op.save()
-                logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
-                logger.debug(tracked_op.log_str)
+                logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
+                logger.debug(f"{ICON} {tracked_op.log_str}")
                 ledger_entries_log_extra = []
                 for entry in ledger_entries:
                     ledger_log_extra = entry.log_extra.copy()
                     ledger_entries_log_extra.append(ledger_log_extra)
                 logger.info(
-                    f"{process_time:>7,.2f} s {cust_id} {tracked_op.log_str}",
+                    f"{SUCCESS_ICON} {process_time:>7,.2f} s {tracked_op.log_str} {tracked_op.short_id}",
                     extra={
-                        "notification": False,
+                        "notification": True,
                         "ledger_items": ledger_entries_log_extra,
                         **sanity_results.log_extra,
                     },
                 )
-                logger.debug(f"{'+++' * 10} {cust_id} {'+++' * 10}")
+                logger.debug(f"{ICON} {'+++' * 10} {cust_id} {'+++' * 10}")
                 # DEBUG section
 
 
