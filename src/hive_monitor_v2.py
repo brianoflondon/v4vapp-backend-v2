@@ -307,11 +307,15 @@ async def witness_first_run(watch_witness: str) -> ProducerReward | None:
         dict: The last good block produced by the specified witness, or an empty
         dictionary if no such block is found.
     """
+    # Only consider stored `producer_reward` documents — other ops (e.g. producer_missed)
+    # also contain a `producer` field and previously caused a Pydantic validation
+    # error when we tried to coerce them into `ProducerReward`.
     last_good_event = await OpBase.collection().find_one(
-        filter={"producer": watch_witness},
+        filter={"producer": watch_witness, "type": "producer_reward"},
         sort=[("block_num", -1)],
     )
     if last_good_event:
+        # validate as a ProducerReward (safe because we filtered by type)
         producer_reward = ProducerReward.model_validate(last_good_event)
         await producer_reward.get_witness_details()
         time_diff = check_time_diff(producer_reward.timestamp)
