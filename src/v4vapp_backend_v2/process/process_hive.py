@@ -105,7 +105,7 @@ async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[Led
             return []
         logger.error(
             f"Error processing transfer operation: {e}",
-            extra={"notification": False, **op.log_extra},
+            extra={"notification": True, **op.log_extra},
         )
         return []
         # raise LedgerEntryCreationException(f"Error processing transfer operation: {e}") from e
