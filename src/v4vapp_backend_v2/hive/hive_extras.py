@@ -389,8 +389,9 @@ async def get_verified_hive_client_for_accounts(
         keys = [
             hive_config.server_account.memo_key,
             hive_config.server_account.active_key,
+            hive_config.server_account.posting_key,
         ]
-    if keys == ["", ""]:
+    if keys == ["", "", ""]:
         hive_client = get_hive_client(nobroadcast=nobroadcast)
     else:
         hive_client = get_hive_client(
