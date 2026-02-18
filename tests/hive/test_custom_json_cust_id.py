@@ -31,6 +31,7 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_treasury(monkeypat
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
                     custom_json_prefix="test",
+                    custom_json_ids_tracked=["test_transfer", "test_notification"],
                 ),
                 expense_config=SimpleNamespace(hive_expense_accounts=[]),
             )
@@ -69,6 +70,7 @@ def test_custom_json_uses_transfer_logic_authorized_server_to_customer(monkeypat
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
                     custom_json_prefix="test",
+                    custom_json_ids_tracked=["test_transfer", "test_notification"],
                 ),
                 expense_config=SimpleNamespace(hive_expense_accounts=[]),
             )
@@ -105,6 +107,7 @@ def test_custom_json_unauthorized_sets_server_id(monkeypatch):
                 hive=SimpleNamespace(
                     all_account_names=["server", "treasury", "funding", "exchange"],
                     server_account_names=["server"],
+                    custom_json_ids_tracked=[],
                 )
             ),
             server_id="server",

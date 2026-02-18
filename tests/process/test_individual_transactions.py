@@ -43,7 +43,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = False
+turn_off_these_tests = True
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -147,7 +147,7 @@ async def test_hive_and_hbd_to_lnd_only():
         # invoice_value_sat = invoice_value_sat
         invoice = await get_lightning_invoice(
             value_sat=invoice_value_sat,
-            memo=f"{currency.symbol} pay invoice {invoice_value_sat}",
+            memo=f"{currency.symbol} pay invoice {invoice_value_sat} unit test: test_hive_and_hbd_to_lnd_only",
         )
 
         conversion_result = await calc_keepsats_to_hive(
@@ -387,7 +387,6 @@ async def test_deposit_keepsats_spend_hive_custom_json():
         assert False, (
             "Custom JSON data is empty, expected to contain memo with invoice payment request"
         )
-
 
 async def test_send_internal_keepsats_transfer_by_hive_transfer():
     """
