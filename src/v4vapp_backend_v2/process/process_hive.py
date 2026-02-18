@@ -17,6 +17,7 @@ from v4vapp_backend_v2.accounting.ledger_entry_class import (
 from v4vapp_backend_v2.actions.tracked_any import TrackedAny, TrackedTransfer
 from v4vapp_backend_v2.actions.tracked_models import ReplyType
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.conversion.exchange_protocol import get_exchange_adapter
 from v4vapp_backend_v2.helpers.bad_actors_list import check_not_development_accounts
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
@@ -262,7 +263,9 @@ async def process_transfer_op(
         hive_transfer.from_account == treasury_account
         and hive_transfer.to_account == exchange_account
     ):
-        ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
+        # Use the configured exchange adapter name as the Exchange Holdings sub-account
+        exchange_sub = get_exchange_adapter().exchange_name
+        ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Treasury Hive", sub=treasury_account)
         ledger_entry.description = f"Treasury to Exchange transfer: {base_description}"
         ledger_entry.ledger_type = LedgerType.TREASURY_TO_EXCHANGE
@@ -271,7 +274,8 @@ async def process_transfer_op(
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == exchange_account
     ):
-        ledger_entry.debit = AssetAccount(name="Exchange Deposits Hive", sub=exchange_account)
+        exchange_sub = get_exchange_adapter().exchange_name
+        ledger_entry.debit = AssetAccount(name="Exchange Holdings", sub=exchange_sub)
         ledger_entry.credit = AssetAccount(name="Customer Deposits Hive", sub=server_account)
         ledger_entry.description = f"Server to Exchange transfer: {base_description}"
         ledger_entry.ledger_type = LedgerType.SERVER_TO_EXCHANGE
