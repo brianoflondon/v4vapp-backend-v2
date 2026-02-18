@@ -26,7 +26,7 @@ ICON = "🔗"
 # Maximum seconds to wait for a new event before assuming the RPC node is
 # unresponsive and switching to the next one.  Two minutes is generous;
 # on a healthy node an event arrives at least every 3 seconds.
-STREAM_TIMEOUT = 15
+STREAM_TIMEOUT = 4
 
 
 class SwitchToLiveStream(Exception):
@@ -141,16 +141,17 @@ async def stream_ops_async(
             # Manual iteration with a per-event timeout so that a hung
             # RPC node triggers a node switch instead of blocking forever.
             async_iter = async_stream_real.__aiter__()
+            current_timeout = STREAM_TIMEOUT
             while True:
                 try:
                     hive_event = await asyncio.wait_for(
-                        async_iter.__anext__(), timeout=STREAM_TIMEOUT
+                        async_iter.__anext__(), timeout=current_timeout
                     )
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
                     logger.warning(
-                        f"{ICON} {start_block:,} Stream timed out after {STREAM_TIMEOUT}s "
+                        f"{ICON} {start_block:,} Stream timed out after {current_timeout}s "
                         f"waiting for events from {rpc_url}, switching node",
                         extra={"notification": False, "error_code": "stream_restart"},
                     )
@@ -219,7 +220,7 @@ async def stream_ops_async(
             # Stream timed out waiting for the next event — the warning
             # was already logged above.  Sleep briefly then let the
             # finally block switch to the next RPC node.
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.1)
         except (NectarException, NumRetriesReached, UnhandledRPCError) as e:
             if re.search(r"Block \d+ does not exist", str(e)):
                 logger.info(f"{ICON} {start_block:,} Refetch {last_block:,}. Try Again. {rpc_url}")

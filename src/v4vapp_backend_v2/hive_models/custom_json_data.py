@@ -1,4 +1,5 @@
 from decimal import Decimal
+from functools import cache
 from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -253,11 +254,14 @@ CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
 }
 
 
+@cache
 def all_custom_json_ids() -> List[str]:
     """
     Returns a list of all custom JSON IDs defined in the CUSTOM_JSON_IDS dictionary.
     This function is useful for retrieving all available custom JSON IDs for validation
     or processing purposes.
+
+    This can be cached because it only contains the static keys from the config setup.
     Returns:
         List[str]: A list of custom JSON IDs.
     """
@@ -266,6 +270,7 @@ def all_custom_json_ids() -> List[str]:
     return list(duplicates_removed)
 
 
+# @time_decorator
 def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
     """
     Tests if the JSON data is valid for a specific operation ID.
@@ -284,6 +289,8 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
     """
     cj_id = data.get("id", None)
     if cj_id is None:
+        return None
+    if cj_id not in all_custom_json_ids():
         return None
     if cj_id in CUSTOM_JSON_IDS.keys():
         return CUSTOM_JSON_IDS[cj_id] if isinstance(CUSTOM_JSON_IDS[cj_id], type) else None

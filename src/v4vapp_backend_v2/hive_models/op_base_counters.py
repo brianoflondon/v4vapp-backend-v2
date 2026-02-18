@@ -195,7 +195,8 @@ class BlockCounter:
                 )
                 logger.info(
                     f"{self.icon} {self.id:>9}{self.block_count:,} "
-                    f"blocks processed in: {last_marker_time_str} "
+                    f"time: {last_marker_time_str} "
+                    f"block: {self.current_block:,} "
                     f"speed up: x{speed_up_factor:.2f} "
                     f"delta: {self.time_diff} catch up: {catch_up_in} "
                     f"running time: {format_time_delta(self.running_time)} "
