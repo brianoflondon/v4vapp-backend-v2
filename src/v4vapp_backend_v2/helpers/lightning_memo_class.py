@@ -3,9 +3,12 @@ from dataclasses import dataclass
 
 LND_INVOICE_PATTERN = re.compile(
     # Accept 'lnbc', 'lntb' or 'lnbcrt' followed by an optional amount token and the '1'
-    # bech32 separator, then the bech32 payload characters. This will find invoices
-    # embedded anywhere in a memo and supports common amount tokens like '31310n'.
-    r"(?s)^(?P<before>.*?)(?P<invoice>(?:lnbc|lntb|lnbcrt)[0-9a-zA-Z]*1[0-9ac-hj-np-zAC-HJ-NP-Z]{1,}[0-9a-zA-Z]+)(?P<after>.*)$",
+    # bech32 separator, then the bech32 payload characters.
+    # Tighten the amount token so the regex does not accidentally treat a short
+    # fragment like 'lnbc12340n' as a full invoice by matching a digit '1' inside
+    # the amount. The amount portion is either digits with an optional suffix
+    # (m/u/n/p) or absent, followed by the literal '1' separator.
+    r"(?s)^(?P<before>.*?)(?P<invoice>(?:lnbc|lntb|lnbcrt)(?:\d+[munp]?)?1[0-9ac-hj-np-zAC-HJ-NP-Z]{1,}[0-9a-zA-Z]+)(?P<after>.*)$",
     re.IGNORECASE,
 )
 
@@ -37,12 +40,25 @@ def _lightning_memo(memo: str) -> str:
     match = LND_INVOICE_PATTERN.match(memo)
     if match:
         invoice = match.group("invoice")
-        return _shorten(invoice)
+        # Only treat it as a full invoice if it's longer than the shorten threshold
+        # (head=12 + tail=5 + ellipsis 3 = 20). Shorter matches are likely
+        # fragments or already-shortened strings and should be ignored here.
+        if len(invoice) > 12 + 5 + 3:
+            return _shorten(invoice)
+        # fall through if the matched "invoice" is too short (treat as plain memo)
 
     # Fallback to a short fragment (amount prefix like lnbc277880n)
-    frag = re.search(r"(lnbc\d+[a-zA-Z])", memo, flags=re.IGNORECASE)
+    # Do NOT match fragments that are part of an already-shortened invoice
+    # (e.g. 'lnbc12340n...9klw7'). Use a negative lookahead so we only
+    # shorten actual fragments that are not immediately followed by '...'.
+    frag = re.search(r"(lnbc\d+[a-zA-Z])(?!\.\.\.)", memo, flags=re.IGNORECASE)
     if frag:
         frag_val = frag.group(1)
+        # If the fragment appears inside a larger memo, use the overall memo's tail
+        # so output becomes '⚡️<frag>...<last5-of-memo>'. For fragment-only memos,
+        # keep the existing _shorten() behaviour.
+        if frag.start() > 0 or frag.end() < len(memo):
+            return f"⚡️{frag_val}...{memo[-5:]}"
         return _shorten(frag_val)
 
     # No invoice found -> prefix with chat bubble
@@ -72,6 +88,7 @@ class LightningMemo:
         memo (str): The memo string to parse for lightning invoice information.
     """
 
+    original_memo: str
     before_text: str
     invoice: str
     ln_address: str
@@ -82,30 +99,48 @@ class LightningMemo:
     is_ln_address: bool = False
     is_lightning: bool = False
 
-    def __init__(self, memo: str):
-        match = LND_INVOICE_PATTERN.match(memo)
-        match_address = LIGHTNING_ADDRESS_PATTERN.match(memo)
+    def __init__(self, memo: str | None = None):
+        self.original_memo = memo if memo else ""
+        match = LND_INVOICE_PATTERN.match(memo) if memo else None
+        match_address = LIGHTNING_ADDRESS_PATTERN.match(memo) if memo else None
+
+        # Invoice case — only accept as a full invoice if the matched string is
+        # longer than the shorten threshold (head=12 + tail=5 + ellipsis 3).
         if match:
-            self.before_text = match.group("before")
-            self.invoice = match.group("invoice")
-            self.ln_address = ""
-            self.after_text = match.group("after")
-            self.short_memo = _lightning_memo(self.invoice)
-            self.is_lightning_invoice = True
-        elif match_address:
+            candidate = match.group("invoice")
+            if len(candidate) > 12 + 5 + 3:
+                self.before_text = match.group("before")
+                self.invoice = candidate
+                self.ln_address = ""
+                self.after_text = match.group("after")
+                self.short_memo = _lightning_memo(self.invoice)
+                self.is_lightning_invoice = True
+                self.is_ln_address = False
+                self.memo = memo if memo else ""
+                self.is_lightning = True
+
+                return
+
+        # Lightning address case
+        if match_address:
             self.before_text = match_address.group("before")
             self.invoice = ""
             self.ln_address = match_address.group("ln_address")
             self.after_text = match_address.group("after")
             self.short_memo = _lightning_memo(self.ln_address)
             self.is_ln_address = True
-        else:
-            self.before_text = ""
-            self.invoice = ""
-            self.ln_address = ""
-            self.after_text = ""
-            self.short_memo = _lightning_memo(memo)
             self.is_lightning_invoice = False
-        self.memo = memo
-        self.is_lightning = self.is_lightning_invoice or self.is_ln_address
-        
+            self.memo = memo if memo else ""
+            self.is_lightning = True
+            return
+
+        # No invoice or address — default behavior
+        self.before_text = ""
+        self.invoice = ""
+        self.ln_address = ""
+        self.after_text = ""
+        self.short_memo = _lightning_memo(memo) if memo else ""
+        self.is_lightning_invoice = False
+        self.is_ln_address = False
+        self.memo = memo if memo else ""
+        self.is_lightning = False

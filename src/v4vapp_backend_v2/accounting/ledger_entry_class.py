@@ -32,6 +32,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     lightning_memo,
     snake_case,
 )
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive_models.account_name_type import AccNameType
 
 
@@ -807,7 +808,7 @@ class LedgerEntry(BaseModel):
         formatted_credit_amount = f"{credit_contra_str} {formatted_credit_amount}"
         formatted_debit_amount = f"{debit_contra_str} {formatted_debit_amount}"
 
-        description = lightning_memo(self.description)
+        description = LightningMemo(self.description).short_memo
         if len(description) > 100:
             # Split description into lines at word boundaries, max 100 chars per line
             description = "\n".join(textwrap.wrap(description, width=100))

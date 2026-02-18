@@ -18,6 +18,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import (
     paywithsats_amount,
     seconds_only_time_diff,
 )
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import decode_memo, get_transfer_cust_id, process_user_memo
 from v4vapp_backend_v2.hive_models.account_name_type import AccName, AccNameType
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
@@ -193,16 +194,17 @@ class TransferBase(OpBase):
             str: The shortened memo string.
         """
         # Regex pattern to capture 'lnbc' followed by numbers and one letter
-        if not self.d_memo:
-            return ""
-        pattern = r"(lnbc\d+[a-zA-Z])"
-        match = re.search(pattern, self.d_memo)
-        if match:
-            # Replace the entire memo with the matched lnbc pattern
-            memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
-        else:
-            memo = f"💬{self.d_memo}"
-        return memo
+        return LightningMemo(self.d_memo).short_memo
+        # if not self.d_memo:
+        #     return ""
+        # pattern = r"(lnbc\d+[a-zA-Z])"
+        # match = re.search(pattern, self.d_memo)
+        # if match:
+        #     # Replace the entire memo with the matched lnbc pattern
+        #     memo = f"⚡️{match.group(1)}...{self.d_memo[-5:]}"
+        # else:
+        #     memo = f"💬{self.d_memo}"
+        # return memo
 
     @property
     def user_memo(self) -> str:

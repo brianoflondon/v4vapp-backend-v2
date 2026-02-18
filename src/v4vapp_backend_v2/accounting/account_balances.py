@@ -13,7 +13,10 @@ from v4vapp_backend_v2.accounting.accounting_classes import (
     LedgerAccountDetails,
     LedgerConvSummary,
 )
-from v4vapp_backend_v2.accounting.in_progress_results_class import InProgressResults, all_held_msats
+from v4vapp_backend_v2.accounting.in_progress_results_class import (
+    InProgressResults,
+    all_held_msats,
+)
 from v4vapp_backend_v2.accounting.ledger_account_classes import LedgerAccount, LiabilityAccount
 from v4vapp_backend_v2.accounting.ledger_entry_class import LedgerEntry
 from v4vapp_backend_v2.accounting.ledger_type_class import LedgerType
@@ -26,11 +29,8 @@ from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.crypto_conversion import CryptoConversion
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import (
-    format_time_delta,
-    lightning_memo,
-    truncate_text,
-)
+from v4vapp_backend_v2.helpers.general_purpose_funcs import format_time_delta, truncate_text
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.v4v_config import V4VConfig
 from v4vapp_backend_v2.models.pydantic_helpers import convert_datetime_fields
 from v4vapp_backend_v2.process.lock_str_class import CustIDType
@@ -44,7 +44,9 @@ UNIT_TOLERANCE = {
 
 # @async_time_stats_decorator()
 async def all_account_balances(
-    as_of_date: datetime | None = None, age: timedelta | None = None, filter: Mapping[str, Any] | None = None
+    as_of_date: datetime | None = None,
+    age: timedelta | None = None,
+    filter: Mapping[str, Any] | None = None,
 ) -> AccountBalances:
     """
     Retrieve all account balances as of a specified date, optionally aged by a given timedelta.
@@ -414,7 +416,7 @@ async def account_balance_printout(
                     if line_items:
                         output.append(line)
                     if user_memos and row.user_memo:
-                        memo = truncate_text(lightning_memo(row.user_memo), 60)
+                        memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
                         output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
         # Perform a conversion with the current quote for this Currency unit
@@ -636,7 +638,7 @@ async def account_balance_printout_grouped_by_customer(
                             if line_items:
                                 output.append(line)
                             if user_memos and row.user_memo:
-                                memo = truncate_text(lightning_memo(row.user_memo), 60)
+                                memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
                                 output.append(f"{' ' * (COL_TS + 1)} {memo}")
                 else:
                     # Single cust_id, recalculate running totals for consistency
@@ -706,7 +708,7 @@ async def account_balance_printout_grouped_by_customer(
                         if line_items:
                             output.append(line)
                         if user_memos and row.user_memo:
-                            memo = truncate_text(lightning_memo(row.user_memo), 60)
+                            memo = truncate_text(LightningMemo(row.user_memo).short_memo, 60)
                             output.append(f"{' ' * (COL_TS + 1)} {memo}")
 
         # Perform a conversion with the current quote for this Currency unit
