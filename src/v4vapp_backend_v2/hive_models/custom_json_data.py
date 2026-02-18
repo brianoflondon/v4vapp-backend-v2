@@ -100,6 +100,10 @@ class KeepsatsTransfer(BaseModel):
         None,
         description="Used specifically for invoice messages, when requesting an invoice from a foreign service, this comment will be sent",
     )
+    do_not_pay: bool = Field(
+        False,
+        description="If True, this transfer should not be paid. This is used for cases where users send invoices to each other",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -137,12 +141,24 @@ class KeepsatsTransfer(BaseModel):
                         f"KeepsatsTransfer Memo contains a lightning invoice, "
                         f"but msats is set to {data['msats']:,.0f}. and sender is not "
                         f"{InternalConfig().server_id}. This is likely a mistake, as the lightning "
-                        f"invoice should determine the amount to pay, not the msats/sats fields.",
+                        f"invoice should determine the amount to pay, not the msats/sats fields."
+                        f"{lightning_memo.original_memo}",
                         extra={"data": data},
                     )
                     data["msats"] = 0
                     data["sats"] = 0
-
+            if lightning_memo.is_ln_address:
+                if (
+                    data.get("from_account", "") != InternalConfig().server_id
+                    and data.get("to_account", "") != InternalConfig().server_id
+                ):
+                    logger.warning(
+                        "KeepsatsTransfer Memo contains a lightning address, "
+                        "but is sent to any address other than a server account "
+                        f"mark it as do not pay. {lightning_memo.original_memo}",
+                        extra={"data": data},
+                    )
+                    data["do_not_pay"] = True
         super().__init__(**data)
 
     @property

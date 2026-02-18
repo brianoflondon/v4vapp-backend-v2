@@ -57,6 +57,7 @@ It includes fixtures for setup and teardown, as well as tests for various paymen
 This must be run after the three watchers are running, as it relies on the watchers to generate the ledgers.
 """
 
+
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
     InternalConfig(config_filename="config/devhive.config.yaml")
@@ -378,6 +379,8 @@ async def test_deposit_keepsats_spend_hive_custom_json():
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
     custom_json = CustomJson.model_validate(last_hive_op)
+    pprint(custom_json.memo)
+    pprint(custom_json.model_dump())
     if custom_json.json_data:
         memo = custom_json.json_data.memo
         assert "Paid Invoice with Keepsats" in memo, (
@@ -387,6 +390,7 @@ async def test_deposit_keepsats_spend_hive_custom_json():
         assert False, (
             "Custom JSON data is empty, expected to contain memo with invoice payment request"
         )
+
 
 async def test_send_internal_keepsats_transfer_by_hive_transfer():
     """

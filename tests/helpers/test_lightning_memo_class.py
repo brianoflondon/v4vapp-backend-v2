@@ -18,6 +18,8 @@ def test_lightningmemo_parses_full_invoice_and_shortens_invoice_component():
     assert len(lm.invoice) > 12 + 5 + 3
 
 
+
+
 def test_lightningmemo_no_invoice_returns_chat_bubble_prefix():
     memo = "hello there"
     lm = LightningMemo(memo)
