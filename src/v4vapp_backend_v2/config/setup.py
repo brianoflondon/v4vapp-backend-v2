@@ -608,6 +608,16 @@ class HiveConfig(BaseConfig):
         return [acc for acc in self.hive_accs.values() if acc.role == HiveRoles.exchange]
 
     @property
+    def exchange_account_names(self) -> List[str]:
+        """
+        Retrieve the names of the exchange accounts.
+
+        Returns:
+            List[str]: A list containing the names of all exchange accounts.
+        """
+        return [acc.name for acc in self.exchange_accounts]
+
+    @property
     def treasury_account_names(self) -> List[str]:
         """
         Retrieve the names of the Treasury accounts.

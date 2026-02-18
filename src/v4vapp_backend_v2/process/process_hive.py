@@ -33,6 +33,10 @@ from v4vapp_backend_v2.process.process_transfer import HiveTransferError, follow
 
 # MARK: Hive Transaction Processing
 
+# TODO: This should be in the config.
+BALANCE_ADJUSTMENT_MEMO = "Balance adjustment"
+BALANCE_ADJUSTMENT_ACCOUNT = "v4v-app"
+
 
 async def process_hive_op(op: TrackedAny, nobroadcast: bool = False) -> List[LedgerEntry]:
     """
@@ -191,8 +195,25 @@ async def process_transfer_op(
     ledger_entry.credit_conv = ledger_entry.debit_conv = hive_transfer.conv
     ledger_entry.cust_id = hive_transfer.cust_id
 
-    # MARK: Server to Treasury
     if (
+        (
+            hive_transfer.from_account == BALANCE_ADJUSTMENT_ACCOUNT
+            or hive_transfer.to_account == BALANCE_ADJUSTMENT_ACCOUNT
+        )
+        and hive_transfer.d_memo
+        and BALANCE_ADJUSTMENT_MEMO in hive_transfer.d_memo
+    ):
+        # Do nothing this is a way to adjust balances without creating ledger entries that affect the P&L
+        logger.warning(
+            f"Balance adjustment transfer detected: {base_description}",
+            extra={"notification": True, **hive_transfer.log_extra},
+        )
+        raise LedgerEntryCreationException(
+            f"Balance Adjustment Transfer detected: {base_description}"
+        )
+
+    # MARK: Server to Treasury
+    elif (
         hive_transfer.from_account == server_account
         and hive_transfer.to_account == treasury_account
     ):
