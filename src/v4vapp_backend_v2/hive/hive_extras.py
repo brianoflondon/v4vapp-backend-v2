@@ -405,6 +405,7 @@ def get_transfer_cust_id(
     to_acc: AccNameType,
     hive_config=None,
     expense_accounts: list[str] | None = None,
+    exchange_accounts: list[str] | None = None,
 ) -> CustIDType:
     """
     Compute the customer id (cust_id) for a transfer a module-level helper.
@@ -414,6 +415,7 @@ def get_transfer_cust_id(
         to_acc: recipient account name
         hive_config: optional object with attribute `all_account_names` (server, treasury, funding, exchange)
         expense_accounts: optional list of expense account names (defaults to ["privex"]).
+        exchange_accounts: optional list of exchange account names (defaults to ["exchange"]).
 
     Returns:
         CustIDType: computed customer id following the same rules as the original method.
@@ -428,7 +430,12 @@ def get_transfer_cust_id(
 
     server_account, treasury_account, funding_account, exchange_account = account_names
 
-    expense_accounts = InternalConfig().config.expense_config.hive_expense_accounts or []
+    expense_accounts = (
+        expense_accounts or InternalConfig().config.expense_config.hive_expense_accounts or []
+    )
+    exchange_accounts = (
+        exchange_accounts or InternalConfig().config.hive.exchange_account_names or []
+    )
 
     # Server to Treasury: cust_id = to_account (treasury)
     if from_acc == server_account and to_acc == treasury_account:
@@ -446,12 +453,14 @@ def get_transfer_cust_id(
     elif from_acc == treasury_account and to_acc == funding_account:
         return to_acc
 
-    # Treasury to Exchange: cust_id = to_account (exchange)
-    elif from_acc == treasury_account and to_acc == exchange_account:
+    # Treasury or Server to Exchange: cust_id = to_account (exchange)
+    elif (
+        from_acc == treasury_account or from_acc == server_account
+    ) and to_acc in exchange_accounts:
         return to_acc
 
     # Exchange to Treasury: cust_id = from_account (exchange)
-    elif from_acc == exchange_account and to_acc == treasury_account:
+    elif from_acc in exchange_accounts and to_acc == treasury_account:
         return from_acc
 
     # Server to expense: cust_id = to_account (expense)
