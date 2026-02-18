@@ -153,6 +153,33 @@ async def process_create_fill_order_op(
             # Optionally, add a suspense entry for the external side (but don't save it if netting)
             # suspense_entry = LedgerEntry(... LiabilityAccount("External Market Suspense", sub="untracked") ...)
             ledger_entries.append(net_entry)
+        elif seller_tracked and not buyer_tracked:
+            # Seller tracked, buyer external: Single net entry for seller
+            # Seller (open_owner) delivers open_pays and receives current_pays
+            ledger_type = LedgerType.FILL_ORDER_NET
+            net_entry = LedgerEntry(
+                group_id=f"{limit_fill_order.group_id}_{ledger_type}",
+                short_id=limit_fill_order.short_id,
+                timestamp=limit_fill_order.timestamp,
+                op_type=limit_fill_order.op_type,
+                ledger_type=ledger_type,
+                cust_id=limit_fill_order.cust_id,
+                description=f"Net fill order: {limit_fill_order.open_owner} trades {limit_fill_order.open_pays.amount_decimal} {limit_fill_order.open_pays.unit} for {limit_fill_order.current_pays.amount_decimal} {limit_fill_order.current_pays.unit} (external buyer)",
+                debit=AssetAccount(
+                    name="Customer Deposits Hive", sub=limit_fill_order.open_owner
+                ),  # Seller debits deposits for what they receive (current_pays)
+                debit_unit=limit_fill_order.current_pays.unit,
+                debit_amount=limit_fill_order.current_pays.amount_decimal,
+                debit_conv=limit_fill_order.credit_conv,
+                credit=AssetAccount(
+                    name="Escrow Hive", sub=limit_fill_order.open_owner
+                ),  # Seller credits escrow for what they deliver (open_pays)
+                credit_unit=limit_fill_order.open_pays.unit,
+                credit_amount=limit_fill_order.open_pays.amount_decimal,
+                credit_conv=limit_fill_order.debit_conv,
+                link=limit_fill_order.link,
+            )
+            ledger_entries.append(net_entry)
         else:
             # Neither tracked: Skip or log (not relevant to your entity)
             logger.info(
