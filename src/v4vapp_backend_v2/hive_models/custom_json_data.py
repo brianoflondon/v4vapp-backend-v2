@@ -121,23 +121,27 @@ class KeepsatsTransfer(BaseModel):
 
         if data.get("memo", None) is None:
             data["memo"] = ""
-
         """
-        This test is vital for the process_custom_json function if we are passing a
-        lightning invoice in the memo, we don't want to have the msats and sats set
-        as that would be confusing, as the amount to pay is actually determined by
-        the lightning invoice, not the msats/sats fields. This allows us to still
-        pass the lightning invoice in the memo for processing, without having
-        conflicting information in the msats/sats fields.
+        Fixed problem where user could send a custom_json with a lightning invoice
+        AND a sats/msats amount. If this is done and ONLY if this originates from a
+        user and not the server, the msats/sats amount is discarded and the lightning
+        invoice retained. If the server sends a custom json it may contain a lightning
+        memo (though it should only contain shortened ones if this is part of the usual
+        process of converting and paying in one transaction.
         """
         if data["msats"] > Decimal(0) and data["memo"] != "":
             lightning_memo = LightningMemo(data["memo"])
             if lightning_memo.is_lightning_invoice:
-                logger.warning(
-                    f"KeepsatsTransfer Memo contains a lightning invoice, "
-                    f"but msats is set to {data['msats']:,.0f}. ",
-                    extra={"data": data},
-                )
+                if data.get("from_account", "") != InternalConfig().server_id:
+                    logger.warning(
+                        f"KeepsatsTransfer Memo contains a lightning invoice, "
+                        f"but msats is set to {data['msats']:,.0f}. and sender is not "
+                        f"{InternalConfig().server_id}. This is likely a mistake, as the lightning "
+                        f"invoice should determine the amount to pay, not the msats/sats fields.",
+                        extra={"data": data},
+                    )
+                    data["msats"] = 0
+                    data["sats"] = 0
 
         super().__init__(**data)
 
