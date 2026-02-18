@@ -265,6 +265,17 @@ async def send_lightning_to_pay_req(
     Returns:
         Payment: The payment object containing details of the sent payment.
     """
+
+    def simulate_error_for_testing():
+        # Simulate an AioRpcError for testing: 'already paid' detail (matches tests)
+        raise AioRpcError(
+            code=1,
+            initial_metadata=None,
+            trailing_metadata=None,
+            details="already paid",
+            debug_error_string="invoice already paid",
+        )
+
     if not lnd_client:
         raise ValueError("LNDClient instance is required")
 
@@ -327,6 +338,7 @@ async def send_lightning_to_pay_req(
     response_queue = asyncio.Queue()
     logging_task = asyncio.create_task(log_payment_in_process(payment_id, response_queue))
     try:
+        # simulate_error_for_testing()
         # Create the SendPaymentRequest object
         request = routerrpc.SendPaymentRequest(**request_params)
         async for payment_resp in lnd_client.router_stub.SendPaymentV2(request):

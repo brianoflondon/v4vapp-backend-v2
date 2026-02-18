@@ -11,6 +11,7 @@ from v4vapp_backend_v2.helpers.general_purpose_funcs import convert_decimals_for
 from v4vapp_backend_v2.hive.hive_extras import (
     CustomJsonSendError,
     HiveTransferError,
+    get_hive_amount_from_trx_reply,
     get_verified_hive_client,
     get_verified_hive_client_for_accounts,
     send_custom_json,
@@ -167,13 +168,7 @@ async def reply_with_hive(details: HiveReturnDetails, nobroadcast: bool = False)
                 extra={"notification": True, **details.tracked_op.log_extra},
             )
         if not error_message:
-            try:
-                op_dict = trx["operations"][0][1]  # type: dict
-                return_amount = Amount(op_dict["amount"])
-            except (KeyError, IndexError):
-                return_amount = Amount("0.001 HIVE")
-            if not return_amount:
-                return_amount = Amount("0.001 HIVE")
+            return_amount = get_hive_amount_from_trx_reply(trx)
             await TransferBase.update_quote()
             details.tracked_op.change_conv = CryptoConversion(
                 conv_from=return_amount.symbol,

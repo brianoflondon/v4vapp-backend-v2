@@ -1,9 +1,11 @@
 from decimal import Decimal
+from functools import cache
 from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from v4vapp_backend_v2.config.setup import InternalConfig, logger
+from v4vapp_backend_v2.database.db_tools import convert_decimal128_to_decimal
 from v4vapp_backend_v2.helpers.general_purpose_funcs import lightning_memo, snake_case
 from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 from v4vapp_backend_v2.hive.hive_extras import process_user_memo
@@ -98,10 +100,15 @@ class KeepsatsTransfer(BaseModel):
         None,
         description="Used specifically for invoice messages, when requesting an invoice from a foreign service, this comment will be sent",
     )
+    do_not_pay: bool = Field(
+        False,
+        description="If True, this transfer should not be paid. This is used for cases where users send invoices to each other",
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
     def __init__(self, **data: Any):
+        data = convert_decimal128_to_decimal(data)
         value_specified_msats = data.get("msats", None)
 
         if not value_specified_msats:
@@ -118,27 +125,40 @@ class KeepsatsTransfer(BaseModel):
 
         if data.get("memo", None) is None:
             data["memo"] = ""
-
         """
-        This test is vital for the process_custom_json function if we are passing a
-        lightning invoice in the memo, we don't want to have the msats and sats set
-        as that would be confusing, as the amount to pay is actually determined by
-        the lightning invoice, not the msats/sats fields. This allows us to still
-        pass the lightning invoice in the memo for processing, without having
-        conflicting information in the msats/sats fields.
+        Fixed problem where user could send a custom_json with a lightning invoice
+        AND a sats/msats amount. If this is done and ONLY if this originates from a
+        user and not the server, the msats/sats amount is discarded and the lightning
+        invoice retained. If the server sends a custom json it may contain a lightning
+        memo (though it should only contain shortened ones if this is part of the usual
+        process of converting and paying in one transaction.
         """
         if data["msats"] > Decimal(0) and data["memo"] != "":
             lightning_memo = LightningMemo(data["memo"])
             if lightning_memo.is_lightning_invoice:
-                logger.warning(
-                    f"KeepsatsTransfer Memo contains a lightning invoice, "
-                    f"but msats is set to {data['msats']:,.0f}. "
-                    f"Setting msats and sats to 0 to avoid confusion.",
-                    extra={"data": data},
-                )
-                data["msats"] = Decimal(0)
-                data["sats"] = Decimal(0)
-
+                if data.get("from_account", "") != InternalConfig().server_id:
+                    logger.warning(
+                        f"KeepsatsTransfer Memo contains a lightning invoice, "
+                        f"but msats is set to {data['msats']:,.0f}. and sender is not "
+                        f"{InternalConfig().server_id}. This is likely a mistake, as the lightning "
+                        f"invoice should determine the amount to pay, not the msats/sats fields."
+                        f"{lightning_memo.original_memo}",
+                        extra={"data": data},
+                    )
+                    data["msats"] = 0
+                    data["sats"] = 0
+            if lightning_memo.is_ln_address:
+                if (
+                    data.get("from_account", "") != InternalConfig().server_id
+                    and data.get("to_account", "") != InternalConfig().server_id
+                ):
+                    logger.warning(
+                        "KeepsatsTransfer Memo contains a lightning address, "
+                        "but is sent to any address other than a server account "
+                        f"mark it as do not pay. {lightning_memo.original_memo}",
+                        extra={"data": data},
+                    )
+                    data["do_not_pay"] = True
         super().__init__(**data)
 
     @property
@@ -254,11 +274,14 @@ CUSTOM_JSON_IDS: Dict[str, Type[BaseModel]] = {
 }
 
 
+@cache
 def all_custom_json_ids() -> List[str]:
     """
     Returns a list of all custom JSON IDs defined in the CUSTOM_JSON_IDS dictionary.
     This function is useful for retrieving all available custom JSON IDs for validation
     or processing purposes.
+
+    This can be cached because it only contains the static keys from the config setup.
     Returns:
         List[str]: A list of custom JSON IDs.
     """
@@ -267,6 +290,7 @@ def all_custom_json_ids() -> List[str]:
     return list(duplicates_removed)
 
 
+# @time_decorator
 def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
     """
     Tests if the JSON data is valid for a specific operation ID.
@@ -285,6 +309,8 @@ def custom_json_test_data(data: Dict[str, Any]) -> Type[BaseModel] | None:
     """
     cj_id = data.get("id", None)
     if cj_id is None:
+        return None
+    if cj_id not in all_custom_json_ids():
         return None
     if cj_id in CUSTOM_JSON_IDS.keys():
         return CUSTOM_JSON_IDS[cj_id] if isinstance(CUSTOM_JSON_IDS[cj_id], type) else None

@@ -176,8 +176,22 @@ async def follow_on_transfer(
             )
             return
 
-        # MARK: Attempt to decode and pay a Lightning invoice if present
-        pay_req = await decode_incoming_and_checks(tracked_op=tracked_op, lnd_client=lnd_client)
+        # Only skip decoding when this is a KeepsatsTransfer explicitly marked do_not_pay.
+        if (
+            isinstance(tracked_op, CustomJson)
+            and isinstance(tracked_op.json_data, KeepsatsTransfer)
+            and tracked_op.json_data.do_not_pay
+        ):
+            logger.warning(
+                f"CustomJson contains a KeepsatsTransfer with do_not_pay=True, skipping payment. {tracked_op.short_id} Memo: {tracked_op.d_memo}",
+                extra={"notification": False, **tracked_op.log_extra},
+            )
+            pay_req = None
+        else:
+            # MARK: Attempt to decode and pay a Lightning invoice if present
+            pay_req = await decode_incoming_and_checks(
+                tracked_op=tracked_op, lnd_client=lnd_client
+            )
         # Important: we ignore Keepsats status for now, first we check amounts and try to pay a lightning invoice.
         # If there is no invoice we will skip to just depositing all the Hive.
 
@@ -191,6 +205,10 @@ async def follow_on_transfer(
             # Just return do not convert.
             if tracked_op.json_data.lightning_memo.is_lightning:
                 release_hold = True
+                logger.warning(
+                    "Failed to process Lightning invoice in custom_json, likely due to a network error. No invoice found on retry, skipping conversion and releasing hold.",
+                    extra={"notification": True, **tracked_op.log_extra},
+                )
                 raise CustomJsonToLightningError(
                     "Failed to process Lightning invoice in custom_json, likely due to a network error. No invoice found on retry, skipping conversion."
                 )

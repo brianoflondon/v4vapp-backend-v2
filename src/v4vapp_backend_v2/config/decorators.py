@@ -1,5 +1,6 @@
 import functools
 import time
+from timeit import default_timer as timer
 
 from v4vapp_backend_v2.config.setup import logger
 
@@ -130,7 +131,7 @@ def time_decorator(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        start_time = time.time()
+        start_time = timer()
         extra_info = ""
         if "account" in kwargs:
             extra_info = f" for '{kwargs['account']}'"
@@ -138,10 +139,9 @@ def time_decorator(func):
             extra_info = f" for cust_id '{kwargs['cust_id']}'"
         try:
             result = func(*args, **kwargs)
-            end_time = time.time()
-            execution_time = end_time - start_time
+            execution_time = timer() - start_time
             logger.info(
-                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.4f}s{extra_info}",
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' took {execution_time:.6f}s{extra_info}",
                 extra={
                     "func_name": func.__qualname__,
                     "call_kwargs": kwargs,
@@ -150,10 +150,9 @@ def time_decorator(func):
             )
             return result
         except Exception as e:
-            end_time = time.time()
-            execution_time = end_time - start_time
+            execution_time = timer() - start_time
             logger.warning(
-                f"{ICON} Function '{func.__qualname__[:26]:<26}' failed after {execution_time:.4f}s: {str(e)}",
+                f"{ICON} Function '{func.__qualname__[:26]:<26}' failed after {execution_time:.6f}s: {str(e)}",
                 extra={"notification": False, "error": e},
             )
             raise

@@ -14,6 +14,10 @@ def test_lightningmemo_parses_full_invoice_and_shortens_invoice_component():
     # LightningMemo uses _lightning_memo on the invoice string itself; compare against helper
     expected = _lightning_memo(invoice)
     assert lm.short_memo == expected
+    # ensure detected invoice is longer than the shorten threshold (head=12 tail=5 + 3)
+    assert len(lm.invoice) > 12 + 5 + 3
+
+
 
 
 def test_lightningmemo_no_invoice_returns_chat_bubble_prefix():
@@ -41,6 +45,24 @@ def test_lightning_memo_matches_fragment_inside_full_memo_and_uses_overall_tail(
     out = lightning_memo(memo)
     # when called on full memo the helper uses the overall memo's tail for the '...<last5>' portion
     assert out == f"⚡️{frag}...{memo[-5:]}"
+
+
+def test_lightningmemo_ignores_already_shortened_invoice_fragment():
+    memo = "Paid ⚡️lnbc12340n...9klw7"
+    lm = LightningMemo(memo)
+
+    # should NOT detect the short/ellipsed invoice fragment as an actual invoice
+    assert lm.invoice == ""
+    assert not lm.is_lightning_invoice
+    # short_memo should preserve the original memo (no invoice shortening)
+    assert lm.short_memo == "💬Paid ⚡️lnbc12340n...9klw7"
+    assert not lm.is_lightning
+
+
+def test__lightning_memo_ignores_shortened_invoice_fragment():
+    memo = "Paid ⚡️lnbc12340n...9klw7"
+    # helper should not shorten a memo that already contains an ellipsed invoice
+    assert _lightning_memo(memo) == "💬Paid ⚡️lnbc12340n...9klw7"
 
 
 def test_lightningmemo_parses_lightning_address_plain():
@@ -91,5 +113,20 @@ def test_lightningmemo_does_not_treat_local_identifier_as_lightning_address():
     assert lm.invoice == ""
     assert lm.ln_address == ""
     assert lm.short_memo.startswith("💬")
+    assert lm.is_lightning_invoice is False
+    assert lm.is_ln_address is False
+
+
+def test_lightning_memo_accepts_none_or_empty_string():
+    lm = LightningMemo(None)
+    assert lm.invoice == ""
+    assert lm.ln_address == ""
+    assert lm.short_memo == ""
+    assert lm.is_lightning_invoice is False
+    assert lm.is_ln_address is False
+    lm = LightningMemo("")
+    assert lm.invoice == ""
+    assert lm.ln_address == ""
+    assert lm.short_memo == ""
     assert lm.is_lightning_invoice is False
     assert lm.is_ln_address is False

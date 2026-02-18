@@ -56,6 +56,7 @@
                 "--config-filename",
                 "devhive.config.yaml",
                 // "--start-block", // The block number to start from. Default or 0 will start from the last good block,
+                // "103924360"
                 // "-1" // -1 will start from the current head block,
                 // "--time-delay",
                 // "2",

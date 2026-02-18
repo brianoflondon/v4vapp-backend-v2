@@ -66,6 +66,10 @@ TIME_DELAY: int = 0
 app = typer.Typer()
 ICON = "🐝"
 
+NOTIFICATION_QUITE_MODE = (
+    True  # Set to True to disable notifications if db_monitor will provide these
+)
+
 # os.environ["http_proxy"] = "http://home-imac.tail400e5.ts.net:8888"
 
 # Define a global flag to track shutdown and startup completion
@@ -677,6 +681,9 @@ async def combined_logging(
     Returns:
         None
     """
+
+    if NOTIFICATION_QUITE_MODE:
+        notification = False
 
     if db_store:
         asyncio.create_task(db_store_op(op))

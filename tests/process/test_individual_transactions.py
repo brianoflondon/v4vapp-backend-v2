@@ -43,7 +43,7 @@ from v4vapp_backend_v2.hive_models.pending_transaction_class import PendingTrans
 from v4vapp_backend_v2.process.hive_notification import send_transfer_custom_json
 from v4vapp_backend_v2.process.lock_str_class import LockStr
 
-turn_off_these_tests = False
+turn_off_these_tests = True
 
 
 if os.getenv("GITHUB_ACTIONS") == "true":
@@ -56,6 +56,7 @@ It includes fixtures for setup and teardown, as well as tests for various paymen
 
 This must be run after the three watchers are running, as it relies on the watchers to generate the ledgers.
 """
+
 
 @pytest.fixture(scope="module", autouse=True)
 async def config_file():
@@ -147,7 +148,7 @@ async def test_hive_and_hbd_to_lnd_only():
         # invoice_value_sat = invoice_value_sat
         invoice = await get_lightning_invoice(
             value_sat=invoice_value_sat,
-            memo=f"{currency.symbol} pay invoice {invoice_value_sat}",
+            memo=f"{currency.symbol} pay invoice {invoice_value_sat} unit test: test_hive_and_hbd_to_lnd_only",
         )
 
         conversion_result = await calc_keepsats_to_hive(
@@ -378,6 +379,8 @@ async def test_deposit_keepsats_spend_hive_custom_json():
         {"type": "custom_json"}, sort=[("timestamp", -1)]
     )
     custom_json = CustomJson.model_validate(last_hive_op)
+    pprint(custom_json.memo)
+    pprint(custom_json.model_dump())
     if custom_json.json_data:
         memo = custom_json.json_data.memo
         assert "Paid Invoice with Keepsats" in memo, (

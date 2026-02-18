@@ -9,6 +9,7 @@ from typing import Any, Generator
 from bson.decimal128 import Decimal128
 
 from v4vapp_backend_v2.config.setup import logger
+from v4vapp_backend_v2.helpers.lightning_memo_class import LightningMemo
 
 
 # MARK: General Text
@@ -485,7 +486,8 @@ def process_clean_memo(
 
     return message
 
-#TODO: #252 Combine this with the lightning memo class
+
+# TODO: #252 Combine this with the lightning memo class
 def lightning_memo(memo: str) -> str:
     """
     Removes and shortens a lightning invoice from a memo for output.
@@ -495,6 +497,9 @@ def lightning_memo(memo: str) -> str:
         str: The shortened memo string or just the original memo with a chat bubble.
     """
     # Regex pattern to capture 'lnbc' followed by numbers and one letter
+    short = LightningMemo(memo)
+    return short.short_memo
+
     pattern = r"(lnbc\d+[a-zA-Z])"
     match = re.search(pattern, memo)
     if match:
@@ -504,8 +509,6 @@ def lightning_memo(memo: str) -> str:
         if not memo.startswith("💬"):
             memo = f"💬{memo}"
     return memo
-
-
 
 
 # MARK: Markdown Functions

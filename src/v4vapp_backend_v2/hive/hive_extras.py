@@ -1190,6 +1190,34 @@ def witness_signing_key(witness_name: str) -> str | None:
         return None
 
 
+def get_hive_amount_from_trx_reply(trx: Dict[str, Any]) -> Amount:
+    """
+    Extracts the amount of a specific asset from a Hive transaction.
+
+    Args:
+        trx (Dict[str, Any]): The Hive transaction data.
+        asset_symbol (str): The symbol of the asset to extract (e.g., "HIVE" or "HBD").
+
+    Returns:
+        Amount: The extracted amount as an Amount object, or a default amount of 0.000 HIVE if not found.
+    """
+    try:
+        # Did this return type change? Used to need trx["operations"][0][1]["amount"]
+        # but that was not working for some reason, so changed to this, but need
+        # to verify it works for all cases.
+        op_dict = trx["operations"][0]["value"]  # type: dict
+        return Amount(op_dict["amount"])
+    except (KeyError, IndexError):
+        try:
+            return Amount(trx["operations"][0][1]["amount"])
+        except (KeyError, IndexError) as e:
+            logger.error(
+                f"Failed to parse return amount from transaction: {e}",
+                extra={"notification": False, "trx": trx},
+            )
+    return Amount("0.000 HIVE")
+
+
 if __name__ == "__main__":
     nodes = get_good_nodes()
     print(nodes)

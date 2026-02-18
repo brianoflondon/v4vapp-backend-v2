@@ -61,7 +61,11 @@ from v4vapp_backend_v2.conversion.exchange_process import rebalance_queue_task
 from v4vapp_backend_v2.conversion.exchange_rebalance import RebalanceDirection
 from v4vapp_backend_v2.helpers.crypto_prices import QuoteResponse
 from v4vapp_backend_v2.helpers.currency_class import Currency
-from v4vapp_backend_v2.helpers.general_purpose_funcs import is_clean_memo, process_clean_memo
+from v4vapp_backend_v2.helpers.general_purpose_funcs import (
+    is_clean_memo,
+    lightning_memo,
+    process_clean_memo,
+)
 from v4vapp_backend_v2.hive_models.amount_pyd import AmountPyd
 from v4vapp_backend_v2.hive_models.custom_json_data import KeepsatsTransfer
 from v4vapp_backend_v2.hive_models.op_transfer import TransferBase
@@ -206,6 +210,7 @@ async def conversion_hive_to_keepsats(
     tracked_op.change_memo = process_clean_memo(tracked_op.d_memo)
     end_memo = f" | {tracked_op.lightning_memo}" if tracked_op.lightning_memo else ""
 
+    # The behavior of the LightningMemo class is VITAL for this test.
     if "⚡️" in tracked_op.lightning_memo:
         if value_sat_rounded > 0:
             fee_text = ""
@@ -239,11 +244,12 @@ async def conversion_hive_to_keepsats(
     # This needs to be a custom json transferring Keepsats from devser VSC Liability to customer
     # should be the FULL amount (including the fee)
     # Then the fee will be a separate custom json
+    memo = f"Paid {lightning_memo(tracked_op.d_memo)}"
     transfer = KeepsatsTransfer(
         from_account=server_id,
         to_account=cust_id,
         msats=int(conv_result.to_convert_conv.msats),
-        memo=tracked_op.d_memo,
+        memo=memo,
         parent_id=tracked_op.group_id,  # This is the group_id of the original transfer
     )
     trx = await send_transfer_custom_json(transfer=transfer, nobroadcast=nobroadcast)
