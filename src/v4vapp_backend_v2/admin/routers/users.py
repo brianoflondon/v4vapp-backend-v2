@@ -18,7 +18,6 @@ from v4vapp_backend_v2.accounting.account_balances import (
     all_account_balances,
     check_hive_conversion_limits,
     list_active_account_subs,
-    list_all_accounts,
 )
 from v4vapp_backend_v2.accounting.limit_check_classes import LimitCheckResult
 from v4vapp_backend_v2.accounting.sanity_checks import SanityCheckResults
@@ -75,19 +74,8 @@ async def users_data_api(active_only: bool = True):
             This significantly speeds up the response for large account sets.
     """
     start = timer()
-    logger.info(
-        f"Fetching users data at {datetime.now(tz=timezone.utc).isoformat()} (active_only={active_only})"
-    )
     if not templates or not nav_manager:
         raise RuntimeError("Templates and navigation not initialized")
-
-    try:
-        # Get all accounts
-        await list_all_accounts()
-    except Exception:
-        # If database is not available, show mock data for demo
-        pass
-    logger.info(f"list_all_accounts done in {timer() - start:.2f} seconds")
 
     # Build a filter to restrict the expensive aggregation to active accounts only
     active_cust_ids = None
@@ -99,18 +87,12 @@ async def users_data_api(active_only: bool = True):
             f"Pre-filtered to {len(active_cust_ids)} active cust_ids in {timer() - start:.2f} seconds"
         )
 
-    account_balances = await all_account_balances(account_name="VSC Liability", cust_ids=active_cust_ids)
-
-    logger.info(
-        f"Fetched {len(account_balances.root)} account balances in {timer() - start:.2f} seconds"
+    account_balances = await all_account_balances(
+        account_name="VSC Liability", cust_ids=active_cust_ids
     )
-    # filter account_balances for all VSC Liability accounts
-    # vsc_liability_balances = [ab for ab in account_balances.root if ab.name == "VSC Liability"]
+
     vsc_liability_balances = account_balances.root
     vsc_liability_balances.sort(key=lambda x: x.sub)
-    logger.info(
-        f"Found {len(vsc_liability_balances)} VSC Liability accounts in {timer() - start:.2f} seconds"
-    )
 
     # Get balances for each account
     users_data: List[dict[str, Any]] = []
@@ -122,9 +104,6 @@ async def users_data_api(active_only: bool = True):
 
     # Run all limit checks concurrently
     limit_check_results = await asyncio.gather(*limit_check_tasks, return_exceptions=True)
-    logger.info(
-        f"Limit checks done for {len(vsc_liability_balances)} accounts in {timer() - start:.2f} seconds"
-    )
 
     for i, account in enumerate(vsc_liability_balances):
         try:
@@ -185,8 +164,6 @@ async def users_data_api(active_only: bool = True):
                 }
             )
 
-    logger.info(f"Processed {len(users_data)} users in {timer() - start:.2f} seconds")
-
     # Calculate summary statistics
     total_users = len(users_data)
     active_users = len([u for u in users_data if u["has_transactions"]])
@@ -212,11 +189,11 @@ async def users_data_api(active_only: bool = True):
             "total_positive_balance": total_positive_balance,
             "total_positive_balance_fmt": total_positive_balance_fmt,
             "error_count": error_count,
+            "processing_time_seconds": round(timer() - start, 4),
         },
         "now": datetime.now(tz=timezone.utc).isoformat(),
     }
 
-    logger.info(f"Returning result with {len(users_data)} users in {timer() - start:.2f} seconds")
     return result
 
 

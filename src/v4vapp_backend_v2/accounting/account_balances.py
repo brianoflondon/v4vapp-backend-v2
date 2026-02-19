@@ -116,17 +116,17 @@ async def all_account_balances(
         account.last_transaction_date = max_timestamp
     _t8 = timer()
 
-    logger.info(
-        f"aggregate={(_t2 - _t1):.3f}s, "
-        # f"to_list={(_t3 - _t2):.3f}s, "
-        # f"validate={(_t5 - _t4):.3f}s, "
-        f"held_msats={(_t6 - _t5):.3f}s, "
-        # f"in_progress={(_t7 - _t6):.3f}s, "
-        # f"post_process={(_t8 - _t7):.3f}s, "
-        f"total={(_t8 - _t0):.3f}s "
-        f"all_account_balances timing "
-        f"({len(account_balances.root)} accounts, {len(results)} result docs)"
-    )
+    # logger.info(
+    #     f"aggregate={(_t2 - _t1):.3f}s, "
+    #     # f"to_list={(_t3 - _t2):.3f}s, "
+    #     # f"validate={(_t5 - _t4):.3f}s, "
+    #     f"held_msats={(_t6 - _t5):.3f}s, "
+    #     # f"in_progress={(_t7 - _t6):.3f}s, "
+    #     # f"post_process={(_t8 - _t7):.3f}s, "
+    #     f"total={(_t8 - _t0):.3f}s "
+    #     f"all_account_balances timing "
+    #     f"({len(account_balances.root)} accounts, {len(results)} result docs)"
+    # )
 
     return account_balances
 
