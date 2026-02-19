@@ -156,406 +156,428 @@ def all_account_balances_pipeline(
     else:
         date_range_query = {"$lte": as_of_date}
 
-    pipeline: Sequence[Mapping[str, Any]] = [
-        {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}},
-        {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
-        {"$match": filter},
-        {
-            "$facet": {
-                "debits_view": [
-                    facet_debit_match,
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "account_type": "$debit.account_type",
-                            "name": "$debit.name",
-                            "sub": "$debit.sub",
-                            "contra": "$debit.contra",
-                            "group_id": 1,
-                            "short_id": 1,
-                            "ledger_type": 1,
-                            "timestamp": 1,
-                            "description": 1,
-                            "user_memo": 1,
-                            "cust_id": 1,
-                            "amount": "$debit_amount",
-                            "amount_signed": "$debit_amount_signed",
-                            "unit": "$debit_unit",
-                            "conv": "$debit_conv",
-                            "conv_signed": "$conv_signed.debit",
-                            "op_type": 1,
-                            "link": 1,
-                            "side": "debit",
-                        }
+    # Build pipeline incrementally so we can inject an early $or match that
+    # checks both `debit.*` and `credit.*` when an account filter is known.
+    # This short-circuits documents before the expensive `$facet` stage.
+    pipeline: Sequence[Mapping[str, Any]] = []
+    pipeline.append(
+        {"$match": {"cust_id": {"$in": cust_ids}}} if cust_ids is not None else {"$match": {}}
+    )
+
+    # minor optimization if we know the account, this is called very often for the server account and the keepsats account.
+    if debit_match_query or credit_match_query:
+        or_clauses: list[Mapping[str, Any]] = []
+        if debit_match_query:
+            or_clauses.append(debit_match_query)
+        if credit_match_query:
+            or_clauses.append(credit_match_query)
+        pipeline.append({"$match": {"$or": or_clauses}})
+
+    pipeline.extend(
+        [
+            {"$match": {"timestamp": date_range_query, "conv_signed": {"$exists": True}}},
+            {"$match": filter},
+            {
+                "$facet": {
+                    "debits_view": [
+                        facet_debit_match,
+                        {
+                            "$project": {
+                                "_id": 0,
+                                "account_type": "$debit.account_type",
+                                "name": "$debit.name",
+                                "sub": "$debit.sub",
+                                "contra": "$debit.contra",
+                                "group_id": 1,
+                                "short_id": 1,
+                                "ledger_type": 1,
+                                "timestamp": 1,
+                                "description": 1,
+                                "user_memo": 1,
+                                "cust_id": 1,
+                                "amount": "$debit_amount",
+                                "amount_signed": "$debit_amount_signed",
+                                "unit": "$debit_unit",
+                                "conv": "$debit_conv",
+                                "conv_signed": "$conv_signed.debit",
+                                "op_type": 1,
+                                "link": 1,
+                                "side": "debit",
+                            }
+                        },
+                    ],
+                    "credits_view": [
+                        facet_credit_match,
+                        {
+                            "$project": {
+                                "_id": 0,
+                                "account_type": "$credit.account_type",
+                                "name": "$credit.name",
+                                "sub": "$credit.sub",
+                                "contra": "$credit.contra",
+                                "group_id": 1,
+                                "short_id": 1,
+                                "ledger_type": 1,
+                                "timestamp": 1,
+                                "description": 1,
+                                "user_memo": 1,
+                                "cust_id": 1,
+                                "amount": "$credit_amount",
+                                "amount_signed": "$credit_amount_signed",
+                                "unit": "$credit_unit",
+                                "conv": "$credit_conv",
+                                "conv_signed": "$conv_signed.credit",
+                                "op_type": 1,
+                                "link": 1,
+                                "side": "credit",
+                            }
+                        },
+                    ],
+                }
+            },
+            {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
+            {"$unwind": "$combined"},
+            {"$replaceRoot": {"newRoot": "$combined"}},
+            {
+                "$group": {
+                    "_id": {
+                        "account_type": "$account_type",
+                        "name": "$name",
+                        "sub": "$sub",
+                        "contra": "$contra",
                     },
-                ],
-                "credits_view": [
-                    facet_credit_match,
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "account_type": "$credit.account_type",
-                            "name": "$credit.name",
-                            "sub": "$credit.sub",
-                            "contra": "$credit.contra",
-                            "group_id": 1,
-                            "short_id": 1,
-                            "ledger_type": 1,
-                            "timestamp": 1,
-                            "description": 1,
-                            "user_memo": 1,
-                            "cust_id": 1,
-                            "amount": "$credit_amount",
-                            "amount_signed": "$credit_amount_signed",
-                            "unit": "$credit_unit",
-                            "conv": "$credit_conv",
-                            "conv_signed": "$conv_signed.credit",
-                            "op_type": 1,
-                            "link": 1,
-                            "side": "credit",
-                        }
-                    },
-                ],
-            }
-        },
-        {"$project": {"combined": {"$concatArrays": ["$debits_view", "$credits_view"]}}},
-        {"$unwind": "$combined"},
-        {"$replaceRoot": {"newRoot": "$combined"}},
-        {
-            "$group": {
-                "_id": {
-                    "account_type": "$account_type",
-                    "name": "$name",
-                    "sub": "$sub",
-                    "contra": "$contra",
-                },
-                "items": {"$push": "$$ROOT"},
-            }
-        },
-        {"$project": {"items": {"$sortArray": {"input": "$items", "sortBy": {"timestamp": 1}}}}},
-        {
-            "$project": {
-                "unit_groups": {
-                    "$map": {
-                        "input": {"$setUnion": ["$items.unit"]},
-                        "as": "unit",
-                        "in": {
-                            "k": "$$unit",
-                            "v": {
-                                "$map": {
-                                    "input": {
-                                        "$filter": {
-                                            "input": "$items",
-                                            "as": "item",
-                                            "cond": {"$eq": ["$$item.unit", "$$unit"]},
-                                        }
-                                    },
-                                    "as": "item",
-                                    "in": {
-                                        "$mergeObjects": [
-                                            "$$item",
-                                            {
-                                                "amount_running_total": {
-                                                    "$sum": {
-                                                        "$map": {
-                                                            "input": {
-                                                                "$slice": [
-                                                                    {
-                                                                        "$filter": {
-                                                                            "input": "$items",
-                                                                            "as": "subitem",
-                                                                            "cond": {
-                                                                                "$eq": [
-                                                                                    "$$subitem.unit",
-                                                                                    "$$unit",
-                                                                                ]
-                                                                            },
-                                                                        }
-                                                                    },
-                                                                    {
-                                                                        "$add": [
+                    "items": {"$push": "$$ROOT"},
+                }
+            },
+            {
+                "$project": {
+                    "items": {"$sortArray": {"input": "$items", "sortBy": {"timestamp": 1}}}
+                }
+            },
+            {
+                "$project": {
+                    "unit_groups": {
+                        "$map": {
+                            "input": {"$setUnion": [{"$map": {"input": "$items", "as": "it", "in": "$$it.unit"}}]},
+                            "as": "unit",
+                            "in": {
+                                "k": "$$unit",
+                                "v": {
+                                    "$map": {
+                                        "input": {
+                                            "$filter": {
+                                                "input": "$items",
+                                                "as": "item",
+                                                "cond": {"$eq": ["$$item.unit", "$$unit"]},
+                                            }
+                                        },
+                                        "as": "item",
+                                        "in": {
+                                            "$mergeObjects": [
+                                                "$$item",
+                                                {
+                                                    "amount_running_total": {
+                                                        "$sum": {
+                                                            "$map": {
+                                                                "input": {
+                                                                    "$slice": [
+                                                                        {
+                                                                            "$filter": {
+                                                                                "input": "$items",
+                                                                                "as": "subitem",
+                                                                                "cond": {
+                                                                                    "$eq": [
+                                                                                        "$$subitem.unit",
+                                                                                        "$$unit",
+                                                                                    ]
+                                                                                },
+                                                                            }
+                                                                        },
+                                                                        {
+                                                                            "$add": [
+                                                                                {
+                                                                                    "$indexOfArray": [
+                                                                                        {
+                                                                                            "$filter": {
+                                                                                                "input": "$items",
+                                                                                                "as": "subitem",
+                                                                                                "cond": {
+                                                                                                    "$eq": [
+                                                                                                        "$$subitem.unit",
+                                                                                                        "$$unit",
+                                                                                                    ]
+                                                                                                },
+                                                                                            }
+                                                                                        },
+                                                                                        "$$item",
+                                                                                    ]
+                                                                                },
+                                                                                1,
+                                                                            ]
+                                                                        },
+                                                                    ]
+                                                                },
+                                                                "as": "subitem",
+                                                                "in": "$$subitem.amount_signed",
+                                                            }
+                                                        }
+                                                    },
+                                                    "conv_running_total": {
+                                                        "hive": {
+                                                            "$sum": {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$slice": [
                                                                             {
-                                                                                "$indexOfArray": [
-                                                                                    {
-                                                                                        "$filter": {
-                                                                                            "input": "$items",
-                                                                                            "as": "subitem",
-                                                                                            "cond": {
-                                                                                                "$eq": [
-                                                                                                    "$$subitem.unit",
-                                                                                                    "$$unit",
-                                                                                                ]
-                                                                                            },
-                                                                                        }
+                                                                                "$filter": {
+                                                                                    "input": "$items",
+                                                                                    "as": "subitem",
+                                                                                    "cond": {
+                                                                                        "$eq": [
+                                                                                            "$$subitem.unit",
+                                                                                            "$$unit",
+                                                                                        ]
                                                                                     },
-                                                                                    "$$item",
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "$add": [
+                                                                                    {
+                                                                                        "$indexOfArray": [
+                                                                                            {
+                                                                                                "$filter": {
+                                                                                                    "input": "$items",
+                                                                                                    "as": "subitem",
+                                                                                                    "cond": {
+                                                                                                        "$eq": [
+                                                                                                            "$$subitem.unit",
+                                                                                                            "$$unit",
+                                                                                                        ]
+                                                                                                    },
+                                                                                                }
+                                                                                            },
+                                                                                            "$$item",
+                                                                                        ]
+                                                                                    },
+                                                                                    1,
                                                                                 ]
                                                                             },
-                                                                            1,
                                                                         ]
                                                                     },
-                                                                ]
-                                                            },
-                                                            "as": "subitem",
-                                                            "in": "$$subitem.amount_signed",
-                                                        }
-                                                    }
-                                                },
-                                                "conv_running_total": {
-                                                    "hive": {
-                                                        "$sum": {
-                                                            "$map": {
-                                                                "input": {
-                                                                    "$slice": [
-                                                                        {
-                                                                            "$filter": {
-                                                                                "input": "$items",
-                                                                                "as": "subitem",
-                                                                                "cond": {
-                                                                                    "$eq": [
-                                                                                        "$$subitem.unit",
-                                                                                        "$$unit",
-                                                                                    ]
-                                                                                },
-                                                                            }
-                                                                        },
-                                                                        {
-                                                                            "$add": [
-                                                                                {
-                                                                                    "$indexOfArray": [
-                                                                                        {
-                                                                                            "$filter": {
-                                                                                                "input": "$items",
-                                                                                                "as": "subitem",
-                                                                                                "cond": {
-                                                                                                    "$eq": [
-                                                                                                        "$$subitem.unit",
-                                                                                                        "$$unit",
-                                                                                                    ]
-                                                                                                },
-                                                                                            }
-                                                                                        },
-                                                                                        "$$item",
-                                                                                    ]
-                                                                                },
-                                                                                1,
-                                                                            ]
-                                                                        },
-                                                                    ]
-                                                                },
-                                                                "as": "subitem",
-                                                                "in": "$$subitem.conv_signed.hive",
+                                                                    "as": "subitem",
+                                                                    "in": "$$subitem.conv_signed.hive",
+                                                                }
                                                             }
-                                                        }
-                                                    },
-                                                    "hbd": {
-                                                        "$sum": {
-                                                            "$map": {
-                                                                "input": {
-                                                                    "$slice": [
-                                                                        {
-                                                                            "$filter": {
-                                                                                "input": "$items",
-                                                                                "as": "subitem",
-                                                                                "cond": {
-                                                                                    "$eq": [
-                                                                                        "$$subitem.unit",
-                                                                                        "$$unit",
-                                                                                    ]
-                                                                                },
-                                                                            }
-                                                                        },
-                                                                        {
-                                                                            "$add": [
-                                                                                {
-                                                                                    "$indexOfArray": [
-                                                                                        {
-                                                                                            "$filter": {
-                                                                                                "input": "$items",
-                                                                                                "as": "subitem",
-                                                                                                "cond": {
-                                                                                                    "$eq": [
-                                                                                                        "$$subitem.unit",
-                                                                                                        "$$unit",
-                                                                                                    ]
-                                                                                                },
-                                                                                            }
-                                                                                        },
-                                                                                        "$$item",
-                                                                                    ]
-                                                                                },
-                                                                                1,
-                                                                            ]
-                                                                        },
-                                                                    ]
-                                                                },
-                                                                "as": "subitem",
-                                                                "in": "$$subitem.conv_signed.hbd",
+                                                        },
+                                                        "hbd": {
+                                                            "$sum": {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$slice": [
+                                                                            {
+                                                                                "$filter": {
+                                                                                    "input": "$items",
+                                                                                    "as": "subitem",
+                                                                                    "cond": {
+                                                                                        "$eq": [
+                                                                                            "$$subitem.unit",
+                                                                                            "$$unit",
+                                                                                        ]
+                                                                                    },
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "$add": [
+                                                                                    {
+                                                                                        "$indexOfArray": [
+                                                                                            {
+                                                                                                "$filter": {
+                                                                                                    "input": "$items",
+                                                                                                    "as": "subitem",
+                                                                                                    "cond": {
+                                                                                                        "$eq": [
+                                                                                                            "$$subitem.unit",
+                                                                                                            "$$unit",
+                                                                                                        ]
+                                                                                                    },
+                                                                                                }
+                                                                                            },
+                                                                                            "$$item",
+                                                                                        ]
+                                                                                    },
+                                                                                    1,
+                                                                                ]
+                                                                            },
+                                                                        ]
+                                                                    },
+                                                                    "as": "subitem",
+                                                                    "in": "$$subitem.conv_signed.hbd",
+                                                                }
                                                             }
-                                                        }
-                                                    },
-                                                    "usd": {
-                                                        "$sum": {
-                                                            "$map": {
-                                                                "input": {
-                                                                    "$slice": [
-                                                                        {
-                                                                            "$filter": {
-                                                                                "input": "$items",
-                                                                                "as": "subitem",
-                                                                                "cond": {
-                                                                                    "$eq": [
-                                                                                        "$$subitem.unit",
-                                                                                        "$$unit",
-                                                                                    ]
-                                                                                },
-                                                                            }
-                                                                        },
-                                                                        {
-                                                                            "$add": [
-                                                                                {
-                                                                                    "$indexOfArray": [
-                                                                                        {
-                                                                                            "$filter": {
-                                                                                                "input": "$items",
-                                                                                                "as": "subitem",
-                                                                                                "cond": {
-                                                                                                    "$eq": [
-                                                                                                        "$$subitem.unit",
-                                                                                                        "$$unit",
-                                                                                                    ]
-                                                                                                },
-                                                                                            }
-                                                                                        },
-                                                                                        "$$item",
-                                                                                    ]
-                                                                                },
-                                                                                1,
-                                                                            ]
-                                                                        },
-                                                                    ]
-                                                                },
-                                                                "as": "subitem",
-                                                                "in": "$$subitem.conv_signed.usd",
+                                                        },
+                                                        "usd": {
+                                                            "$sum": {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$slice": [
+                                                                            {
+                                                                                "$filter": {
+                                                                                    "input": "$items",
+                                                                                    "as": "subitem",
+                                                                                    "cond": {
+                                                                                        "$eq": [
+                                                                                            "$$subitem.unit",
+                                                                                            "$$unit",
+                                                                                        ]
+                                                                                    },
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "$add": [
+                                                                                    {
+                                                                                        "$indexOfArray": [
+                                                                                            {
+                                                                                                "$filter": {
+                                                                                                    "input": "$items",
+                                                                                                    "as": "subitem",
+                                                                                                    "cond": {
+                                                                                                        "$eq": [
+                                                                                                            "$$subitem.unit",
+                                                                                                            "$$unit",
+                                                                                                        ]
+                                                                                                    },
+                                                                                                }
+                                                                                            },
+                                                                                            "$$item",
+                                                                                        ]
+                                                                                    },
+                                                                                    1,
+                                                                                ]
+                                                                            },
+                                                                        ]
+                                                                    },
+                                                                    "as": "subitem",
+                                                                    "in": "$$subitem.conv_signed.usd",
+                                                                }
                                                             }
-                                                        }
-                                                    },
-                                                    "sats": {
-                                                        "$sum": {
-                                                            "$map": {
-                                                                "input": {
-                                                                    "$slice": [
-                                                                        {
-                                                                            "$filter": {
-                                                                                "input": "$items",
-                                                                                "as": "subitem",
-                                                                                "cond": {
-                                                                                    "$eq": [
-                                                                                        "$$subitem.unit",
-                                                                                        "$$unit",
-                                                                                    ]
-                                                                                },
-                                                                            }
-                                                                        },
-                                                                        {
-                                                                            "$add": [
-                                                                                {
-                                                                                    "$indexOfArray": [
-                                                                                        {
-                                                                                            "$filter": {
-                                                                                                "input": "$items",
-                                                                                                "as": "subitem",
-                                                                                                "cond": {
-                                                                                                    "$eq": [
-                                                                                                        "$$subitem.unit",
-                                                                                                        "$$unit",
-                                                                                                    ]
-                                                                                                },
-                                                                                            }
-                                                                                        },
-                                                                                        "$$item",
-                                                                                    ]
-                                                                                },
-                                                                                1,
-                                                                            ]
-                                                                        },
-                                                                    ]
-                                                                },
-                                                                "as": "subitem",
-                                                                "in": "$$subitem.conv_signed.sats",
+                                                        },
+                                                        "sats": {
+                                                            "$sum": {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$slice": [
+                                                                            {
+                                                                                "$filter": {
+                                                                                    "input": "$items",
+                                                                                    "as": "subitem",
+                                                                                    "cond": {
+                                                                                        "$eq": [
+                                                                                            "$$subitem.unit",
+                                                                                            "$$unit",
+                                                                                        ]
+                                                                                    },
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "$add": [
+                                                                                    {
+                                                                                        "$indexOfArray": [
+                                                                                            {
+                                                                                                "$filter": {
+                                                                                                    "input": "$items",
+                                                                                                    "as": "subitem",
+                                                                                                    "cond": {
+                                                                                                        "$eq": [
+                                                                                                            "$$subitem.unit",
+                                                                                                            "$$unit",
+                                                                                                        ]
+                                                                                                    },
+                                                                                                }
+                                                                                            },
+                                                                                            "$$item",
+                                                                                        ]
+                                                                                    },
+                                                                                    1,
+                                                                                ]
+                                                                            },
+                                                                        ]
+                                                                    },
+                                                                    "as": "subitem",
+                                                                    "in": "$$subitem.conv_signed.sats",
+                                                                }
                                                             }
-                                                        }
-                                                    },
-                                                    "msats": {
-                                                        "$sum": {
-                                                            "$map": {
-                                                                "input": {
-                                                                    "$slice": [
-                                                                        {
-                                                                            "$filter": {
-                                                                                "input": "$items",
-                                                                                "as": "subitem",
-                                                                                "cond": {
-                                                                                    "$eq": [
-                                                                                        "$$subitem.unit",
-                                                                                        "$$unit",
-                                                                                    ]
-                                                                                },
-                                                                            }
-                                                                        },
-                                                                        {
-                                                                            "$add": [
-                                                                                {
-                                                                                    "$indexOfArray": [
-                                                                                        {
-                                                                                            "$filter": {
-                                                                                                "input": "$items",
-                                                                                                "as": "subitem",
-                                                                                                "cond": {
-                                                                                                    "$eq": [
-                                                                                                        "$$subitem.unit",
-                                                                                                        "$$unit",
-                                                                                                    ]
-                                                                                                },
-                                                                                            }
-                                                                                        },
-                                                                                        "$$item",
-                                                                                    ]
-                                                                                },
-                                                                                1,
-                                                                            ]
-                                                                        },
-                                                                    ]
-                                                                },
-                                                                "as": "subitem",
-                                                                "in": "$$subitem.conv_signed.msats",
+                                                        },
+                                                        "msats": {
+                                                            "$sum": {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$slice": [
+                                                                            {
+                                                                                "$filter": {
+                                                                                    "input": "$items",
+                                                                                    "as": "subitem",
+                                                                                    "cond": {
+                                                                                        "$eq": [
+                                                                                            "$$subitem.unit",
+                                                                                            "$$unit",
+                                                                                        ]
+                                                                                    },
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "$add": [
+                                                                                    {
+                                                                                        "$indexOfArray": [
+                                                                                            {
+                                                                                                "$filter": {
+                                                                                                    "input": "$items",
+                                                                                                    "as": "subitem",
+                                                                                                    "cond": {
+                                                                                                        "$eq": [
+                                                                                                            "$$subitem.unit",
+                                                                                                            "$$unit",
+                                                                                                        ]
+                                                                                                    },
+                                                                                                }
+                                                                                            },
+                                                                                            "$$item",
+                                                                                        ]
+                                                                                    },
+                                                                                    1,
+                                                                                ]
+                                                                            },
+                                                                        ]
+                                                                    },
+                                                                    "as": "subitem",
+                                                                    "in": "$$subitem.conv_signed.msats",
+                                                                }
                                                             }
-                                                        }
+                                                        },
                                                     },
                                                 },
-                                            },
-                                        ]
-                                    },
-                                }
+                                            ]
+                                        },
+                                    }
+                                },
                             },
-                        },
-                    }
-                },
-            }
-        },
-        {"$project": {"unit_groups": {"$arrayToObject": "$unit_groups"}}},
-        {
-            "$project": {
-                "_id": 0,
-                "account_type": "$_id.account_type",
-                "name": "$_id.name",
-                "sub": "$_id.sub",
-                "contra": "$_id.contra",
-                "balances": "$unit_groups",
-            }
-        },
-        {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
-    ]
+                        }
+                    },
+                }
+            },
+            {"$project": {"unit_groups": {"$arrayToObject": "$unit_groups"}}},
+            {
+                "$project": {
+                    "_id": 0,
+                    "account_type": "$_id.account_type",
+                    "name": "$_id.name",
+                    "sub": "$_id.sub",
+                    "contra": "$_id.contra",
+                    "balances": "$unit_groups",
+                }
+            },
+            {"$sort": {"account_type": 1, "name": 1, "sub": 1}},
+        ]
+    )
 
     return pipeline
 
