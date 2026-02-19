@@ -1294,7 +1294,7 @@ class InternalConfig:
         """
         Monitors the state of the notification loop and lock.
         """
-        max_wait_s = 2.0
+        max_wait_s = 3.0
         start = time.time()
         loop = getattr(self, "notification_loop", None)
         if loop is None:
@@ -1304,10 +1304,11 @@ class InternalConfig:
             time.time() - start
         ) < max_wait_s:
             print(
+                f"{ICON} Waiting for notifications to finish... "
                 f"Notification loop: {loop.is_running()} "
                 f"Notification lock: {InternalConfig.notification_lock}"
             )
-            time.sleep(0.2)
+            time.sleep(1)
         # Ensure we don't stick on lock forever
         InternalConfig.notification_lock = False
         return
@@ -1376,7 +1377,22 @@ class InternalConfig:
         logger.info(f"{ICON} InternalConfig Shutdown: Waiting for notifications")
         self.check_notifications()
         if hasattr(self, "notification_loop") and self.notification_loop is not None:
-            if self.notification_loop.is_running():
+            # If notification_loop IS the currently running event loop (set by
+            # main_async_start), we must NOT call run_until_complete/stop/close
+            # on it — those are illegal while the loop is running from within.
+            # Just let the loop wind down naturally when asyncio.run() returns.
+            try:
+                running_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                running_loop = None
+
+            if running_loop is self.notification_loop:
+                # We're inside the running loop — skip loop management.
+                logger.info(
+                    f"{ICON} InternalConfig Shutdown: notification_loop is the "
+                    "running event loop; skipping loop teardown."
+                )
+            elif self.notification_loop.is_running():
                 logger.info(f"{ICON} InternalConfig Shutdown: Closing notification loop")
 
                 # # Get the current task (the one running the shutdown logic)
