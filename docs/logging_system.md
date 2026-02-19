@@ -372,6 +372,69 @@ Bot configs are JSON files in `config/` named `<bot_name>_n_bot_config.json`:
 
 The default bot is set via `config.logging.default_notification_bot_name`.
 
+### Critical: `notification_loop` must point to the running event loop
+
+#### The problem
+
+`InternalConfig.__init__()` → `setup_logging()` runs **before** `asyncio.run()`
+(i.e. from the synchronous Typer `main()` command).  At that point there is no
+running event loop, so `setup_logging()` creates a **detached** loop via
+`asyncio.new_event_loop()` and stores it in `InternalConfig.notification_loop`.
+
+The `QueueHandler` / `QueueListener` logging config
+(`5-queued-stderr-json-file.json`) processes log records on a **background
+thread**.  When `CustomNotificationHandler.emit()` fires,
+`NotificationProtocol.send_notification()` checks `loop.is_running()`:
+
+| `loop.is_running()` | Code path | Effect |
+|---|---|---|
+| `True`  | `asyncio.run_coroutine_threadsafe(coro, loop)` | **Non-blocking** — schedules work on the main event loop and returns immediately. |
+| `False` | `loop.run_until_complete(coro)` | **Blocks the QueueListener thread** until the Telegram HTTP request completes (10s connect + 30s read timeout). |
+
+Because the detached loop is never started, `is_running()` is always `False`.
+Every notification record blocks the listener thread for up to 40 seconds.
+While the thread is blocked, **no subsequent log records are dequeued** — so
+file writes, console output, and all other handler processing stall.
+
+This manifests as the monitor appearing to "hang" after the first
+`notification: True` log message (typically the "✅ LND gRPC client started"
+startup message).  The `asyncio.create_task()` tasks are actually running on
+the main event loop, but their log output is stuck in the queue.
+
+#### The fix
+
+At the **top** of every monitor's `main_async_start()` coroutine (the first
+function called by `asyncio.run()`), reassign `notification_loop` to the real
+running loop:
+
+```python
+async def main_async_start(...) -> None:
+    # Point notification_loop at the actual running event loop so the
+    # QueueListener thread uses the non-blocking run_coroutine_threadsafe()
+    # path instead of the blocking run_until_complete() path.
+    InternalConfig.notification_loop = asyncio.get_running_loop()
+    ...
+```
+
+This must be done in **every** monitor entry point:
+
+| Monitor | File | Function |
+|---|---|---|
+| LND | `src/lnd_monitor_v2.py` | `main_async_start()` |
+| Hive | `src/hive_monitor_v2.py` | `main_async_start()` |
+| DB | `src/db_monitor.py` | `main_async_start()` |
+| Binance | `src/binance_monitor.py` | `main_async_start()` |
+
+#### Why `setup_logging()` can't do this itself
+
+`setup_logging()` is called from `InternalConfig.__init__()`, which runs in
+synchronous context (no event loop yet).  It **must** create *some* loop
+reference so that log messages emitted during the rest of `__init__()` (Redis
+setup, config validation, etc.) don't crash.  The detached loop works fine for
+those early messages because the QueueListener hasn't started yet at that point
+or the notification handler simply queues them.  The reassignment in
+`main_async_start()` is the earliest safe point where a running loop exists.
+
 ---
 
 ## 9. Error Code Tracking

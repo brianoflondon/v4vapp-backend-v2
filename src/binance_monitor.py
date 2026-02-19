@@ -299,6 +299,9 @@ async def main_async_start():
     Returns:
         None
     """
+    # Ensure notification handler uses the running loop (non-blocking path)
+    InternalConfig.notification_loop = asyncio.get_running_loop()
+
     try:
         db_conn = DBConn()
         await db_conn.setup_database()

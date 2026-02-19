@@ -1250,6 +1250,16 @@ async def main_async_start(connection_name: str) -> None:
     Returns:
         None
     """
+    # CRITICAL: Update notification_loop to the actual running event loop.
+    # setup_logging() runs before asyncio.run() so it creates a detached
+    # event loop (new_event_loop) that is never started.  When the
+    # QueueListener thread later processes a notification record it calls
+    # loop.run_until_complete() which BLOCKS the listener thread, preventing
+    # all subsequent log records (including file writes) from being flushed.
+    # By pointing notification_loop at the running loop, the handler uses
+    # run_coroutine_threadsafe() instead, which is non-blocking.
+    InternalConfig.notification_loop = asyncio.get_running_loop()
+
     process_name = os.path.splitext(os.path.basename(__file__))[0]
     health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
     status_api = StatusAPI(
@@ -1331,6 +1341,12 @@ async def main_async_start(connection_name: str) -> None:
                 extra={"notification": True},
             )
             startup_complete_event.set()
+            print(
+                f"[DIAG] {len(running_tasks)} tasks created, "
+                f"shutdown_event.is_set()={shutdown_event.is_set()}, "
+                f"awaiting shutdown_event.wait()...",
+                flush=True,
+            )
             # Wait for shutdown signal, then cancel streams immediately
             await shutdown_event.wait()
             for t in running_tasks:
