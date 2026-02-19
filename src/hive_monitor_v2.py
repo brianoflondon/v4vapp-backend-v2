@@ -763,6 +763,9 @@ async def main_async_start(
     Returns:
         None
     """
+    # Ensure notification handler uses the running loop (non-blocking path)
+    InternalConfig.notification_loop = asyncio.get_running_loop()
+
     process_name = os.path.splitext(os.path.basename(__file__))[0]
     health_check_port = os.environ.get("HEALTH_CHECK_PORT", "6001")
     status_api = StatusAPI(
