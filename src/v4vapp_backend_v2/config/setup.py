@@ -1126,6 +1126,9 @@ class InternalConfig:
             # Optional: Test connections during startup
             InternalConfig.redis.ping()
             InternalConfig.redis_decoded.ping()
+            # Ledger caching is handled by v4vapp_backend_v2.accounting.ledger_cache
+            # which uses redis_async directly with generation-based invalidation.
+
             logger.info(f"{ICON} Redis clients initialized successfully")
         except RedisError as ex:
             # Disable notifications since Redis is unavailable and notification

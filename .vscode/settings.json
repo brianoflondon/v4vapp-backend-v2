@@ -1,6 +1,7 @@
 {
     "cSpell.words": [
         "ACINQ",
+        "aiocache",
         "aiofiles",
         "asgiref",
         "bsonint",
