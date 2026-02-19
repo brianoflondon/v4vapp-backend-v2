@@ -80,7 +80,7 @@ async def users_data_api(active_only: bool = True) -> dict[str, Any]:
         raise RuntimeError("Templates and navigation not initialized")
 
     # Build a filter to restrict the expensive aggregation to active accounts only
-    active_cust_ids: list[str] = []
+    active_cust_ids: list[str] | None = None
     if active_only:
         active_cust_ids = await list_active_account_subs(
             account_name="VSC Liability", min_transactions=2
